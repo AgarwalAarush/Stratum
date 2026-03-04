@@ -1,26 +1,131 @@
 @import "tailwindcss";
 
+@theme {
+  /* ─── Colors (mapped to CSS vars set by theme system) ─── */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-green: var(--green);
+  --color-red: var(--red);
+
+  /* ─── Typography ─── */
+  --font-family-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+
+  /* ─── Custom font sizes ─── */
+  --font-size-10: 10px;
+  --font-size-11: 11px;
+  --font-size-13: 13px;
+  --font-size-22: 22px;
+
+  /* ─── Border radii ─── */
+  --radius-section: 8px;
+  --radius-item: 4px;
+
+  /* ─── Widths ─── */
+  --width-sidebar: 220px;
+}
+
+/* ─── Design tokens (runtime CSS vars, changed by theme toggle) ─── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Dark mode defaults */
+  --bg: #0c0c0c;
+  --surface: #141414;
+  --surface-2: #1c1c1c;
+  --border: #2a2a2a;
+  --border-subtle: #1f1f1f;
+  --text: #e8e8e8;
+  --text-dim: #888888;
+  --text-muted: #555555;
+  --accent: #ffffff;
+  --green: #22c55e;
+  --red: #ef4444;
+  --scrollbar-thumb: #333333;
+  --scrollbar-thumb-hover: #555555;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+[data-theme="light"] {
+  --bg: #f5f5f5;
+  --surface: #ffffff;
+  --surface-2: #f0f0f0;
+  --border: #e0e0e0;
+  --border-subtle: #ebebeb;
+  --text: #111111;
+  --text-dim: #666666;
+  --text-muted: #9a9a9a;
+  --accent: #000000;
+  --green: #16a34a;
+  --red: #dc2626;
+  --scrollbar-thumb: #c0c0c0;
+  --scrollbar-thumb-hover: #999999;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ─── Base resets ─── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter, system-ui, -apple-system, sans-serif);
+  line-height: 1.5;
+}
+
+/* ─── Theme transitions (only after initial load) ─── */
+body.theme-ready *,
+body.theme-ready *::before,
+body.theme-ready *::after {
+  transition-property: background-color, color, border-color;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
+}
+
+/* ─── Custom scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ─── Focus ring ─── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ─── Utility: hide scrollbar but keep scrollable ─── */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
