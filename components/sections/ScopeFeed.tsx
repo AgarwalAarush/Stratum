@@ -39,47 +39,71 @@ export async function ScopeFeed({ scope }: ScopeFeedProps) {
     }
   }
 
-  return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Top grid (contiguous borders) */}
-      <div className={`grid grid-cols-1 md:grid-cols-${Math.min(gridSections.length, 3)} border-b border-[var(--border)] min-h-[40%]`}>
-        {gridSections.map((section, idx) => {
-          const { items } = getMockSection(section.apiPath)
-          const visibleItems = items.slice(0, 8)
-          const isNotLast = idx !== Math.min(gridSections.length, 3) - 1
+  // For ai-research, gridSections has 3 items: discussions, repos, ai-news.
+  // Left column: Insights / News (Take the first grid section)
+  const leftSection = gridSections[0]
+  // Right top: The remaining grid sections (up to 2)
+  const rightTopSections = gridSections.slice(1, 3)
 
-          return (
+  return (
+    <div className="p-10 lg:p-12 max-w-[1600px] mx-auto flex flex-col lg:flex-row gap-10">
+
+      {/* ─── LEFT COLUMN: Insights ─── */}
+      {leftSection && (
+        <div className="w-full lg:w-4/12 flex flex-col">
+          <SectionContainer
+            label={leftSection.label}
+            sources={leftSection.sources}
+            itemCount={getMockSection(leftSection.apiPath).items.length}
+            className="flex-1 h-full min-h-[600px]"
+          >
+            {getMockSection(leftSection.apiPath).items.slice(0, 10).map(renderItem)}
+          </SectionContainer>
+        </div>
+      )}
+
+      {/* ─── RIGHT COLUMN ─── */}
+      <div className="w-full lg:w-8/12 flex flex-col gap-10">
+
+        {/* Top Row: etc, etc */}
+        {rightTopSections.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+            {rightTopSections.map((section: ScopeDef['sections'][0]) => {
+              const items = getMockSection(section.apiPath).items
+              return (
+                <SectionContainer
+                  key={section.id}
+                  label={section.label}
+                  sources={section.sources}
+                  itemCount={items.length}
+                  className="h-[380px]"
+                >
+                  {items.slice(0, 6).map(renderItem)}
+                </SectionContainer>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Bottom Row: Research Papers */}
+        {featured && (
+          <div className="flex-1 flex flex-col">
             <SectionContainer
-              key={section.id}
-              label={section.label}
-              sources={section.sources}
-              itemCount={items.length}
-              className={isNotLast ? 'border-r border-[var(--border)]' : ''}
+              label={featured.label}
+              sources={featured.sources}
+              itemCount={featuredItems.length}
+              featured
+              className="flex-1 min-h-[500px]"
             >
-              {visibleItems.length === 0
-                ? <p className="px-5 py-8 text-[12px] text-[var(--text-muted)] text-center">No data available</p>
-                : visibleItems.map(renderItem)
+              {featuredItems.length === 0
+                ? <p className="px-8 py-10 text-[13px] text-[var(--text-muted)] text-center">No data available</p>
+                : featuredItems.slice(0, 15).map(renderItem)
               }
             </SectionContainer>
-          )
-        })}
+          </div>
+        )}
       </div>
 
-      {/* Featured full-width section */}
-      {featured && (
-        <SectionContainer
-          label={featured.label}
-          sources={featured.sources}
-          itemCount={featuredItems.length}
-          featured
-          className="flex-1 min-h-[40%]"
-        >
-          {featuredItems.length === 0
-            ? <p className="px-5 py-8 text-[12px] text-[var(--text-muted)] text-center">No data available</p>
-            : featuredItems.slice(0, 15).map(renderItem)
-          }
-        </SectionContainer>
-      )}
     </div>
   )
 }

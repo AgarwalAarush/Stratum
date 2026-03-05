@@ -17,14 +17,14 @@ export function NavPanel({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (b
       {/* ─── Collapsed Side Bar (Always Visible when closed or on mobile maybe, but let's use a simpler approach) ─── */}
       {/* ─── Actually, we can just render the toggle button in the main layout header, or keep a thin strip ─── */}
       <div
-        className="flex flex-col bg-[var(--surface-1)] border-r border-[var(--border)] transition-all duration-300 ease-in-out shrink-0 overflow-hidden"
+        className="flex flex-col bg-[var(--surface-1)] border-r border-[var(--border)] transition-all duration-300 ease-in-out shrink-0"
         style={{
           width: isOpen ? '280px' : '0px',
           opacity: isOpen ? 1 : 0,
         }}
       >
         {/* Drawer header */}
-        <div className="flex items-center justify-between px-5 h-[68px] border-b border-[var(--border)] shrink-0 bg-[var(--bg)]">
+        <div className="flex items-center justify-between px-6 h-[88px] border-b border-[var(--border)] shrink-0 bg-[var(--bg)]">
           <span className="text-[14px] font-bold tracking-[0.1em] uppercase text-[var(--text)]">
             Stratum
           </span>
