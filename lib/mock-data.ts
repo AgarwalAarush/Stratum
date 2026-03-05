@@ -1,51 +1,51 @@
 // lib/mock-data.ts
 import type { FeedItem, SectionData } from './types'
 
-// ─── AI Research: Papers ───
+// ─── AI Research: Papers (accurate publication dates) ───
 const PAPERS: FeedItem[] = [
   {
     type: 'paper',
-    id: 'arxiv-2401-1',
+    id: 'arxiv-2210-1',
     title: 'Scaling Laws for Reward Model Overoptimization in RLHF',
     authors: ['Gao', 'et al.'],
     categories: ['cs.LG', 'cs.AI'],
-    publishedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2022-10-19T00:00:00Z',
     url: 'https://arxiv.org/abs/2210.10760',
   },
   {
     type: 'paper',
-    id: 'arxiv-2401-2',
+    id: 'arxiv-2412-1',
     title: 'Phi-4 Technical Report',
     authors: ['Abdin', 'et al.'],
     categories: ['cs.CL', 'cs.AI'],
-    publishedAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2024-12-12T00:00:00Z',
     url: 'https://arxiv.org/abs/2412.08905',
   },
   {
     type: 'paper',
-    id: 'arxiv-2401-3',
+    id: 'arxiv-2501-1',
     title: 'DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning',
     authors: ['DeepSeek-AI'],
     categories: ['cs.CL', 'cs.AI'],
-    publishedAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2025-01-22T00:00:00Z',
     url: 'https://arxiv.org/abs/2501.12948',
   },
   {
     type: 'paper',
-    id: 'arxiv-2401-4',
+    id: 'arxiv-2212-1',
     title: 'Constitutional AI: Harmlessness from AI Feedback',
     authors: ['Bai', 'et al.'],
     categories: ['cs.AI', 'cs.LG'],
-    publishedAt: new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2022-12-15T00:00:00Z',
     url: 'https://arxiv.org/abs/2212.08073',
   },
   {
     type: 'paper',
-    id: 'arxiv-2401-5',
+    id: 'arxiv-2305-1',
     title: 'Mixture of Experts Meets Instruction Tuning: A Winning Combination for Large Language Models',
     authors: ['Shen', 'et al.'],
     categories: ['cs.CL'],
-    publishedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2023-05-24T00:00:00Z',
     url: 'https://arxiv.org/abs/2305.14705',
   },
 ]
@@ -55,11 +55,11 @@ const AI_DISCUSSIONS: FeedItem[] = [
   {
     type: 'discussion',
     id: 'hn-1',
-    title: 'Ask HN: What are you building with local LLMs in 2025?',
+    title: 'Ask HN: What are you building with local LLMs in 2026?',
     points: 847,
     commentCount: 312,
     source: 'HN',
-    publishedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2026-03-04T08:00:00Z',
     url: 'https://news.ycombinator.com/item?id=39000000',
   },
   {
@@ -69,7 +69,7 @@ const AI_DISCUSSIONS: FeedItem[] = [
     points: 412,
     commentCount: 89,
     source: 'HN',
-    publishedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2026-03-04T03:00:00Z',
     url: 'https://news.ycombinator.com/item?id=39000001',
   },
   {
@@ -79,7 +79,7 @@ const AI_DISCUSSIONS: FeedItem[] = [
     points: 318,
     commentCount: 142,
     source: 'HN',
-    publishedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2026-03-03T22:00:00Z',
     url: 'https://news.ycombinator.com/item?id=39000002',
   },
   {
@@ -89,7 +89,7 @@ const AI_DISCUSSIONS: FeedItem[] = [
     points: 92,
     commentCount: 24,
     source: 'Lobste.rs',
-    publishedAt: new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2026-03-03T18:00:00Z',
     url: 'https://lobste.rs/s/example',
   },
 ]
@@ -142,6 +142,46 @@ const AI_REPOS: FeedItem[] = [
   },
 ]
 
+// ─── AI Research: AI News ───
+const AI_NEWS: FeedItem[] = [
+  {
+    type: 'news',
+    id: 'ai-news-1',
+    title: 'Anthropic releases Claude 3.7 Sonnet with extended thinking',
+    source: 'Anthropic',
+    category: 'Model Release',
+    publishedAt: '2026-03-04T10:00:00Z',
+    url: 'https://www.anthropic.com',
+  },
+  {
+    type: 'news',
+    id: 'ai-news-2',
+    title: 'Google DeepMind releases Gemini 2.0 Flash with real-time audio',
+    source: 'Google DeepMind',
+    category: 'Model Release',
+    publishedAt: '2026-03-03T15:00:00Z',
+    url: 'https://deepmind.google',
+  },
+  {
+    type: 'news',
+    id: 'ai-news-3',
+    title: 'Meta releases Llama 4 Scout with 10M context window',
+    source: 'Meta AI',
+    category: 'Model Release',
+    publishedAt: '2026-03-02T12:00:00Z',
+    url: 'https://ai.meta.com',
+  },
+  {
+    type: 'news',
+    id: 'ai-news-4',
+    title: 'OpenAI o3 achieves 90th percentile on competitive programming benchmarks',
+    source: 'OpenAI',
+    category: 'Benchmark',
+    publishedAt: '2026-03-01T09:00:00Z',
+    url: 'https://openai.com',
+  },
+]
+
 // ─── Finance: Earnings ───
 const EARNINGS: FeedItem[] = [
   {
@@ -150,7 +190,7 @@ const EARNINGS: FeedItem[] = [
     ticker: 'NVDA',
     companyName: 'Nvidia Corp',
     quarter: 'Q4 2025',
-    reportDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    reportDate: '2026-03-03T00:00:00Z',
     epsActual: 0.89,
     epsEstimate: 0.85,
     revenueActual: 22100,
@@ -164,7 +204,7 @@ const EARNINGS: FeedItem[] = [
     ticker: 'MSFT',
     companyName: 'Microsoft Corp',
     quarter: 'Q2 FY2026',
-    reportDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+    reportDate: '2026-03-09T00:00:00Z',
     epsEstimate: 3.20,
     revenueEstimate: 69500,
     url: 'https://www.sec.gov/cgi-bin/browse-edgar',
@@ -175,7 +215,7 @@ const EARNINGS: FeedItem[] = [
     ticker: 'GOOGL',
     companyName: 'Alphabet Inc',
     quarter: 'Q4 2025',
-    reportDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    reportDate: '2026-03-01T00:00:00Z',
     epsActual: 2.15,
     epsEstimate: 2.22,
     revenueActual: 96400,
@@ -185,7 +225,7 @@ const EARNINGS: FeedItem[] = [
   },
 ]
 
-// ─── Startups: Funding ───
+// ─── Startups / Finance: Funding & Deals ───
 const FUNDING: FeedItem[] = [
   {
     type: 'news',
@@ -193,7 +233,7 @@ const FUNDING: FeedItem[] = [
     title: 'Anduril raises $1.5B Series F at $28B valuation to accelerate defense AI',
     source: 'Axios Pro Rata',
     category: 'Series F',
-    publishedAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2026-03-04T06:00:00Z',
     url: 'https://www.axios.com',
   },
   {
@@ -202,7 +242,7 @@ const FUNDING: FeedItem[] = [
     title: 'Perplexity closes $500M Series C led by SoftBank Vision Fund',
     source: 'TechCrunch',
     category: 'Series C',
-    publishedAt: new Date(Date.now() - 9 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2026-03-03T14:00:00Z',
     url: 'https://techcrunch.com',
   },
   {
@@ -211,7 +251,7 @@ const FUNDING: FeedItem[] = [
     title: 'xAI raises $6B in new funding round as Grok 3 gains traction',
     source: 'The Information',
     category: 'Strategic',
-    publishedAt: new Date(Date.now() - 14 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2026-03-02T10:00:00Z',
     url: 'https://www.theinformation.com',
   },
   {
@@ -220,39 +260,8 @@ const FUNDING: FeedItem[] = [
     title: 'TerraPower breaks ground on Natrium reactor in Wyoming',
     source: 'Axios',
     category: 'Energy',
-    publishedAt: new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2026-03-01T08:00:00Z',
     url: 'https://www.axios.com',
-  },
-]
-
-// ─── Releases: Model releases ───
-const MODEL_RELEASES: FeedItem[] = [
-  {
-    type: 'news',
-    id: 'rel-1',
-    title: 'Anthropic releases Claude 3.7 Sonnet with extended thinking',
-    source: 'Anthropic',
-    category: 'Model Release',
-    publishedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    url: 'https://www.anthropic.com',
-  },
-  {
-    type: 'news',
-    id: 'rel-2',
-    title: 'Google DeepMind releases Gemini 2.0 Flash with real-time audio',
-    source: 'Google DeepMind',
-    category: 'Model Release',
-    publishedAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
-    url: 'https://deepmind.google',
-  },
-  {
-    type: 'news',
-    id: 'rel-3',
-    title: 'Meta releases Llama 4 Scout with 10M context window',
-    source: 'Meta AI',
-    category: 'Model Release',
-    publishedAt: new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString(),
-    url: 'https://ai.meta.com',
   },
 ]
 
@@ -264,7 +273,7 @@ const MACRO_INDICATORS: FeedItem[] = [
     title: 'CPI (Jan 2026): +0.3% MoM, +3.1% YoY — above expectations of +2.9%',
     source: 'FRED / BLS',
     category: 'CPI',
-    publishedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2026-02-14T13:00:00Z',
     url: 'https://fred.stlouisfed.org',
   },
   {
@@ -273,7 +282,7 @@ const MACRO_INDICATORS: FeedItem[] = [
     title: 'Unemployment Rate (Jan 2026): 4.1% — unchanged from prior month',
     source: 'FRED / BLS',
     category: 'Employment',
-    publishedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2026-02-07T13:00:00Z',
     url: 'https://fred.stlouisfed.org',
   },
   {
@@ -282,7 +291,7 @@ const MACRO_INDICATORS: FeedItem[] = [
     title: 'PCE Deflator (Dec 2025): +2.6% YoY — Fed target remains 2%',
     source: 'FRED / BEA',
     category: 'PCE',
-    publishedAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+    publishedAt: '2026-01-31T13:00:00Z',
     url: 'https://fred.stlouisfed.org',
   },
 ]
@@ -292,12 +301,13 @@ export const MOCK_DATA: Record<string, FeedItem[]> = {
   '/api/ai-research/papers': PAPERS,
   '/api/ai-research/discussions': AI_DISCUSSIONS,
   '/api/ai-research/repos': AI_REPOS,
+  '/api/ai-research/ai-news': AI_NEWS,
   '/api/finance/earnings': EARNINGS,
   '/api/finance/deals': FUNDING,
   '/api/finance/reports': [],
   '/api/startups/funding': FUNDING,
   '/api/startups/news': FUNDING,
-  '/api/releases/models': MODEL_RELEASES,
+  '/api/releases/models': AI_NEWS,
   '/api/releases/products': [],
   '/api/releases/repos': AI_REPOS,
   '/api/markets/earnings-calendar': EARNINGS,

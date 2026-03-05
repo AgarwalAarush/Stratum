@@ -18,6 +18,7 @@ export interface ScopeDef {
   id: string
   label: string
   sections: SectionDef[]
+  featuredSectionId?: string  // section rendered full-width at bottom; rest go in top grid
 }
 
 // ─── Data item types ───

@@ -5,14 +5,8 @@ export const SCOPES: ScopeDef[] = [
   {
     id: 'ai-research',
     label: 'AI Research',
+    featuredSectionId: 'papers',
     sections: [
-      {
-        id: 'papers',
-        label: 'Research Papers',
-        sources: ['arXiv', 'alphaXiv', 'Semantic Scholar'],
-        itemType: 'paper',
-        apiPath: '/api/ai-research/papers',
-      },
       {
         id: 'discussions',
         label: 'Trending Discussions',
@@ -26,6 +20,20 @@ export const SCOPES: ScopeDef[] = [
         sources: ['GitHub'],
         itemType: 'repo',
         apiPath: '/api/ai-research/repos',
+      },
+      {
+        id: 'ai-news',
+        label: 'AI News',
+        sources: ['Tracked Entities'],
+        itemType: 'news',
+        apiPath: '/api/ai-research/ai-news',
+      },
+      {
+        id: 'papers',
+        label: 'Research Papers',
+        sources: ['arXiv', 'alphaXiv', 'Semantic Scholar'],
+        itemType: 'paper',
+        apiPath: '/api/ai-research/papers',
       },
     ],
   },
