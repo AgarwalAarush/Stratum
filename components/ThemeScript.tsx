@@ -1,10 +1,10 @@
 // components/ThemeScript.tsx
-// Inline script runs before React hydrates — prevents flash of unstyled dark/light content
+// Inline script runs before React hydrates — prevents flash of unstyled content
 export function ThemeScript() {
   const script = `
     (function() {
       try {
-        var t = localStorage.getItem('stratum-theme') || 'dark';
+        var t = localStorage.getItem('stratum-theme') || 'light';
         document.documentElement.dataset.theme = t;
       } catch(e) {}
     })();

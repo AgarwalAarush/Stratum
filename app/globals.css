@@ -20,20 +20,39 @@
   /* ─── Custom font sizes ─── */
   --font-size-10: 10px;
   --font-size-11: 11px;
+  --font-size-12: 12px;
   --font-size-13: 13px;
+  --font-size-14: 14px;
+  --font-size-15: 15px;
   --font-size-22: 22px;
+  --font-size-28: 28px;
 
   /* ─── Border radii ─── */
-  --radius-section: 8px;
+  --radius-section: 12px;
   --radius-item: 4px;
 
   /* ─── Widths ─── */
-  --width-sidebar: 220px;
+  --width-sidebar: 280px;
 }
 
-/* ─── Design tokens (runtime CSS vars, changed by theme toggle) ─── */
+/* ─── Design tokens — LIGHT MODE IS DEFAULT ─── */
 :root {
-  /* Dark mode defaults */
+  --bg: #ffffff;
+  --surface: #f9f9f9;
+  --surface-2: #f0f0f0;
+  --border: #e8e8e8;
+  --border-subtle: #f2f2f2;
+  --text: #111111;
+  --text-dim: #555555;
+  --text-muted: #999999;
+  --accent: #111111;
+  --green: #16a34a;
+  --red: #dc2626;
+  --scrollbar-thumb: #d4d4d4;
+  --scrollbar-thumb-hover: #b0b0b0;
+}
+
+[data-theme="dark"] {
   --bg: #0c0c0c;
   --surface: #141414;
   --surface-2: #1c1c1c;
@@ -49,22 +68,6 @@
   --scrollbar-thumb-hover: #555555;
 }
 
-[data-theme="light"] {
-  --bg: #f5f5f5;
-  --surface: #ffffff;
-  --surface-2: #f0f0f0;
-  --border: #e0e0e0;
-  --border-subtle: #ebebeb;
-  --text: #111111;
-  --text-dim: #666666;
-  --text-muted: #9a9a9a;
-  --accent: #000000;
-  --green: #16a34a;
-  --red: #dc2626;
-  --scrollbar-thumb: #c0c0c0;
-  --scrollbar-thumb-hover: #999999;
-}
-
 /* ─── Base resets ─── */
 *,
 *::before,
@@ -75,7 +78,7 @@
 }
 
 html {
-  font-size: 13px;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -91,7 +94,7 @@ body {
 body.theme-ready *,
 body.theme-ready *::before,
 body.theme-ready *::after {
-  transition-property: background-color, color, border-color;
+  transition-property: background-color, color, border-color, box-shadow;
   transition-duration: 0.15s;
   transition-timing-function: ease;
 }

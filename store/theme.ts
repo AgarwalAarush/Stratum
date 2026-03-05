@@ -10,7 +10,7 @@ interface ThemeStore {
 }
 
 export const useThemeStore = create<ThemeStore>((set, get) => ({
-  theme: 'dark',
+  theme: 'light',
   setTheme: (theme) => {
     set({ theme })
     document.documentElement.dataset.theme = theme
@@ -18,6 +18,6 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
     document.body.classList.add('theme-ready')
   },
   toggle: () => {
-    get().setTheme(get().theme === 'dark' ? 'light' : 'dark')
+    get().setTheme(get().theme === 'light' ? 'dark' : 'light')
   },
 }))
