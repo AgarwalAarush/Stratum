@@ -1,5 +1,5 @@
-// components/items/RepoItem.tsx
 import type { RepoItem as RepoItemType } from '@/lib/types'
+import { ExternalLink, Star } from 'lucide-react'
 
 export function RepoItem({ item }: { item: RepoItemType }) {
   return (
@@ -18,13 +18,13 @@ export function RepoItem({ item }: { item: RepoItemType }) {
         <p className="text-[12px] text-[var(--text-dim)]">
           {item.language}
           <span className="mx-1.5 text-[var(--text-muted)]">·</span>
-          ★ {item.starsToday.toLocaleString()} today
+          <span className="inline-flex items-center gap-1"><Star size={12} /> {item.starsToday.toLocaleString()} today</span>
           <span className="mx-1.5 text-[var(--text-muted)]">·</span>
           {item.totalStars.toLocaleString()} total
         </p>
       </div>
-      <span className="text-[12px] text-[var(--text-muted)] shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        ↗
+      <span className="text-[var(--text-muted)] shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <ExternalLink size={14} />
       </span>
     </a>
   )

@@ -28,8 +28,8 @@
   --font-size-28: 28px;
 
   /* ─── Border radii ─── */
-  --radius-section: 12px;
-  --radius-item: 4px;
+  --radius-section: 16px;
+  --radius-item: 8px;
 
   /* ─── Widths ─── */
   --width-sidebar: 280px;
@@ -37,35 +37,35 @@
 
 /* ─── Design tokens — LIGHT MODE IS DEFAULT ─── */
 :root {
-  --bg: #ffffff;
-  --surface: #f9f9f9;
-  --surface-2: #f0f0f0;
-  --border: #e8e8e8;
-  --border-subtle: #f2f2f2;
-  --text: #111111;
-  --text-dim: #555555;
-  --text-muted: #999999;
-  --accent: #111111;
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --border: #e4e4e7;
+  --border-subtle: #f4f4f5;
+  --text: #09090b;
+  --text-dim: #52525b;
+  --text-muted: #a1a1aa;
+  --accent: #2563eb;
   --green: #16a34a;
-  --red: #dc2626;
+  --red: #ef4444;
   --scrollbar-thumb: #d4d4d4;
-  --scrollbar-thumb-hover: #b0b0b0;
+  --scrollbar-thumb-hover: #a3a3a3;
 }
 
 [data-theme="dark"] {
-  --bg: #0c0c0c;
-  --surface: #141414;
-  --surface-2: #1c1c1c;
-  --border: #2a2a2a;
-  --border-subtle: #1f1f1f;
-  --text: #e8e8e8;
-  --text-dim: #888888;
-  --text-muted: #555555;
-  --accent: #ffffff;
+  --bg: #09090b;
+  --surface: #18181b;
+  --surface-2: #27272a;
+  --border: #27272a;
+  --border-subtle: #18181b;
+  --text: #fafafa;
+  --text-dim: #a1a1aa;
+  --text-muted: #71717a;
+  --accent: #60a5fa;
   --green: #22c55e;
-  --red: #ef4444;
-  --scrollbar-thumb: #333333;
-  --scrollbar-thumb-hover: #555555;
+  --red: #f87171;
+  --scrollbar-thumb: #3f3f46;
+  --scrollbar-thumb-hover: #52525b;
 }
 
 /* ─── Base resets ─── */

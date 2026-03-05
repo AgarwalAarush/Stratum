@@ -1,6 +1,6 @@
-// components/items/EarningsItem.tsx
 import type { EarningsItem as EarningsItemType } from '@/lib/types'
 import { formatRelativeTime, formatFutureTime } from '@/lib/utils'
+import { ExternalLink, ArrowUp, ArrowDown } from 'lucide-react'
 
 export function EarningsItem({ item }: { item: EarningsItemType }) {
   const isUpcoming = item.beat === undefined
@@ -19,9 +19,9 @@ export function EarningsItem({ item }: { item: EarningsItemType }) {
           <span className="text-[14px] font-normal text-[var(--text-dim)] truncate">{item.companyName}</span>
           {!isUpcoming && (
             <span
-              className={`text-[12px] font-semibold ml-auto ${beat ? 'text-[var(--green)]' : 'text-[var(--red)]'}`}
+              className={`text-[12px] font-semibold ml-auto flex items-center gap-1 ${beat ? 'text-[var(--green)]' : 'text-[var(--red)]'}`}
             >
-              {beat ? 'Beat ↑' : 'Miss ↓'}
+              {beat ? <>Beat <ArrowUp size={12} /></> : <>Miss <ArrowDown size={12} /></>}
             </span>
           )}
         </div>
@@ -47,8 +47,8 @@ export function EarningsItem({ item }: { item: EarningsItemType }) {
           )}
         </p>
       </div>
-      <span className="text-[12px] text-[var(--text-muted)] shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        ↗
+      <span className="text-[var(--text-muted)] shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <ExternalLink size={14} />
       </span>
     </a>
   )

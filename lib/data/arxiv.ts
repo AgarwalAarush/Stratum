@@ -77,7 +77,7 @@ export async function fetchArxivPapers(limit = 15): Promise<PaperItem[]> {
 
   try {
     const res = await fetch(url, {
-      next: { revalidate: 3600 },
+      cache: 'no-store',
       headers: { 'User-Agent': 'Stratum/1.0' },
     })
 

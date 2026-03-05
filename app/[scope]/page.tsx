@@ -18,12 +18,14 @@ export default async function ScopePage({ params }: PageProps) {
   const scope = getScopeById(scopeId)!
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       <ScopeHeader
         label={scope.label}
         lastUpdated="just now"
       />
-      <ScopeFeed scope={scope} />
+      <div className="flex-1 overflow-hidden min-h-0">
+        <ScopeFeed scope={scope} />
+      </div>
     </div>
   )
 }

@@ -1,6 +1,6 @@
-// components/items/DiscussionItem.tsx
 import type { DiscussionItem as DiscussionItemType } from '@/lib/types'
 import { formatRelativeTime } from '@/lib/utils'
+import { ExternalLink } from 'lucide-react'
 
 export function DiscussionItem({ item }: { item: DiscussionItemType }) {
   return (
@@ -24,8 +24,8 @@ export function DiscussionItem({ item }: { item: DiscussionItemType }) {
           {formatRelativeTime(item.publishedAt)}
         </p>
       </div>
-      <span className="text-[12px] text-[var(--text-muted)] shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        ↗
+      <span className="text-[var(--text-muted)] shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <ExternalLink size={14} />
       </span>
     </a>
   )

@@ -40,14 +40,22 @@ export async function ScopeFeed({ scope }: ScopeFeedProps) {
   }
 
   return (
-    <div className="p-8 max-w-screen-xl mx-auto space-y-5">
-      {/* Top grid */}
-      <div className={`grid gap-5 grid-cols-1 md:grid-cols-${Math.min(gridSections.length, 3)}`}>
-        {gridSections.map(section => {
+    <div className="flex flex-col h-full min-h-0">
+      {/* Top grid (contiguous borders) */}
+      <div className={`grid grid-cols-1 md:grid-cols-${Math.min(gridSections.length, 3)} border-b border-[var(--border)] min-h-[40%]`}>
+        {gridSections.map((section, idx) => {
           const { items } = getMockSection(section.apiPath)
-          const visibleItems = items.slice(0, 5)
+          const visibleItems = items.slice(0, 8)
+          const isNotLast = idx !== Math.min(gridSections.length, 3) - 1
+
           return (
-            <SectionContainer key={section.id} label={section.label} sources={section.sources} itemCount={items.length}>
+            <SectionContainer
+              key={section.id}
+              label={section.label}
+              sources={section.sources}
+              itemCount={items.length}
+              className={isNotLast ? 'border-r border-[var(--border)]' : ''}
+            >
               {visibleItems.length === 0
                 ? <p className="px-5 py-8 text-[12px] text-[var(--text-muted)] text-center">No data available</p>
                 : visibleItems.map(renderItem)
@@ -56,12 +64,19 @@ export async function ScopeFeed({ scope }: ScopeFeedProps) {
           )
         })}
       </div>
+
       {/* Featured full-width section */}
       {featured && (
-        <SectionContainer label={featured.label} sources={featured.sources} itemCount={featuredItems.length} featured>
+        <SectionContainer
+          label={featured.label}
+          sources={featured.sources}
+          itemCount={featuredItems.length}
+          featured
+          className="flex-1 min-h-[40%]"
+        >
           {featuredItems.length === 0
             ? <p className="px-5 py-8 text-[12px] text-[var(--text-muted)] text-center">No data available</p>
-            : featuredItems.slice(0, 10).map(renderItem)
+            : featuredItems.slice(0, 15).map(renderItem)
           }
         </SectionContainer>
       )}

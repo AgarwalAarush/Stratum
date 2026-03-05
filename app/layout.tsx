@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import '@/app/globals.css'
 import { ThemeScript } from '@/components/ThemeScript'
-import { NavPanel } from '@/components/layout/NavPanel'
+import { ClientLayout } from '@/components/layout/ClientLayout'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -26,11 +26,10 @@ export default function RootLayout({
       <head>
         <ThemeScript />
       </head>
-      <body className="bg-[var(--bg)] min-h-screen">
-        <NavPanel />
-        <main>
+      <body className="bg-[var(--surface-2)] text-[var(--text)] font-sans antialiased">
+        <ClientLayout>
           {children}
-        </main>
+        </ClientLayout>
       </body>
     </html>
   )
