@@ -39,14 +39,8 @@ export async function ScopeFeed({ scope }: ScopeFeedProps) {
     }
   }
 
-  // For ai-research, gridSections has 3 items: discussions, repos, ai-news.
-  // Left column: Insights / News (Take the first grid section)
-  const leftSection = gridSections[0]
-  // Right top: The remaining grid sections (up to 2)
-  const rightTopSections = gridSections.slice(1, 3)
-
   return (
-    <div className="p-10 lg:p-12 max-w-[1600px] mx-auto flex flex-col lg:flex-row gap-10">
+    <div className="max-w-[1200px] mx-auto flex flex-col pt-10 px-8 pb-20 gap-8">
 
       {/* ─── LEFT COLUMN: Insights ─── */}
       {leftSection && (

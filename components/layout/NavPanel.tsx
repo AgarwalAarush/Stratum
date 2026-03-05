@@ -24,13 +24,13 @@ export function NavPanel({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (b
         }}
       >
         {/* Drawer header */}
-        <div className="flex items-center justify-between px-6 h-[88px] border-b border-[var(--border)] shrink-0 bg-[var(--bg)]">
-          <span className="text-[14px] font-bold tracking-[0.1em] uppercase text-[var(--text)]">
-            Stratum
+        <div className="flex items-center justify-between px-6 pt-10 pb-6 shrink-0 bg-[var(--bg)]">
+          <span className="text-[18px] font-bold text-[var(--text)] flex items-center gap-2">
+            🚀 Stratum
           </span>
           <button
             onClick={toggle}
-            className="w-8 h-8 flex items-center justify-center rounded-[8px] text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors cursor-pointer"
+            className="w-8 h-8 flex items-center justify-center rounded-[8px] text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors cursor-pointer"
             aria-label="Close navigation"
           >
             <X size={18} />
@@ -69,10 +69,10 @@ export function NavPanel({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (b
 
       {/* Persistent Toggle Button when closed */}
       {!isOpen && (
-        <div className="absolute top-4 left-4 z-50">
+        <div className="absolute top-10 left-6 z-50">
           <button
             onClick={toggle}
-            className="w-10 h-10 flex items-center justify-center rounded-[10px] bg-[var(--surface-1)] border border-[var(--border-subtle)] backdrop-blur-md shadow-sm text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-all cursor-pointer"
+            className="w-10 h-10 flex items-center justify-center rounded-[10px] bg-[var(--surface)] shadow-md border-0 text-[var(--text-muted)] hover:text-[var(--text)] transition-all cursor-pointer"
             aria-label="Open navigation"
           >
             <Menu size={20} />
