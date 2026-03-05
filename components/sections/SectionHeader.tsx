@@ -6,8 +6,8 @@ interface SectionHeaderProps {
 
 export function SectionHeader({ label, sources }: SectionHeaderProps) {
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
-      <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--text)]">
+    <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-subtle)]">
+      <span className="text-[12px] font-bold uppercase tracking-[0.06em] text-[var(--text)]">
         {label}
       </span>
       <div className="flex gap-1.5 flex-wrap justify-end">

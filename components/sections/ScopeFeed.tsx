@@ -1,6 +1,7 @@
 // components/sections/ScopeFeed.tsx
 import type { ScopeDef, FeedItem } from '@/lib/types'
 import { getMockSection } from '@/lib/mock-data'
+import { fetchArxivPapers } from '@/lib/data/arxiv'
 import { SectionContainer } from './SectionContainer'
 import { PaperItem, DiscussionItem, RepoItem, EarningsItem, NewsItem } from '@/components/items'
 
@@ -23,30 +24,47 @@ interface ScopeFeedProps {
   scope: ScopeDef
 }
 
-export function ScopeFeed({ scope }: ScopeFeedProps) {
-  return (
-    <div className="flex flex-col gap-4 p-6">
-      {scope.sections.map((section) => {
-        const { items } = getMockSection(section.apiPath)
-        const visibleItems = items.slice(0, 5)
+export async function ScopeFeed({ scope }: ScopeFeedProps) {
+  const featured = scope.featuredSectionId
+    ? scope.sections.find(s => s.id === scope.featuredSectionId)
+    : null
+  const gridSections = scope.sections.filter(s => s.id !== scope.featuredSectionId)
 
-        return (
-          <SectionContainer
-            key={section.id}
-            label={section.label}
-            sources={section.sources}
-            itemCount={items.length}
-          >
-            {visibleItems.length === 0 ? (
-              <p className="px-4 py-8 text-[11px] text-[var(--text-muted)] text-center">
-                No data available
-              </p>
-            ) : (
-              visibleItems.map(renderItem)
-            )}
-          </SectionContainer>
-        )
-      })}
+  let featuredItems: FeedItem[] = []
+  if (featured) {
+    if (featured.id === 'papers') {
+      featuredItems = await fetchArxivPapers(10)
+    } else {
+      featuredItems = getMockSection(featured.apiPath).items
+    }
+  }
+
+  return (
+    <div className="p-8 max-w-screen-xl mx-auto space-y-5">
+      {/* Top grid */}
+      <div className={`grid gap-5 grid-cols-1 md:grid-cols-${Math.min(gridSections.length, 3)}`}>
+        {gridSections.map(section => {
+          const { items } = getMockSection(section.apiPath)
+          const visibleItems = items.slice(0, 5)
+          return (
+            <SectionContainer key={section.id} label={section.label} sources={section.sources} itemCount={items.length}>
+              {visibleItems.length === 0
+                ? <p className="px-5 py-8 text-[12px] text-[var(--text-muted)] text-center">No data available</p>
+                : visibleItems.map(renderItem)
+              }
+            </SectionContainer>
+          )
+        })}
+      </div>
+      {/* Featured full-width section */}
+      {featured && (
+        <SectionContainer label={featured.label} sources={featured.sources} itemCount={featuredItems.length} featured>
+          {featuredItems.length === 0
+            ? <p className="px-5 py-8 text-[12px] text-[var(--text-muted)] text-center">No data available</p>
+            : featuredItems.slice(0, 10).map(renderItem)
+          }
+        </SectionContainer>
+      )}
     </div>
   )
 }

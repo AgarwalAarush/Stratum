@@ -6,6 +6,7 @@ interface SectionContainerProps {
   sources: string[]
   children: React.ReactNode
   itemCount?: number
+  featured?: boolean
 }
 
 export function SectionContainer({
@@ -13,11 +14,12 @@ export function SectionContainer({
   sources,
   children,
   itemCount,
+  featured,
 }: SectionContainerProps) {
   return (
-    <section className="border border-[var(--border)] rounded-[8px] overflow-hidden bg-[var(--surface)]">
+    <section className="border border-[var(--border)] rounded-[12px] overflow-hidden bg-[var(--surface)] shadow-sm">
       <SectionHeader label={label} sources={sources} />
-      <div className="overflow-y-auto" style={{ maxHeight: '320px' }}>
+      <div className="overflow-y-auto" style={{ maxHeight: featured ? '480px' : '320px' }}>
         {children}
       </div>
       {itemCount !== undefined && itemCount > 5 && (
