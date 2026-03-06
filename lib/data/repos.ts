@@ -123,8 +123,8 @@ function githubSearchQuery(now: Date): string {
   const createdAfter = createdAfterDate(now)
 
   return [
-    '(topic:ai OR topic:llm OR topic:machine-learning)',
-    '(llm OR "machine learning" OR "artificial intelligence") in:name,description',
+    'topic:ai',
+    'llm in:name,description',
     `created:>=${createdAfter}`,
     `stars:${MIN_TOTAL_STARS}..${MAX_TOTAL_STARS}`,
     'fork:false',
@@ -137,7 +137,7 @@ function fallbackGithubSearchQuery(now: Date): string {
   const createdAfter = createdAfterDate(now)
 
   return [
-    'topic:ai',
+    'topic:llm',
     `created:>=${createdAfter}`,
     `stars:${MIN_TOTAL_STARS}..${MAX_TOTAL_STARS}`,
     'fork:false',
