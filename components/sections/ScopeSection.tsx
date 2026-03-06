@@ -253,7 +253,7 @@ export function ScopeSection({
   const viewportClassName = viewportMode === 'fixed'
     ? 'section-viewport-fixed'
     : viewportMode === 'fill'
-      ? 'xl:flex-1 xl:min-h-0 xl:overflow-y-auto xl:scrollbar-none'
+      ? 'xl:flex-1 xl:min-h-0 xl:overflow-y-auto scrollbar-none'
       : ''
 
   return (

@@ -131,7 +131,7 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto main-scroll">
         {isAiResearchScope ? (
           <>
             <div className="grid grid-cols-1 xl:grid-cols-3 ai-research-grid xl:divide-x xl:divide-black/10">
