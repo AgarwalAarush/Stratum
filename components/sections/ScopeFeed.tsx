@@ -128,12 +128,16 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
       <div className="flex-1 overflow-y-auto">
         {isAiResearchScope ? (
           <>
-            <div className="grid grid-cols-1 xl:grid-cols-3 xl:divide-x xl:divide-black/10">
-              <div className="xl:col-span-2">
+            <div className="grid grid-cols-1 xl:grid-cols-3 xl:grid-rows-[auto_auto] xl:divide-x xl:divide-black/10">
+              <div className="order-1 xl:col-span-2">
                 {renderSection('ai-news-general')}
+              </div>
+              <div className="order-2 xl:col-span-2">
                 {renderSection('ai-policy-regulation')}
               </div>
-              <div>{renderSection('tech-events')}</div>
+              <div className="order-3 xl:order-none xl:col-start-3 xl:row-span-2 xl:[&>section]:h-full xl:[&>section]:flex xl:[&>section]:flex-col">
+                {renderSection('tech-events')}
+              </div>
             </div>
 
             {renderSection('papers')}

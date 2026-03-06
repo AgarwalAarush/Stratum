@@ -19,9 +19,10 @@ function extractAllTagContent(xml: string, tag: string): string[] {
 export function parseArxivEntry(entry: string): PaperItem | null {
   try {
     const rawId = extractTagContent(entry, 'id')
-    // arXiv id looks like: http://arxiv.org/abs/2501.12948v1
-    const idMatch = rawId.match(/abs\/([^v]+)/)
-    const arxivId = idMatch ? idMatch[1] : rawId
+    // arXiv id often looks like: https://arxiv.org/abs/2501.12948v1
+    const idMatch = rawId.match(/abs\/([^?#]+?)(?:v\d+)?$/)
+    const fallbackId = rawId.replace(/^.*abs\//, '').replace(/v\d+$/, '')
+    const arxivId = (idMatch ? idMatch[1] : fallbackId).trim()
 
     const rawTitle = extractTagContent(entry, 'title')
     const title = rawTitle.replace(/\s+/g, ' ').trim()
@@ -54,7 +55,9 @@ export function parseArxivEntry(entry: string): PaperItem | null {
       .slice(0, 3)
 
     // Get HTML link
-    const linkMatch = entry.match(/<link[^>]+type="text\/html"[^>]*href="([^"]+)"/)
+    const linkMatch = entry.match(/<link[^>]+rel="alternate"[^>]+href="([^"]+)"/)
+      || entry.match(/<link[^>]+href="([^"]+)"[^>]+type="text\/html"/)
+      || entry.match(/<link[^>]+type="text\/html"[^>]+href="([^"]+)"/)
     const url = linkMatch ? linkMatch[1] : `https://arxiv.org/abs/${arxivId}`
 
     return {
@@ -88,8 +91,9 @@ export async function fetchArxivPapers(limit = 15): Promise<PaperItem[]> {
 
     const xml = await res.text()
 
-    // Split into entry blocks
-    const entryBlocks = xml.split('<entry>').slice(1).map(e => e.split('</entry>')[0])
+    // Parse entry blocks resiliently (handles optional entry attributes).
+    const entryBlocks = Array.from(xml.matchAll(/<entry\b[^>]*>([\s\S]*?)<\/entry>/g))
+      .map((match) => match[1] ?? '')
     const papers = entryBlocks
       .map(parseArxivEntry)
       .filter((p): p is PaperItem => p !== null)
