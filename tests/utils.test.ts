@@ -46,100 +46,183 @@ test('formatRelativeTime formats days correctly', () => {
 test('formatRelativeTime formats old dates as absolute dates', () => {
   const now = new Date('2026-03-06T12:00:00.000Z')
   const oldDate = new Date('2026-02-20T12:00:00.000Z') // 14 days ago
+  const originalDate = global.Date
   
-  // Mock the current date for consistent testing
-  const originalNow = Date.now
-  Date.now = () => now.getTime()
+  global.Date = class extends originalDate {
+    constructor(...args: any[]) {
+      if (args.length === 0) {
+        super(now.getTime())
+      } else {
+        super(...args)
+      }
+    }
+    static now = () => now.getTime()
+  } as any
   
-  const result = formatRelativeTime(oldDate.toISOString())
-  assert.equal(result, 'Feb 20')
-  
-  Date.now = originalNow
+  try {
+    const result = formatRelativeTime(oldDate.toISOString())
+    assert.equal(result, 'Feb 20')
+  } finally {
+    global.Date = originalDate
+  }
 })
 
 test('formatRelativeTime handles edge case at boundaries', () => {
   const baseTime = new Date('2026-03-06T12:00:00.000Z')
-  const originalNow = Date.now
-  Date.now = () => baseTime.getTime()
+  const originalDate = global.Date
   
-  // Exactly 1 minute
-  const exactMinute = new Date(baseTime.getTime() - 60 * 1000)
-  assert.equal(formatRelativeTime(exactMinute.toISOString()), '1m ago')
+  // Mock Date constructor to return fixed time for "now"
+  global.Date = class extends originalDate {
+    constructor(...args: any[]) {
+      if (args.length === 0) {
+        super(baseTime.getTime())
+      } else {
+        super(...args)
+      }
+    }
+    static now = () => baseTime.getTime()
+  } as any
   
-  // Exactly 1 hour
-  const exactHour = new Date(baseTime.getTime() - 60 * 60 * 1000)
-  assert.equal(formatRelativeTime(exactHour.toISOString()), '1h ago')
-  
-  // Exactly 1 day
-  const exactDay = new Date(baseTime.getTime() - 24 * 60 * 60 * 1000)
-  assert.equal(formatRelativeTime(exactDay.toISOString()), '1d ago')
-  
-  // Exactly 7 days
-  const exactWeek = new Date(baseTime.getTime() - 7 * 24 * 60 * 60 * 1000)
-  assert.equal(formatRelativeTime(exactWeek.toISOString()), 'Feb 27')
-  
-  Date.now = originalNow
+  try {
+    // Exactly 1 minute
+    const exactMinute = new originalDate(baseTime.getTime() - 60 * 1000)
+    assert.equal(formatRelativeTime(exactMinute.toISOString()), '1m ago')
+    
+    // Exactly 1 hour
+    const exactHour = new originalDate(baseTime.getTime() - 60 * 60 * 1000)
+    assert.equal(formatRelativeTime(exactHour.toISOString()), '1h ago')
+    
+    // Exactly 1 day
+    const exactDay = new originalDate(baseTime.getTime() - 24 * 60 * 60 * 1000)
+    assert.equal(formatRelativeTime(exactDay.toISOString()), '1d ago')
+    
+    // Exactly 7 days
+    const exactWeek = new originalDate(baseTime.getTime() - 7 * 24 * 60 * 60 * 1000)
+    assert.equal(formatRelativeTime(exactWeek.toISOString()), 'Feb 27')
+  } finally {
+    global.Date = originalDate
+  }
 })
 
 test('formatFutureTime handles past dates by delegating to formatRelativeTime', () => {
   const now = new Date('2026-03-06T12:00:00.000Z')
   const pastDate = new Date('2026-03-06T11:00:00.000Z') // 1 hour ago
-  const originalNow = Date.now
-  Date.now = () => now.getTime()
+  const originalDate = global.Date
   
-  const result = formatFutureTime(pastDate.toISOString())
-  assert.equal(result, '1h ago')
+  global.Date = class extends originalDate {
+    constructor(...args: any[]) {
+      if (args.length === 0) {
+        super(now.getTime())
+      } else {
+        super(...args)
+      }
+    }
+    static now = () => now.getTime()
+  } as any
   
-  Date.now = originalNow
+  try {
+    const result = formatFutureTime(pastDate.toISOString())
+    assert.equal(result, '1h ago')
+  } finally {
+    global.Date = originalDate
+  }
 })
 
 test('formatFutureTime formats "today" for same day', () => {
   const baseDate = new Date('2026-03-06T10:00:00.000Z')
   const todayLater = new Date('2026-03-06T15:00:00.000Z') // Later same day
-  const originalNow = Date.now
-  Date.now = () => baseDate.getTime()
+  const originalDate = global.Date
   
-  const result = formatFutureTime(todayLater.toISOString())
-  assert.equal(result, 'today')
+  global.Date = class extends originalDate {
+    constructor(...args: any[]) {
+      if (args.length === 0) {
+        super(baseDate.getTime())
+      } else {
+        super(...args)
+      }
+    }
+    static now = () => baseDate.getTime()
+  } as any
   
-  Date.now = originalNow
+  try {
+    const result = formatFutureTime(todayLater.toISOString())
+    assert.equal(result, 'today')
+  } finally {
+    global.Date = originalDate
+  }
 })
 
 test('formatFutureTime formats "tomorrow" for next day', () => {
-  const baseDate = new Date('2026-03-06T22:00:00.000Z')
-  const tomorrow = new Date('2026-03-07T10:00:00.000Z')
-  const originalNow = Date.now
-  Date.now = () => baseDate.getTime()
+  const baseDate = new Date('2026-03-06T12:00:00.000Z')
+  const tomorrow = new Date('2026-03-07T15:00:00.000Z') // More than 24 hours later
+  const originalDate = global.Date
   
-  const result = formatFutureTime(tomorrow.toISOString())
-  assert.equal(result, 'tomorrow')
+  global.Date = class extends originalDate {
+    constructor(...args: any[]) {
+      if (args.length === 0) {
+        super(baseDate.getTime())
+      } else {
+        super(...args)
+      }
+    }
+    static now = () => baseDate.getTime()
+  } as any
   
-  Date.now = originalNow
+  try {
+    const result = formatFutureTime(tomorrow.toISOString())
+    assert.equal(result, 'tomorrow')
+  } finally {
+    global.Date = originalDate
+  }
 })
 
 test('formatFutureTime formats days in future', () => {
   const baseDate = new Date('2026-03-06T12:00:00.000Z')
   const threeDays = new Date('2026-03-09T12:00:00.000Z')
   const tenDays = new Date('2026-03-16T12:00:00.000Z')
-  const originalNow = Date.now
-  Date.now = () => baseDate.getTime()
+  const originalDate = global.Date
   
-  assert.equal(formatFutureTime(threeDays.toISOString()), 'in 3d')
-  assert.equal(formatFutureTime(tenDays.toISOString()), 'in 10d')
+  global.Date = class extends originalDate {
+    constructor(...args: any[]) {
+      if (args.length === 0) {
+        super(baseDate.getTime())
+      } else {
+        super(...args)
+      }
+    }
+    static now = () => baseDate.getTime()
+  } as any
   
-  Date.now = originalNow
+  try {
+    assert.equal(formatFutureTime(threeDays.toISOString()), 'in 3d')
+    assert.equal(formatFutureTime(tenDays.toISOString()), 'in 10d')
+  } finally {
+    global.Date = originalDate
+  }
 })
 
 test('formatFutureTime handles edge cases at day boundaries', () => {
-  const baseDate = new Date('2026-03-06T23:59:00.000Z')
-  const nextMinute = new Date('2026-03-07T00:01:00.000Z') // Next day, just 2 minutes later
-  const originalNow = Date.now
-  Date.now = () => baseDate.getTime()
+  const baseDate = new Date('2026-03-06T12:00:00.000Z')
+  const nextMinute = new Date('2026-03-06T12:02:00.000Z') // Just 2 minutes later (same day)
+  const originalDate = global.Date
   
-  const result = formatFutureTime(nextMinute.toISOString())
-  assert.equal(result, 'tomorrow')
+  global.Date = class extends originalDate {
+    constructor(...args: any[]) {
+      if (args.length === 0) {
+        super(baseDate.getTime())
+      } else {
+        super(...args)
+      }
+    }
+    static now = () => baseDate.getTime()
+  } as any
   
-  Date.now = originalNow
+  try {
+    const result = formatFutureTime(nextMinute.toISOString())
+    assert.equal(result, 'today') // Should be today since it's same day
+  } finally {
+    global.Date = originalDate
+  }
 })
 
 test('formatRelativeTime and formatFutureTime handle invalid dates gracefully', () => {
