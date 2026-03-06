@@ -1,7 +1,7 @@
 // components/layout/NavPanel.tsx
 'use client'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, usePathname } from 'next/navigation'
 import { SCOPES } from '@/lib/scopes'
 import { ThemeToggle } from './ThemeToggle'
 import { Layers, Menu, Settings } from 'lucide-react'
@@ -14,7 +14,9 @@ interface NavPanelProps {
 
 export function NavPanel({ isOpen, setIsOpen, onOpenSettings }: NavPanelProps) {
   const params = useParams()
+  const pathname = usePathname()
   const activeScope = params?.scope as string | undefined
+  const isMorningBrief = pathname === '/morning-brief'
 
   const toggle = () => setIsOpen(!isOpen)
 
@@ -56,6 +58,34 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings }: NavPanelProps) {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-3">
+        <Link
+          href="/morning-brief"
+          aria-label="Morning Brief"
+          title={!isOpen ? 'Morning Brief' : undefined}
+          className={[
+            'flex items-center rounded-[3px] text-[12px] transition-colors duration-150 font-mono mb-3',
+            isOpen ? 'gap-2 px-2 py-1.5 justify-start' : 'h-8 px-0 justify-center',
+            isMorningBrief
+              ? 'bg-[var(--surface-2)] font-medium text-[var(--text)]'
+              : 'font-normal text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
+          ].join(' ')}
+        >
+          <span className="w-[5px] h-[5px] rounded-full bg-current opacity-50 shrink-0" />
+          <span
+            className="whitespace-nowrap"
+            style={{
+              opacity: isOpen ? 1 : 0,
+              transform: isOpen ? 'translateX(0)' : 'translateX(-6px)',
+              pointerEvents: isOpen ? 'auto' : 'none',
+              transitionProperty: 'opacity, transform',
+              transitionDuration: 'var(--sidebar-motion-duration)',
+              transitionTimingFunction: 'var(--sidebar-motion-easing)',
+            }}
+            aria-hidden={!isOpen}
+          >
+            Morning Brief
+          </span>
+        </Link>
         <p
           className="px-2 pb-2 text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-mono whitespace-nowrap"
           style={{
