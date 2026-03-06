@@ -15,9 +15,11 @@ export function SectionContainer({
   sources,
   children,
   itemCount,
-  featured,
+  featured: _featured,
   className = '',
 }: SectionContainerProps) {
+  void _featured
+
   return (
     <section className={`flex flex-col bg-[var(--surface)] border border-[var(--border)] rounded-[20px] shadow-sm hover:shadow-md transition-shadow overflow-hidden ${className}`}>
       <SectionHeader label={label} sources={sources} />

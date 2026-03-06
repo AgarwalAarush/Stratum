@@ -1,85 +1,62 @@
 // components/sections/ScopeFeed.tsx
+import { RefreshCw } from 'lucide-react'
 import type { ScopeDef, FeedItem } from '@/lib/types'
 import { getMockSection } from '@/lib/mock-data'
 import { fetchArxivPapers } from '@/lib/data/arxiv'
-import { SectionContainer } from './SectionContainer'
-import { PaperItem, DiscussionItem, RepoItem, EarningsItem, NewsItem } from '@/components/items'
-
-function renderItem(item: FeedItem) {
-  switch (item.type) {
-    case 'paper':
-      return <PaperItem key={item.id} item={item} />
-    case 'discussion':
-      return <DiscussionItem key={item.id} item={item} />
-    case 'repo':
-      return <RepoItem key={item.id} item={item} />
-    case 'earnings':
-      return <EarningsItem key={item.id} item={item} />
-    case 'news':
-      return <NewsItem key={item.id} item={item} />
-  }
-}
+import { ScopeSection } from './ScopeSection'
 
 interface ScopeFeedProps {
   scope: ScopeDef
 }
 
 export async function ScopeFeed({ scope }: ScopeFeedProps) {
-  const featured = scope.featuredSectionId
-    ? scope.sections.find(s => s.id === scope.featuredSectionId)
-    : null
-  const gridSections = scope.sections.filter(s => s.id !== scope.featuredSectionId)
+  const sections = await Promise.all(
+    scope.sections.map(async (section) => {
+      let items: FeedItem[]
 
-  let featuredItems: FeedItem[] = []
-  if (featured) {
-    if (featured.id === 'papers') {
-      featuredItems = await fetchArxivPapers(10)
-    } else {
-      featuredItems = getMockSection(featured.apiPath).items
-    }
-  }
+      if (section.id === 'papers') {
+        items = await fetchArxivPapers(12)
+      } else {
+        items = getMockSection(section.apiPath).items
+      }
+
+      return { section, items }
+    }),
+  )
 
   return (
-    <div className="w-full flex flex-col pt-10 px-12 pb-24 gap-12">
-
-      {/* Top Row: etc, etc */}
-      {gridSections.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-          {gridSections.map((section: ScopeDef['sections'][0]) => {
-            const items = getMockSection(section.apiPath).items
-            return (
-              <SectionContainer
-                key={section.id}
-                label={section.label}
-                sources={section.sources}
-                itemCount={items.length}
-                className="h-[420px]"
-              >
-                {items.slice(0, 6).map(renderItem)}
-              </SectionContainer>
-            )
-          })}
+    <div className="w-full h-full min-h-0 flex flex-col bg-[var(--bg)]">
+      <header className="flex items-center justify-between px-6 py-4 border-b border-black/10 shrink-0 gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[15px] font-semibold text-[var(--text)] leading-[1.3]">
+            {scope.label}
+          </h1>
         </div>
-      )}
 
-      {/* Bottom Row: Research Papers */}
-      {featured && (
-        <div className="flex-1 flex flex-col">
-          <SectionContainer
-            label={featured.label}
-            sources={featured.sources}
-            itemCount={featuredItems.length}
-            featured
-            className="flex-1 min-h-[600px]"
-          >
-            {featuredItems.length === 0
-              ? <p className="px-8 py-10 text-[13px] text-[var(--text-muted)] text-center">No data available</p>
-              : featuredItems.slice(0, 15).map(renderItem)
-            }
-          </SectionContainer>
+        <div className="flex items-center gap-1.5 shrink-0 border-l border-black/10 pl-3">
+          <RefreshCw size={11} className="text-black/35" />
+          <span className="font-mono text-[11px] text-black/35 whitespace-nowrap">
+            just now
+          </span>
         </div>
-      )}
+      </header>
 
+      <div className="flex-1 overflow-y-auto">
+        {sections.map(({ section, items }) => (
+          <ScopeSection
+            key={section.id}
+            label={section.label}
+            items={items}
+            defaultExpanded
+            collapseAfter={5}
+          />
+        ))}
+        <div className="px-6 py-8">
+          <p className="font-mono text-[11px] text-black/20 text-center">
+            — END OF FEED —
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
