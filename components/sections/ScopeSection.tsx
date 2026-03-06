@@ -42,6 +42,7 @@ function getTag(item: FeedItem): ItemTag | undefined {
     if (item.beat === false) return 'breaking'
   }
   if (item.type === 'paper') {
+    if (item.id.startsWith('alphaxiv-')) return 'hot'
     const ageMs = Date.now() - new Date(item.publishedAt).getTime()
     if (ageMs < 48 * 60 * 60 * 1000) return 'new'
   }
@@ -63,7 +64,7 @@ function getRow(item: FeedItem): DisplayRow {
       return {
         id: item.id,
         title: item.title,
-        source: 'arXiv',
+        source: item.id.startsWith('alphaxiv-') ? 'alphaxiv' : 'arXiv',
         time: formatRelativeTime(item.publishedAt),
         meta: [authorText, categories].filter(Boolean).join(' · '),
         url: item.url,
