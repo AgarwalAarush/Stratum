@@ -172,12 +172,29 @@ Return only a JSON array of strings.`
       return { bullets: FALLBACK_BULLETS, fetchedAt: new Date().toISOString() }
     }
 
-    // Expand bare [n] references into [n](url) markdown links
+    // Expand [n], [n, m], [n-m] references into individual [n](url) markdown links
     const sourceMap = new Map(sourceIndex.map((s) => [s.n, s.url]))
     const processed = bullets.map((b) =>
-      b.replace(/\[(\d+)\]/g, (full, num) => {
-        const url = sourceMap.get(Number(num))
-        return url ? `[${num}](${url})` : full
+      b.replace(/\[[\d,\s-]+\]/g, (full) => {
+        const inner = full.slice(1, -1) // strip [ ]
+        const nums: number[] = []
+        for (const part of inner.split(',')) {
+          const trimmed = part.trim()
+          const range = trimmed.match(/^(\d+)\s*-\s*(\d+)$/)
+          if (range) {
+            const lo = Number(range[1]), hi = Number(range[2])
+            for (let i = lo; i <= hi; i++) nums.push(i)
+          } else if (/^\d+$/.test(trimmed)) {
+            nums.push(Number(trimmed))
+          }
+        }
+        if (nums.length === 0) return full
+        return nums
+          .map((n) => {
+            const url = sourceMap.get(n)
+            return url ? `[${n}](${url})` : `[${n}]`
+          })
+          .join(' ')
       }),
     )
 
