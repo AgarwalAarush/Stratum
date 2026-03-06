@@ -82,10 +82,10 @@ function getGridClassName(columns: number) {
 }
 
 // Test column reordering logic from ScopeSection
-function reorderByColumns<T>(items: T[], columns: number): T[] {
+function reorderByColumns<T>(items: T[], columns: number, rowsPerColumn?: number): T[] {
   if (columns <= 1 || items.length <= 1) return items
 
-  const rowCount = Math.ceil(items.length / columns)
+  const rowCount = rowsPerColumn ?? Math.ceil(items.length / columns)
   const ordered: T[] = []
 
   for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
@@ -99,6 +99,13 @@ function reorderByColumns<T>(items: T[], columns: number): T[] {
   }
 
   return ordered
+}
+
+// Test effective columns calculation from ScopeSection
+function calculateEffectiveColumns(rows: any[], columns: number, itemsPerColumn?: number): number {
+  return itemsPerColumn
+    ? Math.min(columns, Math.max(1, Math.ceil(rows.length / itemsPerColumn)))
+    : columns
 }
 
 test('ScopeSection applies correct CSS classes based on viewportMode prop', () => {
@@ -243,4 +250,73 @@ test('ScopeSection useGridLayout determination works correctly', () => {
   assert.equal(useGridLayout(2), true, 'two columns should use grid layout')
   assert.equal(useGridLayout(3), true, 'three columns should use grid layout')
   assert.equal(useGridLayout(5), true, 'multiple columns should use grid layout')
+})
+
+test('reorderByColumns() should correctly reorder rows when itemsPerColumn is defined and fillByColumn is true', () => {
+  const items = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+  
+  // Test with itemsPerColumn = 3 and 2 columns
+  // Should create 2 columns with 3 items each
+  const reordered = reorderByColumns(items, 2, 3)
+  // Column 1: [A, B, C]  Column 2: [D, E, F]
+  // Reordered: [A, D, B, E, C, F]
+  // Note: G, H are not included as they exceed itemsPerColumn * columns
+  assert.deepEqual(reordered, ['A', 'D', 'B', 'E', 'C', 'F'], 'should reorder items when itemsPerColumn is defined')
+  
+  // Test with itemsPerColumn = 2 and 3 columns
+  const items2 = ['A', 'B', 'C', 'D', 'E', 'F']
+  const reordered2 = reorderByColumns(items2, 3, 2)
+  // Column 1: [A, B]  Column 2: [C, D]  Column 3: [E, F]
+  // Reordered: [A, C, E, B, D, F]
+  assert.deepEqual(reordered2, ['A', 'C', 'E', 'B', 'D', 'F'], 'should reorder items with different itemsPerColumn values')
+})
+
+test('ScopeSection should render the correct number of columns when itemsPerColumn is defined', () => {
+  const items = Array.from({ length: 10 }, (_, i) => `Item ${i + 1}`)
+  
+  // Test with itemsPerColumn = 3 and columns = 4
+  // Should limit to Math.ceil(10 / 3) = 4 columns, but max 4, so 4 columns
+  const effectiveColumns1 = calculateEffectiveColumns(items, 4, 3)
+  assert.equal(effectiveColumns1, 4, 'should use min of columns and calculated columns')
+  
+  // Test with itemsPerColumn = 5 and columns = 4
+  // Should limit to Math.ceil(10 / 5) = 2 columns
+  const effectiveColumns2 = calculateEffectiveColumns(items, 4, 5)
+  assert.equal(effectiveColumns2, 2, 'should limit columns based on itemsPerColumn')
+  
+  // Test with itemsPerColumn = 2 and columns = 3
+  // Should limit to Math.ceil(10 / 2) = 5 columns, but max 3, so 3 columns
+  const effectiveColumns3 = calculateEffectiveColumns(items, 3, 2)
+  assert.equal(effectiveColumns3, 3, 'should respect columns limit when itemsPerColumn would allow more')
+  
+  // Test with small number of items
+  const fewItems = ['A', 'B']
+  const effectiveColumns4 = calculateEffectiveColumns(fewItems, 4, 3)
+  assert.equal(effectiveColumns4, 1, 'should use minimum 1 column when items are fewer than itemsPerColumn')
+})
+
+test('ScopeSection should pass itemsPerColumn to reorderByColumns when fillByColumn is true', () => {
+  const items = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']
+  const columns = 3
+  const itemsPerColumn = 2
+  
+  // Simulate the ScopeSection logic: fillByColumn = true case
+  const effectiveColumns = calculateEffectiveColumns(items, columns, itemsPerColumn)
+  const reorderedWithItemsPerColumn = reorderByColumns(items, effectiveColumns, itemsPerColumn)
+  
+  // Test that itemsPerColumn is properly used in reordering
+  // With itemsPerColumn = 2 and effectiveColumns = 3:
+  // Column 1: [A, B]  Column 2: [C, D]  Column 3: [E, F]
+  // Reordered: [A, C, E, B, D, F]
+  assert.deepEqual(reorderedWithItemsPerColumn, ['A', 'C', 'E', 'B', 'D', 'F'], 'should pass itemsPerColumn to reorderByColumns and respect it')
+  
+  // Verify that without itemsPerColumn, reordering would be different
+  const reorderedWithoutItemsPerColumn = reorderByColumns(items, effectiveColumns)
+  // Without itemsPerColumn: Math.ceil(9/3) = 3 rows per column
+  // Column 1: [A, B, C]  Column 2: [D, E, F]  Column 3: [G, H, I]
+  // Reordered: [A, D, G, B, E, H, C, F, I]
+  assert.deepEqual(reorderedWithoutItemsPerColumn, ['A', 'D', 'G', 'B', 'E', 'H', 'C', 'F', 'I'], 'should produce different result without itemsPerColumn')
+  
+  // Confirm they are different
+  assert.notDeepEqual(reorderedWithItemsPerColumn, reorderedWithoutItemsPerColumn, 'itemsPerColumn should change reordering behavior')
 })

@@ -52,26 +52,96 @@ const EARNINGS_FALLBACK_FEEDS: FinanceFeed[] = [
 ]
 
 const KNOWN_COMPANIES: KnownCompany[] = [
+  // Mega-cap tech
   { ticker: 'AAPL', companyName: 'Apple Inc', aliases: ['apple'] },
   { ticker: 'MSFT', companyName: 'Microsoft Corp', aliases: ['microsoft'] },
   { ticker: 'GOOGL', companyName: 'Alphabet Inc', aliases: ['alphabet', 'google'] },
   { ticker: 'AMZN', companyName: 'Amazon.com Inc', aliases: ['amazon'] },
-  { ticker: 'META', companyName: 'Meta Platforms Inc', aliases: ['meta', 'facebook'] },
+  { ticker: 'META', companyName: 'Meta Platforms Inc', aliases: ['meta platforms', 'facebook'] },
   { ticker: 'NVDA', companyName: 'NVIDIA Corp', aliases: ['nvidia'] },
   { ticker: 'TSLA', companyName: 'Tesla Inc', aliases: ['tesla'] },
   { ticker: 'NFLX', companyName: 'Netflix Inc', aliases: ['netflix'] },
+  // Semiconductors & hardware
   { ticker: 'AMD', companyName: 'Advanced Micro Devices', aliases: ['amd', 'advanced micro devices'] },
   { ticker: 'INTC', companyName: 'Intel Corp', aliases: ['intel'] },
+  { ticker: 'AVGO', companyName: 'Broadcom Inc', aliases: ['broadcom'] },
+  { ticker: 'QCOM', companyName: 'Qualcomm Inc', aliases: ['qualcomm'] },
+  { ticker: 'TSM', companyName: 'Taiwan Semiconductor', aliases: ['tsmc', 'taiwan semiconductor'] },
+  { ticker: 'MU', companyName: 'Micron Technology', aliases: ['micron'] },
+  { ticker: 'SMCI', companyName: 'Super Micro Computer', aliases: ['super micro', 'supermicro'] },
+  { ticker: 'ARM', companyName: 'Arm Holdings', aliases: ['arm holdings'] },
+  // Enterprise software & cloud
+  { ticker: 'ORCL', companyName: 'Oracle Corp', aliases: ['oracle'] },
+  { ticker: 'CRM', companyName: 'Salesforce Inc', aliases: ['salesforce'] },
+  { ticker: 'ADBE', companyName: 'Adobe Inc', aliases: ['adobe'] },
+  { ticker: 'NOW', companyName: 'ServiceNow Inc', aliases: ['servicenow'] },
+  { ticker: 'SNOW', companyName: 'Snowflake Inc', aliases: ['snowflake'] },
+  { ticker: 'PLTR', companyName: 'Palantir Technologies', aliases: ['palantir'] },
+  { ticker: 'WDAY', companyName: 'Workday Inc', aliases: ['workday'] },
+  { ticker: 'PANW', companyName: 'Palo Alto Networks', aliases: ['palo alto networks'] },
+  { ticker: 'CRWD', companyName: 'CrowdStrike Holdings', aliases: ['crowdstrike'] },
+  { ticker: 'DDOG', companyName: 'Datadog Inc', aliases: ['datadog'] },
+  { ticker: 'ZS', companyName: 'Zscaler Inc', aliases: ['zscaler'] },
+  { ticker: 'OKTA', companyName: 'Okta Inc', aliases: ['okta'] },
+  // Fintech & payments
+  { ticker: 'V', companyName: 'Visa Inc', aliases: ['visa'] },
+  { ticker: 'MA', companyName: 'Mastercard Inc', aliases: ['mastercard'] },
+  { ticker: 'PYPL', companyName: 'PayPal Holdings', aliases: ['paypal'] },
+  { ticker: 'SQ', companyName: 'Block Inc', aliases: ['block inc', 'square'] },
+  { ticker: 'COIN', companyName: 'Coinbase Global', aliases: ['coinbase'] },
+  // Banks & financials
   { ticker: 'JPM', companyName: 'JPMorgan Chase', aliases: ['jpmorgan', 'jp morgan'] },
   { ticker: 'BAC', companyName: 'Bank of America', aliases: ['bank of america'] },
   { ticker: 'GS', companyName: 'Goldman Sachs', aliases: ['goldman sachs'] },
-  { ticker: 'V', companyName: 'Visa Inc', aliases: ['visa'] },
-  { ticker: 'MA', companyName: 'Mastercard Inc', aliases: ['mastercard'] },
+  { ticker: 'MS', companyName: 'Morgan Stanley', aliases: ['morgan stanley'] },
+  { ticker: 'WFC', companyName: 'Wells Fargo', aliases: ['wells fargo'] },
+  { ticker: 'C', companyName: 'Citigroup Inc', aliases: ['citigroup', 'citi'] },
+  { ticker: 'BLK', companyName: 'BlackRock Inc', aliases: ['blackrock'] },
+  { ticker: 'SCHW', companyName: 'Charles Schwab', aliases: ['charles schwab', 'schwab'] },
+  // Consumer & retail
   { ticker: 'WMT', companyName: 'Walmart Inc', aliases: ['walmart'] },
   { ticker: 'COST', companyName: 'Costco Wholesale', aliases: ['costco'] },
+  { ticker: 'TGT', companyName: 'Target Corp', aliases: ['target'] },
+  { ticker: 'HD', companyName: 'Home Depot', aliases: ['home depot'] },
+  { ticker: 'LOW', companyName: 'Lowe\'s Companies', aliases: ["lowe's", 'lowes'] },
+  { ticker: 'NKE', companyName: 'Nike Inc', aliases: ['nike'] },
+  // Food & beverage
+  { ticker: 'KO', companyName: 'Coca-Cola Co', aliases: ['coca-cola', 'coca cola'] },
+  { ticker: 'PEP', companyName: 'PepsiCo Inc', aliases: ['pepsico', 'pepsi'] },
+  { ticker: 'MCD', companyName: "McDonald's Corp", aliases: ["mcdonald's", 'mcdonalds'] },
+  { ticker: 'SBUX', companyName: 'Starbucks Corp', aliases: ['starbucks'] },
+  // Media & entertainment
+  { ticker: 'DIS', companyName: 'Walt Disney Co', aliases: ['disney', 'walt disney'] },
+  { ticker: 'SPOT', companyName: 'Spotify Technology', aliases: ['spotify'] },
+  { ticker: 'RBLX', companyName: 'Roblox Corp', aliases: ['roblox'] },
+  // Autos
+  { ticker: 'F', companyName: 'Ford Motor Co', aliases: ['ford'] },
+  { ticker: 'GM', companyName: 'General Motors', aliases: ['general motors'] },
+  // Energy
   { ticker: 'XOM', companyName: 'Exxon Mobil', aliases: ['exxon', 'exxon mobil'] },
   { ticker: 'CVX', companyName: 'Chevron Corp', aliases: ['chevron'] },
+  // Healthcare & pharma
   { ticker: 'PFE', companyName: 'Pfizer Inc', aliases: ['pfizer'] },
+  { ticker: 'JNJ', companyName: 'Johnson & Johnson', aliases: ['johnson & johnson', 'johnson and johnson'] },
+  { ticker: 'LLY', companyName: 'Eli Lilly', aliases: ['eli lilly', 'lilly'] },
+  { ticker: 'MRNA', companyName: 'Moderna Inc', aliases: ['moderna'] },
+  { ticker: 'AMGN', companyName: 'Amgen Inc', aliases: ['amgen'] },
+  { ticker: 'GILD', companyName: 'Gilead Sciences', aliases: ['gilead'] },
+  { ticker: 'UNH', companyName: 'UnitedHealth Group', aliases: ['unitedhealth'] },
+  { ticker: 'CVS', companyName: 'CVS Health Corp', aliases: ['cvs health', 'cvs'] },
+  // Telecom
+  { ticker: 'T', companyName: 'AT&T Inc', aliases: ['at&t'] },
+  { ticker: 'VZ', companyName: 'Verizon Communications', aliases: ['verizon'] },
+  { ticker: 'TMUS', companyName: 'T-Mobile US', aliases: ['t-mobile', 'tmobile'] },
+  // Gig & consumer tech
+  { ticker: 'UBER', companyName: 'Uber Technologies', aliases: ['uber'] },
+  { ticker: 'LYFT', companyName: 'Lyft Inc', aliases: ['lyft'] },
+  { ticker: 'ABNB', companyName: 'Airbnb Inc', aliases: ['airbnb'] },
+  { ticker: 'DASH', companyName: 'DoorDash Inc', aliases: ['doordash'] },
+  // Aerospace & defense
+  { ticker: 'BA', companyName: 'Boeing Co', aliases: ['boeing'] },
+  { ticker: 'LMT', companyName: 'Lockheed Martin', aliases: ['lockheed martin', 'lockheed'] },
+  { ticker: 'RTX', companyName: 'RTX Corp', aliases: ['raytheon', 'rtx'] },
 ]
 
 function parseNumber(value: unknown): number | undefined {
@@ -255,7 +325,7 @@ function normalizeFallbackEarnings(item: ParsedFeedItem, now: Date): EarningsIte
 }
 
 async function fetchFallbackEarnings(now: Date): Promise<EarningsItem[]> {
-  const feedItems = await collectFinanceFeedItems(EARNINGS_FALLBACK_FEEDS, { limit: 60 })
+  const feedItems = await collectFinanceFeedItems(EARNINGS_FALLBACK_FEEDS, { limit: 120 })
 
   return feedItems
     .map((item) => normalizeFallbackEarnings(item, now))
