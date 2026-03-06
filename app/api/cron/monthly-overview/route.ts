@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server'
+import { verifySignatureAppRouter } from '@upstash/qstash/nextjs'
+
+export const dynamic = 'force-dynamic'
 import { generateMonthlyOverview } from '../../../../lib/data/overview-generators'
 
-export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
+async function handler() {
   try {
     const result = await generateMonthlyOverview()
 
@@ -28,3 +25,5 @@ export async function GET(request: Request) {
     )
   }
 }
+
+export const POST = verifySignatureAppRouter(handler)
