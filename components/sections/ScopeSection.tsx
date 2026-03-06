@@ -3,6 +3,8 @@
 import { useMemo } from 'react'
 import type { FeedItem } from '@/lib/types'
 import { formatFutureTime, formatRelativeTime } from '@/lib/utils'
+import { useHoverSummary } from '@/hooks/useHoverSummary'
+import { SummaryCard } from '@/components/SummaryCard'
 
 type ItemTag = 'new' | 'hot' | 'breaking' | 'verified' | 'beta'
 
@@ -164,6 +166,7 @@ function SectionItemRow({
       href={row.url}
       target="_blank"
       rel="noopener noreferrer"
+      data-summary-url={row.url}
       className={`group flex items-start gap-3 px-6 py-2.5 border-b border-black/5 hover:bg-black/[0.025] transition-colors ${className}`}
     >
       <span className="shrink-0 mt-0.5 w-4 text-right font-mono text-[10px] text-black/25">
@@ -241,6 +244,7 @@ export function ScopeSection({
   itemsPerColumn,
   viewportMode = 'fixed',
 }: ScopeSectionProps) {
+  const { activeUrl, cursorPos, containerProps, cardRef, onCardEnter, onCardLeave } = useHoverSummary()
   const rows = useMemo(() => items.map(getRow), [items])
   const effectiveColumns = itemsPerColumn
     ? Math.min(columns, Math.max(1, Math.ceil(rows.length / itemsPerColumn)))
@@ -280,7 +284,7 @@ export function ScopeSection({
         </div>
       </header>
 
-      <div className={viewportClassName}>
+      <div className={viewportClassName} {...containerProps}>
         {rows.length === 0 && (
           <p className="px-6 py-4 font-mono text-[11px] text-black/40">
             No items available.
@@ -303,6 +307,15 @@ export function ScopeSection({
           ))
         )}
       </div>
+      {activeUrl && (
+        <SummaryCard
+          url={activeUrl}
+          cursorPos={cursorPos}
+          cardRef={cardRef}
+          onCardEnter={onCardEnter}
+          onCardLeave={onCardLeave}
+        />
+      )}
     </section>
   )
 }
