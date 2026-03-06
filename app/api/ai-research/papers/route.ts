@@ -1,10 +1,11 @@
 // app/api/ai-research/papers/route.ts
 import type { SectionData } from '@/lib/types'
+import { fetchAlphaxivPapers } from '@/lib/data/alphaxiv'
 import { fetchArxivPapers } from '@/lib/data/arxiv'
 import { cachedFetchWithFallback } from '@/lib/server/cache'
 import { sectionJsonResponse } from '@/lib/server/http-cache'
 
-const CACHE_KEY = 'stratum:ai-research:papers:v2'
+const CACHE_KEY = 'stratum:ai-research:papers:v3'
 export const CACHE_TTL_SECONDS = 86_400
 
 export async function GET() {
@@ -14,7 +15,8 @@ export async function GET() {
       ttlSeconds: CACHE_TTL_SECONDS,
       staleMaxAgeMs: 24 * 60 * 60 * 1_000,
       fetcher: async () => {
-        const items = await fetchArxivPapers(20)
+        let items = await fetchAlphaxivPapers(20)
+        if (items.length === 0) items = await fetchArxivPapers(20)
         if (items.length === 0) return null
 
         return {
