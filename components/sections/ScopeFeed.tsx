@@ -12,6 +12,15 @@ interface ScopeFeedProps {
 }
 
 type ScopeSectionsMap = Record<string, SectionData>
+type ScopeSectionDef = ScopeDef['sections'][number]
+
+interface SectionRenderOptions {
+  collapseAfter?: number
+  columns?: number
+  fillByColumn?: boolean
+}
+
+const FINANCE_SPLIT_IDS = new Set(['research-reports', 'macro'])
 
 async function fetchSection(apiPath: string): Promise<SectionData> {
   try {
@@ -72,12 +81,32 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
   }, [data, isLoading, scope.sections])
 
   const isFinanceScope = scope.id === 'finance'
-  const financeSplitIds = new Set(['research-reports', 'macro'])
+  const isAiResearchScope = scope.id === 'ai-research'
 
-  const sectionById = useMemo(
-    () => Object.fromEntries(scope.sections.map((section) => [section.id, section] as const)),
+  const sectionById = useMemo<Record<string, ScopeSectionDef>>(
+    () =>
+      Object.fromEntries(
+        scope.sections.map((section) => [section.id, section] as const),
+      ) as Record<string, ScopeSectionDef>,
     [scope.sections],
   )
+
+  function renderSection(sectionId: string, options: SectionRenderOptions = {}) {
+    const section = sectionById[sectionId]
+    if (!section) return null
+
+    return (
+      <ScopeSection
+        key={section.id}
+        label={section.label}
+        items={data?.[section.id]?.items ?? []}
+        defaultExpanded
+        collapseAfter={options.collapseAfter ?? (section.id === 'earnings' ? 12 : 5)}
+        columns={options.columns ?? (section.id === 'earnings' ? 3 : 1)}
+        fillByColumn={options.fillByColumn ?? (section.id === 'earnings')}
+      />
+    )
+  }
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col bg-[var(--bg)]">
@@ -97,37 +126,42 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
       </header>
 
       <div className="flex-1 overflow-y-auto">
-        {scope.sections
-          .filter((section) => !isFinanceScope || !financeSplitIds.has(section.id))
-          .map((section) => (
-            <ScopeSection
-              key={section.id}
-              label={section.label}
-              items={data?.[section.id]?.items ?? []}
-              defaultExpanded
-              collapseAfter={section.id === 'earnings' ? 12 : 5}
-              columns={section.id === 'earnings' ? 3 : 1}
-              fillByColumn={section.id === 'earnings'}
-            />
-          ))}
+        {isAiResearchScope ? (
+          <>
+            <div className="grid grid-cols-1 xl:grid-cols-3 xl:divide-x xl:divide-black/10">
+              <div className="xl:col-span-2">
+                {renderSection('ai-news-general')}
+                {renderSection('ai-policy-regulation')}
+              </div>
+              <div>{renderSection('tech-events')}</div>
+            </div>
 
-        {isFinanceScope && sectionById['research-reports'] && sectionById.macro && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-black/10">
-            <ScopeSection
-              key="research-reports"
-              label={sectionById['research-reports'].label}
-              items={data?.['research-reports']?.items ?? []}
-              defaultExpanded
-              collapseAfter={5}
-            />
-            <ScopeSection
-              key="macro"
-              label={sectionById.macro.label}
-              items={data?.macro?.items ?? []}
-              defaultExpanded
-              collapseAfter={5}
-            />
-          </div>
+            {renderSection('papers')}
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-black/10">
+              {renderSection('venture-capital')}
+              {renderSection('startups')}
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 xl:divide-x xl:divide-black/10">
+              {renderSection('infra-hardware')}
+              {renderSection('cybersecurity')}
+              {renderSection('new-technology')}
+            </div>
+          </>
+        ) : (
+          <>
+            {scope.sections
+              .filter((section) => !isFinanceScope || !FINANCE_SPLIT_IDS.has(section.id))
+              .map((section) => renderSection(section.id))}
+
+            {isFinanceScope && sectionById['research-reports'] && sectionById.macro && (
+              <div className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-black/10">
+                {renderSection('research-reports')}
+                {renderSection('macro')}
+              </div>
+            )}
+          </>
         )}
         <div className="px-6 py-8">
           <p className="font-mono text-[11px] text-black/20 text-center">
