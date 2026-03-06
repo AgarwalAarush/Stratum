@@ -20,6 +20,10 @@ function disableRedisForTest() {
   }
 }
 
+function rfc2822FromOffsetMs(offsetMs: number, baseMs: number = Date.now()): string {
+  return new Date(baseMs + offsetMs).toUTCString()
+}
+
 test('fetchFinanceEarnings normalizes FMP rows and marks beat/miss', async (t) => {
   clearCacheForTests()
   const restoreRedis = disableRedisForTest()
@@ -145,6 +149,10 @@ test('fetchFinanceDeals dedupes and prioritizes M&A significance', async (t) => 
 
   process.env.FMP_API_KEY = ''
 
+  const nowMs = Date.now()
+  const maDate = rfc2822FromOffsetMs(-2 * 60 * 60 * 1_000, nowMs)
+  const fundingDate = rfc2822FromOffsetMs(-3 * 60 * 60 * 1_000, nowMs)
+
   global.fetch = (async () =>
     new Response(
       `
@@ -152,17 +160,17 @@ test('fetchFinanceDeals dedupes and prioritizes M&A significance', async (t) => 
           <item>
             <title>Company A acquires Company B in $2B merger</title>
             <link>https://example.com/ma</link>
-            <pubDate>Thu, 06 Mar 2026 12:00:00 GMT</pubDate>
+            <pubDate>${maDate}</pubDate>
           </item>
           <item>
             <title>Company A acquires Company B in $2B merger</title>
             <link>https://example.com/ma</link>
-            <pubDate>Thu, 06 Mar 2026 12:00:00 GMT</pubDate>
+            <pubDate>${maDate}</pubDate>
           </item>
           <item>
             <title>Startup C raises Series B financing</title>
             <link>https://example.com/funding</link>
-            <pubDate>Fri, 05 Mar 2026 12:00:00 GMT</pubDate>
+            <pubDate>${fundingDate}</pubDate>
           </item>
         </channel></rss>
       `,
@@ -187,6 +195,10 @@ test('fetchFinanceReports dedupes and sorts by recency descending', async (t) =>
   const restoreRedis = disableRedisForTest()
 
   const originalFetch = global.fetch
+  const nowMs = Date.now()
+  const newestDate = rfc2822FromOffsetMs(-60 * 60 * 1_000, nowMs)
+  const olderDate = rfc2822FromOffsetMs(-48 * 60 * 60 * 1_000, nowMs)
+
   global.fetch = (async () =>
     new Response(
       `
@@ -194,17 +206,17 @@ test('fetchFinanceReports dedupes and sorts by recency descending', async (t) =>
           <item>
             <title>New portfolio outlook</title>
             <link>https://example.com/new</link>
-            <pubDate>Fri, 06 Mar 2026 12:00:00 GMT</pubDate>
+            <pubDate>${newestDate}</pubDate>
           </item>
           <item>
             <title>New portfolio outlook</title>
             <link>https://example.com/new</link>
-            <pubDate>Fri, 06 Mar 2026 12:00:00 GMT</pubDate>
+            <pubDate>${newestDate}</pubDate>
           </item>
           <item>
             <title>Older market thesis</title>
             <link>https://example.com/old</link>
-            <pubDate>Wed, 04 Mar 2026 12:00:00 GMT</pubDate>
+            <pubDate>${olderDate}</pubDate>
           </item>
         </channel></rss>
       `,
@@ -231,6 +243,7 @@ test('finance deals route returns fresh then memory cache metadata', async (t) =
   const originalFmp = process.env.FMP_API_KEY
 
   process.env.FMP_API_KEY = ''
+  const recentDate = rfc2822FromOffsetMs(-30 * 60 * 1_000)
 
   global.fetch = (async () =>
     new Response(
@@ -239,7 +252,7 @@ test('finance deals route returns fresh then memory cache metadata', async (t) =
           <item>
             <title>Company A acquires Company B</title>
             <link>https://example.com/deal</link>
-            <pubDate>Thu, 06 Mar 2026 13:00:00 GMT</pubDate>
+            <pubDate>${recentDate}</pubDate>
           </item>
         </channel></rss>
       `,
@@ -271,6 +284,7 @@ test('finance deals route serves stale on upstream failure after TTL expiry', as
 
   process.env.FMP_API_KEY = ''
   Date.now = () => now
+  const seededDate = rfc2822FromOffsetMs(-30 * 60 * 1_000, now)
 
   global.fetch = (async () =>
     new Response(
@@ -279,7 +293,7 @@ test('finance deals route serves stale on upstream failure after TTL expiry', as
           <item>
             <title>Strategic merger announced</title>
             <link>https://example.com/stale-seed</link>
-            <pubDate>Thu, 06 Mar 2026 14:00:00 GMT</pubDate>
+            <pubDate>${seededDate}</pubDate>
           </item>
         </channel></rss>
       `,
