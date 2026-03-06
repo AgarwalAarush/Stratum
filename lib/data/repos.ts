@@ -123,8 +123,8 @@ function githubSearchQuery(now: Date): string {
   const createdAfter = createdAfterDate(now)
 
   return [
-    '(topic:ai OR topic:llm OR topic:machine-learning OR topic:generative-ai OR topic:artificial-intelligence)',
-    '(llm OR "machine learning" OR "artificial intelligence" OR "generative ai" OR "large language model") in:name,description',
+    '(topic:ai OR topic:llm OR topic:machine-learning)',
+    '(llm OR "machine learning" OR "artificial intelligence") in:name,description',
     `created:>=${createdAfter}`,
     `stars:${MIN_TOTAL_STARS}..${MAX_TOTAL_STARS}`,
     'fork:false',
@@ -133,16 +133,44 @@ function githubSearchQuery(now: Date): string {
   ].join(' ')
 }
 
+function fallbackGithubSearchQuery(now: Date): string {
+  const createdAfter = createdAfterDate(now)
+
+  return [
+    'topic:ai',
+    `created:>=${createdAfter}`,
+    `stars:${MIN_TOTAL_STARS}..${MAX_TOTAL_STARS}`,
+    'fork:false',
+    'archived:false',
+    'mirror:false',
+  ].join(' ')
+}
+
+async function runGitHubSearch(
+  query: string,
+  limit: number,
+  headers: HeadersInit,
+): Promise<Response | null> {
+  const params = new URLSearchParams({
+    q: query,
+    sort: 'stars',
+    order: 'desc',
+    per_page: String(Math.min(MAX_CANDIDATES, Math.max(limit * 4, limit))),
+  })
+
+  try {
+    return await fetch(`${GITHUB_SEARCH_URL}?${params.toString()}`, {
+      headers,
+      signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+    })
+  } catch {
+    return null
+  }
+}
+
 async function fetchGitHubRepos(limit: number): Promise<GitHubSearchRepo[] | null> {
   try {
     const now = new Date()
-    const params = new URLSearchParams({
-      q: githubSearchQuery(now),
-      sort: 'stars',
-      order: 'desc',
-      per_page: String(Math.min(MAX_CANDIDATES, Math.max(limit * 4, limit))),
-    })
-
     const token = process.env.GITHUB_TOKEN
     const headers: HeadersInit = {
       Accept: 'application/vnd.github+json',
@@ -154,10 +182,15 @@ async function fetchGitHubRepos(limit: number): Promise<GitHubSearchRepo[] | nul
       headers.Authorization = `Bearer ${token}`
     }
 
-    const response = await fetch(`${GITHUB_SEARCH_URL}?${params.toString()}`, {
-      headers,
-      signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
-    })
+    const primary = await runGitHubSearch(githubSearchQuery(now), limit, headers)
+    if (!primary) return null
+
+    let response = primary
+    if (response.status === 422) {
+      const fallback = await runGitHubSearch(fallbackGithubSearchQuery(now), limit, headers)
+      if (!fallback) return null
+      response = fallback
+    }
 
     if (!response.ok) return null
 
