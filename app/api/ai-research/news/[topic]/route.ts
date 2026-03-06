@@ -3,15 +3,15 @@ import { fetchNewsItemsByTopic, isNewsTopic, type NewsTopic } from '../../../../
 import { cachedFetchWithFallback } from '../../../../../lib/server/cache.ts'
 import { sectionJsonResponse, type CacheTier } from '../../../../../lib/server/http-cache.ts'
 
-const CACHE_TTL_SECONDS: Record<NewsTopic, number> = {
-  cybersecurity: 300,
-  general: 600,
-  'venture-capital': 600,
-  'new-technology': 600,
-  startups: 600,
-  policy: 1_800,
-  'infra-hardware': 1_800,
-  'tech-events': 1_800,
+export const CACHE_TTL_SECONDS: Record<NewsTopic, number> = {
+  cybersecurity: 3_600,
+  general: 3_600,
+  'venture-capital': 3_600,
+  'new-technology': 3_600,
+  startups: 3_600,
+  policy: 3_600,
+  'infra-hardware': 3_600,
+  'tech-events': 3_600,
 }
 
 const CACHE_TIER_BY_TOPIC: Record<NewsTopic, CacheTier> = {

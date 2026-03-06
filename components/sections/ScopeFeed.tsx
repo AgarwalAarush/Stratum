@@ -11,6 +11,8 @@ interface ScopeFeedProps {
   scope: ScopeDef
 }
 
+export const SCOPE_REFRESH_INTERVAL_MS = 3_600_000
+
 type ScopeSectionsMap = Record<string, SectionData>
 type ScopeSectionDef = ScopeDef['sections'][number]
 
@@ -64,7 +66,7 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
       return Object.fromEntries(sections)
     },
     {
-      refreshInterval: 180_000,
+      refreshInterval: SCOPE_REFRESH_INTERVAL_MS,
       revalidateOnFocus: true,
       dedupingInterval: 30_000,
     },
@@ -158,6 +160,8 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
               {renderSection('cybersecurity')}
               {renderSection('new-technology')}
             </div>
+
+            {renderSection('repos')}
           </>
         ) : (
           <>
