@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { RefreshCw } from 'lucide-react'
 import type { OverviewData, PeriodicOverviewData, ScopeDef, SectionData } from '@/lib/types'
 import { formatRelativeTime } from '@/lib/utils'
+import { useSettingsStore } from '@/store/settings'
 import { ScopeSection } from './ScopeSection'
 import { AIOverview } from './AIOverview'
 import { PeriodicOverview } from './PeriodicOverview'
@@ -51,6 +52,9 @@ async function fetchSection(apiPath: string): Promise<SectionData> {
 }
 
 export function ScopeFeed({ scope }: ScopeFeedProps) {
+  const devMode = useSettingsStore((s) => s.devMode)
+  const forceParam = devMode ? '?force=true' : ''
+
   const swrKey = useMemo(
     () => `scope:${scope.id}:${scope.sections.map((section) => section.apiPath).join('|')}`,
     [scope.id, scope.sections],
@@ -88,9 +92,9 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
   const isAiResearchScope = scope.id === 'ai-research'
 
   const { data: overviewData, isLoading: overviewLoading } = useSWR<OverviewData>(
-    isAiResearchScope ? 'overview:ai-research' : null,
+    isAiResearchScope ? `overview:ai-research:dev=${devMode}` : null,
     async () => {
-      const response = await fetch('/api/ai-research/overview', {
+      const response = await fetch(`/api/ai-research/overview${forceParam}`, {
         headers: { Accept: 'application/json' },
       })
       if (!response.ok) return { bullets: [], fetchedAt: new Date().toISOString() }
@@ -99,12 +103,12 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
     {
       refreshInterval: SCOPE_REFRESH_INTERVAL_MS,
       revalidateOnFocus: false,
-      dedupingInterval: 60_000,
+      dedupingInterval: devMode ? 0 : 60_000,
     },
   )
 
   const fetchPeriodicOverview = async (type: string) => {
-    const response = await fetch(`/api/overviews/${type}`, {
+    const response = await fetch(`/api/overviews/${type}${forceParam}`, {
       headers: { Accept: 'application/json' },
     })
     if (!response.ok) return null
@@ -113,15 +117,15 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
   }
 
   const { data: weeklyData, isLoading: weeklyLoading } = useSWR<PeriodicOverviewData | null>(
-    isAiResearchScope ? 'overview:weekly' : null,
+    isAiResearchScope ? `overview:weekly:dev=${devMode}` : null,
     () => fetchPeriodicOverview('weekly'),
-    { refreshInterval: SCOPE_REFRESH_INTERVAL_MS, revalidateOnFocus: false, dedupingInterval: 120_000 },
+    { refreshInterval: SCOPE_REFRESH_INTERVAL_MS, revalidateOnFocus: false, dedupingInterval: devMode ? 0 : 120_000 },
   )
 
   const { data: monthlyData, isLoading: monthlyLoading } = useSWR<PeriodicOverviewData | null>(
-    isAiResearchScope ? 'overview:monthly' : null,
+    isAiResearchScope ? `overview:monthly:dev=${devMode}` : null,
     () => fetchPeriodicOverview('monthly'),
-    { refreshInterval: SCOPE_REFRESH_INTERVAL_MS, revalidateOnFocus: false, dedupingInterval: 120_000 },
+    { refreshInterval: SCOPE_REFRESH_INTERVAL_MS, revalidateOnFocus: false, dedupingInterval: devMode ? 0 : 120_000 },
   )
 
   const sectionById = useMemo<Record<string, ScopeSectionDef>>(

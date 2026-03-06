@@ -1,8 +1,47 @@
 'use client'
 
+import type { ReactNode } from 'react'
+
 interface AIOverviewProps {
   bullets: string[]
   isLoading: boolean
+}
+
+const CITATION_RE = /\[(\d+)\]\((https?:\/\/[^\s)]+)\)/g
+
+function parseBulletWithCitations(bullet: string): ReactNode {
+  const parts: ReactNode[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  CITATION_RE.lastIndex = 0
+  while ((match = CITATION_RE.exec(bullet)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(bullet.slice(lastIndex, match.index))
+    }
+    const num = match[1]
+    const url = match[2]
+    parts.push(
+      <a
+        key={`${num}-${match.index}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-block font-mono text-[10px] bg-black/8 dark:bg-white/10 rounded px-1 py-px hover:bg-black/15 dark:hover:bg-white/20 transition-colors relative -top-0.5 no-underline text-[var(--text-dim)]"
+      >
+        {num}
+      </a>,
+    )
+    lastIndex = match.index + match[0].length
+  }
+
+  if (parts.length === 0) return bullet
+
+  if (lastIndex < bullet.length) {
+    parts.push(bullet.slice(lastIndex))
+  }
+
+  return <>{parts}</>
 }
 
 export function AIOverview({ bullets, isLoading }: AIOverviewProps) {
@@ -44,7 +83,9 @@ export function AIOverview({ bullets, isLoading }: AIOverviewProps) {
             {bullets.map((bullet, i) => (
               <li key={i} className="flex items-start gap-2">
                 <span className="font-mono text-[12px] text-black/30 shrink-0 mt-0.5">→</span>
-                <span className="text-[13px] text-[var(--text)] leading-[1.5]">{bullet}</span>
+                <span className="text-[13px] text-[var(--text)] leading-[1.5]">
+                  {parseBulletWithCitations(bullet)}
+                </span>
               </li>
             ))}
           </ul>

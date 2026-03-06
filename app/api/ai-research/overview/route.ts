@@ -7,7 +7,26 @@ import { sectionJsonResponse } from '../../../../lib/server/http-cache.ts'
 const CACHE_KEY = 'stratum:ai-research:overview:v1'
 const CACHE_TTL_SECONDS = 21_600 // 6 hours
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const force = searchParams.get('force') === 'true'
+
+  if (force) {
+    try {
+      const overview = await generateAIOverview()
+      if (overview.bullets.length > 0) {
+        void saveDailyOverview(overview.bullets)
+      }
+      return sectionJsonResponse(overview, 'slow', 'fresh')
+    } catch {
+      return sectionJsonResponse(
+        { bullets: [], fetchedAt: new Date().toISOString() },
+        'slow',
+        'none',
+      )
+    }
+  }
+
   try {
     const { data, source } = await cachedFetchWithFallback<OverviewData>({
       key: CACHE_KEY,

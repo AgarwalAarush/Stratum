@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Database, Moon, Palette, Settings2, Shield, Sun, X } from 'lucide-react'
+import { AlertTriangle, Database, Moon, Palette, Settings2, Shield, Sun, X } from 'lucide-react'
 import { useThemeStore } from '@/store/theme'
+import { useSettingsStore } from '@/store/settings'
 import type { Theme } from '@/lib/types'
 
 type SettingsTab = 'general' | 'appearance' | 'data'
@@ -19,6 +20,10 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [compactDensity, setCompactDensity] = useState(false)
   const [safeMode, setSafeMode] = useState(true)
   const { theme, setTheme } = useThemeStore()
+  const { devMode, setDevMode } = useSettingsStore()
+  const [devPasswordInput, setDevPasswordInput] = useState('')
+  const [showDevPassword, setShowDevPassword] = useState(false)
+  const [devPasswordError, setDevPasswordError] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -161,6 +166,12 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 
             {tab === 'data' && (
               <div className="space-y-6">
+                {devMode && (
+                  <div className="flex items-center gap-2 rounded-[10px] bg-amber-500/10 border border-amber-500/20 px-3 py-2">
+                    <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+                    <p className="text-[12px] font-medium text-amber-700 dark:text-amber-400">Developer mode active — overviews will regenerate on every page load</p>
+                  </div>
+                )}
                 <div>
                   <h3 className="text-[14px] font-semibold text-[var(--text)] mb-2">Data controls</h3>
                   <p className="text-[12px] text-[var(--text-muted)]">Baseline controls before full settings are added.</p>
@@ -185,6 +196,73 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   <p className="text-[12px] text-[var(--text-muted)] mt-1">
                     Local preferences only. No cloud sync yet.
                   </p>
+                </div>
+
+                <div className="pt-4 border-t border-[var(--border)]">
+                  <div className="mb-4">
+                    <h3 className="text-[14px] font-semibold text-[var(--text)] mb-2">Developer</h3>
+                    <p className="text-[12px] text-[var(--text-muted)]">Testing and debugging tools.</p>
+                  </div>
+                  <div className="rounded-[12px] border border-[var(--border)] px-4 py-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[13px] font-medium text-[var(--text)]">Developer Mode</p>
+                        <p className="text-[12px] text-[var(--text-muted)]">Bypass cache and force-regenerate all overviews on page load.</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (devMode) {
+                            setDevMode(false)
+                            setShowDevPassword(false)
+                          } else {
+                            setShowDevPassword(true)
+                            setDevPasswordInput('')
+                            setDevPasswordError(false)
+                          }
+                        }}
+                        className={[
+                          'relative w-10 h-5 rounded-full transition-colors cursor-pointer shrink-0',
+                          devMode ? 'bg-[var(--accent)]' : 'bg-black/15',
+                        ].join(' ')}
+                      >
+                        <span
+                          className={[
+                            'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
+                            devMode ? 'left-5.5' : 'left-0.5',
+                          ].join(' ')}
+                        />
+                      </button>
+                    </div>
+                    {showDevPassword && !devMode && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="password"
+                          value={devPasswordInput}
+                          onChange={(e) => {
+                            setDevPasswordInput(e.target.value)
+                            setDevPasswordError(false)
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              if (devPasswordInput === 'abc') {
+                                setDevMode(true)
+                                setShowDevPassword(false)
+                                setDevPasswordInput('')
+                              } else {
+                                setDevPasswordError(true)
+                              }
+                            }
+                          }}
+                          placeholder="Enter password"
+                          className="flex-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[12px] text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                          autoFocus
+                        />
+                        {devPasswordError && (
+                          <span className="text-[11px] text-red-500">Wrong password</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
