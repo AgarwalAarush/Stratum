@@ -128,6 +128,8 @@ export const NEWS_TOPIC_FEEDS: Record<NewsTopic, ServerFeed[]> = {
     { name: 'CTF Events', url: gn('(CTF OR "capture the flag" OR "cybersecurity competition") when:14d') },
     { name: 'AI Hackathons', url: gn('("AI hackathon" OR "ML hackathon" OR "LLM hackathon" OR "AI buildathon") when:14d') },
     { name: 'Developer Competitions', url: gn('("developer challenge" OR "coding challenge" OR "programming contest" OR "startup competition") when:14d') },
+    { name: 'AI Conferences', url: gn('(AI conference OR "AI summit" OR "machine learning conference") when:30d') },
+    { name: 'Tech Conferences', url: gn('("developer conference" OR "tech summit" OR devcon OR "developer event") when:7d') },
   ],
 }
 
