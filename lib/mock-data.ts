@@ -1,5 +1,5 @@
 // lib/mock-data.ts
-import type { FeedItem, SectionData } from './types'
+import type { FeedItem, NewsItem, SectionData } from './types'
 
 // ─── AI Research: Papers (accurate publication dates) ───
 const PAPERS: FeedItem[] = [
@@ -142,8 +142,8 @@ const AI_REPOS: FeedItem[] = [
   },
 ]
 
-// ─── AI Research: AI News (model/product releases) ───
-const CORE_AI_NEWS: FeedItem[] = [
+// ─── AI Research: Release Updates ───
+const RELEASE_UPDATES: NewsItem[] = [
   {
     type: 'news',
     id: 'ai-news-1',
@@ -179,6 +179,24 @@ const CORE_AI_NEWS: FeedItem[] = [
     category: 'Benchmark',
     publishedAt: '2026-03-01T09:00:00Z',
     url: 'https://openai.com',
+  },
+  {
+    type: 'news',
+    id: 'ai-news-5',
+    title: 'Perplexity rolls out Deep Research mode in public beta',
+    source: 'Perplexity',
+    category: 'Product Launch',
+    publishedAt: '2026-02-28T18:00:00Z',
+    url: 'https://www.perplexity.ai',
+  },
+  {
+    type: 'news',
+    id: 'ai-news-6',
+    title: 'NVIDIA ships CUDA 13 release candidate with new inference kernels',
+    source: 'NVIDIA',
+    category: 'Platform Release',
+    publishedAt: '2026-02-27T20:00:00Z',
+    url: 'https://developer.nvidia.com/cuda-toolkit',
   },
 ]
 
@@ -226,13 +244,13 @@ const EARNINGS: FeedItem[] = [
 ]
 
 // ─── Startup Signals / Finance: Funding & Deals ───
-const FUNDING: FeedItem[] = [
+const FUNDING: NewsItem[] = [
   {
     type: 'news',
     id: 'fund-1',
     title: 'Anduril raises $1.5B Series F at $28B valuation to accelerate defense AI',
     source: 'Axios Pro Rata',
-    category: 'Series F',
+    category: 'Startup · Series F',
     publishedAt: '2026-03-04T06:00:00Z',
     url: 'https://www.axios.com',
   },
@@ -241,7 +259,7 @@ const FUNDING: FeedItem[] = [
     id: 'fund-2',
     title: 'Perplexity closes $500M Series C led by SoftBank Vision Fund',
     source: 'TechCrunch',
-    category: 'Series C',
+    category: 'Startup · Series C',
     publishedAt: '2026-03-03T14:00:00Z',
     url: 'https://techcrunch.com',
   },
@@ -250,7 +268,7 @@ const FUNDING: FeedItem[] = [
     id: 'fund-3',
     title: 'xAI raises $6B in new funding round as Grok 3 gains traction',
     source: 'The Information',
-    category: 'Strategic',
+    category: 'Startup · Strategic',
     publishedAt: '2026-03-02T10:00:00Z',
     url: 'https://www.theinformation.com',
   },
@@ -259,13 +277,15 @@ const FUNDING: FeedItem[] = [
     id: 'fund-4',
     title: 'TerraPower breaks ground on Natrium reactor in Wyoming',
     source: 'Axios',
-    category: 'Energy',
+    category: 'Startup · Energy',
     publishedAt: '2026-03-01T08:00:00Z',
     url: 'https://www.axios.com',
   },
 ]
 
-const AI_NEWS: FeedItem[] = [...CORE_AI_NEWS, ...FUNDING]
+const AI_NEWS: NewsItem[] = [...RELEASE_UPDATES, ...FUNDING].sort(
+  (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
+)
 
 // ─── Macro: Indicators ───
 const MACRO_INDICATORS: FeedItem[] = [
