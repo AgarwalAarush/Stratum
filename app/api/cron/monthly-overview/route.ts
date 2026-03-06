@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
-import { verifySignatureAppRouter } from '@upstash/qstash/nextjs'
+import { generateMonthlyOverview } from '../../../../lib/data/overview-generators'
 
 export const dynamic = 'force-dynamic'
-import { generateMonthlyOverview } from '../../../../lib/data/overview-generators'
 
 async function handler() {
   try {
@@ -26,4 +25,8 @@ async function handler() {
   }
 }
 
-export const POST = verifySignatureAppRouter(handler)
+export async function POST(request: Request) {
+  const { verifySignatureAppRouter } = await import('@upstash/qstash/nextjs')
+  const verified = verifySignatureAppRouter(handler)
+  return verified(request)
+}
