@@ -102,15 +102,12 @@ export const NEWS_TOPIC_FEEDS: Record<NewsTopic, ServerFeed[]> = {
   ],
   startups: [
     { name: 'TechCrunch Startups', url: 'https://techcrunch.com/category/startups/feed/' },
-    { name: 'VentureBeat', url: 'https://venturebeat.com/feed/' },
-    { name: 'EU Startups', url: gn('site:eu-startups.com when:7d') },
-    { name: 'Tech in Asia', url: gn('site:techinasia.com when:7d') },
-    { name: 'Inc42', url: 'https://inc42.com/feed/' },
-    { name: 'TechCabal', url: 'https://techcabal.com/feed/' },
     { name: 'Unicorn News', url: gn('("unicorn startup" OR "unicorn valuation" OR "$1 billion valuation") when:7d') },
     { name: 'New Unicorns', url: gn('("becomes unicorn" OR "joins unicorn" OR "reaches unicorn" OR "achieved unicorn") when:14d') },
     { name: 'IPO News', url: gn('(IPO OR "initial public offering" OR SPAC) tech when:7d') },
     { name: 'Tech IPO News', url: gn('tech IPO OR "tech company" IPO when:7d') },
+    { name: 'Funding Rounds', url: gn('("funding round" OR "Series A" OR "Series B" OR "Series C" OR "raised" million) startup when:7d') },
+    { name: 'Crunchbase Funding', url: gn('site:crunchbase.com "funding round" OR "series" when:7d') },
   ],
   'infra-hardware': [
     { name: "Tom's Hardware", url: 'https://www.tomshardware.com/feeds/all' },
@@ -128,7 +125,7 @@ export const NEWS_TOPIC_FEEDS: Record<NewsTopic, ServerFeed[]> = {
     { name: 'CTF Events', url: gn('(CTF OR "capture the flag" OR "cybersecurity competition") when:14d') },
     { name: 'AI Hackathons', url: gn('("AI hackathon" OR "ML hackathon" OR "LLM hackathon" OR "AI buildathon") when:14d') },
     { name: 'Developer Competitions', url: gn('("developer challenge" OR "coding challenge" OR "programming contest" OR "startup competition") when:14d') },
-    { name: 'AI Conferences', url: gn('(AI conference OR "AI summit" OR "machine learning conference") when:30d') },
+    { name: 'Cerebral Valley', url: gn('site:cerebralvalley.ai OR "Cerebral Valley" when:14d') },
     { name: 'Tech Conferences', url: gn('("developer conference" OR "tech summit" OR devcon OR "developer event") when:7d') },
   ],
 }

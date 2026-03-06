@@ -50,7 +50,7 @@ function getTag(item: FeedItem): ItemTag | undefined {
   }
   if (item.type === 'news') {
     const title = item.title.toLowerCase()
-    if (/breach|hack(ed|ing)?|ransomware|zero.?day|cyber.?attack|exploit|outage|emergency|ban(ned)?|shutdown/.test(title)) return 'breaking'
+    if (/breach|hack(?!athon)(ed|ing)?|ransomware|zero.?day|cyber.?attack|exploit|outage|emergency|ban(ned)?|shutdown/.test(title)) return 'breaking'
     if (/launch(es|ed)?|announc(es|ed|ement)|releas(es|ed)|unveil(s|ed)?|introduc(es|ed)|debut(s|ed)?|now available/.test(title)) return 'new'
     if (/\$\d+[bm]|\bbillion\b|\bIPO\b|acqui(res|red|sition)|partnership/.test(title)) return 'hot'
   }
