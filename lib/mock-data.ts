@@ -142,8 +142,8 @@ const AI_REPOS: FeedItem[] = [
   },
 ]
 
-// ─── AI Research: AI News ───
-const AI_NEWS: FeedItem[] = [
+// ─── AI Research: AI News (model/product releases) ───
+const CORE_AI_NEWS: FeedItem[] = [
   {
     type: 'news',
     id: 'ai-news-1',
@@ -225,7 +225,7 @@ const EARNINGS: FeedItem[] = [
   },
 ]
 
-// ─── Startups / Finance: Funding & Deals ───
+// ─── Startup Signals / Finance: Funding & Deals ───
 const FUNDING: FeedItem[] = [
   {
     type: 'news',
@@ -264,6 +264,8 @@ const FUNDING: FeedItem[] = [
     url: 'https://www.axios.com',
   },
 ]
+
+const AI_NEWS: FeedItem[] = [...CORE_AI_NEWS, ...FUNDING]
 
 // ─── Macro: Indicators ───
 const MACRO_INDICATORS: FeedItem[] = [
@@ -305,15 +307,8 @@ export const MOCK_DATA: Record<string, FeedItem[]> = {
   '/api/finance/earnings': EARNINGS,
   '/api/finance/deals': FUNDING,
   '/api/finance/reports': [],
-  '/api/startups/funding': FUNDING,
-  '/api/startups/news': FUNDING,
-  '/api/releases/models': AI_NEWS,
-  '/api/releases/products': [],
-  '/api/releases/repos': AI_REPOS,
   '/api/markets/earnings-calendar': EARNINGS,
-  '/api/markets/macro': MACRO_INDICATORS,
   '/api/macro/indicators': MACRO_INDICATORS,
-  '/api/macro/events': [],
 }
 
 export function getMockSection(apiPath: string): SectionData {

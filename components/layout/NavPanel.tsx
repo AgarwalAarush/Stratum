@@ -18,47 +18,56 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings }: NavPanelProps) {
 
   const toggle = () => setIsOpen(!isOpen)
 
-  if (!isOpen) {
-    return (
-      <aside className="w-[56px] bg-[var(--surface)] border-r border-[var(--border)] shrink-0 flex flex-col items-center py-3">
-        <button
-          onClick={toggle}
-          className="w-10 h-10 flex items-center justify-center rounded-[8px] text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
-          aria-label="Expand navigation"
-        >
-          <Menu size={16} />
-        </button>
-
-        <button
-          onClick={onOpenSettings}
-          className="w-10 h-10 mt-auto flex items-center justify-center rounded-[8px] text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
-          aria-label="Open settings"
-        >
-          <Settings size={15} />
-        </button>
-        <ThemeToggle compact />
-      </aside>
-    )
-  }
-
   return (
-    <aside className="w-[188px] bg-[var(--surface)] border-r border-[var(--border)] shrink-0 flex flex-col">
-      <div className="flex items-center gap-2 px-4 py-4 border-b border-[var(--border)] shrink-0">
+    <aside
+      className="bg-[var(--surface)] border-r border-[var(--border)] shrink-0 flex flex-col overflow-hidden"
+      style={{
+        width: isOpen ? 'var(--sidebar-open-width)' : 'var(--sidebar-collapsed-width)',
+        transitionProperty: 'width',
+        transitionDuration: 'var(--sidebar-motion-duration)',
+        transitionTimingFunction: 'var(--sidebar-motion-easing)',
+      }}
+    >
+      <div className="h-[var(--top-header-height)] border-b border-[var(--border)] shrink-0 flex items-center px-3">
         <button
           onClick={toggle}
-          className="w-7 h-7 flex items-center justify-center rounded-[6px] text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors cursor-pointer"
-          aria-label="Collapse navigation"
+          className="w-7 h-7 flex items-center justify-center rounded-[6px] text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors cursor-pointer shrink-0"
+          aria-label={isOpen ? 'Collapse navigation' : 'Expand navigation'}
         >
           <Menu size={15} />
         </button>
-        <span className="text-[13px] font-semibold text-[var(--text)] tracking-[0.12em] uppercase font-mono flex items-center gap-2">
-          <Layers size={14} strokeWidth={1.5} />
-          Stratum
-        </span>
+        <div
+          className="min-w-0 ml-2 flex items-center gap-2"
+          style={{
+            opacity: isOpen ? 1 : 0,
+            transform: isOpen ? 'translateX(0)' : 'translateX(-8px)',
+            pointerEvents: isOpen ? 'auto' : 'none',
+            transitionProperty: 'opacity, transform',
+            transitionDuration: 'var(--sidebar-motion-duration)',
+            transitionTimingFunction: 'var(--sidebar-motion-easing)',
+          }}
+          aria-hidden={!isOpen}
+        >
+          <Layers size={14} strokeWidth={1.5} className="shrink-0" />
+          <span className="text-[13px] font-semibold text-[var(--text)] tracking-[0.12em] uppercase font-mono whitespace-nowrap">
+            Stratum
+          </span>
+        </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-3">
-        <p className="px-2 pb-2 text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-mono">
+        <p
+          className="px-2 pb-2 text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-mono whitespace-nowrap"
+          style={{
+            opacity: isOpen ? 1 : 0,
+            transform: isOpen ? 'translateX(0)' : 'translateX(-6px)',
+            pointerEvents: isOpen ? 'auto' : 'none',
+            transitionProperty: 'opacity, transform',
+            transitionDuration: 'var(--sidebar-motion-duration)',
+            transitionTimingFunction: 'var(--sidebar-motion-easing)',
+          }}
+          aria-hidden={!isOpen}
+        >
           Scopes
         </p>
         <ul className="flex flex-col gap-0.5">
@@ -68,15 +77,31 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings }: NavPanelProps) {
               <li key={scope.id}>
                 <Link
                   href={`/${scope.id}`}
+                  aria-label={scope.label}
+                  title={!isOpen ? scope.label : undefined}
                   className={[
-                    'flex items-center gap-2 px-2 py-1.5 rounded-[3px] text-[12px] transition-colors duration-150 font-mono',
+                    'flex items-center rounded-[3px] text-[12px] transition-colors duration-150 font-mono',
+                    isOpen ? 'gap-2 px-2 py-1.5 justify-start' : 'h-8 px-0 justify-center',
                     scopeIsActive
                       ? 'bg-[var(--surface-2)] font-medium text-[var(--text)]'
                       : 'font-normal text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
                   ].join(' ')}
                 >
                   <span className="w-[5px] h-[5px] rounded-full bg-current opacity-50 shrink-0" />
-                  {scope.label}
+                  <span
+                    className="whitespace-nowrap"
+                    style={{
+                      opacity: isOpen ? 1 : 0,
+                      transform: isOpen ? 'translateX(0)' : 'translateX(-6px)',
+                      pointerEvents: isOpen ? 'auto' : 'none',
+                      transitionProperty: 'opacity, transform',
+                      transitionDuration: 'var(--sidebar-motion-duration)',
+                      transitionTimingFunction: 'var(--sidebar-motion-easing)',
+                    }}
+                    aria-hidden={!isOpen}
+                  >
+                    {scope.label}
+                  </span>
                 </Link>
               </li>
             )
@@ -87,13 +112,31 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings }: NavPanelProps) {
       <div className="shrink-0 px-3 py-3 border-t border-[var(--border-subtle)] space-y-1.5">
         <button
           onClick={onOpenSettings}
-          className="flex items-center gap-2 w-full px-2 py-2 rounded-[3px] text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] text-[10px] font-medium font-mono uppercase tracking-[0.08em] transition-colors cursor-pointer"
+          className={[
+            'flex items-center rounded-[3px] text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer',
+            isOpen
+              ? 'gap-2 w-full px-2 py-2 text-[10px] font-medium font-mono uppercase tracking-[0.08em] justify-start'
+              : 'w-10 h-10 justify-center mx-auto',
+          ].join(' ')}
           aria-label="Open settings"
+          title={!isOpen ? 'Settings' : undefined}
         >
           <Settings size={12} />
-          <span>Settings</span>
+          <span
+            style={{
+              opacity: isOpen ? 1 : 0,
+              transform: isOpen ? 'translateX(0)' : 'translateX(-6px)',
+              pointerEvents: isOpen ? 'auto' : 'none',
+              transitionProperty: 'opacity, transform',
+              transitionDuration: 'var(--sidebar-motion-duration)',
+              transitionTimingFunction: 'var(--sidebar-motion-easing)',
+            }}
+            aria-hidden={!isOpen}
+          >
+            Settings
+          </span>
         </button>
-        <ThemeToggle />
+        <ThemeToggle compact={!isOpen} />
       </div>
     </aside>
   )

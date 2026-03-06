@@ -1,6 +1,6 @@
 // app/[scope]/page.tsx
 import { notFound } from 'next/navigation'
-import { getScopeById, isValidScopeId } from '@/lib/scopes'
+import { getScopeById, isValidScopeId, SCOPE_IDS } from '@/lib/scopes'
 import { ScopeFeed } from '@/components/sections/ScopeFeed'
 
 interface PageProps {
@@ -24,12 +24,5 @@ export default async function ScopePage({ params }: PageProps) {
 }
 
 export function generateStaticParams() {
-  return [
-    { scope: 'ai-research' },
-    { scope: 'finance' },
-    { scope: 'startups' },
-    { scope: 'releases' },
-    { scope: 'markets' },
-    { scope: 'macro' },
-  ]
+  return SCOPE_IDS.map((scope) => ({ scope }))
 }

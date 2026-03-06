@@ -26,7 +26,7 @@ export async function ScopeFeed({ scope }: ScopeFeedProps) {
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col bg-[var(--bg)]">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-black/10 shrink-0 gap-4">
+      <header className="h-[var(--top-header-height)] flex items-center justify-between px-6 border-b border-black/10 shrink-0 gap-4">
         <div className="min-w-0">
           <h1 className="text-[15px] font-semibold text-[var(--text)] leading-[1.3]">
             {scope.label}

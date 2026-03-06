@@ -38,6 +38,11 @@
 
 /* ─── Design tokens — LIGHT MODE IS DEFAULT ─── */
 :root {
+  --top-header-height: 56px;
+  --sidebar-open-width: 188px;
+  --sidebar-collapsed-width: 56px;
+  --sidebar-motion-duration: 220ms;
+  --sidebar-motion-easing: cubic-bezier(0.22, 1, 0.36, 1);
   --bg: #ffffff;
   --surface: #fafafa;
   --surface-2: #f3f4f6;
@@ -67,6 +72,13 @@
   --red: #f87171;
   --scrollbar-thumb: #3f3f46;
   --scrollbar-thumb-hover: #52525b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --sidebar-motion-duration: 1ms;
+    --sidebar-motion-easing: linear;
+  }
 }
 
 html {
