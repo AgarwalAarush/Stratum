@@ -39,6 +39,9 @@
 /* ─── Design tokens — LIGHT MODE IS DEFAULT ─── */
 :root {
   --top-header-height: 56px;
+  --section-header-height: 36px;
+  --section-content-height: 280px;
+  --section-total-height: calc(var(--section-header-height) + var(--section-content-height) + 1px);
   --sidebar-open-width: 188px;
   --sidebar-collapsed-width: 56px;
   --sidebar-motion-duration: 220ms;

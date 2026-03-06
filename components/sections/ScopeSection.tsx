@@ -1,7 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useMemo } from 'react'
 import type { FeedItem } from '@/lib/types'
 import { formatFutureTime, formatRelativeTime } from '@/lib/utils'
 
@@ -10,10 +9,10 @@ type ItemTag = 'new' | 'hot' | 'breaking' | 'verified' | 'beta'
 interface ScopeSectionProps {
   label: string
   items: FeedItem[]
-  defaultExpanded?: boolean
-  collapseAfter?: number
   columns?: number
   fillByColumn?: boolean
+  fillAvailableHeight?: boolean
+  contentHeightClassName?: string
 }
 
 interface DisplayRow {
@@ -231,13 +230,11 @@ function reorderByColumns(rows: RankedRow[], columns: number): RankedRow[] {
 export function ScopeSection({
   label,
   items,
-  defaultExpanded = true,
-  collapseAfter = 5,
   columns = 1,
   fillByColumn = false,
+  fillAvailableHeight = false,
+  contentHeightClassName = 'h-[var(--section-content-height)]',
 }: ScopeSectionProps) {
-  const [expanded, setExpanded] = useState(defaultExpanded)
-  const [showAll, setShowAll] = useState(false)
   const rows = useMemo(() => items.map(getRow), [items])
   const useGridLayout = columns > 1
   const gridClassName = useMemo(() => {
@@ -246,30 +243,23 @@ export function ScopeSection({
     return 'grid grid-cols-1'
   }, [columns])
 
-  const visibleRows = showAll ? rows : rows.slice(0, collapseAfter)
   const rankedRows = useMemo(
-    () => visibleRows.map((row, index) => ({ row, rank: index + 1 })),
-    [visibleRows],
+    () => rows.map((row, index) => ({ row, rank: index + 1 })),
+    [rows],
   )
   const orderedGridRows = useMemo(
     () => (fillByColumn ? reorderByColumns(rankedRows, columns) : rankedRows),
     [fillByColumn, rankedRows, columns],
   )
-  const hiddenCount = Math.max(0, rows.length - collapseAfter)
+
+  const viewportClassName = fillAvailableHeight
+    ? 'flex-1 min-h-0 overflow-y-auto scrollbar-none'
+    : `${contentHeightClassName} overflow-y-auto scrollbar-none`
 
   return (
-    <section className="border-b border-black/10">
-      <button
-        onClick={() => setExpanded((value) => !value)}
-        className="w-full flex items-center justify-between px-6 py-2 border-b border-transparent hover:bg-black/[0.015] transition-colors"
-        style={{ borderBottomColor: expanded ? 'rgba(0,0,0,0.06)' : 'transparent' }}
-      >
+    <section className={`border-b border-black/10 flex flex-col ${fillAvailableHeight ? 'h-full min-h-0' : ''}`}>
+      <header className="w-full h-[var(--section-header-height)] shrink-0 flex items-center justify-between px-6 border-b border-black/5">
         <div className="flex items-center gap-2">
-          {expanded ? (
-            <ChevronDown size={11} className="text-black/35" />
-          ) : (
-            <ChevronRight size={11} className="text-black/35" />
-          )}
           <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-black/70">
             {label}
           </span>
@@ -277,45 +267,31 @@ export function ScopeSection({
             {rows.length}
           </span>
         </div>
-      </button>
+      </header>
 
-      {expanded && (
-        <div>
-          {rows.length === 0 && (
-            <p className="px-6 py-4 font-mono text-[11px] text-black/40">
-              No items available.
-            </p>
-          )}
-          {useGridLayout ? (
-            <div
-              className={`${gridClassName} border-b border-black/5`}
-            >
-              {orderedGridRows.map(({ row, rank }) => (
-                <SectionItemRow
-                  key={row.id}
-                  row={row}
-                  rank={rank}
-                  className="h-full border-b-0"
-                />
-              ))}
-            </div>
-          ) : (
-            rankedRows.map(({ row, rank }) => (
-              <SectionItemRow key={row.id} row={row} rank={rank} />
-            ))
-          )}
-          {!showAll && hiddenCount > 0 && (
-            <button
-              onClick={() => setShowAll(true)}
-              className="w-full px-6 py-2 text-left hover:bg-black/[0.015] transition-colors"
-            >
-              <span className="font-mono text-[11px] text-black/45 tracking-[0.04em] hover:text-black/80">
-                + {hiddenCount} more
-              </span>
-            </button>
-          )}
-        </div>
-      )}
+      <div className={viewportClassName}>
+        {rows.length === 0 && (
+          <p className="px-6 py-4 font-mono text-[11px] text-black/40">
+            No items available.
+          </p>
+        )}
+        {useGridLayout ? (
+          <div className={gridClassName}>
+            {orderedGridRows.map(({ row, rank }) => (
+              <SectionItemRow
+                key={row.id}
+                row={row}
+                rank={rank}
+                className="h-full border-b-0"
+              />
+            ))}
+          </div>
+        ) : (
+          rankedRows.map(({ row, rank }) => (
+            <SectionItemRow key={row.id} row={row} rank={rank} />
+          ))
+        )}
+      </div>
     </section>
   )
 }

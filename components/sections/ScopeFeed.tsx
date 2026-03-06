@@ -15,9 +15,10 @@ type ScopeSectionsMap = Record<string, SectionData>
 type ScopeSectionDef = ScopeDef['sections'][number]
 
 interface SectionRenderOptions {
-  collapseAfter?: number
   columns?: number
   fillByColumn?: boolean
+  fillAvailableHeight?: boolean
+  contentHeightClassName?: string
 }
 
 const FINANCE_SPLIT_IDS = new Set(['research-reports', 'macro'])
@@ -100,10 +101,10 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
         key={section.id}
         label={section.label}
         items={data?.[section.id]?.items ?? []}
-        defaultExpanded
-        collapseAfter={options.collapseAfter ?? (section.id === 'earnings' ? 12 : 5)}
         columns={options.columns ?? (section.id === 'earnings' ? 3 : 1)}
         fillByColumn={options.fillByColumn ?? (section.id === 'earnings')}
+        fillAvailableHeight={options.fillAvailableHeight}
+        contentHeightClassName={options.contentHeightClassName}
       />
     )
   }
@@ -128,15 +129,15 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
       <div className="flex-1 overflow-y-auto">
         {isAiResearchScope ? (
           <>
-            <div className="grid grid-cols-1 xl:grid-cols-3 xl:grid-rows-[auto_auto] xl:divide-x xl:divide-black/10">
-              <div className="order-1 xl:col-span-2">
+            <div className="grid grid-cols-1 xl:grid-cols-3 xl:grid-rows-[var(--section-total-height)_var(--section-total-height)] xl:divide-x xl:divide-black/10">
+              <div className="xl:col-span-2 xl:row-start-1">
                 {renderSection('ai-news-general')}
               </div>
-              <div className="order-2 xl:col-span-2">
+              <div className="xl:col-span-2 xl:row-start-2">
                 {renderSection('ai-policy-regulation')}
               </div>
-              <div className="order-3 xl:order-none xl:col-start-3 xl:row-span-2 xl:[&>section]:h-full xl:[&>section]:flex xl:[&>section]:flex-col">
-                {renderSection('tech-events')}
+              <div className="xl:col-start-3 xl:row-start-1 xl:row-span-2 xl:[&>section]:h-full xl:[&>section]:min-h-0">
+                {renderSection('tech-events', { fillAvailableHeight: true })}
               </div>
             </div>
 
