@@ -121,6 +121,7 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
         items={data?.[section.id]?.items ?? []}
         columns={options.columns ?? (section.id === 'earnings' ? 3 : 1)}
         fillByColumn={options.fillByColumn ?? (section.id === 'earnings')}
+        itemsPerColumn={section.id === 'earnings' ? 4 : undefined}
         viewportMode={
           options.viewportMode
             ?? (section.id === 'tech-events'

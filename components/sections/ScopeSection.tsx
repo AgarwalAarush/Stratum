@@ -11,6 +11,7 @@ interface ScopeSectionProps {
   items: FeedItem[]
   columns?: number
   fillByColumn?: boolean
+  itemsPerColumn?: number
   viewportMode?: 'fixed' | 'fill' | 'natural'
 }
 
@@ -212,10 +213,10 @@ interface RankedRow {
   rank: number
 }
 
-function reorderByColumns(rows: RankedRow[], columns: number): RankedRow[] {
+function reorderByColumns(rows: RankedRow[], columns: number, rowsPerColumn?: number): RankedRow[] {
   if (columns <= 1 || rows.length <= 1) return rows
 
-  const rowCount = Math.ceil(rows.length / columns)
+  const rowCount = rowsPerColumn ?? Math.ceil(rows.length / columns)
   const ordered: RankedRow[] = []
 
   for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
@@ -236,23 +237,27 @@ export function ScopeSection({
   items,
   columns = 1,
   fillByColumn = false,
+  itemsPerColumn,
   viewportMode = 'fixed',
 }: ScopeSectionProps) {
   const rows = useMemo(() => items.map(getRow), [items])
-  const useGridLayout = columns > 1
+  const effectiveColumns = itemsPerColumn
+    ? Math.min(columns, Math.max(1, Math.ceil(rows.length / itemsPerColumn)))
+    : columns
+  const useGridLayout = effectiveColumns > 1
   const gridClassName = useMemo(() => {
-    if (columns >= 3) return 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
-    if (columns === 2) return 'grid grid-cols-1 lg:grid-cols-2'
+    if (effectiveColumns >= 3) return 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
+    if (effectiveColumns === 2) return 'grid grid-cols-1 lg:grid-cols-2'
     return 'grid grid-cols-1'
-  }, [columns])
+  }, [effectiveColumns])
 
   const rankedRows = useMemo(
     () => rows.map((row, index) => ({ row, rank: index + 1 })),
     [rows],
   )
   const orderedGridRows = useMemo(
-    () => (fillByColumn ? reorderByColumns(rankedRows, columns) : rankedRows),
-    [fillByColumn, rankedRows, columns],
+    () => (fillByColumn ? reorderByColumns(rankedRows, effectiveColumns, itemsPerColumn) : rankedRows),
+    [fillByColumn, rankedRows, effectiveColumns, itemsPerColumn],
   )
 
   const viewportClassName = viewportMode === 'fixed'
