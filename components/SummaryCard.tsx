@@ -15,7 +15,7 @@ export function SummaryCard({ url, onClose }: SummaryCardProps) {
 
   return createPortal(
     <div
-      className="fixed rounded-2xl border border-[var(--border)] shadow-[0_8px_32px_rgba(0,0,0,0.18)] overflow-hidden"
+      className="fixed border border-[var(--border)] shadow-[0_8px_32px_rgba(0,0,0,0.18)] overflow-hidden"
       style={{
         top: 24,
         left: '50%',
@@ -52,7 +52,7 @@ export function SummaryCard({ url, onClose }: SummaryCardProps) {
                 {title}
               </h3>
             )}
-            <div className="text-[12px] text-[var(--text)] leading-[1.5] summary-markdown">
+            <div className="text-[14px] text-[var(--text)] leading-[1.5] summary-markdown">
               <ReactMarkdown>{text}</ReactMarkdown>
             </div>
           </>

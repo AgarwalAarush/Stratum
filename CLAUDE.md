@@ -33,6 +33,10 @@ The core abstraction is **Scopes** (top-level nav tabs like "AI Research", "Fina
 
 Each file fetches from a specific external source: `arxiv.ts` (arXiv API XML), `discussions.ts` (HN Algolia + Lobste.rs), `repos.ts` (GitHub Search API), `rss.ts`/`rss-parser.ts` (RSS feeds by topic), `finance-*.ts` (FMP, FRED, SEC EDGAR), `overview.ts` (Claude API for AI overview bullets).
 
+### Article scrapers (`lib/data/scrapers/`)
+
+Used by the summary feature (`/api/summary`) to extract article text for Claude-generated summaries. Registry (`registry.ts`) resolves Google News redirect URLs and dispatches to domain-specific scrapers (`arxiv.ts`, `github.ts`) or the `generic.ts` fallback. The generic scraper uses linkedom for HTML parsing and extracts text from semantic containers (`<article>`, `<main>`) with a largest-block fallback.
+
 ### Item types
 
 Five item types defined in `lib/types.ts`: `paper`, `discussion`, `repo`, `earnings`, `news`. Each has a corresponding component in `components/items/` and a typed interface. All API responses conform to `SectionData { items: FeedItem[], fetchedAt: string }`.
@@ -49,6 +53,7 @@ Five item types defined in `lib/types.ts`: `paper`, `discussion`, `repo`, `earni
 - CSS custom properties for theming (`--bg`, `--text`, `--surface-2`, etc.) with `data-theme` attribute on `<html>`
 - Zustand store for theme state (`store/theme.ts`)
 - `ClientLayout` wraps the app with nav panel; `ScopeFeed` handles section grid layout
+- `SummaryCard` renders as a fixed overlay portal with streaming markdown; uses `--summary-card-bg` CSS variable for theme-aware background
 
 ## Environment variables
 
