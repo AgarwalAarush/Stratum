@@ -11,8 +11,7 @@ interface ScopeSectionProps {
   items: FeedItem[]
   columns?: number
   fillByColumn?: boolean
-  fillAvailableHeight?: boolean
-  contentHeightClassName?: string
+  viewportMode?: 'fixed' | 'fill' | 'natural'
 }
 
 interface DisplayRow {
@@ -232,8 +231,7 @@ export function ScopeSection({
   items,
   columns = 1,
   fillByColumn = false,
-  fillAvailableHeight = false,
-  contentHeightClassName = 'h-[var(--section-content-height)]',
+  viewportMode = 'fixed',
 }: ScopeSectionProps) {
   const rows = useMemo(() => items.map(getRow), [items])
   const useGridLayout = columns > 1
@@ -252,13 +250,15 @@ export function ScopeSection({
     [fillByColumn, rankedRows, columns],
   )
 
-  const viewportClassName = fillAvailableHeight
-    ? 'flex-1 min-h-0 overflow-y-auto scrollbar-none'
-    : `${contentHeightClassName} overflow-y-auto scrollbar-none`
+  const viewportClassName = viewportMode === 'fixed'
+    ? 'section-viewport-fixed'
+    : viewportMode === 'fill'
+      ? 'xl:flex-1 xl:min-h-0 xl:overflow-y-auto xl:scrollbar-none'
+      : ''
 
   return (
-    <section className={`border-b border-black/10 flex flex-col ${fillAvailableHeight ? 'h-full min-h-0' : ''}`}>
-      <header className="w-full h-[var(--section-header-height)] shrink-0 flex items-center justify-between px-6 border-b border-black/5">
+    <section className="border-b border-black/10 flex flex-col">
+      <header className="w-full h-[var(--section-header-height)] shrink-0 flex items-center justify-between px-6 py-2 border-b border-black/10">
         <div className="flex items-center gap-2">
           <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-black/70">
             {label}

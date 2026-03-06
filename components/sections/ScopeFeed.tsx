@@ -17,8 +17,7 @@ type ScopeSectionDef = ScopeDef['sections'][number]
 interface SectionRenderOptions {
   columns?: number
   fillByColumn?: boolean
-  fillAvailableHeight?: boolean
-  contentHeightClassName?: string
+  viewportMode?: 'fixed' | 'fill' | 'natural'
 }
 
 const FINANCE_SPLIT_IDS = new Set(['research-reports', 'macro'])
@@ -103,8 +102,14 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
         items={data?.[section.id]?.items ?? []}
         columns={options.columns ?? (section.id === 'earnings' ? 3 : 1)}
         fillByColumn={options.fillByColumn ?? (section.id === 'earnings')}
-        fillAvailableHeight={options.fillAvailableHeight}
-        contentHeightClassName={options.contentHeightClassName}
+        viewportMode={
+          options.viewportMode
+            ?? (section.id === 'tech-events'
+              ? 'fill'
+              : section.id === 'earnings'
+                ? 'natural'
+                : 'fixed')
+        }
       />
     )
   }
@@ -129,7 +134,7 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
       <div className="flex-1 overflow-y-auto">
         {isAiResearchScope ? (
           <>
-            <div className="grid grid-cols-1 xl:grid-cols-3 xl:grid-rows-[var(--section-total-height)_var(--section-total-height)] xl:divide-x xl:divide-black/10">
+            <div className="grid grid-cols-1 xl:grid-cols-3 ai-research-grid xl:divide-x xl:divide-black/10">
               <div className="xl:col-span-2 xl:row-start-1">
                 {renderSection('ai-news-general')}
               </div>
@@ -137,7 +142,7 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
                 {renderSection('ai-policy-regulation')}
               </div>
               <div className="xl:col-start-3 xl:row-start-1 xl:row-span-2 xl:[&>section]:h-full xl:[&>section]:min-h-0">
-                {renderSection('tech-events', { fillAvailableHeight: true })}
+                {renderSection('tech-events', { viewportMode: 'fill' })}
               </div>
             </div>
 

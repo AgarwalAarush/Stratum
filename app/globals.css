@@ -140,3 +140,21 @@ body.theme-ready *::after {
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+
+/* ─── Section fixed-height viewport ─── */
+.section-viewport-fixed {
+  height: var(--section-content-height);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.section-viewport-fixed::-webkit-scrollbar {
+  display: none;
+}
+
+/* ─── AI research top grid row heights (xl+) ─── */
+@media (min-width: 1280px) {
+  .ai-research-grid {
+    grid-template-rows: var(--section-total-height) var(--section-total-height);
+  }
+}
