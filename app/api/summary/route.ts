@@ -30,12 +30,12 @@ export async function GET(request: Request) {
   if (supabase) {
     const { data } = await supabase
       .from('article_summaries')
-      .select('summary')
+      .select('summary, title')
       .eq('url_hash', urlHash)
       .single()
 
     if (data?.summary) {
-      const body = sseEvent({ type: 'done', summary: data.summary })
+      const body = sseEvent({ type: 'done', summary: data.summary, title: data.title ?? '' })
       return new Response(body, {
         headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
       })
@@ -76,6 +76,8 @@ export async function GET(request: Request) {
           return
         }
 
+        controller.enqueue(encoder.encode(sseEvent({ type: 'meta', title: article.title })))
+
         const apiKey = process.env.ANTHROPIC_API_KEY
         if (!apiKey) {
           controller.enqueue(encoder.encode(sseEvent({ type: 'error', message: 'Summary service unavailable' })))
@@ -105,7 +107,7 @@ export async function GET(request: Request) {
         })
 
         messageStream.on('end', () => {
-          controller.enqueue(encoder.encode(sseEvent({ type: 'done', summary: fullText })))
+          controller.enqueue(encoder.encode(sseEvent({ type: 'done', summary: fullText, title: article.title })))
           controller.close()
           resolveInflight!(fullText)
           inflight.delete(urlHash)

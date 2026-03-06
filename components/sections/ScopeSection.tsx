@@ -244,7 +244,7 @@ export function ScopeSection({
   itemsPerColumn,
   viewportMode = 'fixed',
 }: ScopeSectionProps) {
-  const { activeUrl, cursorPos, containerProps, cardRef, onCardEnter, onCardLeave } = useHoverSummary()
+  const { activeUrl, close, containerProps } = useHoverSummary()
   const rows = useMemo(() => items.map(getRow), [items])
   const effectiveColumns = itemsPerColumn
     ? Math.min(columns, Math.max(1, Math.ceil(rows.length / itemsPerColumn)))
@@ -310,10 +310,7 @@ export function ScopeSection({
       {activeUrl && (
         <SummaryCard
           url={activeUrl}
-          cursorPos={cursorPos}
-          cardRef={cardRef}
-          onCardEnter={onCardEnter}
-          onCardLeave={onCardLeave}
+          onClose={close}
         />
       )}
     </section>

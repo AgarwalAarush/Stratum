@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 
-const summaryCache = new Map<string, string>()
+const summaryCache = new Map<string, { text: string; title: string }>()
 
 export function useStreamingSummary(url: string | null) {
   const [text, setText] = useState('')
+  const [title, setTitle] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -11,6 +12,7 @@ export function useStreamingSummary(url: string | null) {
   useEffect(() => {
     if (!url) {
       setText('')
+      setTitle('')
       setIsLoading(false)
       setError(null)
       return
@@ -19,7 +21,8 @@ export function useStreamingSummary(url: string | null) {
     // Check client cache
     const cached = summaryCache.get(url)
     if (cached) {
-      setText(cached)
+      setText(cached.text)
+      setTitle(cached.title)
       setIsLoading(false)
       setError(null)
       return
@@ -28,6 +31,7 @@ export function useStreamingSummary(url: string | null) {
     const controller = new AbortController()
     abortRef.current = controller
     setText('')
+    setTitle('')
     setError(null)
     setIsLoading(true)
 
@@ -46,6 +50,7 @@ export function useStreamingSummary(url: string | null) {
         const decoder = new TextDecoder()
         let buffer = ''
         let accumulated = ''
+        let articleTitle = ''
 
         while (true) {
           const { done, value } = await reader.read()
@@ -59,13 +64,18 @@ export function useStreamingSummary(url: string | null) {
             if (!line.startsWith('data: ')) continue
             try {
               const event = JSON.parse(line.slice(6))
-              if (event.type === 'chunk') {
+              if (event.type === 'meta') {
+                articleTitle = event.title ?? ''
+                setTitle(articleTitle)
+              } else if (event.type === 'chunk') {
                 accumulated += event.text
                 setText(accumulated)
               } else if (event.type === 'done') {
                 const summary = event.summary ?? accumulated
+                if (event.title) articleTitle = event.title
                 setText(summary)
-                summaryCache.set(url, summary)
+                setTitle(articleTitle)
+                summaryCache.set(url, { text: summary, title: articleTitle })
                 setIsLoading(false)
               } else if (event.type === 'error') {
                 setError(event.message ?? 'Summary unavailable')
@@ -92,5 +102,5 @@ export function useStreamingSummary(url: string | null) {
     }
   }, [url])
 
-  return { text, isLoading, error }
+  return { text, title, isLoading, error }
 }
