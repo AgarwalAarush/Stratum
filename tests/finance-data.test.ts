@@ -24,7 +24,7 @@ function rfc2822FromOffsetMs(offsetMs: number, baseMs: number = Date.now()): str
   return new Date(baseMs + offsetMs).toUTCString()
 }
 
-test('fetchFinanceEarnings normalizes FMP rows and marks beat/miss', async (t) => {
+test('fetchFinanceEarnings normalizes FMP rows and marks beat/miss', { concurrency: false }, async (t) => {
   clearCacheForTests()
   const restoreRedis = disableRedisForTest()
 
@@ -91,7 +91,7 @@ test('fetchFinanceEarnings normalizes FMP rows and marks beat/miss', async (t) =
   assert.equal(msft?.beat, false)
 })
 
-test('fetchFinanceEarnings enforces 14-day window and includes upcoming events', async (t) => {
+test('fetchFinanceEarnings enforces 14-day window and includes upcoming events', { concurrency: false }, async (t) => {
   clearCacheForTests()
   const restoreRedis = disableRedisForTest()
 
@@ -140,7 +140,7 @@ test('fetchFinanceEarnings enforces 14-day window and includes upcoming events',
   assert.equal(items[0]?.ticker, 'NVDA')
 })
 
-test('fetchFinanceDeals dedupes and prioritizes M&A significance', async (t) => {
+test('fetchFinanceDeals dedupes and prioritizes M&A significance', { concurrency: false }, async (t) => {
   clearCacheForTests()
   const restoreRedis = disableRedisForTest()
 
@@ -190,7 +190,7 @@ test('fetchFinanceDeals dedupes and prioritizes M&A significance', async (t) => 
   assert.equal(items[1]?.category, 'Funding')
 })
 
-test('fetchFinanceReports dedupes and sorts by recency descending', async (t) => {
+test('fetchFinanceReports dedupes and sorts by recency descending', { concurrency: false }, async (t) => {
   clearCacheForTests()
   const restoreRedis = disableRedisForTest()
 
@@ -235,7 +235,7 @@ test('fetchFinanceReports dedupes and sorts by recency descending', async (t) =>
   assert.equal(items[1]?.title, 'Older market thesis')
 })
 
-test('finance deals route returns fresh then memory cache metadata', async (t) => {
+test('finance deals route returns fresh then memory cache metadata', { concurrency: false }, async (t) => {
   clearCacheForTests()
   const restoreRedis = disableRedisForTest()
 
@@ -250,7 +250,7 @@ test('finance deals route returns fresh then memory cache metadata', async (t) =
       `
         <rss><channel>
           <item>
-            <title>Company A acquires Company B</title>
+            <title>Company A acquisition deal announced</title>
             <link>https://example.com/deal</link>
             <pubDate>${recentDate}</pubDate>
           </item>
@@ -273,14 +273,14 @@ test('finance deals route returns fresh then memory cache metadata', async (t) =
   assert.equal(first.headers.get('X-Cache-Tier'), 'medium')
 })
 
-test('finance deals route serves stale on upstream failure after TTL expiry', async (t) => {
+test('finance deals route serves stale on upstream failure after TTL expiry', { concurrency: false }, async (t) => {
   clearCacheForTests()
   const restoreRedis = disableRedisForTest()
 
   const originalFetch = global.fetch
   const originalNow = Date.now
   const originalFmp = process.env.FMP_API_KEY
-  let now = 1_800_000_000_000
+  let now = Date.now()
 
   process.env.FMP_API_KEY = ''
   Date.now = () => now
@@ -322,7 +322,7 @@ test('finance deals route serves stale on upstream failure after TTL expiry', as
   assert.ok(body.items.length > 0)
 })
 
-test('macro route returns safe empty payload when upstream is unavailable', async (t) => {
+test('macro route returns safe empty payload when upstream is unavailable', { concurrency: false }, async (t) => {
   clearCacheForTests()
   const restoreRedis = disableRedisForTest()
 
