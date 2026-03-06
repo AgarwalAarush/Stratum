@@ -1,5 +1,6 @@
 import type { OverviewData } from '../../../../lib/types.ts'
 import { generateAIOverview } from '../../../../lib/data/overview.ts'
+import { saveDailyOverview } from '../../../../lib/data/overview-persistence.ts'
 import { cachedFetchWithFallback } from '../../../../lib/server/cache.ts'
 import { sectionJsonResponse } from '../../../../lib/server/http-cache.ts'
 
@@ -18,6 +19,10 @@ export async function GET() {
         return overview
       },
     })
+
+    if (source === 'fresh' && data && data.bullets.length > 0) {
+      void saveDailyOverview(data.bullets)
+    }
 
     return sectionJsonResponse(
       data ?? { bullets: [], fetchedAt: new Date().toISOString() },

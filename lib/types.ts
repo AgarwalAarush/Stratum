@@ -95,3 +95,12 @@ export interface OverviewData {
   bullets: string[]
   fetchedAt: string
 }
+
+export interface PeriodicOverviewData {
+  type: 'weekly' | 'monthly'
+  content: string
+  date: string
+  periodStart: string
+  periodEnd: string
+  fetchedAt: string
+}

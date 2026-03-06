@@ -3,10 +3,11 @@
 import { useMemo } from 'react'
 import useSWR from 'swr'
 import { RefreshCw } from 'lucide-react'
-import type { OverviewData, ScopeDef, SectionData } from '@/lib/types'
+import type { OverviewData, PeriodicOverviewData, ScopeDef, SectionData } from '@/lib/types'
 import { formatRelativeTime } from '@/lib/utils'
 import { ScopeSection } from './ScopeSection'
 import { AIOverview } from './AIOverview'
+import { PeriodicOverview } from './PeriodicOverview'
 
 interface ScopeFeedProps {
   scope: ScopeDef
@@ -102,6 +103,27 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
     },
   )
 
+  const fetchPeriodicOverview = async (type: string) => {
+    const response = await fetch(`/api/overviews/${type}`, {
+      headers: { Accept: 'application/json' },
+    })
+    if (!response.ok) return null
+    const data = (await response.json()) as PeriodicOverviewData
+    return data.content ? data : null
+  }
+
+  const { data: weeklyData, isLoading: weeklyLoading } = useSWR<PeriodicOverviewData | null>(
+    isAiResearchScope ? 'overview:weekly' : null,
+    () => fetchPeriodicOverview('weekly'),
+    { refreshInterval: SCOPE_REFRESH_INTERVAL_MS, revalidateOnFocus: false, dedupingInterval: 120_000 },
+  )
+
+  const { data: monthlyData, isLoading: monthlyLoading } = useSWR<PeriodicOverviewData | null>(
+    isAiResearchScope ? 'overview:monthly' : null,
+    () => fetchPeriodicOverview('monthly'),
+    { refreshInterval: SCOPE_REFRESH_INTERVAL_MS, revalidateOnFocus: false, dedupingInterval: 120_000 },
+  )
+
   const sectionById = useMemo<Record<string, ScopeSectionDef>>(
     () =>
       Object.fromEntries(
@@ -157,6 +179,12 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
             <AIOverview
               bullets={overviewData?.bullets ?? []}
               isLoading={overviewLoading}
+            />
+
+            <PeriodicOverview
+              weekly={weeklyData ?? null}
+              monthly={monthlyData ?? null}
+              isLoading={weeklyLoading || monthlyLoading}
             />
 
             <div className="grid grid-cols-1 xl:grid-cols-3 ai-research-grid xl:divide-x xl:divide-black/10">
