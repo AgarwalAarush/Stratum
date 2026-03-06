@@ -49,13 +49,13 @@ const TOPIC_LABELS: Record<NewsTopic, string> = {
 
 export const NEWS_TOPIC_FEEDS: Record<NewsTopic, ServerFeed[]> = {
   general: [
-    { name: 'AI News', url: gn('(OpenAI OR Anthropic OR Google AI OR "large language model" OR ChatGPT) when:2d') },
+    { name: 'AI News', url: gn('(OpenAI OR Anthropic OR "Google AI" OR Gemini OR DeepSeek OR Mistral OR Qwen OR "large language model" OR ChatGPT) when:1d') },
     { name: 'VentureBeat AI', url: 'https://venturebeat.com/category/ai/feed/' },
     { name: 'The Verge AI', url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml' },
     { name: 'MIT Tech Review AI', url: 'https://www.technologyreview.com/topic/artificial-intelligence/feed' },
     { name: 'MIT Research', url: 'https://news.mit.edu/rss/research' },
-    { name: 'ArXiv AI', url: 'https://export.arxiv.org/rss/cs.AI' },
-    { name: 'ArXiv ML', url: 'https://export.arxiv.org/rss/cs.LG' },
+    { name: 'Reuters AI', url: gn('site:reuters.com "artificial intelligence" when:2d') },
+    { name: 'Bloomberg Tech', url: gn('site:bloomberg.com "artificial intelligence" when:2d') },
     { name: 'OpenAI News', url: gn('OpenAI ChatGPT GPT-4 when:7d') },
     { name: 'Anthropic News', url: gn('Anthropic Claude AI when:7d') },
   ],

@@ -40,10 +40,15 @@ function getTag(item: FeedItem): ItemTag | undefined {
     if (item.beat === true) return 'verified'
     if (item.beat === false) return 'breaking'
   }
+  if (item.type === 'paper') {
+    const ageMs = Date.now() - new Date(item.publishedAt).getTime()
+    if (ageMs < 48 * 60 * 60 * 1000) return 'new'
+  }
   if (item.type === 'news') {
-    const category = (item.category ?? '').toLowerCase()
-    if (category.includes('release')) return 'new'
-    if (category.includes('benchmark')) return 'verified'
+    const title = item.title.toLowerCase()
+    if (/breach|hack(ed|ing)?|ransomware|zero.?day|cyber.?attack|exploit|outage|emergency|ban(ned)?|shutdown/.test(title)) return 'breaking'
+    if (/launch(es|ed)?|announc(es|ed|ement)|releas(es|ed)|unveil(s|ed)?|introduc(es|ed)|debut(s|ed)?|now available/.test(title)) return 'new'
+    if (/\$\d+[bm]|\bbillion\b|\bIPO\b|acqui(res|red|sition)|partnership/.test(title)) return 'hot'
   }
   return undefined
 }
