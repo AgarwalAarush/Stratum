@@ -95,6 +95,46 @@ export async function fetchLatestOverview(
   }
 }
 
+export async function saveMorningBrief(data: import('../types').MorningBriefData): Promise<void> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return
+
+  const today = new Date().toISOString().slice(0, 10)
+
+  await supabase
+    .from('overviews')
+    .upsert(
+      { type: 'morning-brief', content: JSON.stringify(data), date: today },
+      { onConflict: 'type,date' },
+    )
+}
+
+export async function fetchLatestMorningBrief(): Promise<import('../types').MorningBriefData | null> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+
+  const { data, error } = await supabase
+    .from('overviews')
+    .select('content, date')
+    .eq('type', 'morning-brief')
+    .order('date', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (error || !data) return null
+
+  const row = data as OverviewRow
+  const parsed = JSON.parse(row.content) as import('../types').MorningBriefData
+
+  // Mark as stale if not from today
+  const today = new Date().toISOString().slice(0, 10)
+  if (row.date !== today) {
+    parsed.stale = true
+  }
+
+  return parsed
+}
+
 export async function saveOverview(
   type: 'weekly' | 'monthly',
   content: string,
