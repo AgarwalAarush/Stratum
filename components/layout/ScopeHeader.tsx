@@ -6,7 +6,7 @@ interface ScopeHeaderProps {
 
 export function ScopeHeader({ label, lastUpdated }: ScopeHeaderProps) {
   return (
-    <div className="py-8 px-8 border-b border-[var(--border)] bg-[var(--bg)] shrink-0">
+    <div className="py-12 px-12 border-b border-[var(--border)] bg-[var(--bg)] shrink-0">
       <h1 className="text-[28px] font-bold text-[var(--text)] mb-1">
         {label}
       </h1>

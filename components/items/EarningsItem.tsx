@@ -11,10 +11,10 @@ export function EarningsItem({ item }: { item: EarningsItemType }) {
       href={item.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-start justify-between gap-3 px-5 py-4 border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--surface-2)] transition-colors cursor-pointer group"
+      className="flex items-start justify-between gap-3 px-8 py-6 border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--surface-2)] transition-colors cursor-pointer group"
     >
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-center gap-2 mb-2">
           <span className="text-[14px] font-semibold text-[var(--text)] group-hover:text-[var(--accent)]">{item.ticker}</span>
           <span className="text-[14px] font-normal text-[var(--text-dim)] truncate">{item.companyName}</span>
           {!isUpcoming && (

@@ -1,7 +1,6 @@
 // app/[scope]/page.tsx
 import { notFound } from 'next/navigation'
 import { getScopeById, isValidScopeId } from '@/lib/scopes'
-import { ScopeHeader } from '@/components/layout/ScopeHeader'
 import { ScopeFeed } from '@/components/sections/ScopeFeed'
 
 interface PageProps {
@@ -18,14 +17,8 @@ export default async function ScopePage({ params }: PageProps) {
   const scope = getScopeById(scopeId)!
 
   return (
-    <div className="flex flex-col h-full">
-      <ScopeHeader
-        label={scope.label}
-        lastUpdated="just now"
-      />
-      <div className="flex-1 overflow-hidden min-h-0">
-        <ScopeFeed scope={scope} />
-      </div>
+    <div className="flex-1 overflow-hidden min-h-0">
+      <ScopeFeed scope={scope} />
     </div>
   )
 }

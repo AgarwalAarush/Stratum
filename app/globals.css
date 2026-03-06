@@ -68,15 +68,6 @@
   --scrollbar-thumb-hover: #52525b;
 }
 
-/* ─── Base resets ─── */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
 html {
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
