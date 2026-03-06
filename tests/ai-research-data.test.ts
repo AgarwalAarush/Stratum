@@ -453,7 +453,7 @@ test('news topic route serves stale fallback when upstream fails after cache exp
   })
   assert.equal(seeded.headers.get('X-Data-Source'), 'fresh')
 
-  now += 601_000
+  now += 3_601_000
   global.fetch = (async () => {
     throw new Error('upstream unavailable')
   }) as typeof fetch

@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { ScopeDef, FeedItem } from '../../lib/types'
 
 function createMockScope(id: string, sections: any[]): ScopeDef {
@@ -30,6 +32,11 @@ function createMockItems(count: number): FeedItem[] {
     url: `https://example.com/item-${i}`,
   }))
 }
+
+const scopeFeedSource = readFileSync(
+  join(process.cwd(), 'components/sections/ScopeFeed.tsx'),
+  'utf8',
+)
 
 // Test the viewport mode logic from ScopeFeed
 function getViewportModeForSection(sectionId: string, options?: { viewportMode?: 'fixed' | 'fill' | 'natural' }) {
@@ -101,4 +108,19 @@ test('ScopeFeed handles scope ID detection correctly', () => {
   assert.equal(financeScope.id, 'finance', 'finance scope should have correct ID')
   assert.equal(aiResearchScope.id, 'ai-research', 'ai-research scope should have correct ID')
   assert.equal(generalScope.id, 'general', 'general scope should have correct ID')
+})
+
+test('ScopeFeed uses hourly refresh interval', () => {
+  assert.match(scopeFeedSource, /SCOPE_REFRESH_INTERVAL_MS\s*=\s*3_600_000/)
+  assert.match(scopeFeedSource, /refreshInterval:\s*SCOPE_REFRESH_INTERVAL_MS/)
+})
+
+test('AI Research layout renders repos section at the bottom before end marker', () => {
+  const newTechnologyIndex = scopeFeedSource.indexOf("{renderSection('new-technology')}")
+  const reposIndex = scopeFeedSource.indexOf("{renderSection('repos')}")
+  const endMarkerIndex = scopeFeedSource.indexOf('END OF FEED')
+
+  assert.ok(newTechnologyIndex >= 0)
+  assert.ok(reposIndex > newTechnologyIndex)
+  assert.ok(endMarkerIndex > reposIndex)
 })

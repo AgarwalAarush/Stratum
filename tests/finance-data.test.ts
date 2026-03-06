@@ -303,7 +303,7 @@ test('finance deals route serves stale on upstream failure after TTL expiry', { 
   const seeded = await getFinanceDealsRoute()
   assert.equal(seeded.headers.get('X-Data-Source'), 'fresh')
 
-  now += 601_000
+  now += 3_601_000
   global.fetch = (async () => {
     throw new Error('upstream down')
   }) as typeof fetch
@@ -348,5 +348,5 @@ test('macro route returns safe empty payload when upstream is unavailable', { co
   assert.deepEqual(body.items, [])
   assert.equal(typeof body.fetchedAt, 'string')
   assert.equal(response.headers.get('X-Data-Source'), 'none')
-  assert.equal(response.headers.get('X-Cache-Tier'), 'static')
+  assert.equal(response.headers.get('X-Cache-Tier'), 'slow')
 })
