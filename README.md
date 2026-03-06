@@ -154,7 +154,12 @@ cp .env.example .env.local  # Add API keys
 npm run dev
 ```
 
-Required env vars: `ANTHROPIC_API_KEY`, `UPSTASH_REDIS_URL`, `CRUNCHBASE_API_KEY`, `FRED_API_KEY`
+Environment variables:
+- `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` (cache tier)
+- `FMP_API_KEY` (optional, finance earnings/deals enrichment)
+- `FRED_API_KEY` (optional, macro indicators enrichment)
+- `SEC_API_USER_AGENT` (optional, SEC-friendly user-agent string)
+- `GITHUB_TOKEN` (optional, improves AI-research GitHub rate limits)
 
 ---
 
