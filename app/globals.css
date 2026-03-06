@@ -15,7 +15,8 @@
   --color-red: var(--red);
 
   /* ─── Typography ─── */
-  --font-family-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-family-sans: var(--font-ibm-plex-sans), system-ui, -apple-system, sans-serif;
+  --font-family-mono: var(--font-ibm-plex-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   /* ─── Custom font sizes ─── */
   --font-size-10: 10px;
@@ -38,13 +39,13 @@
 /* ─── Design tokens — LIGHT MODE IS DEFAULT ─── */
 :root {
   --bg: #ffffff;
-  --surface: #ffffff;
-  --surface-2: #f4f4f5;
-  --border: #e4e4e7;
-  --border-subtle: #f4f4f5;
-  --text: #09090b;
-  --text-dim: #52525b;
-  --text-muted: #a1a1aa;
+  --surface: #fafafa;
+  --surface-2: #f3f4f6;
+  --border: rgba(0, 0, 0, 0.12);
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --text: #0a0a0a;
+  --text-dim: #555555;
+  --text-muted: #999999;
   --accent: #2563eb;
   --green: #16a34a;
   --red: #ef4444;
@@ -77,7 +78,7 @@ html {
 body {
   background-color: var(--bg);
   color: var(--text);
-  font-family: var(--font-inter, system-ui, -apple-system, sans-serif);
+  font-family: var(--font-ibm-plex-sans, system-ui, -apple-system, sans-serif);
   line-height: 1.5;
 }
 

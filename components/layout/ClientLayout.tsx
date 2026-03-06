@@ -10,7 +10,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
     return (
-        <div className="flex bg-[var(--bg)] min-h-screen">
+        <div className="flex h-screen overflow-hidden bg-[var(--bg)]">
             <NavPanel
                 isOpen={isNavOpen}
                 setIsOpen={setIsNavOpen}

@@ -1,13 +1,21 @@
 // app/layout.tsx
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google'
 import '@/app/globals.css'
 import { ThemeScript } from '@/components/ThemeScript'
 import { ClientLayout } from '@/components/layout/ClientLayout'
 
-const inter = Inter({
+const ibmPlexSans = IBM_Plex_Sans({
   subsets: ['latin'],
-  variable: '--font-inter',
+  weight: ['400', '500', '600'],
+  variable: '--font-ibm-plex-sans',
+  display: 'swap',
+})
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-ibm-plex-mono',
   display: 'swap',
 })
 
@@ -22,7 +30,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" data-theme="light" className={inter.variable}>
+    <html
+      lang="en"
+      data-theme="light"
+      className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}
+    >
       <head>
         <ThemeScript />
       </head>
