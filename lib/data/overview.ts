@@ -144,7 +144,7 @@ ${sourcesBlock}
 
 Generate 8–12 concise bullet points summarizing the key takeaways, emerging themes, and things to watch. Each bullet should be one sentence, actionable, and analytical — not just restating headlines.
 
-When a bullet draws from a specific headline, include a citation as [n](url) where n is the source number and url is the source URL from the Sources list above. Place citations at the end of the relevant clause. A bullet may have 0-3 citations.
+When a bullet draws from a specific headline, cite it as [n] using the headline number. Place citations at the end of the relevant clause. A bullet may have 0-3 citations.
 
 Return only a JSON array of strings.`
 
@@ -172,7 +172,16 @@ Return only a JSON array of strings.`
       return { bullets: FALLBACK_BULLETS, fetchedAt: new Date().toISOString() }
     }
 
-    return { bullets, fetchedAt: new Date().toISOString() }
+    // Expand bare [n] references into [n](url) markdown links
+    const sourceMap = new Map(sourceIndex.map((s) => [s.n, s.url]))
+    const processed = bullets.map((b) =>
+      b.replace(/\[(\d+)\]/g, (full, num) => {
+        const url = sourceMap.get(Number(num))
+        return url ? `[${num}](${url})` : full
+      }),
+    )
+
+    return { bullets: processed, fetchedAt: new Date().toISOString() }
   } catch {
     return { bullets: FALLBACK_BULLETS, fetchedAt: new Date().toISOString() }
   }
