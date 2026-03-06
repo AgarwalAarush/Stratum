@@ -90,3 +90,8 @@ export interface SectionData {
   items: FeedItem[]
   fetchedAt: string          // ISO date string
 }
+
+export interface OverviewData {
+  bullets: string[]
+  fetchedAt: string
+}

@@ -80,7 +80,7 @@ export const SCOPES: ScopeDef[] = [
       {
         id: 'tech-events',
         label: 'Tech Events',
-        sources: ['Dev Events', 'dev.events'],
+        sources: ['Hackathons', 'Devpost', 'MLH'],
         itemType: 'news',
         apiPath: '/api/ai-research/news/tech-events',
       },

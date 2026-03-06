@@ -3,9 +3,10 @@
 import { useMemo } from 'react'
 import useSWR from 'swr'
 import { RefreshCw } from 'lucide-react'
-import type { ScopeDef, SectionData } from '@/lib/types'
+import type { OverviewData, ScopeDef, SectionData } from '@/lib/types'
 import { formatRelativeTime } from '@/lib/utils'
 import { ScopeSection } from './ScopeSection'
+import { AIOverview } from './AIOverview'
 
 interface ScopeFeedProps {
   scope: ScopeDef
@@ -85,6 +86,22 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
   const isFinanceScope = scope.id === 'finance'
   const isAiResearchScope = scope.id === 'ai-research'
 
+  const { data: overviewData, isLoading: overviewLoading } = useSWR<OverviewData>(
+    isAiResearchScope ? 'overview:ai-research' : null,
+    async () => {
+      const response = await fetch('/api/ai-research/overview', {
+        headers: { Accept: 'application/json' },
+      })
+      if (!response.ok) return { bullets: [], fetchedAt: new Date().toISOString() }
+      return (await response.json()) as OverviewData
+    },
+    {
+      refreshInterval: SCOPE_REFRESH_INTERVAL_MS,
+      revalidateOnFocus: false,
+      dedupingInterval: 60_000,
+    },
+  )
+
   const sectionById = useMemo<Record<string, ScopeSectionDef>>(
     () =>
       Object.fromEntries(
@@ -136,6 +153,11 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
       <div className="flex-1 overflow-y-auto main-scroll">
         {isAiResearchScope ? (
           <>
+            <AIOverview
+              bullets={overviewData?.bullets ?? []}
+              isLoading={overviewLoading}
+            />
+
             <div className="grid grid-cols-1 xl:grid-cols-3 ai-research-grid xl:divide-x xl:divide-black/10">
               <div className="xl:col-span-2 xl:row-start-1">
                 {renderSection('ai-news-general')}

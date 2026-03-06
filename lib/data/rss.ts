@@ -122,12 +122,12 @@ export const NEWS_TOPIC_FEEDS: Record<NewsTopic, ServerFeed[]> = {
     { name: 'Cloud Outages', url: gn('(Azure OR AWS OR GCP OR Cloudflare OR Slack OR GitHub) outage OR down when:1d') },
   ],
   'tech-events': [
-    { name: 'Dev Events', url: gn('("developer conference" OR "tech summit" OR devcon OR "developer event") when:7d') },
-    { name: 'dev.events', url: 'https://dev.events/rss.xml' },
-    { name: 'AI Conferences', url: gn('(AI conference OR "AI summit" OR "machine learning conference") when:30d') },
-    { name: 'Tech Summits', url: gn('("tech summit" OR "technology summit") when:30d') },
-    { name: 'Developer Events', url: gn('(developer meetup OR hackathon OR "developer conference") when:30d') },
-    { name: 'Open Source Conferences', url: gn('("open source conference" OR FOSDEM OR KubeCon OR PyCon) when:30d') },
+    { name: 'Hackathons', url: gn('(hackathon OR "hack day" OR "coding competition" OR "build competition") when:14d') },
+    { name: 'MLH Events', url: gn('site:mlh.io OR "Major League Hacking" hackathon when:30d') },
+    { name: 'Devpost', url: gn('site:devpost.com hackathon when:14d') },
+    { name: 'CTF Events', url: gn('(CTF OR "capture the flag" OR "cybersecurity competition") when:14d') },
+    { name: 'AI Hackathons', url: gn('("AI hackathon" OR "ML hackathon" OR "LLM hackathon" OR "AI buildathon") when:14d') },
+    { name: 'Developer Competitions', url: gn('("developer challenge" OR "coding challenge" OR "programming contest" OR "startup competition") when:14d') },
   ],
 }
 
