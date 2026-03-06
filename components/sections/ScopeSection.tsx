@@ -12,6 +12,7 @@ interface ScopeSectionProps {
   items: FeedItem[]
   defaultExpanded?: boolean
   collapseAfter?: number
+  columns?: number
 }
 
 interface DisplayRow {
@@ -141,7 +142,15 @@ function ChangeChip({ value }: { value: number }) {
   )
 }
 
-function SectionItemRow({ row, index }: { row: DisplayRow; index: number }) {
+function SectionItemRow({
+  row,
+  index,
+  className = '',
+}: {
+  row: DisplayRow
+  index: number
+  className?: string
+}) {
   const tag = row.tag ? tagStyles[row.tag] : null
 
   return (
@@ -149,7 +158,7 @@ function SectionItemRow({ row, index }: { row: DisplayRow; index: number }) {
       href={row.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-start gap-3 px-6 py-2.5 border-b border-black/5 hover:bg-black/[0.025] transition-colors"
+      className={`group flex items-start gap-3 px-6 py-2.5 border-b border-black/5 hover:bg-black/[0.025] transition-colors ${className}`}
     >
       <span className="shrink-0 mt-0.5 w-4 text-right font-mono text-[10px] text-black/25">
         {index + 1}
@@ -157,7 +166,7 @@ function SectionItemRow({ row, index }: { row: DisplayRow; index: number }) {
 
       <div className="flex-1 min-w-0">
         <div className="flex items-start gap-2 flex-wrap">
-          <span className="text-[13px] text-[var(--text)] leading-[1.4] group-hover:underline decoration-dotted underline-offset-2">
+          <span className="text-[13px] text-[var(--text)] leading-[1.4] whitespace-normal break-words group-hover:underline decoration-dotted underline-offset-2">
             {row.title}
           </span>
           {tag && (
@@ -199,10 +208,17 @@ export function ScopeSection({
   items,
   defaultExpanded = true,
   collapseAfter = 5,
+  columns = 1,
 }: ScopeSectionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [showAll, setShowAll] = useState(false)
   const rows = useMemo(() => items.map(getRow), [items])
+  const useGridLayout = columns > 1
+  const gridClassName = useMemo(() => {
+    if (columns >= 3) return 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
+    if (columns === 2) return 'grid grid-cols-1 lg:grid-cols-2'
+    return 'grid grid-cols-1'
+  }, [columns])
 
   const visibleRows = showAll ? rows : rows.slice(0, collapseAfter)
   const hiddenCount = Math.max(0, rows.length - collapseAfter)
@@ -236,9 +252,24 @@ export function ScopeSection({
               No items available.
             </p>
           )}
-          {visibleRows.map((row, index) => (
-            <SectionItemRow key={row.id} row={row} index={index} />
-          ))}
+          {useGridLayout ? (
+            <div
+              className={`${gridClassName} border-b border-black/5`}
+            >
+              {visibleRows.map((row, index) => (
+                <SectionItemRow
+                  key={row.id}
+                  row={row}
+                  index={index}
+                  className="h-full border-b-0"
+                />
+              ))}
+            </div>
+          ) : (
+            visibleRows.map((row, index) => (
+              <SectionItemRow key={row.id} row={row} index={index} />
+            ))
+          )}
           {!showAll && hiddenCount > 0 && (
             <button
               onClick={() => setShowAll(true)}

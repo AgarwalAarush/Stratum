@@ -112,13 +112,6 @@ export const SCOPES: ScopeDef[] = [
         apiPath: '/api/finance/reports',
       },
       {
-        id: 'markets',
-        label: 'Markets',
-        sources: ['SEC EDGAR', 'Earnings Whispers'],
-        itemType: 'earnings',
-        apiPath: '/api/markets/earnings-calendar',
-      },
-      {
         id: 'macro',
         label: 'Macro',
         sources: ['FRED', 'FOMC', 'Fed Calendar'],

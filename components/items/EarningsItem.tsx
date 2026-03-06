@@ -16,7 +16,7 @@ export function EarningsItem({ item }: { item: EarningsItemType }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-[14px] font-semibold text-[var(--text)] group-hover:text-[var(--accent)]">{item.ticker}</span>
-          <span className="text-[14px] font-normal text-[var(--text-dim)] truncate">{item.companyName}</span>
+          <span className="text-[14px] font-normal text-[var(--text-dim)] whitespace-normal break-words">{item.companyName}</span>
           {!isUpcoming && (
             <span
               className={`text-[12px] font-semibold ml-auto flex items-center gap-1 ${beat ? 'text-[var(--green)]' : 'text-[var(--red)]'}`}

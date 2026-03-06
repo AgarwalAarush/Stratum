@@ -71,6 +71,14 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
     return isLoading ? 'loading...' : 'just now'
   }, [data, isLoading, scope.sections])
 
+  const isFinanceScope = scope.id === 'finance'
+  const financeSplitIds = new Set(['research-reports', 'macro'])
+
+  const sectionById = useMemo(
+    () => Object.fromEntries(scope.sections.map((section) => [section.id, section] as const)),
+    [scope.sections],
+  )
+
   return (
     <div className="w-full h-full min-h-0 flex flex-col bg-[var(--bg)]">
       <header className="h-[var(--top-header-height)] flex items-center justify-between px-6 border-b border-black/10 shrink-0 gap-4">
@@ -89,15 +97,37 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
       </header>
 
       <div className="flex-1 overflow-y-auto">
-        {scope.sections.map((section) => (
-          <ScopeSection
-            key={section.id}
-            label={section.label}
-            items={data?.[section.id]?.items ?? []}
-            defaultExpanded
-            collapseAfter={5}
-          />
-        ))}
+        {scope.sections
+          .filter((section) => !isFinanceScope || !financeSplitIds.has(section.id))
+          .map((section) => (
+            <ScopeSection
+              key={section.id}
+              label={section.label}
+              items={data?.[section.id]?.items ?? []}
+              defaultExpanded
+              collapseAfter={5}
+              columns={section.id === 'earnings' ? 3 : 1}
+            />
+          ))}
+
+        {isFinanceScope && sectionById['research-reports'] && sectionById.macro && (
+          <div className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-black/10">
+            <ScopeSection
+              key="research-reports"
+              label={sectionById['research-reports'].label}
+              items={data?.['research-reports']?.items ?? []}
+              defaultExpanded
+              collapseAfter={5}
+            />
+            <ScopeSection
+              key="macro"
+              label={sectionById.macro.label}
+              items={data?.macro?.items ?? []}
+              defaultExpanded
+              collapseAfter={5}
+            />
+          </div>
+        )}
         <div className="px-6 py-8">
           <p className="font-mono text-[11px] text-black/20 text-center">
             — END OF FEED —
