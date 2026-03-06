@@ -2,6 +2,10 @@ import type { RepoItem as RepoItemType } from '@/lib/types'
 import { ExternalLink, Star } from 'lucide-react'
 
 export function RepoItem({ item }: { item: RepoItemType }) {
+  const starsPerDayLabel = item.starsPerDay.toLocaleString(undefined, {
+    maximumFractionDigits: 1,
+  })
+
   return (
     <a
       href={item.url}
@@ -18,7 +22,7 @@ export function RepoItem({ item }: { item: RepoItemType }) {
         <p className="text-[12px] text-[var(--text-dim)]">
           {item.language}
           <span className="mx-1.5 text-[var(--text-muted)]">·</span>
-          <span className="inline-flex items-center gap-1"><Star size={12} /> {item.starsToday.toLocaleString()} today</span>
+          <span className="inline-flex items-center gap-1"><Star size={12} /> {starsPerDayLabel} est/day</span>
           <span className="mx-1.5 text-[var(--text-muted)]">·</span>
           {item.totalStars.toLocaleString()} total
         </p>

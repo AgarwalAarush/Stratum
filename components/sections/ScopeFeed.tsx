@@ -95,7 +95,7 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
             label={section.label}
             items={data?.[section.id]?.items ?? []}
             defaultExpanded
-            collapseAfter={section.id === 'ai-news' ? 8 : 5}
+            collapseAfter={5}
           />
         ))}
         <div className="px-6 py-8">

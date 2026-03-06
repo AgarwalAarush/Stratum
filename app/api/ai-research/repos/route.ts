@@ -3,7 +3,7 @@ import { fetchTrendingRepos } from '@/lib/data/repos'
 import { cachedFetchWithFallback } from '@/lib/server/cache'
 import { sectionJsonResponse } from '@/lib/server/http-cache'
 
-const CACHE_KEY = 'stratum:ai-research:repos:v1'
+const CACHE_KEY = 'stratum:ai-research:repos:v2'
 
 export async function GET() {
   try {
@@ -13,6 +13,8 @@ export async function GET() {
       staleMaxAgeMs: 24 * 60 * 60 * 1_000,
       fetcher: async () => {
         const items = await fetchTrendingRepos(20)
+        if (items === null) return null
+
         return {
           items,
           fetchedAt: new Date().toISOString(),

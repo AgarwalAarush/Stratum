@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server.js'
 
 export type CacheTier = 'fast' | 'medium' | 'slow' | 'static'
 export type DataSourceHeader = 'memory' | 'redis' | 'fresh' | 'stale' | 'none'

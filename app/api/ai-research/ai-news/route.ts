@@ -1,9 +1,9 @@
-import type { SectionData } from '@/lib/types'
-import { fetchAiNewsItems } from '@/lib/data/rss'
-import { cachedFetchWithFallback } from '@/lib/server/cache'
-import { sectionJsonResponse } from '@/lib/server/http-cache'
+import type { SectionData } from '../../../../lib/types.ts'
+import { fetchNewsItemsByTopic } from '../../../../lib/data/rss.ts'
+import { cachedFetchWithFallback } from '../../../../lib/server/cache.ts'
+import { sectionJsonResponse } from '../../../../lib/server/http-cache.ts'
 
-const CACHE_KEY = 'stratum:ai-research:ai-news:v1'
+const CACHE_KEY = 'stratum:ai-research:news:general:v1'
 
 export async function GET() {
   try {
@@ -12,7 +12,11 @@ export async function GET() {
       ttlSeconds: 600,
       staleMaxAgeMs: 12 * 60 * 60 * 1_000,
       fetcher: async () => {
-        const items = await fetchAiNewsItems()
+        const items = await fetchNewsItemsByTopic('general', 20)
+        if (items.length === 0) {
+          throw new Error('No items fetched for general AI news')
+        }
+
         return {
           items,
           fetchedAt: new Date().toISOString(),

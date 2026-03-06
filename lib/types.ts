@@ -52,7 +52,7 @@ export interface RepoItem {
   name: string
   description: string
   language: string
-  starsToday: number
+  starsPerDay: number
   totalStars: number
   url: string
 }

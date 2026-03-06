@@ -35,7 +35,7 @@ const tagStyles: Record<ItemTag, { label: string; color: string; bg: string }> =
 
 function getTag(item: FeedItem): ItemTag | undefined {
   if (item.type === 'discussion' && item.points >= 500) return 'hot'
-  if (item.type === 'repo' && item.starsToday >= 1000) return 'hot'
+  if (item.type === 'repo' && item.starsPerDay >= 15) return 'hot'
   if (item.type === 'earnings') {
     if (item.beat === true) return 'verified'
     if (item.beat === false) return 'breaking'
@@ -79,7 +79,7 @@ function getRow(item: FeedItem): DisplayRow {
         id: item.id,
         title: `${item.owner}/${item.name} — ${item.description}`,
         source: 'GitHub',
-        time: `↑ ${item.starsToday.toLocaleString()} today`,
+        time: `↑ ${item.starsPerDay.toLocaleString(undefined, { maximumFractionDigits: 1 })} est/day`,
         meta: `${item.language} · ${item.totalStars.toLocaleString()} stars`,
         url: item.url,
         tag: getTag(item),
