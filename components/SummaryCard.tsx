@@ -15,7 +15,7 @@ export function SummaryCard({ url, onClose }: SummaryCardProps) {
 
   return createPortal(
     <div
-      className="fixed rounded-xl border border-[var(--border)] shadow-lg overflow-hidden"
+      className="fixed rounded-2xl border border-[var(--border)] shadow-[0_8px_32px_rgba(0,0,0,0.18)] overflow-hidden"
       style={{
         top: 24,
         left: '50%',
@@ -24,7 +24,7 @@ export function SummaryCard({ url, onClose }: SummaryCardProps) {
         maxWidth: 480,
         maxHeight: 320,
         zIndex: 50,
-        backgroundColor: 'var(--surface)',
+        backgroundColor: 'var(--summary-card-bg, #ffffff)',
       }}
     >
       <button

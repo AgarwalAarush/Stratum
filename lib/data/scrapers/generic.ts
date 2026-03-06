@@ -33,7 +33,7 @@ export const genericScraper: ArticleScraper = {
   async scrape(url) {
     const res = await fetch(url, {
       signal: AbortSignal.timeout(10_000),
-      headers: { 'User-Agent': 'Stratum/0.1 (article-summary)' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Stratum/0.1; +https://github.com)' },
     })
     if (!res.ok) return null
 

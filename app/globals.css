@@ -59,6 +59,7 @@
   --red: #ef4444;
   --scrollbar-thumb: #d4d4d4;
   --scrollbar-thumb-hover: #a3a3a3;
+  --summary-card-bg: #ffffff;
 }
 
 [data-theme="dark"] {
@@ -75,6 +76,7 @@
   --red: #f87171;
   --scrollbar-thumb: #3f3f46;
   --scrollbar-thumb-hover: #52525b;
+  --summary-card-bg: #27272a;
 }
 
 @media (prefers-reduced-motion: reduce) {

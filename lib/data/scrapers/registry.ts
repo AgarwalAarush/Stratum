@@ -15,11 +15,13 @@ for (const scraper of scrapers) {
 async function resolveUrl(url: string): Promise<string> {
   const hostname = new URL(url).hostname
   if (!hostname.includes('news.google.com')) return url
+  const controller = new AbortController()
   const res = await fetch(url, {
-    method: 'HEAD',
     redirect: 'follow',
-    signal: AbortSignal.timeout(10_000),
+    signal: controller.signal,
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Stratum/0.1)' },
   })
+  controller.abort() // don't need the body
   return res.url
 }
 
