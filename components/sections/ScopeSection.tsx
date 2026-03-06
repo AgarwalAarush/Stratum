@@ -13,6 +13,7 @@ interface ScopeSectionProps {
   defaultExpanded?: boolean
   collapseAfter?: number
   columns?: number
+  fillByColumn?: boolean
 }
 
 interface DisplayRow {
@@ -144,11 +145,11 @@ function ChangeChip({ value }: { value: number }) {
 
 function SectionItemRow({
   row,
-  index,
+  rank,
   className = '',
 }: {
   row: DisplayRow
-  index: number
+  rank: number
   className?: string
 }) {
   const tag = row.tag ? tagStyles[row.tag] : null
@@ -161,7 +162,7 @@ function SectionItemRow({
       className={`group flex items-start gap-3 px-6 py-2.5 border-b border-black/5 hover:bg-black/[0.025] transition-colors ${className}`}
     >
       <span className="shrink-0 mt-0.5 w-4 text-right font-mono text-[10px] text-black/25">
-        {index + 1}
+        {rank}
       </span>
 
       <div className="flex-1 min-w-0">
@@ -203,12 +204,37 @@ function SectionItemRow({
   )
 }
 
+interface RankedRow {
+  row: DisplayRow
+  rank: number
+}
+
+function reorderByColumns(rows: RankedRow[], columns: number): RankedRow[] {
+  if (columns <= 1 || rows.length <= 1) return rows
+
+  const rowCount = Math.ceil(rows.length / columns)
+  const ordered: RankedRow[] = []
+
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    for (let colIndex = 0; colIndex < columns; colIndex += 1) {
+      const sourceIndex = colIndex * rowCount + rowIndex
+      const candidate = rows[sourceIndex]
+      if (candidate) {
+        ordered.push(candidate)
+      }
+    }
+  }
+
+  return ordered
+}
+
 export function ScopeSection({
   label,
   items,
   defaultExpanded = true,
   collapseAfter = 5,
   columns = 1,
+  fillByColumn = false,
 }: ScopeSectionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [showAll, setShowAll] = useState(false)
@@ -221,6 +247,14 @@ export function ScopeSection({
   }, [columns])
 
   const visibleRows = showAll ? rows : rows.slice(0, collapseAfter)
+  const rankedRows = useMemo(
+    () => visibleRows.map((row, index) => ({ row, rank: index + 1 })),
+    [visibleRows],
+  )
+  const orderedGridRows = useMemo(
+    () => (fillByColumn ? reorderByColumns(rankedRows, columns) : rankedRows),
+    [fillByColumn, rankedRows, columns],
+  )
   const hiddenCount = Math.max(0, rows.length - collapseAfter)
 
   return (
@@ -256,18 +290,18 @@ export function ScopeSection({
             <div
               className={`${gridClassName} border-b border-black/5`}
             >
-              {visibleRows.map((row, index) => (
+              {orderedGridRows.map(({ row, rank }) => (
                 <SectionItemRow
                   key={row.id}
                   row={row}
-                  index={index}
+                  rank={rank}
                   className="h-full border-b-0"
                 />
               ))}
             </div>
           ) : (
-            visibleRows.map((row, index) => (
-              <SectionItemRow key={row.id} row={row} index={index} />
+            rankedRows.map(({ row, rank }) => (
+              <SectionItemRow key={row.id} row={row} rank={rank} />
             ))
           )}
           {!showAll && hiddenCount > 0 && (

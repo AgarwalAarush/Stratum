@@ -16,7 +16,7 @@ export async function GET() {
       ttlSeconds: 300,
       staleMaxAgeMs: 12 * 60 * 60 * 1_000,
       fetcher: async () => {
-        const items = await fetchFinanceEarnings(20, { calendarStyle: false })
+        const items = await fetchFinanceEarnings(60, { calendarStyle: false })
         if (items.length === 0) {
           throw new Error('No finance earnings items fetched')
         }

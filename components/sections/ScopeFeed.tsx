@@ -105,8 +105,9 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
               label={section.label}
               items={data?.[section.id]?.items ?? []}
               defaultExpanded
-              collapseAfter={5}
+              collapseAfter={section.id === 'earnings' ? 12 : 5}
               columns={section.id === 'earnings' ? 3 : 1}
+              fillByColumn={section.id === 'earnings'}
             />
           ))}
 
