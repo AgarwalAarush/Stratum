@@ -104,3 +104,18 @@ export interface PeriodicOverviewData {
   periodEnd: string
   fetchedAt: string
 }
+
+export interface MorningBriefSection {
+  title: string
+  bullets: string[]
+}
+
+export interface MorningBriefData {
+  headline: string
+  sections: MorningBriefSection[]
+  watchList: string[]
+  itemCount: number
+  generatedAt: string
+  fetchedAt: string
+  stale?: boolean
+}
