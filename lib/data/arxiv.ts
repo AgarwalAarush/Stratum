@@ -1,5 +1,5 @@
 // lib/data/arxiv.ts
-import type { PaperItem } from '@/lib/types'
+import type { PaperItem } from '../types'
 
 function extractTagContent(xml: string, tag: string): string {
   const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`))
@@ -16,7 +16,7 @@ function extractAllTagContent(xml: string, tag: string): string[] {
   return results
 }
 
-function parseEntry(entry: string): PaperItem | null {
+export function parseArxivEntry(entry: string): PaperItem | null {
   try {
     const rawId = extractTagContent(entry, 'id')
     // arXiv id looks like: http://arxiv.org/abs/2501.12948v1
@@ -49,7 +49,7 @@ function parseEntry(entry: string): PaperItem | null {
     // Extract categories
     const categoryMatches = entry.match(/term="([^"]+)"/g) || []
     const categories = categoryMatches
-      .map(m => m.replace('term="', '').replace('"', ''))
+      .map((m) => m.replace('term="', '').replace('"', ''))
       .filter(c => c.startsWith('cs.') || c.startsWith('stat.') || c.startsWith('math.'))
       .slice(0, 3)
 
@@ -78,7 +78,8 @@ export async function fetchArxivPapers(limit = 15): Promise<PaperItem[]> {
   try {
     const res = await fetch(url, {
       cache: 'no-store',
-      headers: { 'User-Agent': 'Stratum/1.0' },
+      headers: { 'User-Agent': 'Stratum/0.2' },
+      signal: AbortSignal.timeout(15_000),
     })
 
     if (!res.ok) {
@@ -90,7 +91,7 @@ export async function fetchArxivPapers(limit = 15): Promise<PaperItem[]> {
     // Split into entry blocks
     const entryBlocks = xml.split('<entry>').slice(1).map(e => e.split('</entry>')[0])
     const papers = entryBlocks
-      .map(parseEntry)
+      .map(parseArxivEntry)
       .filter((p): p is PaperItem => p !== null)
 
     return papers
