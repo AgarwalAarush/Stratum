@@ -33,6 +33,7 @@ export default function RootLayout({
     <html
       lang="en"
       data-theme="light"
+      suppressHydrationWarning
       className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}
     >
       <head>
