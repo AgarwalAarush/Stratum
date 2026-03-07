@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Stratum is a minimalist tech intelligence dashboard that aggregates research papers, startup news, finance data, and general tech signals into a single dense, monochrome interface. Built with Next.js App Router, it fetches from real APIs (arXiv, HN, GitHub, RSS feeds, FRED, SEC EDGAR) and caches results via a two-tier system (in-memory + Upstash Redis).
 
+**Production URL:** stratum.aarushagarwal.dev
+
 ## Commands
 
 - `npm run dev` — start dev server
