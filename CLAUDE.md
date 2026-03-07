@@ -31,7 +31,7 @@ The core abstraction is **Scopes** (top-level nav tabs like "AI Research", "Fina
 
 ### Data fetchers (`lib/data/`)
 
-Each file fetches from a specific external source: `arxiv.ts` (arXiv API XML), `discussions.ts` (HN Algolia + Lobste.rs), `repos.ts` (GitHub Search API), `rss.ts`/`rss-parser.ts` (RSS feeds by topic), `finance-*.ts` (FMP, FRED, SEC EDGAR), `overview.ts` (Claude API for AI overview bullets).
+Each file fetches from a specific external source: `arxiv.ts` (arXiv API XML), `discussions.ts` (HN Algolia + Lobste.rs), `repos.ts` (GitHub Search API), `rss.ts`/`rss-parser.ts` (RSS feeds by topic), `finance-*.ts` (FMP, FRED, SEC EDGAR), `overview.ts` (Claude API for daily AI overview bullets), `morning-brief.ts` (Claude API for daily morning brief), `overview-generators.ts` (Claude API for weekly/monthly periodic overviews).
 
 ### Article scrapers (`lib/data/scrapers/`)
 
@@ -41,11 +41,24 @@ Used by the summary feature (`/api/summary`) to extract article text for Claude-
 
 Five item types defined in `lib/types.ts`: `paper`, `discussion`, `repo`, `earnings`, `news`. Each has a corresponding component in `components/items/` and a typed interface. All API responses conform to `SectionData { items: FeedItem[], fetchedAt: string }`.
 
+### Scheduled jobs (QStash cron)
+
+Three cron jobs trigger POST requests to `/api/cron/*` routes, verified via `@upstash/qstash` signature verification (`verifySignatureAppRouter`). Schedules are configured in the QStash dashboard (not in repo):
+
+- `/api/cron/morning-brief` — daily at 12 PM UTC. Calls `generateMorningBrief()` (fetches 14 sources in parallel, synthesizes with Claude Sonnet), saves to Supabase.
+- `/api/cron/weekly-overview` — Mondays at 1 PM UTC. Fetches the week's daily overviews, synthesizes with Claude Sonnet into a 400-600 word briefing.
+- `/api/cron/monthly-overview` — 1st and 15th at 2 PM UTC. Fetches 30 days of dailies + weeklies + previous monthly, synthesizes 600-900 word strategic briefing.
+
+All persisted via `overview-persistence.ts` to Supabase `overviews` table (upsert on type+date). Public read routes: `/api/morning-brief`, `/api/overviews/weekly`, `/api/overviews/monthly`.
+
 ### Route patterns
 
 - `app/[scope]/page.tsx` — dynamic scope page, validates scope ID, renders `ScopeFeed`
 - `app/api/[scope]/[section]/route.ts` — generic fallback route (serves mock data)
 - `app/api/ai-research/papers/route.ts` (etc.) — dedicated routes with real fetchers override the generic catch-all
+- `app/api/cron/*` — QStash-triggered POST routes (morning-brief, weekly-overview, monthly-overview)
+- `app/api/morning-brief/route.ts` — public GET for latest morning brief
+- `app/api/overviews/[type]/route.ts` — public GET for weekly/monthly overviews
 
 ### Layout & styling
 
@@ -57,7 +70,7 @@ Five item types defined in `lib/types.ts`: `paper`, `discussion`, `repo`, `earni
 
 ## Environment variables
 
-Copy `.env.example` to `.env.local`. Redis (`UPSTASH_REDIS_REST_URL`/`TOKEN`) is the only required variable — all others (FMP, FRED, SEC, GitHub, Anthropic) are optional and gracefully degrade.
+Copy `.env.example` to `.env.local`. Redis (`UPSTASH_REDIS_REST_URL`/`TOKEN`) is the only required variable. Supabase (`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`) is needed for overview persistence. QStash signing keys (`QSTASH_CURRENT_SIGNING_KEY`/`QSTASH_NEXT_SIGNING_KEY`) are needed for cron job verification. All others (FMP, FRED, SEC, GitHub, Anthropic) are optional and gracefully degrade.
 
 ## Key conventions
 

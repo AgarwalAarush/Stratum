@@ -48,8 +48,10 @@ Stratum is organized into **scopes** — top-level navigation tabs that each con
 | Styling | Tailwind CSS 4, IBM Plex Sans/Mono |
 | State | Zustand (theme) + SWR (data fetching) |
 | Data sources | RSS/Atom feeds, arXiv API, HN Algolia, GitHub Search, FMP, FRED, SEC EDGAR |
-| AI | Anthropic Claude API (Haiku 4.5 — overview generation) |
+| AI | Anthropic Claude API (Haiku for daily overviews, Sonnet for morning briefs & periodic overviews) |
 | Caching | Two-tier: in-memory Map + Upstash Redis (REST API) |
+| Persistence | Supabase (overview storage) |
+| Scheduling | Upstash QStash (cron job triggers with signature verification) |
 | Deployment | Vercel |
 
 ---
@@ -70,13 +72,17 @@ npm run dev
 |---|---|---|
 | `UPSTASH_REDIS_REST_URL` | Yes | Redis cache tier |
 | `UPSTASH_REDIS_REST_TOKEN` | Yes | Redis auth |
-| `ANTHROPIC_API_KEY` | No | AI Overview briefing (falls back to static bullets) |
+| `SUPABASE_URL` | Yes* | Overview persistence |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes* | Supabase auth |
+| `QSTASH_CURRENT_SIGNING_KEY` | Yes* | QStash cron verification |
+| `QSTASH_NEXT_SIGNING_KEY` | Yes* | QStash cron key rotation |
+| `ANTHROPIC_API_KEY` | No | AI overviews & morning brief (falls back to static content) |
 | `FMP_API_KEY` | No | Finance earnings/deals enrichment |
 | `FRED_API_KEY` | No | Macro indicators from FRED |
 | `SEC_API_USER_AGENT` | No | SEC EDGAR requests |
 | `GITHUB_TOKEN` | No | Higher GitHub API rate limits |
 
-All optional variables degrade gracefully — the dashboard works without them, just with fewer data sources.
+\* Required for the morning brief and periodic overview features. All other optional variables degrade gracefully — the dashboard works without them, just with fewer data sources.
 
 ### Commands
 
@@ -94,12 +100,13 @@ npm test          # Run all tests (Node built-in test runner)
 ```
 app/
   [scope]/page.tsx              # Dynamic scope page (validates ID, renders ScopeFeed)
+  morning-brief/page.tsx        # Morning brief page
   api/
     ai-research/                # Dedicated API routes per section
       papers/route.ts
       discussions/route.ts
       repos/route.ts
-      overview/route.ts         # Claude-powered AI briefing
+      overview/route.ts         # Claude-powered daily AI briefing
       news/[topic]/route.ts     # RSS news by topic
       ...
     finance/
@@ -107,6 +114,12 @@ app/
       deals/route.ts
       reports/route.ts
     macro/indicators/route.ts
+    morning-brief/route.ts      # Public GET — latest morning brief
+    overviews/[type]/route.ts   # Public GET — weekly/monthly overviews
+    cron/                       # QStash-triggered POST routes
+      morning-brief/route.ts    # Daily at 12 PM UTC
+      weekly-overview/route.ts  # Mondays at 1 PM UTC
+      monthly-overview/route.ts # 1st & 15th at 2 PM UTC
     [scope]/[section]/route.ts  # Generic fallback (mock data)
 
 components/
@@ -118,15 +131,22 @@ lib/
   scopes.ts                     # Scope/section registry (central config)
   types.ts                      # All TypeScript interfaces
   data/                         # Data fetchers (one per external source)
+    morning-brief.ts            # Morning brief generator (14 sources + Claude Sonnet)
+    overview.ts                 # Daily overview generator (Claude Haiku)
+    overview-generators.ts      # Weekly/monthly overview generators (Claude Sonnet)
+    overview-persistence.ts     # Supabase read/write for all overview types
   server/
     cache.ts                    # Two-tier cache with stale fallback + dedup
     http-cache.ts               # Standardized Cache-Control headers
+    supabase.ts                 # Supabase client singleton
 
 store/
   theme.ts                      # Zustand theme store
 ```
 
 **Data flow:** Client (`ScopeFeed` via SWR) -> API routes -> `cachedFetchWithFallback()` -> external APIs. Cache layers: in-memory -> Redis -> fresh fetch -> stale fallback.
+
+**Scheduled overviews:** QStash cron -> POST `/api/cron/*` (signature-verified) -> generate with Claude -> persist to Supabase `overviews` table (upsert on type+date) -> served via public GET routes with in-memory + Redis caching.
 
 ---
 
