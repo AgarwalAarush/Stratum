@@ -1,10 +1,29 @@
 import type { SectionData } from '../../../../../lib/types.ts'
-import { fetchNewsItemsByTopic, isNewsTopic, type NewsTopic } from '../../../../../lib/data/rss.ts'
+import { fetchNewsItemsByTopic } from '../../../../../lib/data/rss.ts'
 import { cachedFetchWithFallback } from '../../../../../lib/server/cache.ts'
 import { sectionJsonResponse, type CacheTier } from '../../../../../lib/server/http-cache.ts'
 import { persistIfFresh } from '../../../../../lib/server/persist-after-fetch.ts'
 
-export const CACHE_TTL_SECONDS: Record<NewsTopic, number> = {
+type AiResearchNewsTopic =
+  | 'general'
+  | 'cybersecurity'
+  | 'venture-capital'
+  | 'policy'
+  | 'new-technology'
+  | 'startups'
+  | 'infra-hardware'
+  | 'tech-events'
+
+const AI_RESEARCH_TOPICS: AiResearchNewsTopic[] = [
+  'general', 'cybersecurity', 'venture-capital', 'policy',
+  'new-technology', 'startups', 'infra-hardware', 'tech-events',
+]
+
+function isAiResearchNewsTopic(value: string): value is AiResearchNewsTopic {
+  return (AI_RESEARCH_TOPICS as string[]).includes(value)
+}
+
+export const CACHE_TTL_SECONDS: Record<AiResearchNewsTopic, number> = {
   cybersecurity: 3_600,
   general: 3_600,
   'venture-capital': 3_600,
@@ -15,7 +34,7 @@ export const CACHE_TTL_SECONDS: Record<NewsTopic, number> = {
   'tech-events': 3_600,
 }
 
-const CACHE_TIER_BY_TOPIC: Record<NewsTopic, CacheTier> = {
+const CACHE_TIER_BY_TOPIC: Record<AiResearchNewsTopic, CacheTier> = {
   cybersecurity: 'fast',
   general: 'medium',
   'venture-capital': 'medium',
@@ -36,7 +55,7 @@ export async function GET(
 ) {
   const { topic } = await params
 
-  if (!isNewsTopic(topic)) {
+  if (!isAiResearchNewsTopic(topic)) {
     return sectionJsonResponse(emptySection(), 'medium', 'none')
   }
 
