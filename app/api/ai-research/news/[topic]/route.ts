@@ -45,7 +45,7 @@ export async function GET(
 
   try {
     const result = await cachedFetchWithFallback<SectionData>({
-      key: `stratum:ai-research:news:${topic}:v1`,
+      key: `stratum:ai-research:news:${topic}:v2`,
       ttlSeconds,
       staleMaxAgeMs: 12 * 60 * 60 * 1_000,
       fetcher: async () => {

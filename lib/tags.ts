@@ -27,13 +27,21 @@ const TAG_THRESHOLDS = {
 
   // News
   NEWS_HOT_TIER1_AGE_MS: 6 * 60 * 60 * 1000,
+  NEWS_HOT_TIER2_AGE_MS: 12 * 60 * 60 * 1000,
+  NEWS_VERY_FRESH_MAX_AGE_MS: 45 * 60 * 1000,
 } as const
 
 // ─── News patterns ───
 
-const BREAKING_RE = /breach|hack(?!athon)(ed|ing)?|ransomware|zero.?day|cyber.?attack|exploit|outage|emergency|ban(ned)?|shutdown|critical|urgent|fatal|recall|suspend(ed|s)?|investigation|indict|lawsuit|leaked/
-const NEW_RE = /launch(es|ed)?|announc(es|ed|ement)|releas(es|ed)|unveil(s|ed)?|introduc(es|ed)|debut(s|ed)?|now available|preview|beta|early access|open.source(d)?|first look|just.announced/
-const HOT_RE = /\$\d+[bm]|\bbillion\b|\bIPO\b|acqui(res|red|sition)|partnership|surpass(es|ed)?|record|milestone|breakthrough|trillion|valuation|funding|raise[ds]?\s*\$/
+const SECURITY_BREAKING_RE = /breach|hack(?!athon)(ed|ing)?|ransomware|zero.?day|cyber.?attack|exploit|outage|emergency|critical vulnerability|fatal|leaked/
+const POLICY_BREAKING_RE = /\bban(ned)?\b|\bfine[ds]?\b|\bprobe\b|\binvestigation\b|\blawsuit\b|\bsue[ds]?\b|\bindict(ed|ment)?\b|\benforcement\b|\bsuspend(ed|s)?\b|\bblocked?\b|\bshutdown\b|\bemergency\b/
+const GENERIC_NEW_RE = /\blaunch(es|ed)?\b|\bannounce(s|d|ment)\b|\brelease(s|d)?\b|\bunveil(s|ed)?\b|\bintroduce(s|d)\b|\bdebut(s|ed)?\b|\bpreview\b|\bbeta\b|\bearly access\b|\bnow available\b|\bjust announced\b/
+const GENERAL_ENTITY_RE = /\b(openai|anthropic|google ai|gemini|deepseek|mistral|qwen|chatgpt|claude|gpt-[a-z0-9.]+|ai|model|assistant|agent|api|sdk)\b/
+const GENERAL_RELEASE_RE = /\brolls?\s+out\b|\brollout\b|\bupgrade(s|d)?\b|\bopen[- ]source[ds]?\b|\bpreview\b|\bbeta\b|\bearly access\b|\bgenerally available\b|\bnow available\b|\bapi access\b|\bsdk\b|\bavailability\b/
+const GENERAL_HOT_RE = /\bbreakthrough\b|\bmilestone\b|\brecord\b|\bbenchmark\b|\breasoning\b|\bpartnership\b|\bstate[- ]of[- ]the[- ]art\b|\bsurpass(es|ed)?\b/
+const POLICY_HOT_RE = /\bproposal\b|\bproposed\b|\bdraft\b|\bguidance\b|\brule\b|\brulemaking\b|\bconsultation\b|\bframework\b|\bcompliance\b|\bdeadline\b|\bhearing\b|\bvote\b|\badopt(s|ed)?\b|\bai act\b|\bftc\b|\bdoj\b|\bnist\b|\bwhite house\b|\bparliament\b|\bcommission\b/
+const VENTURE_HOT_RE = /\$\d+[bm]|\bbillion\b|\bipo\b|acqui(res|red|sition)|partnership|surpass(es|ed)?|record|milestone|breakthrough|trillion|valuation|funding|raise[ds]?\s*\$|\bseries [a-z]\b|\bseed round\b|\bventure round\b|\bunicorn\b/
+const VENTURE_NEW_RE = /\bnew fund\b|\blaunch(es|ed)? (an |its )?fund\b|\bseed round\b|\bseries [a-z]\b/
 
 // ─── Source tiers ───
 
@@ -42,6 +50,21 @@ const TIER_2 = ['The Verge', 'TechCrunch', 'Ars Technica', 'MIT Technology Revie
 
 function isSourceTier(source: string, tier: string[]): boolean {
   return tier.some(t => source.includes(t))
+}
+
+function inferNewsTopic(item: FeedItem & { type: 'news' }): string | undefined {
+  if (item.topic) return item.topic
+
+  const category = item.category?.toLowerCase() ?? ''
+  if (category.includes('policy')) return 'policy'
+  if (category.includes('venture capital')) return 'venture-capital'
+  if (category.includes('general ai news')) return 'general'
+  if (/(^|\b)(m&a|ipo|funding|deals?)(\b|$)/.test(category)) return 'venture-capital'
+  return undefined
+}
+
+function getCanonicalSource(item: FeedItem & { type: 'news' }): string {
+  return item.canonicalSource ?? item.publisher ?? item.feedName ?? item.source
 }
 
 // ─── Per-type tag helpers ───
@@ -88,20 +111,52 @@ function getEarningsTag(item: FeedItem & { type: 'earnings' }): ItemTag | undefi
 function getNewsTag(item: FeedItem & { type: 'news' }): ItemTag | undefined {
   const title = item.title.toLowerCase()
   const ageMs = item.publishedAt ? Date.now() - new Date(item.publishedAt).getTime() : Infinity
+  const topic = inferNewsTopic(item)
+  const canonicalSource = getCanonicalSource(item)
   const isBreakingFresh = ageMs < TAG_THRESHOLDS.BREAKING_MAX_AGE_MS
   const isRecent = ageMs < TAG_THRESHOLDS.NEW_MAX_AGE_MS
+  const isVeryFresh = ageMs < TAG_THRESHOLDS.NEWS_VERY_FRESH_MAX_AGE_MS
+  const isTier1Recent = isSourceTier(canonicalSource, TIER_1) && ageMs < TAG_THRESHOLDS.NEWS_HOT_TIER1_AGE_MS
+  const isTier2Recent = isSourceTier(canonicalSource, TIER_2) && ageMs < TAG_THRESHOLDS.NEWS_HOT_TIER2_AGE_MS
+  const matchesGeneralRelease = GENERIC_NEW_RE.test(title) || GENERAL_RELEASE_RE.test(title)
+  const matchesGeneralHot = GENERAL_HOT_RE.test(title)
+  const matchesPolicyHot = POLICY_HOT_RE.test(title)
+  const matchesVentureHot = VENTURE_HOT_RE.test(title)
 
-  // BREAKING: pattern match + fresh, or high-urgency patterns regardless
-  if (BREAKING_RE.test(title) && isBreakingFresh) return 'breaking'
-  if (/zero.?day|cyber.?attack|ransomware|emergency/.test(title)) return 'breaking'
+  if (SECURITY_BREAKING_RE.test(title)) return 'breaking'
+  if ((topic === 'policy' || matchesPolicyHot || isTier1Recent) && POLICY_BREAKING_RE.test(title) && isBreakingFresh) {
+    return 'breaking'
+  }
 
-  // HOT: financial patterns, or tier-1 source + recent
-  if (HOT_RE.test(title)) return 'hot'
-  if (isSourceTier(item.source, TIER_1) && ageMs < TAG_THRESHOLDS.NEWS_HOT_TIER1_AGE_MS) return 'hot'
+  if (matchesVentureHot) return 'hot'
 
-  // NEW: pattern match + recent, or anything very fresh
-  if (NEW_RE.test(title) && isRecent) return 'new'
-  if (isBreakingFresh) return 'new'
+  if ((topic === 'policy' || matchesPolicyHot) && matchesPolicyHot && (isRecent || isTier1Recent)) {
+    return 'hot'
+  }
+
+  if (
+    (topic === 'general' || matchesGeneralHot || matchesGeneralRelease) &&
+    matchesGeneralHot &&
+    (isRecent || isTier1Recent || isTier2Recent)
+  ) {
+    return 'hot'
+  }
+
+  if (matchesGeneralRelease && GENERAL_ENTITY_RE.test(title) && isTier1Recent) {
+    return 'hot'
+  }
+
+  if ((topic === 'general' || matchesGeneralRelease) && matchesGeneralRelease && (isRecent || isTier2Recent)) {
+    return 'new'
+  }
+
+  if ((topic === 'policy' || matchesPolicyHot) && matchesPolicyHot && isRecent) {
+    return 'new'
+  }
+
+  if (VENTURE_NEW_RE.test(title) && isRecent) return 'new'
+  if (GENERIC_NEW_RE.test(title) && isRecent) return 'new'
+  if (isVeryFresh) return 'new'
 
   return undefined
 }
