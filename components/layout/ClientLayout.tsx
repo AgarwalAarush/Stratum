@@ -18,6 +18,12 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
     const [isBriefOpen, setIsBriefOpen] = useState(false)
 
     useEffect(() => {
+        if (window.innerWidth < 768) {
+            setIsNavOpen(false)
+        }
+    }, [])
+
+    useEffect(() => {
         const seen = localStorage.getItem(BRIEF_SEEN_KEY)
         if (seen !== getTodayDate()) {
             setIsBriefOpen(true)
