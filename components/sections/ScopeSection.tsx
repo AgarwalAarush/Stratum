@@ -1,12 +1,11 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { FeedItem } from '@/lib/types'
+import type { FeedItem, ItemTag } from '@/lib/types'
 import { formatFutureTime, formatRelativeTime } from '@/lib/utils'
+import { getTag } from '@/lib/tags'
 import { useHoverSummary } from '@/hooks/useHoverSummary'
 import { SummaryCard } from '@/components/SummaryCard'
-
-type ItemTag = 'new' | 'hot' | 'breaking' | 'verified' | 'beta'
 
 interface ScopeSectionProps {
   label: string
@@ -34,27 +33,6 @@ const tagStyles: Record<ItemTag, { label: string; color: string; bg: string }> =
   breaking: { label: 'BREAKING', color: '#991b1b', bg: '#fee2e2' },
   verified: { label: 'VERIFIED', color: '#1e3a5f', bg: '#dbeafe' },
   beta: { label: 'BETA', color: '#5a3a00', bg: '#fef3c7' },
-}
-
-function getTag(item: FeedItem): ItemTag | undefined {
-  if (item.type === 'discussion' && item.points >= 500) return 'hot'
-  if (item.type === 'repo' && item.starsPerDay >= 15) return 'hot'
-  if (item.type === 'earnings') {
-    if (item.beat === true) return 'verified'
-    if (item.beat === false) return 'breaking'
-  }
-  if (item.type === 'paper') {
-    if (item.id.startsWith('alphaxiv-')) return 'hot'
-    const ageMs = Date.now() - new Date(item.publishedAt).getTime()
-    if (ageMs < 48 * 60 * 60 * 1000) return 'new'
-  }
-  if (item.type === 'news') {
-    const title = item.title.toLowerCase()
-    if (/breach|hack(?!athon)(ed|ing)?|ransomware|zero.?day|cyber.?attack|exploit|outage|emergency|ban(ned)?|shutdown/.test(title)) return 'breaking'
-    if (/launch(es|ed)?|announc(es|ed|ement)|releas(es|ed)|unveil(s|ed)?|introduc(es|ed)|debut(s|ed)?|now available/.test(title)) return 'new'
-    if (/\$\d+[bm]|\bbillion\b|\bIPO\b|acqui(res|red|sition)|partnership/.test(title)) return 'hot'
-  }
-  return undefined
 }
 
 function getRow(item: FeedItem): DisplayRow {

@@ -71,6 +71,8 @@ async function decodeGoogleNewsUrl(url: string): Promise<string> {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
       'User-Agent': GOOGLE_NEWS_UA,
+      'Referer': 'https://news.google.com/',
+      'X-Same-Domain': '1',
     },
     body,
   })

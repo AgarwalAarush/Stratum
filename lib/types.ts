@@ -2,6 +2,8 @@
 
 export type ItemType = 'paper' | 'discussion' | 'repo' | 'earnings' | 'news'
 
+export type ItemTag = 'new' | 'hot' | 'breaking' | 'verified' | 'beta'
+
 export type Theme = 'dark' | 'light'
 
 // ─── Scope & Section registry types ───
