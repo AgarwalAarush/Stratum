@@ -90,6 +90,7 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
 
   const isFinanceScope = scope.id === 'finance'
   const isAiResearchScope = scope.id === 'ai-research'
+  const isGlobalNewsScope = scope.id === 'global-news'
 
   const { data: overviewData, isLoading: overviewLoading } = useSWR<OverviewData>(
     isAiResearchScope ? `overview:ai-research:dev=${devMode}` : null,
@@ -221,8 +222,24 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
         ) : (
           <>
             {scope.sections
-              .filter((section) => !isFinanceScope || !FINANCE_SPLIT_IDS.has(section.id))
-              .map((section) => renderSection(section.id))}
+              .filter((section) =>
+                (!isFinanceScope || !FINANCE_SPLIT_IDS.has(section.id)) &&
+                !(isGlobalNewsScope && section.id === 'global-supply-chains')
+              )
+              .map((section) => {
+                if (isGlobalNewsScope && section.id === 'european-union' && sectionById['global-supply-chains']) {
+                  return (
+                    <div key="eu-supply-pair" className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-border">
+                      {renderSection('european-union')}
+                      {renderSection('global-supply-chains')}
+                    </div>
+                  )
+                }
+                return renderSection(
+                  section.id,
+                  section.id === 'geopolitics' ? { columns: 2 } : {}
+                )
+              })}
 
             {isFinanceScope && sectionById['research-reports'] && sectionById.macro && (
               <div className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-border">
