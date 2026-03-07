@@ -2,6 +2,14 @@
 
 > A minimalist, real-time aggregation dashboard for technology, research, startups, and finance — signal over noise.
 
+<p align="center">
+  <img src="app/icon.png" alt="Stratum icon" width="80" />
+</p>
+
+<p align="center">
+  <img src="app/overview.png" alt="Stratum dashboard overview" width="800" />
+</p>
+
 ---
 
 ## Overview
@@ -18,7 +26,7 @@ Stratum is organized into **scopes** — top-level navigation tabs that each con
 
 ### AI Research
 
-- **AI Overview** — Claude-generated daily briefing bullets synthesized from all sections' headlines
+- **AI Overview** — Claude-generated daily briefing bullets synthesized from all sections' headlines; weekly and monthly synthesized overviews also available
 - **General AI News** — aggregated from VentureBeat AI, The Verge AI, MIT Tech Review, Reuters, Bloomberg, and Google News RSS
 - **AI Policy & Regulation** — Politico Tech, EU Digital Policy, global AI regulation coverage
 - **Tech Events** — hackathons, CTFs, developer competitions (MLH, Devpost, etc.)
@@ -152,12 +160,17 @@ store/
 
 ## Roadmap
 
+- [x] AI-generated daily overview bullets per scope
+- [x] Morning brief — daily synthesized intelligence digest
+- [x] Weekly and monthly periodic overviews (Claude Sonnet)
+- [x] Article summarization — Claude-powered inline summaries with streaming markdown
+- [x] Semantic tagging on feed items (in progress)
+- [x] Mobile-responsive layout with collapsible nav
 - [ ] Semantic search over paper abstracts (local embeddings)
 - [ ] Trend clustering across sources
 - [ ] Keyboard shortcuts
 - [ ] Saved filters / watchlists
 - [ ] Drag-to-reorder panels
-- [ ] Mobile-responsive layout
 
 ---
 
