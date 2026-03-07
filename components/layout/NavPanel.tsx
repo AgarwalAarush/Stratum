@@ -37,41 +37,22 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings }: NavPanelProps) {
         transitionTimingFunction: 'var(--sidebar-motion-easing)',
       }}
     >
-      <div className="h-[var(--top-header-height)] border-b border-[var(--border)] shrink-0 flex items-center px-3">
-        {isOpen ? (
-          <>
-            <button
-              onClick={toggle}
-              className="w-7 h-7 flex items-center justify-center rounded-[6px] text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors cursor-pointer shrink-0"
-              aria-label="Collapse navigation"
-            >
-              <Menu size={15} />
-            </button>
-            <div
-              className="min-w-0 ml-2 flex items-center gap-2"
-              style={{
-                opacity: isOpen ? 1 : 0,
-                transform: isOpen ? 'translateX(0)' : 'translateX(-8px)',
-                pointerEvents: isOpen ? 'auto' : 'none',
-                transitionProperty: 'opacity, transform',
-                transitionDuration: 'var(--sidebar-motion-duration)',
-                transitionTimingFunction: 'var(--sidebar-motion-easing)',
-              }}
-              aria-hidden={!isOpen}
-            >
-              <Image src="/icon.jpg" alt="" width={20} height={20} className="shrink-0 rounded-[4px]" />
-              <span className="text-[13px] font-semibold text-[var(--text)] tracking-[0.12em] uppercase font-mono whitespace-nowrap">
-                Stratum
-              </span>
-            </div>
-          </>
-        ) : (
+      <div className="h-[var(--top-header-height)] border-b border-[var(--border)] shrink-0 relative flex items-center">
+        <button
+          onClick={toggle}
+          className="cursor-pointer shrink-0 absolute"
+          style={{ left: 'calc(var(--sidebar-collapsed-width) / 2 - 10px)' }}
+          aria-label={isOpen ? 'Collapse navigation' : 'Expand navigation'}
+        >
+          <Image src="/icon.png" alt="Stratum" width={20} height={20} className="rounded-[4px]" />
+        </button>
+        {isOpen && (
           <button
             onClick={toggle}
-            className="w-full flex items-center justify-center cursor-pointer"
-            aria-label="Expand navigation"
+            className="w-7 h-7 flex items-center justify-center rounded-[6px] text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors cursor-pointer shrink-0 absolute right-3"
+            aria-label="Collapse navigation"
           >
-            <Image src="/icon.jpg" alt="Stratum" width={20} height={20} className="rounded-[4px]" />
+            <Menu size={15} />
           </button>
         )}
       </div>
