@@ -6,6 +6,7 @@ import { formatFutureTime, formatRelativeTime } from '@/lib/utils'
 import { getTag } from '@/lib/tags'
 import { useHoverSummary } from '@/hooks/useHoverSummary'
 import { SummaryCard } from '@/components/SummaryCard'
+import { useThemeStore } from '@/store/theme'
 
 interface ScopeSectionProps {
   label: string
@@ -27,12 +28,20 @@ interface DisplayRow {
   change?: number
 }
 
-const tagStyles: Record<ItemTag, { label: string; color: string; bg: string }> = {
+const tagStylesLight: Record<ItemTag, { label: string; color: string; bg: string }> = {
   new: { label: 'NEW', color: '#1a6b2e', bg: '#e8f5ec' },
   hot: { label: 'HOT', color: '#a33000', bg: '#feeee8' },
   breaking: { label: 'BREAKING', color: '#991b1b', bg: '#fee2e2' },
   verified: { label: 'VERIFIED', color: '#1e3a5f', bg: '#dbeafe' },
   beta: { label: 'BETA', color: '#5a3a00', bg: '#fef3c7' },
+}
+
+const tagStylesDark: Record<ItemTag, { label: string; color: string; bg: string }> = {
+  new: { label: 'NEW', color: '#4ade80', bg: '#14532d' },
+  hot: { label: 'HOT', color: '#fb923c', bg: '#7c2d12' },
+  breaking: { label: 'BREAKING', color: '#fca5a5', bg: '#7f1d1d' },
+  verified: { label: 'VERIFIED', color: '#93c5fd', bg: '#1e3a5f' },
+  beta: { label: 'BETA', color: '#fcd34d', bg: '#713f12' },
 }
 
 function getRow(item: FeedItem): DisplayRow {
@@ -147,6 +156,8 @@ function SectionItemRow({
   rank: number
   className?: string
 }) {
+  const { theme } = useThemeStore()
+  const tagStyles = theme === 'dark' ? tagStylesDark : tagStylesLight
   const tag = row.tag ? tagStyles[row.tag] : null
 
   return (

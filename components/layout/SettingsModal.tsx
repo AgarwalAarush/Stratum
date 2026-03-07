@@ -68,8 +68,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         aria-label="Close settings"
       />
 
-      <div className="relative w-full max-w-[900px] h-[min(700px,90vh)] bg-[var(--bg)] border border-[var(--border)] rounded-[20px] shadow-xl overflow-hidden flex">
-        <aside className="w-[240px] bg-[var(--surface)] border-r border-[var(--border)] p-4 flex flex-col gap-2">
+      <div className="relative w-full max-w-[900px] h-[min(700px,90vh)] bg-[var(--surface)] border border-[var(--border)] rounded-[20px] shadow-xl overflow-hidden flex">
+        <aside className="w-[240px] bg-[var(--bg)] border-r border-[var(--border)] p-4 flex flex-col gap-2">
           <button className={tabButtonClass('general')} onClick={() => setTab('general')}>
             <Settings2 size={16} />
             General
@@ -222,7 +222,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                         }}
                         className={[
                           'relative w-10 h-5 rounded-full transition-colors cursor-pointer shrink-0',
-                          devMode ? 'bg-[var(--accent)]' : 'bg-black/15',
+                          devMode ? 'bg-[var(--accent)]' : 'bg-surface-2',
                         ].join(' ')}
                       >
                         <span
