@@ -15,14 +15,13 @@ export function SummaryCard({ url, onClose }: SummaryCardProps) {
 
   return createPortal(
     <div
-      className="fixed border border-[var(--border)] shadow-[0_8px_32px_rgba(0,0,0,0.18)] overflow-hidden"
+      className="fixed border border-[var(--border)] shadow-[0_8px_32px_rgba(0,0,0,0.18)]"
       style={{
         top: 24,
         left: '50%',
         transform: 'translateX(-50%)',
         width: '90vw',
         maxWidth: 480,
-        maxHeight: 320,
         zIndex: 50,
         backgroundColor: 'var(--summary-card-bg, #ffffff)',
       }}
@@ -34,12 +33,12 @@ export function SummaryCard({ url, onClose }: SummaryCardProps) {
       >
         <X size={14} />
       </button>
-      <div className="p-3 pr-8 overflow-y-auto" style={{ maxHeight: 320 }}>
-        {isLoading && !text ? (
-          <div className="flex flex-col gap-2">
-            <div className="h-3 rounded bg-black/8 dark:bg-white/10 animate-pulse" style={{ width: '90%' }} />
-            <div className="h-3 rounded bg-black/8 dark:bg-white/10 animate-pulse" style={{ width: '75%' }} />
-            <div className="h-3 rounded bg-black/8 dark:bg-white/10 animate-pulse" style={{ width: '50%' }} />
+      <div className="p-3 pr-8">
+        {isLoading ? (
+          <div className="flex flex-col gap-2.5">
+            <div className="h-4 rounded bg-black/8 dark:bg-white/10 animate-pulse" style={{ width: '90%' }} />
+            <div className="h-4 rounded bg-black/8 dark:bg-white/10 animate-pulse" style={{ width: '75%' }} />
+            <div className="h-4 rounded bg-black/8 dark:bg-white/10 animate-pulse" style={{ width: '60%' }} />
           </div>
         ) : error ? (
           <p className="font-mono text-[11px] text-[var(--text-muted)]">

@@ -2,6 +2,7 @@ import type { ArticleScraper, ScrapedArticle } from './types'
 import { arxivScraper } from './arxiv'
 import { githubScraper } from './github'
 import { genericScraper } from './generic'
+import { cachedFetchWithFallback } from '@/lib/server/cache'
 
 const scrapers: ArticleScraper[] = [arxivScraper, githubScraper]
 
@@ -15,11 +16,35 @@ for (const scraper of scrapers) {
 const GOOGLE_NEWS_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
-async function decodeGoogleNewsUrl(url: string): Promise<string> {
+// Semaphore to limit concurrent Google News resolution requests
+class Semaphore {
+  private queue: (() => void)[] = []
+  private active = 0
+  constructor(private max: number) {}
+  async acquire(): Promise<void> {
+    if (this.active < this.max) {
+      this.active++
+      return
+    }
+    return new Promise<void>((resolve) => {
+      this.queue.push(() => { this.active++; resolve() })
+    })
+  }
+  release(): void {
+    this.active--
+    const next = this.queue.shift()
+    if (next) next()
+  }
+}
+
+const gnewsSemaphore = new Semaphore(2)
+
+async function decodeGoogleNewsUrl(url: string): Promise<string | null> {
+  await gnewsSemaphore.acquire()
   try {
     // Extract article ID from path (after /articles/ or /read/)
     const match = url.match(/\/(?:articles|read)\/(CB[A-Za-z0-9_-]+)/)
-    if (!match) return url
+    if (!match) return null
     const articleId = match[1]
 
     // Step 1: Fetch the Google News article page to get timestamp + signature
@@ -27,11 +52,15 @@ async function decodeGoogleNewsUrl(url: string): Promise<string> {
       signal: AbortSignal.timeout(10_000),
       headers: { 'User-Agent': GOOGLE_NEWS_UA },
     })
+    if (pageRes.status === 429) {
+      console.warn('[gnews] Rate limited on article page fetch')
+      return null
+    }
     const html = await pageRes.text()
 
     const tsMatch = html.match(/data-n-a-ts="([^"]+)"/)
     const sgMatch = html.match(/data-n-a-sg="([^"]+)"/)
-    if (!tsMatch || !sgMatch) return url
+    if (!tsMatch || !sgMatch) return null
     const timestamp = tsMatch[1]
     const signature = sgMatch[1]
 
@@ -78,32 +107,54 @@ async function decodeGoogleNewsUrl(url: string): Promise<string> {
       },
       body,
     })
+    if (rpcRes.status === 429) {
+      console.warn('[gnews] Rate limited on batchexecute RPC')
+      return null
+    }
     const rpcText = await rpcRes.text()
 
     // Response format: first line is length prefix, then blank line, then JSON array
     const chunks = rpcText.split('\n\n')
-    if (chunks.length < 2) return url
+    if (chunks.length < 2) return null
     const outer = JSON.parse(chunks[1])
-    if (!outer[0][2]) return url
+    if (!outer[0][2]) return null
     const inner = JSON.parse(outer[0][2])
     const decoded = inner[1]
     if (typeof decoded === 'string' && decoded.startsWith('http')) return decoded
 
-    return url
+    return null
   } catch {
-    return url
+    return null
+  } finally {
+    gnewsSemaphore.release()
   }
 }
 
-async function resolveUrl(url: string): Promise<string> {
+export async function cachedDecodeGoogleNewsUrl(url: string): Promise<string | null> {
+  const match = url.match(/\/(?:articles|read)\/(CB[A-Za-z0-9_-]+)/)
+  if (!match) return null
+
+  const articleId = match[1]
+  const result = await cachedFetchWithFallback<string>({
+    key: `stratum:gnews:url:v1:${articleId}`,
+    ttlSeconds: 86400,
+    negativeTtlSeconds: 300,
+    fetcher: () => decodeGoogleNewsUrl(url),
+  })
+
+  return result.data ?? null
+}
+
+async function resolveUrl(url: string): Promise<string | null> {
   const hostname = new URL(url).hostname
   if (!hostname.includes('news.google.com')) return url
-  return decodeGoogleNewsUrl(url)
+  return cachedDecodeGoogleNewsUrl(url)
 }
 
 export async function scrapeArticle(url: string): Promise<ScrapedArticle | null> {
   try {
     const resolved = await resolveUrl(url)
+    if (!resolved) return null
     const hostname = new URL(resolved).hostname.replace(/^www\./, '')
     const scraper = domainMap.get(hostname) ?? genericScraper
     return await scraper.scrape(resolved)

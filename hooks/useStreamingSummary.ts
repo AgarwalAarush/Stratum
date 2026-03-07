@@ -69,7 +69,6 @@ export function useStreamingSummary(url: string | null) {
                 setTitle(articleTitle)
               } else if (event.type === 'chunk') {
                 accumulated += event.text
-                setText(accumulated)
               } else if (event.type === 'done') {
                 const summary = event.summary ?? accumulated
                 if (event.title) articleTitle = event.title

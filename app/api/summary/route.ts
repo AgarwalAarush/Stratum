@@ -69,7 +69,11 @@ export async function GET(request: Request) {
       try {
         const article = await scrapeArticle(url)
         if (!article || !article.content) {
-          controller.enqueue(encoder.encode(sseEvent({ type: 'error', message: 'Could not fetch article content' })))
+          const isGoogleNews = url.includes('news.google.com')
+          const message = isGoogleNews
+            ? 'Summary temporarily unavailable. Try again shortly.'
+            : 'Could not fetch article content'
+          controller.enqueue(encoder.encode(sseEvent({ type: 'error', message })))
           controller.close()
           resolveInflight!(null)
           inflight.delete(urlHash)

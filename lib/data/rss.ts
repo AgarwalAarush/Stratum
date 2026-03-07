@@ -1,6 +1,7 @@
 import type { NewsItem } from '../types'
 import { cachedFetchWithFallback } from '../server/cache.ts'
 import { parseFeedXml, type ParsedFeedItem } from './rss-parser.ts'
+import { cachedDecodeGoogleNewsUrl } from './scrapers/registry'
 
 export interface ServerFeed {
   name: string
@@ -270,7 +271,16 @@ async function fetchFeed(feed: ServerFeed, signal: AbortSignal): Promise<ParsedF
     },
   })
 
-  return result.data ?? []
+  const items = result.data ?? []
+
+  // Pre-warm Google News URL resolution cache (fire-and-forget)
+  for (const item of items) {
+    if (item.link?.includes('news.google.com')) {
+      cachedDecodeGoogleNewsUrl(item.link).catch(() => {})
+    }
+  }
+
+  return items
 }
 
 export function isNewsTopic(value: string): value is NewsTopic {
