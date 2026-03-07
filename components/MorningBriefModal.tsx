@@ -88,14 +88,14 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
         <div className="flex-1 overflow-y-auto main-scroll px-8 py-6">
           {isLoading ? (
             <div className="space-y-6 max-w-3xl">
-              <div className="h-5 rounded bg-black/8 animate-pulse w-3/4" />
+              <div className="h-5 rounded bg-surface-2 animate-pulse w-3/4" />
               {Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="space-y-2">
-                  <div className="h-3 rounded bg-black/8 animate-pulse w-1/4" />
+                  <div className="h-3 rounded bg-surface-2 animate-pulse w-1/4" />
                   {Array.from({ length: 3 }).map((_, j) => (
                     <div
                       key={j}
-                      className="h-4 rounded bg-black/8 animate-pulse"
+                      className="h-4 rounded bg-surface-2 animate-pulse"
                       style={{ width: `${60 + (j % 3) * 12}%` }}
                     />
                   ))}
@@ -106,7 +106,7 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
             <div className="max-w-3xl">
               {/* Stale indicator */}
               {data.stale && (
-                <div className="mb-4 px-3 py-1.5 rounded bg-black/5 dark:bg-white/5">
+                <div className="mb-4 px-3 py-1.5 rounded bg-surface-2">
                   <span className="font-mono text-[10px] text-[var(--text-muted)]">
                     Showing yesterday&apos;s brief
                   </span>
@@ -122,13 +122,13 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
               <div className="space-y-5">
                 {data.sections.map((section, i) => (
                   <div key={i}>
-                    <h3 className="font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-black/60 mb-2">
+                    <h3 className="font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-text-dim mb-2">
                       {section.title}
                     </h3>
                     <ul className="space-y-1.5">
                       {section.bullets.map((bullet, j) => (
                         <li key={j} className="flex items-start gap-2">
-                          <span className="font-mono text-[12px] text-black/30 shrink-0 mt-0.5">→</span>
+                          <span className="font-mono text-[12px] text-text-muted shrink-0 mt-0.5">→</span>
                           <span className="text-[13px] text-[var(--text)] leading-[1.5]">
                             {parseBulletWithCitations(bullet)}
                           </span>
@@ -141,14 +141,14 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
 
               {/* What to Watch */}
               {data.watchList.length > 0 && (
-                <div className="mt-6 pt-4 border-t border-black/10">
-                  <h3 className="font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-black/60 mb-2">
+                <div className="mt-6 pt-4 border-t border-border">
+                  <h3 className="font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-text-dim mb-2">
                     What to Watch
                   </h3>
                   <ul className="space-y-1.5">
                     {data.watchList.map((item, i) => (
                       <li key={i} className="flex items-start gap-2">
-                        <span className="font-mono text-[12px] text-black/30 shrink-0 mt-0.5">→</span>
+                        <span className="font-mono text-[12px] text-text-muted shrink-0 mt-0.5">→</span>
                         <span className="text-[13px] text-[var(--text)] leading-[1.5]">
                           {parseBulletWithCitations(item)}
                         </span>

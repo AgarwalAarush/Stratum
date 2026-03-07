@@ -20,7 +20,7 @@ export function parseBulletWithCitations(bullet: string): ReactNode {
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center justify-center font-mono text-[9px] min-w-[16px] h-[16px] bg-black/8 dark:bg-white/10 rounded-full px-1 hover:bg-black/15 dark:hover:bg-white/20 transition-colors relative -top-0.5 no-underline text-[var(--text-dim)] leading-none"
+        className="inline-flex items-center justify-center font-mono text-[9px] min-w-[16px] h-[16px] bg-surface-2 rounded-full px-1 hover:bg-border transition-colors relative -top-0.5 no-underline text-[var(--text-dim)] leading-none"
       >
         {num}
       </a>,

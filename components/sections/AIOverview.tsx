@@ -46,19 +46,19 @@ function parseBulletWithCitations(bullet: string): ReactNode {
 
 export function AIOverview({ bullets, isLoading }: AIOverviewProps) {
   return (
-    <section className="border-b border-black/10 flex flex-col">
-      <header className="w-full h-[var(--section-header-height)] shrink-0 flex items-center justify-between px-6 py-2 border-b border-black/10">
+    <section className="border-b border-border flex flex-col">
+      <header className="w-full h-[var(--section-header-height)] shrink-0 flex items-center justify-between px-6 py-2 border-b border-border">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-black/70">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-text-dim">
             AI Overview
           </span>
           {!isLoading && (
-            <span className="font-mono text-[10px] text-black/30 tracking-[0.05em]">
+            <span className="font-mono text-[10px] text-text-muted tracking-[0.05em]">
               {bullets.length}
             </span>
           )}
         </div>
-        <span className="font-mono text-[10px] text-black/25 tracking-[0.05em]">
+        <span className="font-mono text-[10px] text-text-muted tracking-[0.05em]">
           claude-powered
         </span>
       </header>
@@ -69,20 +69,20 @@ export function AIOverview({ bullets, isLoading }: AIOverviewProps) {
             {Array.from({ length: 4 }).map((_, i) => (
               <div
                 key={i}
-                className="h-4 rounded bg-black/8 animate-pulse"
+                className="h-4 rounded bg-surface-2 animate-pulse"
                 style={{ width: `${65 + (i % 3) * 12}%` }}
               />
             ))}
           </div>
         ) : bullets.length === 0 ? (
-          <p className="font-mono text-[11px] text-black/40">
+          <p className="font-mono text-[11px] text-text-muted">
             No overview available.
           </p>
         ) : (
           <ul className="grid grid-cols-1 xl:grid-cols-2 gap-x-8 gap-y-2">
             {bullets.map((bullet, i) => (
               <li key={i} className="flex items-start gap-2">
-                <span className="font-mono text-[12px] text-black/30 shrink-0 mt-0.5">→</span>
+                <span className="font-mono text-[12px] text-text-muted shrink-0 mt-0.5">→</span>
                 <span className="text-[13px] text-[var(--text)] leading-[1.5]">
                   {parseBulletWithCitations(bullet)}
                 </span>

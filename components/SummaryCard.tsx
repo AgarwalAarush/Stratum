@@ -36,9 +36,9 @@ export function SummaryCard({ url, onClose }: SummaryCardProps) {
       <div className="p-3 pr-8">
         {isLoading ? (
           <div className="flex flex-col gap-2.5">
-            <div className="h-4 rounded bg-black/8 dark:bg-white/10 animate-pulse" style={{ width: '90%' }} />
-            <div className="h-4 rounded bg-black/8 dark:bg-white/10 animate-pulse" style={{ width: '75%' }} />
-            <div className="h-4 rounded bg-black/8 dark:bg-white/10 animate-pulse" style={{ width: '60%' }} />
+            <div className="h-4 rounded bg-surface-2 animate-pulse" style={{ width: '90%' }} />
+            <div className="h-4 rounded bg-surface-2 animate-pulse" style={{ width: '75%' }} />
+            <div className="h-4 rounded bg-surface-2 animate-pulse" style={{ width: '60%' }} />
           </div>
         ) : error ? (
           <p className="font-mono text-[11px] text-[var(--text-muted)]">

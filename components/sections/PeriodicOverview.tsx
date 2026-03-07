@@ -37,7 +37,7 @@ function renderContent(content: string) {
             .filter((l) => l.trim())
             .map((line, j) => (
               <li key={j} className="flex items-start gap-2">
-                <span className="font-mono text-[12px] text-black/30 shrink-0 mt-0.5">→</span>
+                <span className="font-mono text-[12px] text-text-muted shrink-0 mt-0.5">→</span>
                 <span className="text-[13px] text-[var(--text)] leading-[1.5]">
                   {line.replace(/^[-*]\s+/, '')}
                 </span>
@@ -52,7 +52,7 @@ function renderContent(content: string) {
       return (
         <h3
           key={i}
-          className="font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-black/60 mt-4 mb-1"
+          className="font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-text-dim mt-4 mb-1"
         >
           {trimmed.replace(/^#{1,3}\s+/, '')}
         </h3>
@@ -77,10 +77,10 @@ export function PeriodicOverview({ weekly, monthly, isLoading }: PeriodicOvervie
   const active = activeTab === 'weekly' ? weekly : monthly
 
   return (
-    <section className="border-b border-black/10 flex flex-col">
-      <header className="w-full h-[var(--section-header-height)] shrink-0 flex items-center justify-between px-6 py-2 border-b border-black/10">
+    <section className="border-b border-border flex flex-col">
+      <header className="w-full h-[var(--section-header-height)] shrink-0 flex items-center justify-between px-6 py-2 border-b border-border">
         <div className="flex items-center gap-3">
-          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-black/70">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-text-dim">
             Intelligence Briefing
           </span>
           <div className="flex gap-1">
@@ -88,8 +88,8 @@ export function PeriodicOverview({ weekly, monthly, isLoading }: PeriodicOvervie
               onClick={() => setActiveTab('weekly')}
               className={`font-mono text-[10px] px-2 py-0.5 rounded transition-colors ${
                 activeTab === 'weekly'
-                  ? 'bg-black/10 text-black/70'
-                  : 'text-black/35 hover:text-black/50'
+                  ? 'bg-surface-2 text-text-dim'
+                  : 'text-text-muted hover:text-text-dim'
               }`}
             >
               Weekly
@@ -98,8 +98,8 @@ export function PeriodicOverview({ weekly, monthly, isLoading }: PeriodicOvervie
               onClick={() => setActiveTab('monthly')}
               className={`font-mono text-[10px] px-2 py-0.5 rounded transition-colors ${
                 activeTab === 'monthly'
-                  ? 'bg-black/10 text-black/70'
-                  : 'text-black/35 hover:text-black/50'
+                  ? 'bg-surface-2 text-text-dim'
+                  : 'text-text-muted hover:text-text-dim'
               }`}
             >
               Biweekly
@@ -107,7 +107,7 @@ export function PeriodicOverview({ weekly, monthly, isLoading }: PeriodicOvervie
           </div>
         </div>
         {active && active.periodStart && active.periodEnd && (
-          <span className="font-mono text-[10px] text-black/25 tracking-[0.05em]">
+          <span className="font-mono text-[10px] text-text-muted tracking-[0.05em]">
             {formatDateRange(active.periodStart, active.periodEnd)}
           </span>
         )}
@@ -119,7 +119,7 @@ export function PeriodicOverview({ weekly, monthly, isLoading }: PeriodicOvervie
             {Array.from({ length: 5 }).map((_, i) => (
               <div
                 key={i}
-                className="h-4 rounded bg-black/8 animate-pulse"
+                className="h-4 rounded bg-surface-2 animate-pulse"
                 style={{ width: `${50 + (i % 4) * 15}%` }}
               />
             ))}
@@ -127,7 +127,7 @@ export function PeriodicOverview({ weekly, monthly, isLoading }: PeriodicOvervie
         ) : active && active.content ? (
           <div className="max-w-3xl">{renderContent(active.content)}</div>
         ) : (
-          <p className="font-mono text-[11px] text-black/40">
+          <p className="font-mono text-[11px] text-text-muted">
             No {activeTab} briefing available yet.
           </p>
         )}
