@@ -120,6 +120,54 @@ export const SCOPES: ScopeDef[] = [
       },
     ],
   },
+  {
+    id: 'global-news',
+    label: 'Global News',
+    sections: [
+      {
+        id: 'geopolitics',
+        label: 'Geopolitics & Conflicts',
+        sources: ['Reuters', 'AP News', 'Al Jazeera', 'Foreign Affairs', 'CSIS'],
+        itemType: 'news',
+        apiPath: '/api/global-news/news/geopolitics',
+      },
+      {
+        id: 'european-union',
+        label: 'European Union',
+        sources: ['Euractiv', 'Politico EU', 'ECB'],
+        itemType: 'news',
+        apiPath: '/api/global-news/news/european-union',
+      },
+      {
+        id: 'climate-environment',
+        label: 'Climate & Environment',
+        sources: ['Carbon Brief', 'The Guardian', 'Climate Policy'],
+        itemType: 'news',
+        apiPath: '/api/global-news/news/climate-environment',
+      },
+      {
+        id: 'global-supply-chains',
+        label: 'Global Supply Chains',
+        sources: ['Trade News', 'Shipping & Logistics', 'Commodities'],
+        itemType: 'news',
+        apiPath: '/api/global-news/news/global-supply-chains',
+      },
+      {
+        id: 'global-summits',
+        label: 'Global Summits & Conferences',
+        sources: ['G7/G20', 'United Nations', 'WEF', 'NATO'],
+        itemType: 'news',
+        apiPath: '/api/global-news/news/global-summits',
+      },
+      {
+        id: 'global-health',
+        label: 'Global Health',
+        sources: ['WHO', 'Pandemic Watch', 'Health Policy'],
+        itemType: 'news',
+        apiPath: '/api/global-news/news/global-health',
+      },
+    ],
+  },
 ]
 
 export const SCOPE_IDS = SCOPES.map((s) => s.id)

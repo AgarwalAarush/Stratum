@@ -13,6 +13,7 @@ const NAV_ABBR: Record<string, string> = {
   'morning-brief': 'MB',
   'ai-research': 'AI',
   'finance': 'FI',
+  'global-news': 'GN',
 }
 
 interface NavPanelProps {

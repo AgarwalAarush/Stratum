@@ -17,6 +17,12 @@ export type NewsTopic =
   | 'startups'
   | 'infra-hardware'
   | 'tech-events'
+  | 'geopolitics'
+  | 'european-union'
+  | 'climate-environment'
+  | 'global-supply-chains'
+  | 'global-summits'
+  | 'global-health'
 
 const FEED_TIMEOUT_MS = 8_000
 const OVERALL_DEADLINE_MS = 25_000
@@ -27,12 +33,17 @@ const gn = (query: string) =>
   `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`
 
 const SOURCE_HOST_ALIASES: Record<string, string> = {
+  'aljazeera.com': 'Al Jazeera',
   'apnews.com': 'AP News',
   'arstechnica.com': 'Ars Technica',
   'bloomberg.com': 'Bloomberg',
+  'carbonbrief.org': 'Carbon Brief',
+  'euractiv.com': 'Euractiv',
+  'foreignaffairs.com': 'Foreign Affairs',
   'ft.com': 'Financial Times',
   'reuters.com': 'Reuters',
   'technologyreview.com': 'MIT Technology Review',
+  'theguardian.com': 'The Guardian',
   'theverge.com': 'The Verge',
   'techcrunch.com': 'TechCrunch',
   'wired.com': 'Wired',
@@ -48,6 +59,12 @@ export const NEWS_TOPICS: NewsTopic[] = [
   'startups',
   'infra-hardware',
   'tech-events',
+  'geopolitics',
+  'european-union',
+  'climate-environment',
+  'global-supply-chains',
+  'global-summits',
+  'global-health',
 ]
 
 const TOPIC_LABELS: Record<NewsTopic, string> = {
@@ -59,6 +76,12 @@ const TOPIC_LABELS: Record<NewsTopic, string> = {
   startups: 'Startups',
   'infra-hardware': 'Infra & Hardware',
   'tech-events': 'Tech Events',
+  geopolitics: 'Geopolitics & Conflicts',
+  'european-union': 'European Union',
+  'climate-environment': 'Climate & Environment',
+  'global-supply-chains': 'Global Supply Chains',
+  'global-summits': 'Global Summits & Conferences',
+  'global-health': 'Global Health',
 }
 
 export const NEWS_TOPIC_FEEDS: Record<NewsTopic, ServerFeed[]> = {
@@ -142,6 +165,50 @@ export const NEWS_TOPIC_FEEDS: Record<NewsTopic, ServerFeed[]> = {
     { name: 'AI Conferences', url: gn('(AI conference OR "AI summit" OR "machine learning conference") when:30d') },
     { name: 'Cerebral Valley', url: gn('site:cerebralvalley.ai OR "Cerebral Valley" when:14d') },
     { name: 'Tech Conferences', url: gn('("developer conference" OR "tech summit" OR devcon OR "developer event") when:7d') },
+  ],
+  geopolitics: [
+    { name: 'Reuters World', url: gn('site:reuters.com geopolitics OR war OR conflict when:3d') },
+    { name: 'AP World', url: gn('site:apnews.com war OR conflict OR geopolitics when:3d') },
+    { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml' },
+    { name: 'Foreign Affairs', url: gn('site:foreignaffairs.com when:14d') },
+    { name: 'CSIS', url: gn('site:csis.org when:7d') },
+    { name: 'Geopolitical Tensions', url: gn('(geopolitical tensions OR military conflict OR territorial dispute OR sanctions) when:3d') },
+    { name: 'Wars & Conflicts', url: gn('(war OR armed conflict OR ceasefire OR peace talks) when:3d') },
+  ],
+  'european-union': [
+    { name: 'Euractiv', url: 'https://www.euractiv.com/feed/' },
+    { name: 'Politico EU', url: gn('site:politico.eu when:3d') },
+    { name: 'EU Policy', url: gn('("European Union" OR "European Commission" OR "European Parliament" OR ECB) policy when:3d') },
+    { name: 'EU Regulation', url: gn('("EU regulation" OR "EU directive" OR "European Council") when:7d') },
+    { name: 'ECB Policy', url: gn('("European Central Bank" OR ECB OR "euro zone" monetary policy) when:7d') },
+  ],
+  'climate-environment': [
+    { name: 'Carbon Brief', url: 'https://www.carbonbrief.org/feed/' },
+    { name: 'Guardian Climate', url: 'https://www.theguardian.com/environment/climate-crisis/rss' },
+    { name: 'Climate Change', url: gn('("climate change" OR "global warming" OR "climate crisis") when:3d') },
+    { name: 'Energy Transition', url: gn('("energy transition" OR "renewable energy" OR "clean energy" OR "net zero") when:7d') },
+    { name: 'Climate Policy', url: gn('("climate policy" OR "carbon emissions" OR "Paris Agreement" OR "climate legislation") when:7d') },
+  ],
+  'global-supply-chains': [
+    { name: 'Supply Chain News', url: gn('("supply chain" disruption OR crisis OR shortage) when:3d') },
+    { name: 'Trade & Tariffs', url: gn('(tariffs OR "trade war" OR "trade deal" OR "trade policy") when:3d') },
+    { name: 'Shipping & Logistics', url: gn('(shipping OR logistics OR "freight rates" OR "port congestion" OR "container shipping") when:7d') },
+    { name: 'Commodities', url: gn('(commodities OR "oil prices" OR "rare earth" OR "critical minerals") when:3d') },
+    { name: 'Global Trade', url: gn('("global trade" OR WTO OR "trade agreement" OR export OR import) when:7d') },
+  ],
+  'global-summits': [
+    { name: 'G7 G20', url: gn('(G7 OR G20 summit OR meeting) when:14d') },
+    { name: 'United Nations', url: gn('("United Nations" OR "UN General Assembly" OR "UN Security Council") when:7d') },
+    { name: 'WEF Davos', url: gn('("World Economic Forum" OR WEF OR Davos) when:14d') },
+    { name: 'COP Climate', url: gn('("COP28" OR "COP29" OR "COP30" OR "climate summit") when:14d') },
+    { name: 'NATO', url: gn('(NATO summit OR meeting OR alliance) when:7d') },
+    { name: 'Global Conferences', url: gn('("global summit" OR "international conference" OR "world leaders" summit) when:7d') },
+  ],
+  'global-health': [
+    { name: 'WHO News', url: gn('("World Health Organization" OR WHO) when:3d') },
+    { name: 'Pandemic Watch', url: gn('(pandemic OR epidemic OR "disease outbreak" OR "public health emergency") when:7d') },
+    { name: 'Global Health Policy', url: gn('("global health" policy OR "health crisis" OR "vaccine" OR "health equity") when:7d') },
+    { name: 'Infectious Disease', url: gn('("infectious disease" OR "bird flu" OR mpox OR "drug resistant") when:7d') },
   ],
 }
 
