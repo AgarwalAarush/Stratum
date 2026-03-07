@@ -22,7 +22,7 @@ Tests use Node's built-in test runner (`node:test` + `node:assert/strict`), not 
 
 ### Scope/Section model
 
-The core abstraction is **Scopes** (top-level nav tabs like "AI Research", "Finance") containing **Sections** (individual feed panels like "Papers", "Earnings"). All scope/section definitions live in `lib/scopes.ts` as a static registry (`SCOPES` array of `ScopeDef`). Each section declares its `apiPath`, `itemType`, and data sources.
+The core abstraction is **Scopes** (top-level nav tabs: "AI Research", "Finance", "Global News") containing **Sections** (individual feed panels like "Papers", "Earnings", "Geopolitics"). All scope/section definitions live in `lib/scopes.ts` as a static registry (`SCOPES` array of `ScopeDef`). Each section declares its `apiPath`, `itemType`, and data sources.
 
 ### Data flow
 
@@ -33,7 +33,7 @@ The core abstraction is **Scopes** (top-level nav tabs like "AI Research", "Fina
 
 ### Data fetchers (`lib/data/`)
 
-Each file fetches from a specific external source: `arxiv.ts` (arXiv API XML), `discussions.ts` (HN Algolia + Lobste.rs), `repos.ts` (GitHub Search API), `rss.ts`/`rss-parser.ts` (RSS feeds by topic), `finance-*.ts` (FMP, FRED, SEC EDGAR), `overview.ts` (Claude API for daily AI overview bullets), `morning-brief.ts` (Claude API for daily morning brief), `overview-generators.ts` (Claude API for weekly/monthly periodic overviews).
+Each file fetches from a specific external source: `arxiv.ts` (arXiv API XML), `discussions.ts` (HN Algolia + Lobste.rs), `repos.ts` (GitHub Search API), `rss.ts`/`rss-parser.ts` (RSS feeds by topic, including all global-news and ai-research news sections), `finance-*.ts` (FMP, FRED, SEC EDGAR), `overview.ts` (Claude API for daily AI overview bullets), `morning-brief.ts` (Claude API for daily morning brief), `overview-generators.ts` (Claude API for weekly/monthly periodic overviews). Fresh fetches are also persisted to Supabase via `persist-after-fetch.ts`.
 
 ### Article scrapers (`lib/data/scrapers/`)
 
@@ -58,6 +58,8 @@ All persisted via `overview-persistence.ts` to Supabase `overviews` table (upser
 - `app/[scope]/page.tsx` — dynamic scope page, validates scope ID, renders `ScopeFeed`
 - `app/api/[scope]/[section]/route.ts` — generic fallback route (serves mock data)
 - `app/api/ai-research/papers/route.ts` (etc.) — dedicated routes with real fetchers override the generic catch-all
+- `app/api/ai-research/news/[topic]/route.ts` — dynamic topic route for AI Research news sections (general, cybersecurity, venture-capital, etc.)
+- `app/api/global-news/news/[topic]/route.ts` — dynamic topic route for Global News sections (geopolitics, european-union, climate-environment, etc.)
 - `app/api/cron/*` — QStash-triggered POST routes (morning-brief, weekly-overview, monthly-overview)
 - `app/api/morning-brief/route.ts` — public GET for latest morning brief
 - `app/api/overviews/[type]/route.ts` — public GET for weekly/monthly overviews
@@ -67,7 +69,8 @@ All persisted via `overview-persistence.ts` to Supabase `overviews` table (upser
 - Tailwind CSS v4, IBM Plex Sans/Mono fonts
 - CSS custom properties for theming (`--bg`, `--text`, `--surface-2`, etc.) with `data-theme` attribute on `<html>`
 - Zustand store for theme state (`store/theme.ts`)
-- `ClientLayout` wraps the app with nav panel; `ScopeFeed` handles section grid layout
+- `ClientLayout` wraps the app with nav panel; `ScopeFeed` handles section grid layout with scope-specific overrides
+- `ScopeFeed` layout customization: AI Research has a fully custom layout. Other scopes use a generic branch with per-scope overrides — filter out "split" section IDs (e.g. `FINANCE_SPLIT_IDS`) and render them as side-by-side grid pairs, or pass `{ columns: 2 }` to `renderSection()` for multi-column within a single section. To add a new side-by-side pair: filter one ID from the main loop, detect the other in `.map()`, and render both in a `grid grid-cols-2` wrapper at that position.
 - `SummaryCard` renders as a fixed overlay portal with streaming markdown; uses `--summary-card-bg` CSS variable for theme-aware background
 
 ## Environment variables

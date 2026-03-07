@@ -12,10 +12,6 @@ async function fetcher(url: string) {
   return res.json() as Promise<MorningBriefData>
 }
 
-function getTodayDate() {
-  return new Date().toISOString().slice(0, 10)
-}
-
 const STORAGE_KEY = 'stratum:morning-brief-seen'
 
 interface MorningBriefModalProps {
@@ -45,7 +41,7 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
   }, [open, isLoading, data])
 
   function dismiss() {
-    localStorage.setItem(STORAGE_KEY, getTodayDate())
+    localStorage.setItem(STORAGE_KEY, new Date().toISOString())
     onClose()
   }
 

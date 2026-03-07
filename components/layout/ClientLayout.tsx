@@ -8,8 +8,10 @@ import { MorningBriefModal } from '@/components/MorningBriefModal'
 
 const BRIEF_SEEN_KEY = 'stratum:morning-brief-seen'
 
-function getTodayDate() {
-    return new Date().toISOString().slice(0, 10)
+// Brief is generated daily at 12:00 UTC. Returns that timestamp for today.
+function getTodayGenerationTime() {
+    const today = new Date().toISOString().slice(0, 10)
+    return new Date(`${today}T12:00:00.000Z`)
 }
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
@@ -25,7 +27,11 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         const seen = localStorage.getItem(BRIEF_SEEN_KEY)
-        if (seen !== getTodayDate()) {
+        const generationTime = getTodayGenerationTime()
+        const now = new Date()
+        // Only auto-show if the brief has been generated (past 12 UTC) and not yet seen since then
+        const seenAfterGeneration = seen && new Date(seen) >= generationTime
+        if (now >= generationTime && !seenAfterGeneration) {
             setIsBriefOpen(true)
         }
     }, [])
