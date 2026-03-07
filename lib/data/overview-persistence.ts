@@ -1,5 +1,5 @@
-import type { FeedItem, MorningBriefData } from '../types'
-import { getSupabaseClient } from '../server/supabase'
+import type { FeedItem, MorningBriefData } from '../types.ts'
+import { getSupabaseClient } from '../server/supabase.ts'
 
 interface OverviewRow {
   id: string

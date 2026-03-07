@@ -178,7 +178,7 @@ test('news: NEW for general rollout headline in AI news topic', () => {
   const item: FeedItem = {
     type: 'news',
     id: '3b',
-    title: 'Anthropic rolls out API access for Claude reasoning models',
+    title: 'Anthropic rolls out API preview for Claude developers',
     source: 'Anthropic News',
     canonicalSource: 'TechCrunch',
     topic: 'general',

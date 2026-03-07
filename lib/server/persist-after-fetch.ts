@@ -1,6 +1,6 @@
-import type { SectionData } from '@/lib/types'
-import type { CachedFetchResult } from '@/lib/server/cache'
-import { persistFeedItems } from '@/lib/data/overview-persistence'
+import type { SectionData } from '../types.ts'
+import type { CachedFetchResult } from './cache.ts'
+import { persistFeedItems } from '../data/overview-persistence.ts'
 
 export function persistIfFresh(
   scope: string,
