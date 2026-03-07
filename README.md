@@ -1,7 +1,7 @@
 <p align="center">
-  <span style="display:inline-flex; align-items:center; gap:0.5em;">
-    <img src="app/icon.png" alt="Stratum icon" height="45" />
-    <strong style="font-size:3.5em; letter-spacing:-0.02em;">Stratum</strong>
+  <span style="display:inline-flex; align-items:center; gap:0.12em;">
+    <img src="app/icon-text.jpg" alt="S" height="45" />
+    <strong style="font-size:3.5em; letter-spacing:-0.02em;">tratum</strong>
   </span>
 </p>
 <p align="center" style="font-size:1.4em; font-weight:500; margin-top:-0.5em; color:#333;">Tech Intelligence Dashboard</p>
