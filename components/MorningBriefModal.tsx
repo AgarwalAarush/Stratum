@@ -83,7 +83,7 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
         {/* Body */}
         <div className="flex-1 overflow-y-auto main-scroll px-8 py-6">
           {isLoading ? (
-            <div className="space-y-6 max-w-3xl">
+            <div className="space-y-6">
               <div className="h-5 rounded bg-surface-2 animate-pulse w-3/4" />
               {Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="space-y-2">
@@ -99,7 +99,7 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
               ))}
             </div>
           ) : hasContent ? (
-            <div className="max-w-3xl">
+            <div>
               {/* Stale indicator */}
               {data.stale && (
                 <div className="mb-4 px-3 py-1.5 rounded bg-surface-2">
