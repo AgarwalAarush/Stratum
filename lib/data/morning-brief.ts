@@ -8,10 +8,16 @@ import { fetchFinanceEarnings } from './finance-earnings'
 import { fetchFinanceDeals } from './finance-deals'
 import { fetchFinanceReports } from './finance-reports'
 import { fetchMacroIndicators } from './finance-macro'
+import {
+  fetchRecentFeedItems,
+  fetchYesterdaysBrief,
+  type FeedItemRow,
+} from './overview-persistence'
 
 interface SourceItem {
   title: string
   url: string
+  detail?: string
 }
 
 const SECTIONS: Array<{ label: string; fetch: () => Promise<SourceItem[]> }> = [
@@ -75,7 +81,11 @@ const SECTIONS: Array<{ label: string; fetch: () => Promise<SourceItem[]> }> = [
     label: 'PAPERS',
     fetch: async () => {
       const items = await fetchArxivPapers(5)
-      return items.map((i) => ({ title: i.title, url: i.url }))
+      return items.map((i) => ({
+        title: i.title,
+        url: i.url,
+        detail: i.categories.join(', '),
+      }))
     },
   },
   {
@@ -83,21 +93,33 @@ const SECTIONS: Array<{ label: string; fetch: () => Promise<SourceItem[]> }> = [
     fetch: async () => {
       const items = await fetchTrendingRepos(5)
       if (!items) return []
-      return items.map((i) => ({ title: `${i.owner}/${i.name}: ${i.description}`, url: i.url }))
+      return items.map((i) => ({
+        title: `${i.owner}/${i.name}: ${i.description}`,
+        url: i.url,
+        detail: `${i.totalStars} stars, ${i.language}`,
+      }))
     },
   },
   {
     label: 'DISCUSSIONS',
     fetch: async () => {
       const items = await fetchDiscussions(5)
-      return items.map((i) => ({ title: i.title, url: i.url }))
+      return items.map((i) => ({
+        title: i.title,
+        url: i.url,
+        detail: `${i.points} pts, ${i.commentCount} comments`,
+      }))
     },
   },
   {
     label: 'EARNINGS',
     fetch: async () => {
       const items = await fetchFinanceEarnings(5)
-      return items.map((i) => ({ title: `${i.ticker} ${i.quarter} earnings${i.beat !== undefined ? (i.beat ? ' (beat)' : ' (miss)') : ''}`, url: i.url }))
+      return items.map((i) => ({
+        title: `${i.ticker} ${i.quarter} earnings${i.beat !== undefined ? (i.beat ? ' (beat)' : ' (miss)') : ''}`,
+        url: i.url,
+        detail: i.epsActual !== undefined ? `EPS: ${i.epsActual}` : undefined,
+      }))
     },
   },
   {
@@ -151,45 +173,114 @@ const FALLBACK_BRIEF: MorningBriefData = {
   fetchedAt: new Date().toISOString(),
 }
 
+function feedItemRowToSourceItem(row: FeedItemRow): SourceItem {
+  const meta = row.metadata as Record<string, unknown>
+  let detail: string | undefined
+  switch (row.item_type) {
+    case 'paper':
+      if (Array.isArray(meta.categories)) detail = (meta.categories as string[]).join(', ')
+      break
+    case 'repo':
+      detail = [meta.totalStars && `${meta.totalStars} stars`, meta.language].filter(Boolean).join(', ')
+      break
+    case 'discussion':
+      detail = [meta.points && `${meta.points} pts`, meta.commentCount && `${meta.commentCount} comments`].filter(Boolean).join(', ')
+      break
+    case 'earnings':
+      detail = meta.epsActual !== undefined ? `EPS: ${meta.epsActual}` : undefined
+      break
+  }
+  return { title: row.title, url: row.url, detail: detail || undefined }
+}
+
 export async function generateMorningBrief(): Promise<MorningBriefData> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return { ...FALLBACK_BRIEF, fetchedAt: new Date().toISOString() }
   }
 
-  const results = await Promise.allSettled(SECTIONS.map((s) => s.fetch()))
+  // Fetch live items, historical items, and yesterday's brief in parallel
+  const [liveResults, recentItems, yesterdaysBrief] = await Promise.all([
+    Promise.allSettled(SECTIONS.map((s) => s.fetch())),
+    fetchRecentFeedItems(24),
+    fetchYesterdaysBrief(),
+  ])
+
+  // Build live source items with labels
+  const liveByUrl = new Map<string, { label: string; item: SourceItem }>()
+  for (let i = 0; i < SECTIONS.length; i++) {
+    const result = liveResults[i]
+    if (result.status === 'fulfilled' && result.value.length > 0) {
+      for (const item of result.value) {
+        liveByUrl.set(item.url, { label: SECTIONS[i].label, item })
+      }
+    }
+  }
+
+  // Merge Supabase historical items (live wins on dedup)
+  const historicalByUrl = new Map<string, { label: string; item: SourceItem }>()
+  for (const row of recentItems) {
+    if (!liveByUrl.has(row.url)) {
+      const label = `${row.scope.toUpperCase()}/${row.section.toUpperCase()}`
+      historicalByUrl.set(row.url, { label, item: feedItemRowToSourceItem(row) })
+    }
+  }
+
+  // Combine: live first, then historical
+  const allItems = [...liveByUrl.values(), ...historicalByUrl.values()]
+
+  if (allItems.length === 0) {
+    return { ...FALLBACK_BRIEF, fetchedAt: new Date().toISOString() }
+  }
+
+  // Group by label for the prompt
+  const grouped = new Map<string, SourceItem[]>()
+  for (const { label, item } of allItems) {
+    const list = grouped.get(label) ?? []
+    list.push(item)
+    grouped.set(label, list)
+  }
 
   const headlineBlocks: string[] = []
   const sourceIndex: Array<{ n: number; url: string }> = []
   let sourceCounter = 1
   let totalItems = 0
 
-  for (let i = 0; i < SECTIONS.length; i++) {
-    const result = results[i]
-    if (result.status === 'fulfilled' && result.value.length > 0) {
-      totalItems += result.value.length
-      const numberedItems = result.value.map((item) => {
-        const n = sourceCounter++
-        sourceIndex.push({ n, url: item.url })
-        return `[${n}] ${item.title}`
-      })
-      headlineBlocks.push(`[${SECTIONS[i].label}] ${numberedItems.join(' / ')}`)
-    }
-  }
-
-  if (headlineBlocks.length === 0) {
-    return { ...FALLBACK_BRIEF, fetchedAt: new Date().toISOString() }
+  for (const [label, items] of grouped) {
+    totalItems += items.length
+    const numberedItems = items.map((item) => {
+      const n = sourceCounter++
+      sourceIndex.push({ n, url: item.url })
+      const detailSuffix = item.detail ? ` (${item.detail})` : ''
+      return `[${n}] ${item.title}${detailSuffix}`
+    })
+    headlineBlocks.push(`[${label}] ${numberedItems.join(' / ')}`)
   }
 
   const sourcesBlock = sourceIndex.map((s) => `[${s.n}] ${s.url}`).join('\n')
 
-  const prompt = `You are a morning intelligence briefing writer for Stratum, a tech intelligence dashboard. Below are the latest headlines across AI research, policy, cybersecurity, venture capital, tech events, infrastructure, startups, papers, repos, discussions, earnings, deals, research reports, and macro indicators. Each headline has a numbered source reference.
+  // Build yesterday's context block
+  let yesterdayBlock = ''
+  if (yesterdaysBrief) {
+    const sectionTitles = yesterdaysBrief.sections.map((s) => s.title).join(', ')
+    const watchItems = yesterdaysBrief.watchList.slice(0, 3).join('; ')
+    yesterdayBlock = `
+
+Yesterday's Brief Context:
+- Headline: ${yesterdaysBrief.headline}
+- Sections covered: ${sectionTitles}
+- Watch list: ${watchItems}
+
+Note developing stories and whether yesterday's watch list items have materialized in today's headlines.`
+  }
+
+  const prompt = `You are a morning intelligence briefing writer for Stratum, a tech intelligence dashboard. Below are the latest headlines across AI research, policy, cybersecurity, venture capital, tech events, infrastructure, startups, papers, repos, discussions, earnings, deals, research reports, and macro indicators. Each headline has a numbered source reference. Some items include metadata details in parentheses (categories, star counts, engagement metrics, EPS figures) — use these for richer analysis.
 
 Headlines:
 ${headlineBlocks.join('\n')}
 
 Sources:
-${sourcesBlock}
+${sourcesBlock}${yesterdayBlock}
 
 Generate a structured morning brief as JSON matching this exact schema:
 {
@@ -206,6 +297,7 @@ Generate a structured morning brief as JSON matching this exact schema:
 Requirements:
 - 3-5 thematic sections with 3-5 bullets each
 - Bullets should be analytical and draw connections, not just restate headlines
+- Use metadata details (star counts, EPS, categories) to add quantitative depth
 - Citations as [n] using the headline numbers, placed at the end of relevant clauses
 - headline: one sharp, specific sentence (not generic)
 - watchList: forward-looking items only

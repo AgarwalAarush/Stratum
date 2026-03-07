@@ -2,13 +2,14 @@ import type { SectionData } from '../../../../lib/types.ts'
 import { fetchNewsItemsByTopic } from '../../../../lib/data/rss.ts'
 import { cachedFetchWithFallback } from '../../../../lib/server/cache.ts'
 import { sectionJsonResponse } from '../../../../lib/server/http-cache.ts'
+import { persistIfFresh } from '../../../../lib/server/persist-after-fetch.ts'
 
 const CACHE_KEY = 'stratum:ai-research:news:general:v1'
 export const CACHE_TTL_SECONDS = 3_600
 
 export async function GET() {
   try {
-    const { data, source } = await cachedFetchWithFallback<SectionData>({
+    const result = await cachedFetchWithFallback<SectionData>({
       key: CACHE_KEY,
       ttlSeconds: CACHE_TTL_SECONDS,
       staleMaxAgeMs: 12 * 60 * 60 * 1_000,
@@ -25,10 +26,11 @@ export async function GET() {
       },
     })
 
+    persistIfFresh('ai-research', 'ai-news', result)
     return sectionJsonResponse(
-      data ?? { items: [], fetchedAt: new Date().toISOString() },
+      result.data ?? { items: [], fetchedAt: new Date().toISOString() },
       'medium',
-      source,
+      result.source,
     )
   } catch {
     return sectionJsonResponse(

@@ -2,6 +2,7 @@ import type { SectionData } from '../../../../../lib/types.ts'
 import { fetchNewsItemsByTopic, isNewsTopic, type NewsTopic } from '../../../../../lib/data/rss.ts'
 import { cachedFetchWithFallback } from '../../../../../lib/server/cache.ts'
 import { sectionJsonResponse, type CacheTier } from '../../../../../lib/server/http-cache.ts'
+import { persistIfFresh } from '../../../../../lib/server/persist-after-fetch.ts'
 
 export const CACHE_TTL_SECONDS: Record<NewsTopic, number> = {
   cybersecurity: 3_600,
@@ -43,7 +44,7 @@ export async function GET(
   const ttlSeconds = CACHE_TTL_SECONDS[topic]
 
   try {
-    const { data, source } = await cachedFetchWithFallback<SectionData>({
+    const result = await cachedFetchWithFallback<SectionData>({
       key: `stratum:ai-research:news:${topic}:v1`,
       ttlSeconds,
       staleMaxAgeMs: 12 * 60 * 60 * 1_000,
@@ -60,7 +61,8 @@ export async function GET(
       },
     })
 
-    return sectionJsonResponse(data ?? emptySection(), tier, source)
+    persistIfFresh('ai-research', `news-${topic}`, result)
+    return sectionJsonResponse(result.data ?? emptySection(), tier, result.source)
   } catch {
     return sectionJsonResponse(emptySection(), tier, 'none')
   }

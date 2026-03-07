@@ -170,7 +170,7 @@ export async function persistFeedItems(
 
   try {
     const rows = items.map((item) => {
-      const { type, title, url, ...rest } = item as Record<string, unknown>
+      const { type, title, url, ...rest } = item as unknown as Record<string, unknown>
       const publishedAt =
         (rest.publishedAt as string | undefined) ??
         (rest.reportDate as string | undefined) ??
