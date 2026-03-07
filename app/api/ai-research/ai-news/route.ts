@@ -4,7 +4,7 @@ import { cachedFetchWithFallback } from '../../../../lib/server/cache.ts'
 import { sectionJsonResponse } from '../../../../lib/server/http-cache.ts'
 import { persistIfFresh } from '../../../../lib/server/persist-after-fetch.ts'
 
-const CACHE_KEY = 'stratum:ai-research:news:general:v1'
+const CACHE_KEY = 'stratum:ai-research:news:general:v2'
 export const CACHE_TTL_SECONDS = 3_600
 
 export async function GET() {

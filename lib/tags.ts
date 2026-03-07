@@ -40,7 +40,7 @@ const GENERAL_ENTITY_RE = /\b(openai|anthropic|google ai|gemini|deepseek|mistral
 const GENERAL_RELEASE_RE = /\brolls?\s+out\b|\brollout\b|\bupgrade(s|d)?\b|\bopen[- ]source[ds]?\b|\bpreview\b|\bbeta\b|\bearly access\b|\bgenerally available\b|\bnow available\b|\bapi access\b|\bsdk\b|\bavailability\b/
 const GENERAL_HOT_RE = /\bbreakthrough\b|\bmilestone\b|\brecord\b|\bbenchmark\b|\breasoning\b|\bpartnership\b|\bstate[- ]of[- ]the[- ]art\b|\bsurpass(es|ed)?\b/
 const POLICY_HOT_RE = /\bproposal\b|\bproposed\b|\bdraft\b|\bguidance\b|\brule\b|\brulemaking\b|\bconsultation\b|\bframework\b|\bcompliance\b|\bdeadline\b|\bhearing\b|\bvote\b|\badopt(s|ed)?\b|\bai act\b|\bftc\b|\bdoj\b|\bnist\b|\bwhite house\b|\bparliament\b|\bcommission\b/
-const VENTURE_HOT_RE = /\$\d+[bm]|\bbillion\b|\bipo\b|acqui(res|red|sition)|partnership|surpass(es|ed)?|record|milestone|breakthrough|trillion|valuation|funding|raise[ds]?\s*\$|\bseries [a-z]\b|\bseed round\b|\bventure round\b|\bunicorn\b/
+const VENTURE_HOT_RE = /\$\d+[bm]|\bbillion\b|\bipo\b|acqui(res|red|sition)|\bmerger\b|\bbuyout\b|valuation|funding|raise[ds]?\s*\$|\bseries [a-z]\b|\bseed round\b|\bventure round\b|\bunicorn\b/
 const VENTURE_NEW_RE = /\bnew fund\b|\blaunch(es|ed)? (an |its )?fund\b|\bseed round\b|\bseries [a-z]\b/
 
 // ─── Source tiers ───

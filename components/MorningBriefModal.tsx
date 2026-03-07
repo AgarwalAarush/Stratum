@@ -30,12 +30,6 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
 
   useEffect(() => {
     if (!open) return
-    // Auto-close if data loaded but empty
-    if (!isLoading && data && data.sections.length === 0) {
-      onClose()
-      return
-    }
-
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
 

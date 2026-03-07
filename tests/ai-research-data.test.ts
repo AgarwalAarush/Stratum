@@ -13,6 +13,7 @@ import { parseFeedXml } from '../lib/data/rss-parser.ts'
 import { cachedFetchWithFallback, clearCacheForTests } from '../lib/server/cache.ts'
 import { GET as getLegacyAiNewsRoute } from '../app/api/ai-research/ai-news/route.ts'
 import { GET as getTopicNewsRoute } from '../app/api/ai-research/news/[topic]/route.ts'
+import type { NewsItem } from '../lib/types.ts'
 
 function daysAgoIso(days: number, now: Date = new Date()): string {
   return new Date(now.getTime() - days * 24 * 60 * 60 * 1_000).toISOString()
@@ -171,6 +172,7 @@ test('parseFeedXml extracts items from RSS and Atom payloads', () => {
         <title><![CDATA[RSS Headline]]></title>
         <link>https://example.com/rss</link>
         <pubDate>Wed, 06 Mar 2026 10:00:00 GMT</pubDate>
+        <source url="https://www.reuters.com">Reuters</source>
       </item>
     </channel></rss>
   `
@@ -190,6 +192,8 @@ test('parseFeedXml extracts items from RSS and Atom payloads', () => {
   assert.equal(rssItems.length, 1)
   assert.equal(atomItems.length, 1)
   assert.equal(rssItems[0]?.title, 'RSS Headline')
+  assert.equal(rssItems[0]?.publisher, 'Reuters')
+  assert.equal(rssItems[0]?.publisherUrl, 'https://www.reuters.com')
   assert.equal(atomItems[0]?.title, 'Atom Headline')
   assert.equal(atomItems[0]?.link, 'https://example.com/atom')
 })
@@ -337,6 +341,42 @@ test('fetchNewsItemsByTopic sets category by topic label', async (t) => {
 
   assert.ok(items.length > 0)
   assert.equal(items[0]?.category, 'AI Policy & Regulation')
+  assert.equal(items[0]?.topic, 'policy')
+  assert.equal(items[0]?.feedName, 'Politico Tech')
+})
+
+test('fetchNewsItemsByTopic preserves canonical publisher metadata for Google News feeds', async (t) => {
+  clearCacheForTests()
+
+  const originalFetch = global.fetch
+  global.fetch = (async () =>
+    new Response(
+      `
+        <rss><channel>
+          <item>
+            <title>EU proposes new AI safety guidance</title>
+            <link>https://news.google.com/rss/articles/example-story</link>
+            <pubDate>Thu, 06 Mar 2026 12:00:00 GMT</pubDate>
+            <source url="https://www.reuters.com/world/europe/example">Reuters</source>
+          </item>
+        </channel></rss>
+      `,
+      { status: 200, headers: { 'Content-Type': 'application/xml' } },
+    )) as typeof fetch
+
+  t.after(() => {
+    global.fetch = originalFetch
+  })
+
+  const items = await fetchNewsItemsByTopic('policy', 5)
+  const first = items[0] as NewsItem | undefined
+
+  assert.ok(first)
+  assert.equal(first?.source, 'Politico Tech')
+  assert.equal(first?.feedName, 'Politico Tech')
+  assert.equal(first?.publisher, 'Reuters')
+  assert.equal(first?.canonicalSource, 'Reuters')
+  assert.equal(first?.topic, 'policy')
 })
 
 test('news topic route returns valid SectionData for valid topic', async (t) => {

@@ -174,6 +174,34 @@ test('news: NEW for "launched" + < 3hrs', () => {
   assert.equal(getTag(item), 'new')
 })
 
+test('news: NEW for general rollout headline in AI news topic', () => {
+  const item: FeedItem = {
+    type: 'news',
+    id: '3b',
+    title: 'Anthropic rolls out API access for Claude reasoning models',
+    source: 'Anthropic News',
+    canonicalSource: 'TechCrunch',
+    topic: 'general',
+    publishedAt: hoursAgo(2),
+    url: '#',
+  }
+  assert.equal(getTag(item), 'new')
+})
+
+test('news: HOT for major general AI benchmark headline from tier-1 publisher', () => {
+  const item: FeedItem = {
+    type: 'news',
+    id: '3c',
+    title: 'OpenAI hits new benchmark milestone with reasoning model upgrade',
+    source: 'AI News',
+    canonicalSource: 'Bloomberg',
+    topic: 'general',
+    publishedAt: hoursAgo(2),
+    url: '#',
+  }
+  assert.equal(getTag(item), 'hot')
+})
+
 test('news: HOT for $2B acquisition', () => {
   const item: FeedItem = {
     type: 'news', id: '4', title: 'Google acquires AI startup for $2B',
@@ -188,6 +216,36 @@ test('news: HOT for tier-1 source + fresh', () => {
     source: 'Reuters', publishedAt: hoursAgo(3), url: '#',
   }
   assert.equal(getTag(item), 'hot')
+})
+
+test('news: HOT for policy proposal from canonical publisher even when feed label is custom', () => {
+  const item: FeedItem = {
+    type: 'news',
+    id: '5b',
+    title: 'EU Commission proposes new AI compliance framework',
+    source: 'AI Regulation',
+    feedName: 'AI Regulation',
+    publisher: 'Reuters',
+    canonicalSource: 'Reuters',
+    topic: 'policy',
+    publishedAt: hoursAgo(2),
+    url: '#',
+  }
+  assert.equal(getTag(item), 'hot')
+})
+
+test('news: BREAKING for fresh policy enforcement headline', () => {
+  const item: FeedItem = {
+    type: 'news',
+    id: '5c',
+    title: 'FTC fines AI startup after emergency probe into deceptive claims',
+    source: 'Tech Antitrust',
+    canonicalSource: 'Reuters',
+    topic: 'policy',
+    publishedAt: hoursAgo(0.5),
+    url: '#',
+  }
+  assert.equal(getTag(item), 'breaking')
 })
 
 test('news: no tag for generic old article', () => {
