@@ -99,16 +99,11 @@ function getRow(item: FeedItem): DisplayRow {
           title = title.slice(0, suffix)
         }
       }
-      // Only show category when it adds info beyond the feed/topic name
-      const metaParts = [
-        item.category && item.category !== item.source && item.category !== item.feedName ? item.category : undefined,
-      ].filter(Boolean)
       return {
         id: item.id,
         title,
         source: publisher,
         time: formatRelativeTime(item.publishedAt),
-        meta: metaParts.length > 0 ? metaParts.join(' · ') : undefined,
         url: item.url,
         tag: getTag(item),
       }

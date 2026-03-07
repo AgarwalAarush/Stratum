@@ -94,7 +94,7 @@ export async function GET(request: Request) {
           messages: [
             {
               role: 'user',
-              content: `Summarize this article in 2-3 concise sentences. Focus on the key finding, announcement, or insight. Be specific and analytical.\n\nTitle: ${article.title}\n\n${article.content}`,
+              content: `Summarize this article in 2-3 concise sentences. Focus on the key finding, announcement, or insight. Be specific and analytical. Do not include any heading or label like "Summary" — just provide the sentences directly.\n\nTitle: ${article.title}\n\n${article.content}`,
             },
           ],
         })
