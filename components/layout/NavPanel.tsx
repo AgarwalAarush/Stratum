@@ -6,6 +6,7 @@ import { SCOPES } from '@/lib/scopes'
 import { ThemeToggle } from './ThemeToggle'
 import Image from 'next/image'
 import { Menu, Settings } from 'lucide-react'
+import { useState } from 'react'
 
 const NAV_ABBR: Record<string, string> = {
   'morning-brief': 'MB',
@@ -26,6 +27,7 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings }: NavPanelProps) {
   const isMorningBrief = pathname === '/morning-brief'
 
   const toggle = () => setIsOpen(!isOpen)
+  const [iconHovered, setIconHovered] = useState(false)
 
   return (
     <aside
@@ -40,11 +42,17 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings }: NavPanelProps) {
       <div className="h-[var(--top-header-height)] border-b border-[var(--border)] shrink-0 relative flex items-center">
         <button
           onClick={toggle}
-          className="cursor-pointer shrink-0 absolute"
-          style={{ left: 'calc(var(--sidebar-collapsed-width) / 2 - 10px)' }}
+          onMouseEnter={() => !isOpen && setIconHovered(true)}
+          onMouseLeave={() => setIconHovered(false)}
+          className={`cursor-pointer shrink-0 absolute flex items-center justify-center ${!isOpen && iconHovered ? 'w-7 h-7 rounded-[6px] bg-[var(--surface-2)] text-[var(--text)]' : ''}`}
+          style={{ left: !isOpen && iconHovered ? 'calc(var(--sidebar-collapsed-width) / 2 - 14px)' : 'calc(var(--sidebar-collapsed-width) / 2 - 10px)' }}
           aria-label={isOpen ? 'Collapse navigation' : 'Expand navigation'}
         >
-          <Image src="/icon.png" alt="Stratum" width={20} height={20} className="rounded-[4px]" />
+          {!isOpen && iconHovered ? (
+            <Menu size={15} />
+          ) : (
+            <Image src="/icon.png" alt="Stratum" width={20} height={20} className="rounded-[4px]" />
+          )}
         </button>
         {isOpen && (
           <button
