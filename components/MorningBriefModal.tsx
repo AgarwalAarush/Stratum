@@ -1,6 +1,8 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import useSWR from 'swr'
+import { X } from 'lucide-react'
 import { parseBulletWithCitations } from '@/lib/citations'
 import type { MorningBriefData } from '@/lib/types'
 
@@ -10,37 +12,92 @@ async function fetcher(url: string) {
   return res.json() as Promise<MorningBriefData>
 }
 
-export function MorningBriefFeed() {
-  const { data, isLoading } = useSWR('/api/morning-brief', fetcher, {
-    refreshInterval: 3_600_000,
+function getTodayDate() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+const STORAGE_KEY = 'stratum:morning-brief-seen'
+
+export function MorningBriefModal() {
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    const seen = localStorage.getItem(STORAGE_KEY)
+    if (seen !== getTodayDate()) {
+      setShow(true)
+    }
+  }, [])
+
+  const { data, isLoading } = useSWR(show ? '/api/morning-brief' : null, fetcher, {
     revalidateOnFocus: false,
   })
 
+  useEffect(() => {
+    if (!show) return
+    // Auto-close if data loaded but empty
+    if (!isLoading && data && data.sections.length === 0) {
+      setShow(false)
+      return
+    }
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') dismiss()
+    }
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [show, isLoading, data])
+
+  function dismiss() {
+    localStorage.setItem(STORAGE_KEY, getTodayDate())
+    setShow(false)
+  }
+
+  if (!show) return null
+
   const hasContent = data && data.sections.length > 0
+  const briefDate = data?.generatedAt
+    ? new Date(data.generatedAt).toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      })
+    : getTodayDate()
 
   return (
-    <div className="h-full overflow-y-auto">
-      <section className="flex flex-col">
-        {/* Header */}
-        <header className="w-full h-[var(--section-header-height)] shrink-0 flex items-center justify-between px-6 py-2 border-b border-black/10">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-black/70">
-              Morning Brief
-            </span>
-          </div>
-          {hasContent && (
-            <span className="font-mono text-[10px] text-black/25 tracking-[0.05em]">
-              {data.generatedAt
-                ? `Generated ${new Date(data.generatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
-                : ''}
-              {data.itemCount > 0 ? ` · ${data.itemCount} signals` : ''}
-            </span>
-          )}
-        </header>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-8">
+      <button
+        onClick={dismiss}
+        className="absolute inset-0 bg-black/35 cursor-default"
+        aria-label="Close morning brief"
+      />
 
-        <div className="px-6 py-4 max-w-3xl">
+      <div className="relative w-full max-w-[850px] h-[min(750px,90vh)] bg-[var(--bg)] border border-[var(--border)] rounded-[20px] shadow-xl overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-8 py-5 border-b border-[var(--border)] shrink-0">
+          <div>
+            <h2 className="text-[18px] font-bold text-[var(--text)]">Morning Brief</h2>
+            <p className="text-[12px] text-[var(--text-muted)] mt-0.5 font-mono">{briefDate}</p>
+          </div>
+          <button
+            onClick={dismiss}
+            className="w-9 h-9 rounded-[10px] flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
+            aria-label="Close morning brief modal"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto main-scroll px-8 py-6">
           {isLoading ? (
-            <div className="space-y-6">
+            <div className="space-y-6 max-w-3xl">
               <div className="h-5 rounded bg-black/8 animate-pulse w-3/4" />
               {Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="space-y-2">
@@ -55,12 +112,8 @@ export function MorningBriefFeed() {
                 </div>
               ))}
             </div>
-          ) : !hasContent ? (
-            <p className="font-mono text-[11px] text-black/40">
-              No morning brief available yet.
-            </p>
-          ) : (
-            <>
+          ) : hasContent ? (
+            <div className="max-w-3xl">
               {/* Stale indicator */}
               {data.stale && (
                 <div className="mb-4 px-3 py-1.5 rounded bg-black/5 dark:bg-white/5">
@@ -114,10 +167,10 @@ export function MorningBriefFeed() {
                   </ul>
                 </div>
               )}
-            </>
-          )}
+            </div>
+          ) : null}
         </div>
-      </section>
+      </div>
     </div>
   )
 }

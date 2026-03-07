@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { NavPanel } from './NavPanel'
 import { SettingsModal } from './SettingsModal'
+import { MorningBriefModal } from '@/components/MorningBriefModal'
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
     const [isNavOpen, setIsNavOpen] = useState(true)
@@ -23,6 +24,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
                 open={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
             />
+            <MorningBriefModal />
         </div>
     )
 }
