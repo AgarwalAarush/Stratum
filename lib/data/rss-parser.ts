@@ -4,6 +4,8 @@ export interface ParsedFeedItem {
   title: string
   link: string
   publishedAt: number
+  publisher?: string
+  publisherUrl?: string
 }
 
 export function hashString(input: string): string {
@@ -50,6 +52,19 @@ function parsePublishedAt(block: string, isAtom: boolean): number {
   return Number.isNaN(parsed) ? Date.now() : parsed
 }
 
+function extractSourceMeta(block: string): { publisher?: string; publisherUrl?: string } {
+  const sourceMatch = block.match(/<source\b([^>]*)>([\s\S]*?)<\/source>/i)
+  if (!sourceMatch) return {}
+
+  const publisher = decodeXmlEntities(sourceMatch[2].replace(/<[^>]+>/g, '').trim()) || undefined
+  const publisherUrlMatch = sourceMatch[1]?.match(/\burl=["']([^"']+)["']/i)
+
+  return {
+    publisher,
+    publisherUrl: publisherUrlMatch?.[1]?.trim() || undefined,
+  }
+}
+
 export function parseFeedXml(xml: string, feedName: string): ParsedFeedItem[] {
   const itemRegex = /<item[\s\S]*?>[\s\S]*?<\/item>/gi
   const entryRegex = /<entry[\s\S]*?>[\s\S]*?<\/entry>/gi
@@ -79,6 +94,7 @@ export function parseFeedXml(xml: string, feedName: string): ParsedFeedItem[] {
 
     const publishedAt = parsePublishedAt(block, isAtom)
     const idBase = link || title
+    const sourceMeta = extractSourceMeta(block)
 
     parsed.push({
       id: `news-${hashString(`${feedName}:${idBase}`)}`,
@@ -86,6 +102,8 @@ export function parseFeedXml(xml: string, feedName: string): ParsedFeedItem[] {
       title: title.replace(/\s+/g, ' ').trim(),
       link,
       publishedAt,
+      publisher: sourceMeta.publisher,
+      publisherUrl: sourceMeta.publisherUrl,
     })
   }
 

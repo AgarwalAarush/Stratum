@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import useSWR from 'swr'
 import { X } from 'lucide-react'
 import { parseBulletWithCitations } from '@/lib/citations'
@@ -18,25 +18,21 @@ function getTodayDate() {
 
 const STORAGE_KEY = 'stratum:morning-brief-seen'
 
-export function MorningBriefModal() {
-  const [show, setShow] = useState(false)
+interface MorningBriefModalProps {
+  open: boolean
+  onClose: () => void
+}
 
-  useEffect(() => {
-    const seen = localStorage.getItem(STORAGE_KEY)
-    if (seen !== getTodayDate()) {
-      setShow(true)
-    }
-  }, [])
-
-  const { data, isLoading } = useSWR(show ? '/api/morning-brief' : null, fetcher, {
+export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
+  const { data, isLoading } = useSWR(open ? '/api/morning-brief' : null, fetcher, {
     revalidateOnFocus: false,
   })
 
   useEffect(() => {
-    if (!show) return
+    if (!open) return
     // Auto-close if data loaded but empty
     if (!isLoading && data && data.sections.length === 0) {
-      setShow(false)
+      onClose()
       return
     }
 
@@ -52,14 +48,14 @@ export function MorningBriefModal() {
       document.body.style.overflow = previousOverflow
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [show, isLoading, data])
+  }, [open, isLoading, data])
 
   function dismiss() {
     localStorage.setItem(STORAGE_KEY, getTodayDate())
-    setShow(false)
+    onClose()
   }
 
-  if (!show) return null
+  if (!open) return null
 
   const hasContent = data && data.sections.length > 0
   const briefDate = data?.generatedAt

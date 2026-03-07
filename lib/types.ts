@@ -78,7 +78,11 @@ export interface NewsItem {
   type: 'news'
   id: string
   title: string
-  source: string
+  source: string            // display label shown in the UI
+  feedName?: string         // normalized feed label used during ingestion
+  publisher?: string        // underlying publisher when distinct from the feed label
+  canonicalSource?: string  // publisher or normalized host used for source-tier logic
+  topic?: string            // e.g. 'general', 'policy', 'venture-capital'
   category?: string          // e.g. 'Series B', 'M&A', 'Policy'
   publishedAt: string
   url: string
