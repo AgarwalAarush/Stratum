@@ -25,6 +25,19 @@ const DEFAULT_MAX_ITEMS = 20
 const gn = (query: string) =>
   `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`
 
+const SOURCE_HOST_ALIASES: Record<string, string> = {
+  'apnews.com': 'AP News',
+  'arstechnica.com': 'Ars Technica',
+  'bloomberg.com': 'Bloomberg',
+  'ft.com': 'Financial Times',
+  'reuters.com': 'Reuters',
+  'technologyreview.com': 'MIT Technology Review',
+  'theverge.com': 'The Verge',
+  'techcrunch.com': 'TechCrunch',
+  'wired.com': 'Wired',
+  'wsj.com': 'WSJ',
+}
+
 export const NEWS_TOPICS: NewsTopic[] = [
   'general',
   'cybersecurity',
@@ -131,12 +144,71 @@ export const NEWS_TOPIC_FEEDS: Record<NewsTopic, ServerFeed[]> = {
   ],
 }
 
+function getHostname(url: string): string | null {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase()
+    return hostname.startsWith('www.') ? hostname.slice(4) : hostname
+  } catch {
+    return null
+  }
+}
+
+function normalizeSourceName(value: string | undefined): string | undefined {
+  if (!value) return undefined
+
+  const normalized = value
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/^the\s+/i, 'The ')
+
+  if (!normalized) return undefined
+
+  const lower = normalized.toLowerCase()
+  if (lower.includes('associated press') || lower === 'ap' || lower.includes('ap news')) return 'AP News'
+  if (lower.includes('ars technica')) return 'Ars Technica'
+  if (lower.includes('bloomberg')) return 'Bloomberg'
+  if (lower.includes('financial times') || lower === 'ft') return 'Financial Times'
+  if (lower.includes('mit technology review') || lower.includes('technology review')) return 'MIT Technology Review'
+  if (lower.includes('reuters')) return 'Reuters'
+  if (lower.includes('techcrunch')) return 'TechCrunch'
+  if (lower.includes('the verge') || lower === 'verge') return 'The Verge'
+  if (lower.includes('wall street journal') || lower === 'wsj') return 'WSJ'
+  if (lower.includes('wired')) return 'Wired'
+
+  return normalized
+}
+
+function resolveCanonicalSource(item: ParsedFeedItem): string {
+  const normalizedPublisher = normalizeSourceName(item.publisher)
+  if (normalizedPublisher) return normalizedPublisher
+
+  const publisherHost = item.publisherUrl ? getHostname(item.publisherUrl) : null
+  if (publisherHost && SOURCE_HOST_ALIASES[publisherHost]) {
+    return SOURCE_HOST_ALIASES[publisherHost]
+  }
+
+  const linkHost = item.link ? getHostname(item.link) : null
+  if (linkHost && SOURCE_HOST_ALIASES[linkHost]) {
+    return SOURCE_HOST_ALIASES[linkHost]
+  }
+
+  if (linkHost && linkHost !== 'news.google.com') {
+    return linkHost
+  }
+
+  return normalizeSourceName(item.source) ?? item.source
+}
+
 function toNewsItem(item: ParsedFeedItem, topic: NewsTopic): NewsItem {
   return {
     type: 'news',
     id: item.id,
     title: item.title,
     source: item.source,
+    feedName: item.source,
+    publisher: normalizeSourceName(item.publisher),
+    canonicalSource: resolveCanonicalSource(item),
+    topic,
     category: TOPIC_LABELS[topic],
     publishedAt: new Date(item.publishedAt).toISOString(),
     url: item.link || '#',
@@ -186,7 +258,7 @@ async function fetchRssText(url: string, signal: AbortSignal): Promise<string | 
 
 async function fetchFeed(feed: ServerFeed, signal: AbortSignal): Promise<ParsedFeedItem[]> {
   const result = await cachedFetchWithFallback<ParsedFeedItem[]>({
-    key: `rss:feed:v2:${feed.url}`,
+    key: `rss:feed:v3:${feed.url}`,
     ttlSeconds: 600,
     staleMaxAgeMs: 6 * 60 * 60 * 1_000,
     fetcher: async () => {
