@@ -1,20 +1,20 @@
-# Stratum — Tech Intelligence Dashboard
+<p align="center">
+  <span style="display:inline-flex; align-items:center; gap:0.5em;">
+    <img src="app/icon.png" alt="Stratum icon" height="45" />
+    <strong style="font-size:3.5em; letter-spacing:-0.02em;">Stratum</strong>
+  </span>
+</p>
+<p align="center" style="font-size:1.4em; font-weight:500; margin-top:-0.5em; color:#333;">Tech Intelligence Dashboard</p>
 
 > A minimalist, real-time aggregation dashboard for technology, research, startups, and finance — signal over noise.
-
-<p align="center">
-  <img src="app/icon.png" alt="Stratum icon" width="80" />
-</p>
 
 <p align="center">
   <img src="app/overview.png" alt="Stratum dashboard overview" width="800" />
 </p>
 
----
-
 ## Overview
 
-A focused intelligence layer for staying on top of everything that matters in tech: new research papers, startup moves, market-moving deals, earnings events, and breaking releases — all in one fast, clean interface. Inspired by the panel model of [worldmonitor.app](https://github.com/koala73/worldmonitor), but purpose-built for the tech and finance ecosystem.
+A focused intelligence layer for staying on top of everything that matters in tech: new research papers, startup moves, market-moving deals, earnings events, and breaking releases — all in one fast, clean interface. Purpose-built for the tech and finance ecosystem.
 
 **Design philosophy:** Minimalist. Black and white. Dense but never cluttered. Inline where possible. Information-first.
 
@@ -176,7 +176,6 @@ store/
 
 ## Inspiration
 
-- [worldmonitor.app](https://worldmonitor.app) — panel architecture and feed aggregation patterns
 - [tldr.tech](https://tldr.tech) — curated tech newsletter model
 - [Exploding Topics](https://explodingtopics.com) — trend detection UI
 
