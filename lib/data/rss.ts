@@ -255,7 +255,8 @@ function resolveCanonicalSource(item: ParsedFeedItem): string {
     return SOURCE_HOST_ALIASES[publisherHost]
   }
 
-  const linkHost = item.link ? getHostname(item.link) : null
+  const effectiveLink = item.resolvedLink || item.link
+  const linkHost = effectiveLink ? getHostname(effectiveLink) : null
   if (linkHost && SOURCE_HOST_ALIASES[linkHost]) {
     return SOURCE_HOST_ALIASES[linkHost]
   }
@@ -279,7 +280,7 @@ function toNewsItem(item: ParsedFeedItem, topic: NewsTopic): NewsItem {
     topic,
     category: TOPIC_LABELS[topic],
     publishedAt: new Date(item.publishedAt).toISOString(),
-    url: item.link || '#',
+    url: item.resolvedLink || item.link || '#',
   }
 }
 
@@ -297,6 +298,27 @@ function dedupeItems(items: ParsedFeedItem[]): ParsedFeedItem[] {
   }
 
   return unique
+}
+
+const RESOLVE_TIMEOUT_MS = 12_000
+const RESOLVE_BATCH_SIZE = 5
+
+async function resolveGoogleNewsUrls(items: ParsedFeedItem[]): Promise<void> {
+  const googleItems = items.filter(i => i.link?.includes('news.google.com'))
+  if (googleItems.length === 0) return
+
+  const deadline = AbortSignal.timeout(RESOLVE_TIMEOUT_MS)
+
+  for (let i = 0; i < googleItems.length; i += RESOLVE_BATCH_SIZE) {
+    if (deadline.aborted) break
+    const batch = googleItems.slice(i, i + RESOLVE_BATCH_SIZE)
+    await Promise.allSettled(
+      batch.map(async (item) => {
+        const resolved = await cachedDecodeGoogleNewsUrl(item.link)
+        if (resolved) item.resolvedLink = resolved
+      })
+    )
+  }
 }
 
 async function fetchRssText(url: string, signal: AbortSignal): Promise<string | null> {
@@ -338,16 +360,7 @@ async function fetchFeed(feed: ServerFeed, signal: AbortSignal): Promise<ParsedF
     },
   })
 
-  const items = result.data ?? []
-
-  // Pre-warm Google News URL resolution cache (fire-and-forget)
-  for (const item of items) {
-    if (item.link?.includes('news.google.com')) {
-      cachedDecodeGoogleNewsUrl(item.link).catch(() => {})
-    }
-  }
-
-  return items
+  return result.data ?? []
 }
 
 export function isNewsTopic(value: string): value is NewsTopic {
@@ -385,7 +398,9 @@ export async function fetchNewsItemsByTopic(
     const deduped = dedupeItems(allItems)
     deduped.sort((a, b) => b.publishedAt - a.publishedAt)
 
-    return deduped.slice(0, limit).map((item) => toNewsItem(item, topic))
+    const final = deduped.slice(0, limit)
+    await resolveGoogleNewsUrls(final)
+    return final.map((item) => toNewsItem(item, topic))
   } finally {
     clearTimeout(deadlineTimeout)
   }

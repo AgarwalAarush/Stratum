@@ -12,7 +12,7 @@ async function fetcher(url: string) {
   return res.json() as Promise<MorningBriefData>
 }
 
-const STORAGE_KEY = 'stratum:morning-brief-seen'
+export const MORNING_BRIEF_SEEN_KEY = 'stratum:morning-brief-seen'
 
 interface MorningBriefModalProps {
   open: boolean
@@ -41,7 +41,7 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
   }, [open, isLoading, data])
 
   function dismiss() {
-    localStorage.setItem(STORAGE_KEY, new Date().toISOString())
+    localStorage.setItem(MORNING_BRIEF_SEEN_KEY, new Date().toISOString())
     onClose()
   }
 
@@ -54,7 +54,7 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
         month: 'long',
         day: 'numeric',
       })
-    : getTodayDate()
+    : new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-8">

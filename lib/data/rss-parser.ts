@@ -6,6 +6,7 @@ export interface ParsedFeedItem {
   publishedAt: number
   publisher?: string
   publisherUrl?: string
+  resolvedLink?: string
 }
 
 export function hashString(input: string): string {

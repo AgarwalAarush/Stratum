@@ -4,14 +4,13 @@
 import { useEffect, useState } from 'react'
 import { NavPanel } from './NavPanel'
 import { SettingsModal } from './SettingsModal'
-import { MorningBriefModal } from '@/components/MorningBriefModal'
-
-const BRIEF_SEEN_KEY = 'stratum:morning-brief-seen'
+import { MorningBriefModal, MORNING_BRIEF_SEEN_KEY } from '@/components/MorningBriefModal'
 
 // Brief is generated daily at 12:00 UTC. Returns that timestamp for today.
 function getTodayGenerationTime() {
-    const today = new Date().toISOString().slice(0, 10)
-    return new Date(`${today}T12:00:00.000Z`)
+    const t = new Date()
+    t.setUTCHours(12, 0, 0, 0)
+    return t
 }
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
@@ -26,7 +25,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
     }, [])
 
     useEffect(() => {
-        const seen = localStorage.getItem(BRIEF_SEEN_KEY)
+        const seen = localStorage.getItem(MORNING_BRIEF_SEEN_KEY)
         const generationTime = getTodayGenerationTime()
         const now = new Date()
         // Only auto-show if the brief has been generated (past 12 UTC) and not yet seen since then
