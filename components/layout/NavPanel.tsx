@@ -4,7 +4,14 @@ import Link from 'next/link'
 import { useParams, usePathname } from 'next/navigation'
 import { SCOPES } from '@/lib/scopes'
 import { ThemeToggle } from './ThemeToggle'
-import { Layers, Menu, Settings } from 'lucide-react'
+import Image from 'next/image'
+import { Menu, Settings } from 'lucide-react'
+
+const NAV_ABBR: Record<string, string> = {
+  'morning-brief': 'MB',
+  'ai-research': 'AI',
+  'finance': 'FI',
+}
 
 interface NavPanelProps {
   isOpen: boolean
@@ -31,30 +38,42 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings }: NavPanelProps) {
       }}
     >
       <div className="h-[var(--top-header-height)] border-b border-[var(--border)] shrink-0 flex items-center px-3">
-        <button
-          onClick={toggle}
-          className="w-7 h-7 flex items-center justify-center rounded-[6px] text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors cursor-pointer shrink-0"
-          aria-label={isOpen ? 'Collapse navigation' : 'Expand navigation'}
-        >
-          <Menu size={15} />
-        </button>
-        <div
-          className="min-w-0 ml-2 flex items-center gap-2"
-          style={{
-            opacity: isOpen ? 1 : 0,
-            transform: isOpen ? 'translateX(0)' : 'translateX(-8px)',
-            pointerEvents: isOpen ? 'auto' : 'none',
-            transitionProperty: 'opacity, transform',
-            transitionDuration: 'var(--sidebar-motion-duration)',
-            transitionTimingFunction: 'var(--sidebar-motion-easing)',
-          }}
-          aria-hidden={!isOpen}
-        >
-          <Layers size={14} strokeWidth={1.5} className="shrink-0" />
-          <span className="text-[13px] font-semibold text-[var(--text)] tracking-[0.12em] uppercase font-mono whitespace-nowrap">
-            Stratum
-          </span>
-        </div>
+        {isOpen ? (
+          <>
+            <button
+              onClick={toggle}
+              className="w-7 h-7 flex items-center justify-center rounded-[6px] text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors cursor-pointer shrink-0"
+              aria-label="Collapse navigation"
+            >
+              <Menu size={15} />
+            </button>
+            <div
+              className="min-w-0 ml-2 flex items-center gap-2"
+              style={{
+                opacity: isOpen ? 1 : 0,
+                transform: isOpen ? 'translateX(0)' : 'translateX(-8px)',
+                pointerEvents: isOpen ? 'auto' : 'none',
+                transitionProperty: 'opacity, transform',
+                transitionDuration: 'var(--sidebar-motion-duration)',
+                transitionTimingFunction: 'var(--sidebar-motion-easing)',
+              }}
+              aria-hidden={!isOpen}
+            >
+              <Image src="/icon.jpg" alt="" width={20} height={20} className="shrink-0 rounded-[4px]" />
+              <span className="text-[13px] font-semibold text-[var(--text)] tracking-[0.12em] uppercase font-mono whitespace-nowrap">
+                Stratum
+              </span>
+            </div>
+          </>
+        ) : (
+          <button
+            onClick={toggle}
+            className="w-full flex items-center justify-center cursor-pointer"
+            aria-label="Expand navigation"
+          >
+            <Image src="/icon.jpg" alt="Stratum" width={20} height={20} className="rounded-[4px]" />
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-3">
@@ -70,21 +89,26 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings }: NavPanelProps) {
               : 'font-normal text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
           ].join(' ')}
         >
-          <span className="w-[5px] h-[5px] rounded-full bg-current opacity-50 shrink-0" />
-          <span
-            className="whitespace-nowrap"
-            style={{
-              opacity: isOpen ? 1 : 0,
-              transform: isOpen ? 'translateX(0)' : 'translateX(-6px)',
-              pointerEvents: isOpen ? 'auto' : 'none',
-              transitionProperty: 'opacity, transform',
-              transitionDuration: 'var(--sidebar-motion-duration)',
-              transitionTimingFunction: 'var(--sidebar-motion-easing)',
-            }}
-            aria-hidden={!isOpen}
-          >
-            Morning Brief
-          </span>
+          {isOpen ? (
+            <>
+              <span className="w-[5px] h-[5px] rounded-full bg-current opacity-50 shrink-0" />
+              <span
+                className="whitespace-nowrap"
+                style={{
+                  opacity: isOpen ? 1 : 0,
+                  transform: isOpen ? 'translateX(0)' : 'translateX(-6px)',
+                  pointerEvents: isOpen ? 'auto' : 'none',
+                  transitionProperty: 'opacity, transform',
+                  transitionDuration: 'var(--sidebar-motion-duration)',
+                  transitionTimingFunction: 'var(--sidebar-motion-easing)',
+                }}
+              >
+                Morning Brief
+              </span>
+            </>
+          ) : (
+            <span className="text-[10px] font-mono font-medium">{NAV_ABBR['morning-brief']}</span>
+          )}
         </Link>
         <p
           className="px-2 pb-2 text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-mono whitespace-nowrap"
@@ -117,21 +141,26 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings }: NavPanelProps) {
                       : 'font-normal text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
                   ].join(' ')}
                 >
-                  <span className="w-[5px] h-[5px] rounded-full bg-current opacity-50 shrink-0" />
-                  <span
-                    className="whitespace-nowrap"
-                    style={{
-                      opacity: isOpen ? 1 : 0,
-                      transform: isOpen ? 'translateX(0)' : 'translateX(-6px)',
-                      pointerEvents: isOpen ? 'auto' : 'none',
-                      transitionProperty: 'opacity, transform',
-                      transitionDuration: 'var(--sidebar-motion-duration)',
-                      transitionTimingFunction: 'var(--sidebar-motion-easing)',
-                    }}
-                    aria-hidden={!isOpen}
-                  >
-                    {scope.label}
-                  </span>
+                  {isOpen ? (
+                    <>
+                      <span className="w-[5px] h-[5px] rounded-full bg-current opacity-50 shrink-0" />
+                      <span
+                        className="whitespace-nowrap"
+                        style={{
+                          opacity: isOpen ? 1 : 0,
+                          transform: isOpen ? 'translateX(0)' : 'translateX(-6px)',
+                          pointerEvents: isOpen ? 'auto' : 'none',
+                          transitionProperty: 'opacity, transform',
+                          transitionDuration: 'var(--sidebar-motion-duration)',
+                          transitionTimingFunction: 'var(--sidebar-motion-easing)',
+                        }}
+                      >
+                        {scope.label}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-[10px] font-mono font-medium">{NAV_ABBR[scope.id] ?? scope.id.slice(0, 2).toUpperCase()}</span>
+                  )}
                 </Link>
               </li>
             )

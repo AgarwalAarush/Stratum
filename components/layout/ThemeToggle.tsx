@@ -2,6 +2,7 @@
 'use client'
 import { useEffect } from 'react'
 import { useThemeStore } from '@/store/theme'
+import { Sun, Moon } from 'lucide-react'
 
 interface ThemeToggleProps {
   compact?: boolean
@@ -30,9 +31,7 @@ export function ThemeToggle({ compact = false }: ThemeToggleProps) {
       aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
       title={compact ? (theme === 'dark' ? 'Light mode' : 'Dark mode') : undefined}
     >
-      <span className={compact ? 'text-[15px] leading-none' : 'text-[13px] leading-none'}>
-        {theme === 'dark' ? '☀' : '🌙'}
-      </span>
+      {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
       {!compact && <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
     </button>
   )
