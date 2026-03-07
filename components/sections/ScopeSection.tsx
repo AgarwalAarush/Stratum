@@ -88,16 +88,31 @@ function getRow(item: FeedItem): DisplayRow {
         change,
       }
     }
-    case 'news':
+    case 'news': {
+      const publisher = item.canonicalSource || item.publisher || item.source
+      let title = item.title
+      // Strip redundant trailing " - Publisher" from title
+      if ((item.canonicalSource || item.publisher) && title.includes(' - ')) {
+        const suffix = title.lastIndexOf(' - ')
+        const trailing = title.slice(suffix + 3).trim()
+        if (trailing.length < 40) {
+          title = title.slice(0, suffix)
+        }
+      }
+      // Only show category when it adds info beyond the feed/topic name
+      const metaParts = [
+        item.category && item.category !== item.source && item.category !== item.feedName ? item.category : undefined,
+      ].filter(Boolean)
       return {
         id: item.id,
-        title: item.title,
-        source: item.source,
+        title,
+        source: publisher,
         time: formatRelativeTime(item.publishedAt),
-        meta: item.category,
+        meta: metaParts.length > 0 ? metaParts.join(' · ') : undefined,
         url: item.url,
         tag: getTag(item),
       }
+    }
   }
 }
 
@@ -152,19 +167,17 @@ function SectionItemRow({
       </span>
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-start gap-2 flex-wrap">
-          <span className="text-[13px] text-[var(--text)] leading-[1.4] whitespace-normal break-words group-hover:underline decoration-dotted underline-offset-2">
-            {row.title}
-          </span>
+        <span className="text-[13px] text-[var(--text)] leading-[1.4] whitespace-normal break-words group-hover:underline decoration-dotted underline-offset-2">
+          {row.title}
           {tag && (
             <span
-              className="font-mono text-[9px] font-semibold tracking-[0.1em] px-1 py-0.5 rounded-[2px] shrink-0 self-center"
+              className="font-mono text-[9px] font-semibold tracking-[0.1em] px-1 py-0.5 rounded-[2px] ml-1.5 inline-block align-middle translate-y-[-0.5px]"
               style={{ color: tag.color, backgroundColor: tag.bg }}
             >
               {tag.label}
             </span>
           )}
-        </div>
+        </span>
         <div className="flex items-center gap-2.5 mt-0.5 flex-wrap">
           <span className="font-mono text-[11px] text-black/55 tracking-[0.02em]">
             {row.source}
