@@ -68,7 +68,7 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
         aria-label="Close morning brief"
       />
 
-      <div className="relative w-full max-w-[850px] h-[min(750px,90vh)] bg-[var(--bg)] border border-[var(--border)] rounded-[20px] shadow-xl overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-[850px] h-[min(750px,90vh)] bg-[var(--bg)] border border-[var(--border)] shadow-xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-8 py-5 border-b border-[var(--border)] shrink-0">
           <div>
