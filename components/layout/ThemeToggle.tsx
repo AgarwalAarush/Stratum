@@ -5,10 +5,10 @@ import { useThemeStore } from '@/store/theme'
 import { Sun, Moon } from 'lucide-react'
 
 interface ThemeToggleProps {
-  compact?: boolean
+  isOpen?: boolean
 }
 
-export function ThemeToggle({ compact = false }: ThemeToggleProps) {
+export function ThemeToggle({ isOpen = true }: ThemeToggleProps) {
   const { theme, toggle, setTheme } = useThemeStore()
 
   // Sync with localStorage on mount (handles SSR/hydration mismatch)
@@ -22,17 +22,30 @@ export function ThemeToggle({ compact = false }: ThemeToggleProps) {
   return (
     <button
       onClick={toggle}
-      className={[
-        'transition-colors cursor-pointer',
-        compact
-          ? 'w-10 h-10 rounded-[8px] flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]'
-          : 'flex items-center gap-2 w-full px-2 py-2 rounded-[3px] text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] text-[10px] font-medium font-mono uppercase tracking-[0.08em]',
-      ].join(' ')}
+      className="flex items-center w-full h-8 rounded-[3px] text-[var(--text-dim)] hover:text-[var(--text)] transition-colors cursor-pointer"
       aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-      title={compact ? (theme === 'dark' ? 'Light mode' : 'Dark mode') : undefined}
+      title={!isOpen ? (theme === 'dark' ? 'Light mode' : 'Dark mode') : undefined}
     >
-      {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-      {!compact && <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
+      <span
+        className="shrink-0 flex items-center justify-center"
+        style={{ width: 'var(--sidebar-collapsed-width)' }}
+      >
+        {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+      </span>
+      <span
+        className="text-[10px] font-medium font-mono uppercase tracking-[0.08em] whitespace-nowrap"
+        style={{
+          opacity: isOpen ? 1 : 0,
+          transform: isOpen ? 'translateX(0)' : 'translateX(-6px)',
+          pointerEvents: isOpen ? 'auto' : 'none',
+          transitionProperty: 'opacity, transform',
+          transitionDuration: 'var(--sidebar-motion-duration)',
+          transitionTimingFunction: 'var(--sidebar-motion-easing)',
+        }}
+        aria-hidden={!isOpen}
+      >
+        {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+      </span>
     </button>
   )
 }

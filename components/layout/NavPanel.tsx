@@ -157,20 +157,21 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings }: NavPanelProps) {
         </ul>
       </nav>
 
-      <div className="shrink-0 px-3 py-3 border-t border-[var(--border-subtle)] space-y-1.5">
+      <div className="shrink-0 py-3 border-t border-[var(--border-subtle)] space-y-1.5">
         <button
           onClick={onOpenSettings}
-          className={[
-            'flex items-center rounded-[3px] text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer',
-            isOpen
-              ? 'gap-2 w-full px-2 py-2 text-[10px] font-medium font-mono uppercase tracking-[0.08em] justify-start'
-              : 'w-10 h-10 justify-center mx-auto',
-          ].join(' ')}
+          className="flex items-center w-full h-8 rounded-[3px] text-[var(--text-dim)] hover:text-[var(--text)] transition-colors cursor-pointer"
           aria-label="Open settings"
           title={!isOpen ? 'Settings' : undefined}
         >
-          <Settings size={12} />
           <span
+            className="shrink-0 flex items-center justify-center"
+            style={{ width: 'var(--sidebar-collapsed-width)' }}
+          >
+            <Settings size={12} />
+          </span>
+          <span
+            className="text-[10px] font-medium font-mono uppercase tracking-[0.08em] whitespace-nowrap"
             style={{
               opacity: isOpen ? 1 : 0,
               transform: isOpen ? 'translateX(0)' : 'translateX(-6px)',
@@ -184,7 +185,7 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings }: NavPanelProps) {
             Settings
           </span>
         </button>
-        <ThemeToggle compact={!isOpen} />
+        <ThemeToggle isOpen={isOpen} />
       </div>
     </aside>
   )
