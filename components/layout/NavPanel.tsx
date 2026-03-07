@@ -7,6 +7,7 @@ import { ThemeToggle } from './ThemeToggle'
 import Image from 'next/image'
 import { Menu, Settings } from 'lucide-react'
 import { useState } from 'react'
+import { useThemeStore } from '@/store/theme'
 
 const NAV_ABBR: Record<string, string> = {
   'morning-brief': 'MB',
@@ -24,6 +25,7 @@ interface NavPanelProps {
 export function NavPanel({ isOpen, setIsOpen, onOpenSettings, onOpenBrief }: NavPanelProps) {
   const params = useParams()
   const activeScope = params?.scope as string | undefined
+  const { theme } = useThemeStore()
 
   const toggle = () => setIsOpen(!isOpen)
   const [iconHovered, setIconHovered] = useState(false)
@@ -50,7 +52,7 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings, onOpenBrief }: Nav
           {!isOpen && iconHovered ? (
             <Menu size={15} />
           ) : (
-            <Image src="/icon.png" alt="Stratum" width={20} height={20} className="rounded-[4px]" />
+            <Image src={theme === 'dark' ? '/icon-dark.jpg' : '/icon.png'} alt="Stratum" width={20} height={20} className="rounded-[4px]" />
           )}
         </button>
         {isOpen && (

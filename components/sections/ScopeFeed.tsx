@@ -162,16 +162,16 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col bg-[var(--bg)]">
-      <header className="h-[var(--top-header-height)] flex items-center justify-between px-6 border-b border-black/10 shrink-0 gap-4">
+      <header className="h-[var(--top-header-height)] flex items-center justify-between px-6 border-b border-border shrink-0 gap-4">
         <div className="min-w-0">
           <h1 className="text-[15px] font-semibold text-[var(--text)] leading-[1.3]">
             {scope.label}
           </h1>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0 border-l border-black/10 pl-3">
-          <RefreshCw size={11} className="text-black/35" />
-          <span className="font-mono text-[11px] text-black/35 whitespace-nowrap">
+        <div className="flex items-center gap-1.5 shrink-0 border-l border-border pl-3">
+          <RefreshCw size={11} className="text-text-muted" />
+          <span className="font-mono text-[11px] text-text-muted whitespace-nowrap">
             {lastUpdatedLabel}
           </span>
         </div>
@@ -191,7 +191,7 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
               isLoading={weeklyLoading || monthlyLoading}
             />
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 ai-research-grid xl:divide-x xl:divide-black/10">
+            <div className="grid grid-cols-1 xl:grid-cols-3 ai-research-grid xl:divide-x xl:divide-border">
               <div className="xl:col-span-2 xl:row-start-1">
                 {renderSection('ai-news-general')}
               </div>
@@ -205,12 +205,12 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
 
             {renderSection('papers')}
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-black/10">
+            <div className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-border">
               {renderSection('venture-capital')}
               {renderSection('startups')}
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 xl:divide-x xl:divide-black/10">
+            <div className="grid grid-cols-1 xl:grid-cols-3 xl:divide-x xl:divide-border">
               {renderSection('infra-hardware')}
               {renderSection('cybersecurity')}
               {renderSection('new-technology')}
@@ -225,7 +225,7 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
               .map((section) => renderSection(section.id))}
 
             {isFinanceScope && sectionById['research-reports'] && sectionById.macro && (
-              <div className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-black/10">
+              <div className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-border">
                 {renderSection('research-reports')}
                 {renderSection('macro')}
               </div>
@@ -233,7 +233,7 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
           </>
         )}
         <div className="px-6 py-8">
-          <p className="font-mono text-[11px] text-black/20 text-center">
+          <p className="font-mono text-[11px] text-text-muted text-center">
             — END OF FEED —
           </p>
         </div>

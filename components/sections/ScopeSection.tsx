@@ -155,9 +155,9 @@ function SectionItemRow({
       target="_blank"
       rel="noopener noreferrer"
       data-summary-url={row.url}
-      className={`group flex items-start gap-3 px-6 py-2.5 border-b border-black/5 hover:bg-black/[0.025] transition-colors ${className}`}
+      className={`group flex items-start gap-3 px-6 py-2.5 border-b border-border-subtle hover:bg-surface transition-colors ${className}`}
     >
-      <span className="shrink-0 mt-0.5 w-4 text-right font-mono text-[10px] text-black/25">
+      <span className="shrink-0 mt-0.5 w-4 text-right font-mono text-[10px] text-text-muted">
         {rank}
       </span>
 
@@ -174,17 +174,17 @@ function SectionItemRow({
           )}
         </span>
         <div className="flex items-center gap-2.5 mt-0.5 flex-wrap">
-          <span className="font-mono text-[11px] text-black/55 tracking-[0.02em]">
+          <span className="font-mono text-[11px] text-text-dim tracking-[0.02em]">
             {row.source}
           </span>
-          <span className="font-mono text-[10px] text-black/25">·</span>
-          <span className="font-mono text-[11px] text-black/40">
+          <span className="font-mono text-[10px] text-text-muted">·</span>
+          <span className="font-mono text-[11px] text-text-muted">
             {row.time}
           </span>
           {row.meta && (
             <>
-              <span className="font-mono text-[10px] text-black/25">·</span>
-              <span className="font-mono text-[11px] text-black/50 tracking-[0.02em]">
+              <span className="font-mono text-[10px] text-text-muted">·</span>
+              <span className="font-mono text-[11px] text-text-dim tracking-[0.02em]">
                 {row.meta}
               </span>
             </>
@@ -258,13 +258,13 @@ export function ScopeSection({
       : ''
 
   return (
-    <section className="border-b border-black/10 flex flex-col">
-      <header className="w-full h-[var(--section-header-height)] shrink-0 flex items-center justify-between px-6 py-2 border-b border-black/10">
+    <section className="border-b border-border flex flex-col">
+      <header className="w-full h-[var(--section-header-height)] shrink-0 flex items-center justify-between px-6 py-2 border-b border-border">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-black/70">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-text-dim">
             {label}
           </span>
-          <span className="font-mono text-[10px] text-black/30 tracking-[0.05em]">
+          <span className="font-mono text-[10px] text-text-muted tracking-[0.05em]">
             {rows.length}
           </span>
         </div>
@@ -272,7 +272,7 @@ export function ScopeSection({
 
       <div className={viewportClassName} {...containerProps}>
         {rows.length === 0 && (
-          <p className="px-6 py-4 font-mono text-[11px] text-black/40">
+          <p className="px-6 py-4 font-mono text-[11px] text-text-muted">
             No items available.
           </p>
         )}
