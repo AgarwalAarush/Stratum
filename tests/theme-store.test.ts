@@ -52,9 +52,9 @@ function mockZustandStore() {
   return store
 }
 
-test('theme store structure and types', () => {
+test('theme store structure and types', async () => {
   // Test that the store can be imported
-  const storeModule = require('../store/theme.ts')
+  const storeModule = await import('../store/theme.ts')
   assert.ok(storeModule, 'Theme store module should be importable')
 })
 

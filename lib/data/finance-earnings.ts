@@ -1,4 +1,4 @@
-import type { EarningsItem } from '../types'
+import type { EarningsItem } from '../types.ts'
 import { hashString, type ParsedFeedItem } from './rss-parser.ts'
 import {
   FINANCE_FORWARD_DAYS,

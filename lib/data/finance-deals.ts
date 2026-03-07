@@ -1,4 +1,4 @@
-import type { NewsItem } from '../types'
+import type { NewsItem } from '../types.ts'
 import {
   FINANCE_LOOKBACK_DAYS,
   collectFinanceFeedItems,

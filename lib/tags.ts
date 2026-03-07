@@ -1,4 +1,4 @@
-import type { FeedItem, ItemTag } from '@/lib/types'
+import type { FeedItem, ItemTag } from './types.ts'
 
 // ─── Thresholds ───
 

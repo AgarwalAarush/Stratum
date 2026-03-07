@@ -1,4 +1,4 @@
-import type { ArticleScraper } from './types'
+import type { ArticleScraper } from './types.ts'
 import { parseHTML } from 'linkedom'
 
 const STRIP_TAGS = new Set(['nav', 'footer', 'aside', 'script', 'style', 'noscript', 'header', 'form', 'svg'])

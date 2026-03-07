@@ -1,8 +1,8 @@
-import type { PeriodicOverviewData } from '../../../../lib/types'
-import { fetchLatestOverview } from '../../../../lib/data/overview-persistence'
-import { generateWeeklyOverview, generateMonthlyOverview } from '../../../../lib/data/overview-generators'
-import { cachedFetchWithFallback } from '../../../../lib/server/cache'
-import { sectionJsonResponse } from '../../../../lib/server/http-cache'
+import type { PeriodicOverviewData } from '../../../../lib/types.ts'
+import { fetchLatestOverview } from '../../../../lib/data/overview-persistence.ts'
+import { generateWeeklyOverview, generateMonthlyOverview } from '../../../../lib/data/overview-generators.ts'
+import { cachedFetchWithFallback } from '../../../../lib/server/cache.ts'
+import { sectionJsonResponse } from '../../../../lib/server/http-cache.ts'
 
 const TTL: Record<string, number> = {
   weekly: 6 * 60 * 60,   // 6 hours

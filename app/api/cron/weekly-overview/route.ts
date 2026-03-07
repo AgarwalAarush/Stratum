@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { generateWeeklyOverview } from '../../../../lib/data/overview-generators'
+import { generateWeeklyOverview } from '../../../../lib/data/overview-generators.ts'
 
 export const dynamic = 'force-dynamic'
 

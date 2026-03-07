@@ -1,4 +1,4 @@
-import type { ArticleScraper } from './types'
+import type { ArticleScraper } from './types.ts'
 import { parseHTML } from 'linkedom'
 
 export const arxivScraper: ArticleScraper = {

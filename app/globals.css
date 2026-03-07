@@ -177,6 +177,15 @@ body.theme-ready *::after {
   display: none;
 }
 
+/* ─── Pulse animation for critical map markers ─── */
+@keyframes pulse-marker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.animate-pulse-marker {
+  animation: pulse-marker 2s ease-in-out infinite;
+}
+
 /* ─── AI research top grid row heights (xl+) ─── */
 @media (min-width: 1280px) {
   .ai-research-grid {

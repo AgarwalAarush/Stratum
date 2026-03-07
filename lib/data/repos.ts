@@ -1,4 +1,4 @@
-import type { RepoItem } from '../types'
+import type { RepoItem } from '../types.ts'
 
 const GITHUB_SEARCH_URL = 'https://api.github.com/search/repositories'
 const SEARCH_TIMEOUT_MS = 10_000

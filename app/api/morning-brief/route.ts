@@ -1,8 +1,8 @@
-import type { MorningBriefData } from '../../../lib/types'
-import { generateMorningBrief } from '../../../lib/data/morning-brief'
-import { fetchLatestMorningBrief } from '../../../lib/data/overview-persistence'
-import { cachedFetchWithFallback } from '../../../lib/server/cache'
-import { sectionJsonResponse } from '../../../lib/server/http-cache'
+import type { MorningBriefData } from '../../../lib/types.ts'
+import { generateMorningBrief } from '../../../lib/data/morning-brief.ts'
+import { fetchLatestMorningBrief } from '../../../lib/data/overview-persistence.ts'
+import { cachedFetchWithFallback } from '../../../lib/server/cache.ts'
+import { sectionJsonResponse } from '../../../lib/server/http-cache.ts'
 
 export const CACHE_TTL_SECONDS = 21_600
 

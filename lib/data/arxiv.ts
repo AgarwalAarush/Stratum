@@ -1,5 +1,5 @@
 // lib/data/arxiv.ts
-import type { PaperItem } from '../types'
+import type { PaperItem } from '../types.ts'
 
 function extractTagContent(xml: string, tag: string): string {
   const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`))

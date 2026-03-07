@@ -1,8 +1,8 @@
-import type { ArticleScraper, ScrapedArticle } from './types'
-import { arxivScraper } from './arxiv'
-import { githubScraper } from './github'
-import { genericScraper } from './generic'
-import { cachedFetchWithFallback } from '@/lib/server/cache'
+import type { ArticleScraper, ScrapedArticle } from './types.ts'
+import { arxivScraper } from './arxiv.ts'
+import { githubScraper } from './github.ts'
+import { genericScraper } from './generic.ts'
+import { cachedFetchWithFallback } from '../../server/cache.ts'
 
 const scrapers: ArticleScraper[] = [arxivScraper, githubScraper]
 

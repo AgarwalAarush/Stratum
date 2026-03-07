@@ -1,4 +1,4 @@
-import type { ArticleScraper } from './types'
+import type { ArticleScraper } from './types.ts'
 
 export const githubScraper: ArticleScraper = {
   domains: ['github.com'],

@@ -1,9 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { OverviewData } from '../types'
-import { fetchNewsItemsByTopic } from './rss'
-import { fetchArxivPapers } from './arxiv'
-import { fetchTrendingRepos } from './repos'
-import { fetchDiscussions } from './discussions'
+import type { OverviewData } from '../types.ts'
+import { fetchNewsItemsByTopic } from './rss.ts'
+import { fetchArxivPapers } from './arxiv.ts'
+import { fetchTrendingRepos } from './repos.ts'
+import { fetchDiscussions } from './discussions.ts'
 
 interface SourceItem {
   title: string

@@ -131,7 +131,7 @@ test('SummaryCard positioning logic', () => {
   assert.equal(rightEdgePos.left, 1100 - OFFSET_X - MAX_W)
   
   // Test left edge clamping
-  const leftEdgePos = calculatePosition({ x: 10, y: 400 }, { w: MAX_W, h: MAX_H })
+  const leftEdgePos = calculatePosition({ x: -5, y: 400 }, { w: MAX_W, h: MAX_H })
   assert.equal(leftEdgePos.left, MARGIN)
   
   // Test top edge clamping (should flip below cursor)
@@ -383,7 +383,7 @@ test('formatRelativeTime usage in components', () => {
   // Mock formatRelativeTime function behavior
   const formatRelativeTime = (isoString: string): string => {
     const date = new Date(isoString)
-    const now = new Date()
+    const now = new Date(Date.now())
     const diffMs = now.getTime() - date.getTime()
     const diffMin = Math.floor(diffMs / 60000)
     

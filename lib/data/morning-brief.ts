@@ -1,18 +1,18 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { MorningBriefData } from '../types'
-import { fetchNewsItemsByTopic } from './rss'
-import { fetchArxivPapers } from './arxiv'
-import { fetchTrendingRepos } from './repos'
-import { fetchDiscussions } from './discussions'
-import { fetchFinanceEarnings } from './finance-earnings'
-import { fetchFinanceDeals } from './finance-deals'
-import { fetchFinanceReports } from './finance-reports'
-import { fetchMacroIndicators } from './finance-macro'
+import type { MorningBriefData } from '../types.ts'
+import { fetchNewsItemsByTopic } from './rss.ts'
+import { fetchArxivPapers } from './arxiv.ts'
+import { fetchTrendingRepos } from './repos.ts'
+import { fetchDiscussions } from './discussions.ts'
+import { fetchFinanceEarnings } from './finance-earnings.ts'
+import { fetchFinanceDeals } from './finance-deals.ts'
+import { fetchFinanceReports } from './finance-reports.ts'
+import { fetchMacroIndicators } from './finance-macro.ts'
 import {
   fetchRecentFeedItems,
   fetchYesterdaysBrief,
   type FeedItemRow,
-} from './overview-persistence'
+} from './overview-persistence.ts'
 
 interface SourceItem {
   title: string

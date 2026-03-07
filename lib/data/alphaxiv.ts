@@ -1,5 +1,5 @@
 // lib/data/alphaxiv.ts
-import type { PaperItem } from '../types'
+import type { PaperItem } from '../types.ts'
 
 interface AlphaxivPaper {
   universal_paper_id: string

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { generateMorningBrief } from '../../../../lib/data/morning-brief'
-import { saveMorningBrief } from '../../../../lib/data/overview-persistence'
+import { generateMorningBrief } from '../../../../lib/data/morning-brief.ts'
+import { saveMorningBrief } from '../../../../lib/data/overview-persistence.ts'
 
 export const dynamic = 'force-dynamic'
 

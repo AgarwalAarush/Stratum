@@ -1,4 +1,4 @@
-import type { NewsItem } from '../types'
+import type { NewsItem } from '../types.ts'
 import { cachedFetchWithFallback } from '../server/cache.ts'
 import { hashString, parseFeedXml, type ParsedFeedItem } from './rss-parser.ts'
 

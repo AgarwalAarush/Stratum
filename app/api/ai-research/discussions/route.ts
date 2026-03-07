@@ -1,8 +1,8 @@
-import type { SectionData } from '@/lib/types'
-import { fetchDiscussions } from '@/lib/data/discussions'
-import { cachedFetchWithFallback } from '@/lib/server/cache'
-import { sectionJsonResponse } from '@/lib/server/http-cache'
-import { persistIfFresh } from '@/lib/server/persist-after-fetch'
+import type { SectionData } from '../../../lib/types.ts'
+import { fetchDiscussions } from '../../../lib/data/discussions.ts'
+import { cachedFetchWithFallback } from '../../../lib/server/cache.ts'
+import { sectionJsonResponse } from '../../../lib/server/http-cache.ts'
+import { persistIfFresh } from '../../../lib/server/persist-after-fetch.ts'
 
 const CACHE_KEY = 'stratum:ai-research:discussions:v1'
 export const CACHE_TTL_SECONDS = 3_600

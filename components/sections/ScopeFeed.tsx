@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import useSWR from 'swr'
+import dynamic from 'next/dynamic'
 import { RefreshCw } from 'lucide-react'
 import type { OverviewData, PeriodicOverviewData, ScopeDef, SectionData } from '@/lib/types'
 import { formatRelativeTime } from '@/lib/utils'
@@ -9,6 +10,14 @@ import { useSettingsStore } from '@/store/settings'
 import { ScopeSection } from './ScopeSection'
 import { AIOverview } from './AIOverview'
 import { PeriodicOverview } from './PeriodicOverview'
+
+const GlobalNewsMap = dynamic(
+  () => import('./GlobalNewsMap').then((m) => ({ default: m.GlobalNewsMap })),
+  {
+    loading: () => <div className="h-[260px] border-b border-border" />,
+    ssr: false,
+  },
+)
 
 interface ScopeFeedProps {
   scope: ScopeDef
@@ -221,6 +230,7 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
           </>
         ) : (
           <>
+            {isGlobalNewsScope && <GlobalNewsMap />}
             {scope.sections
               .filter((section) =>
                 (!isFinanceScope || !FINANCE_SPLIT_IDS.has(section.id)) &&

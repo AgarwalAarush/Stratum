@@ -1,10 +1,10 @@
 // app/api/ai-research/papers/route.ts
-import type { SectionData } from '@/lib/types'
-import { fetchAlphaxivPapers } from '@/lib/data/alphaxiv'
-import { fetchArxivPapers } from '@/lib/data/arxiv'
-import { cachedFetchWithFallback } from '@/lib/server/cache'
-import { sectionJsonResponse } from '@/lib/server/http-cache'
-import { persistIfFresh } from '@/lib/server/persist-after-fetch'
+import type { SectionData } from '../../../lib/types.ts'
+import { fetchAlphaxivPapers } from '../../../lib/data/alphaxiv.ts'
+import { fetchArxivPapers } from '../../../lib/data/arxiv.ts'
+import { cachedFetchWithFallback } from '../../../lib/server/cache.ts'
+import { sectionJsonResponse } from '../../../lib/server/http-cache.ts'
+import { persistIfFresh } from '../../../lib/server/persist-after-fetch.ts'
 
 const CACHE_KEY = 'stratum:ai-research:papers:v3'
 export const CACHE_TTL_SECONDS = 86_400

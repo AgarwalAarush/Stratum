@@ -1,4 +1,4 @@
-import type { DiscussionItem } from '../types'
+import type { DiscussionItem } from '../types.ts'
 
 const HN_TOP_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/topstories.json'
 const HN_ITEM_URL = 'https://hacker-news.firebaseio.com/v0/item'

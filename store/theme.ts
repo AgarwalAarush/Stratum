@@ -1,7 +1,7 @@
 // store/theme.ts
 'use client'
 import { create } from 'zustand'
-import type { Theme } from '@/lib/types'
+import type { Theme } from '../lib/types.ts'
 
 interface ThemeStore {
   theme: Theme

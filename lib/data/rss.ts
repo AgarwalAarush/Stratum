@@ -1,7 +1,7 @@
-import type { NewsItem } from '../types'
+import type { NewsItem } from '../types.ts'
 import { cachedFetchWithFallback } from '../server/cache.ts'
 import { parseFeedXml, type ParsedFeedItem } from './rss-parser.ts'
-import { cachedDecodeGoogleNewsUrl } from './scrapers/registry'
+import { cachedDecodeGoogleNewsUrl } from './scrapers/registry.ts'
 
 export interface ServerFeed {
   name: string

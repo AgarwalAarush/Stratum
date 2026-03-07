@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
 import Anthropic from '@anthropic-ai/sdk'
-import { getSupabaseClient } from '@/lib/server/supabase'
-import { scrapeArticle } from '@/lib/data/scrapers/registry'
+import { getSupabaseClient } from '../../../lib/server/supabase.ts'
+import { scrapeArticle } from '../../../lib/data/scrapers/registry.ts'
 
 const inflight = new Map<string, Promise<string | null>>()
 
