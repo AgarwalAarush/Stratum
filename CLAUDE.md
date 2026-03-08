@@ -39,6 +39,10 @@ Each file fetches from a specific external source: `arxiv.ts` (arXiv API XML), `
 
 Used by the summary feature (`/api/summary`) to extract article text for Claude-generated summaries. Registry (`registry.ts`) resolves Google News redirect URLs and dispatches to domain-specific scrapers (`arxiv.ts`, `github.ts`) or the `generic.ts` fallback. The generic scraper uses linkedom for HTML parsing and extracts text from semantic containers (`<article>`, `<main>`) with a largest-block fallback.
 
+### Google News proxy (`services/gnews-proxy/`)
+
+A standalone Node.js HTTP server (zero dependencies) deployed on Render that transparently forwards requests to `news.google.com`. Needed because Vercel's shared IPs get rate-limited/blocked by Google News, breaking `decodeGoogleNewsUrl()`. The proxy runs on a non-Vercel IP, sidestepping the blocks. Auth via `x-proxy-key` header; `/health` endpoint for Render health checks. Configured via `GNEWS_PROXY_URL` and `GNEWS_PROXY_KEY` env vars — falls back to direct fetch when unset.
+
 ### Item types
 
 Five item types defined in `lib/types.ts`: `paper`, `discussion`, `repo`, `earnings`, `news`. Each has a corresponding component in `components/items/` and a typed interface. All API responses conform to `SectionData { items: FeedItem[], fetchedAt: string }`.

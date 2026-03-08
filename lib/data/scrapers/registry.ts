@@ -16,6 +16,20 @@ for (const scraper of scrapers) {
 const GOOGLE_NEWS_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
+const GNEWS_PROXY_URL = process.env.GNEWS_PROXY_URL
+const GNEWS_PROXY_KEY = process.env.GNEWS_PROXY_KEY
+
+function gnewsFetch(url: string, init: RequestInit): Promise<Response> {
+  if (GNEWS_PROXY_URL && GNEWS_PROXY_KEY) {
+    const proxied = url.replace('https://news.google.com', GNEWS_PROXY_URL)
+    return fetch(proxied, {
+      ...init,
+      headers: { ...(init.headers as Record<string, string>), 'x-proxy-key': GNEWS_PROXY_KEY },
+    })
+  }
+  return fetch(url, init)
+}
+
 // Semaphore to limit concurrent Google News resolution requests
 class Semaphore {
   private queue: (() => void)[] = []
@@ -49,7 +63,7 @@ async function decodeGoogleNewsUrl(url: string): Promise<string | null> {
     const articleId = match[1]
 
     // Step 1: Fetch the Google News article page to get timestamp + signature
-    const pageRes = await fetch(`https://news.google.com/articles/${articleId}`, {
+    const pageRes = await gnewsFetch(`https://news.google.com/articles/${articleId}`, {
       signal: AbortSignal.timeout(10_000),
       headers: { 'User-Agent': GOOGLE_NEWS_UA },
     })
@@ -97,7 +111,7 @@ async function decodeGoogleNewsUrl(url: string): Promise<string | null> {
     ]
 
     const body = `f.req=${encodeURIComponent(JSON.stringify(payload))}`
-    const rpcRes = await fetch('https://news.google.com/_/DotsSplashUi/data/batchexecute', {
+    const rpcRes = await gnewsFetch('https://news.google.com/_/DotsSplashUi/data/batchexecute', {
       method: 'POST',
       signal: AbortSignal.timeout(10_000),
       headers: {
