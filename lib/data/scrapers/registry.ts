@@ -38,7 +38,7 @@ class Semaphore {
   }
 }
 
-const gnewsSemaphore = new Semaphore(2)
+const gnewsSemaphore = new Semaphore(4)
 
 async function decodeGoogleNewsUrl(url: string): Promise<string | null> {
   await gnewsSemaphore.acquire()
@@ -139,7 +139,7 @@ export async function cachedDecodeGoogleNewsUrl(url: string): Promise<string | n
   const result = await cachedFetchWithFallback<string>({
     key: `stratum:gnews:url:v1:${articleId}`,
     ttlSeconds: 86400,
-    negativeTtlSeconds: 300,
+    negativeTtlSeconds: 3600,
     fetcher: () => decodeGoogleNewsUrl(url),
   })
 
