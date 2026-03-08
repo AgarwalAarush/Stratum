@@ -288,7 +288,7 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
                 }
                 return renderSection(
                   section.id,
-                  section.id === 'geopolitics' ? { columns: 2 } : {}
+                  (section.id === 'geopolitics' || section.id === 'us-news') ? { columns: 2 } : {}
                 )
               })}
 
