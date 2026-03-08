@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 
 interface AIOverviewProps {
+  title?: string
   bullets: string[]
   isLoading: boolean
 }
@@ -44,13 +45,13 @@ function parseBulletWithCitations(bullet: string): ReactNode {
   return <>{parts}</>
 }
 
-export function AIOverview({ bullets, isLoading }: AIOverviewProps) {
+export function AIOverview({ title = 'AI Overview', bullets, isLoading }: AIOverviewProps) {
   return (
     <section className="border-b border-border flex flex-col">
       <header className="w-full h-[var(--section-header-height)] shrink-0 flex items-center justify-between px-6 py-2 border-b border-border">
         <div className="flex items-center gap-2">
           <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-text-dim">
-            AI Overview
+            {title}
           </span>
           {!isLoading && (
             <span className="font-mono text-[10px] text-text-muted tracking-[0.05em]">

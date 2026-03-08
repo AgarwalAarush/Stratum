@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import {
   fetchDailyOverviews,
+  fetchGlobalNewsDailyOverviews,
   fetchWeeklyOverviews,
   fetchLatestOverview,
   saveOverview,
@@ -39,8 +40,11 @@ export async function generateWeeklyOverview(): Promise<{
   const startDate = prevMonday.toISOString().slice(0, 10)
   const endDate = prevSunday.toISOString().slice(0, 10)
 
-  const dailies = await fetchDailyOverviews(startDate, endDate)
-  if (dailies.length === 0) {
+  const [dailies, globalNewsDailies] = await Promise.all([
+    fetchDailyOverviews(startDate, endDate),
+    fetchGlobalNewsDailyOverviews(startDate, endDate),
+  ])
+  if (dailies.length === 0 && globalNewsDailies.length === 0) {
     return { success: false, error: 'No daily overviews found for the period' }
   }
 
@@ -48,14 +52,19 @@ export async function generateWeeklyOverview(): Promise<{
     .map((d) => `[${d.date}]\n${d.bullets.map((b) => `- ${b}`).join('\n')}`)
     .join('\n\n')
 
-  const prompt = `You are an analytical intelligence briefing writer for a tech intelligence dashboard called Stratum. Below are the daily AI overview bullet points from the past week (${startDate} to ${endDate}).
+  const globalNewsDailySummary = globalNewsDailies
+    .map((d) => `[${d.date}]\n${d.bullets.map((b) => `- ${b}`).join('\n')}`)
+    .join('\n\n')
 
-Daily Overviews:
-${dailySummary}
+  const prompt = `You are an analytical intelligence briefing writer for a tech intelligence dashboard called Stratum. Below are the daily AI and global news overview bullet points from the past week (${startDate} to ${endDate}).
+
+${dailies.length > 0 ? `AI & Tech Daily Overviews:\n${dailySummary}` : ''}
+
+${globalNewsDailies.length > 0 ? `Global News Daily Overviews:\n${globalNewsDailySummary}` : ''}
 
 Write a weekly intelligence briefing that:
-- Identifies 3-5 significant themes or trends from the week
-- Draws connections between seemingly unrelated events across domains
+- Identifies 3-5 significant themes or trends from the week across both AI/tech and global affairs
+- Draws connections between seemingly unrelated events across domains (tech, geopolitics, policy, markets)
 - Notes emerging patterns that aren't obvious from individual daily summaries
 - Highlights what to watch in the coming week
 - Uses a mix of analytical paragraphs and bullet points
@@ -90,17 +99,22 @@ export async function generateMonthlyOverview(): Promise<{
   thirtyDaysAgo.setUTCDate(now.getUTCDate() - 30)
   const startDate = thirtyDaysAgo.toISOString().slice(0, 10)
 
-  const [dailies, weeklies, previousMonthly] = await Promise.all([
+  const [dailies, globalNewsDailies, weeklies, previousMonthly] = await Promise.all([
     fetchDailyOverviews(startDate, today),
+    fetchGlobalNewsDailyOverviews(startDate, today),
     fetchWeeklyOverviews(startDate, today),
     fetchLatestOverview('monthly'),
   ])
 
-  if (dailies.length === 0 && weeklies.length === 0) {
+  if (dailies.length === 0 && globalNewsDailies.length === 0 && weeklies.length === 0) {
     return { success: false, error: 'No overviews found for the period' }
   }
 
   const dailySummary = dailies
+    .map((d) => `[${d.date}]\n${d.bullets.map((b) => `- ${b}`).join('\n')}`)
+    .join('\n\n')
+
+  const globalNewsDailySummary = globalNewsDailies
     .map((d) => `[${d.date}]\n${d.bullets.map((b) => `- ${b}`).join('\n')}`)
     .join('\n\n')
 
@@ -112,16 +126,17 @@ export async function generateMonthlyOverview(): Promise<{
     ? `\n\nPrevious Biweekly Briefing (${previousMonthly.date}):\n${previousMonthly.content}`
     : ''
 
-  const prompt = `You are a strategic intelligence analyst for a tech intelligence dashboard called Stratum. Below are the daily and weekly overviews from the past 30 days, plus the previous biweekly briefing if available.
+  const prompt = `You are a strategic intelligence analyst for a tech intelligence dashboard called Stratum. Below are the daily AI and global news overviews, weekly briefings from the past 30 days, plus the previous biweekly briefing if available.
 
-Daily Overviews (${startDate} to ${today}):
-${dailySummary}
+${dailies.length > 0 ? `AI & Tech Daily Overviews (${startDate} to ${today}):\n${dailySummary}` : ''}
+
+${globalNewsDailies.length > 0 ? `Global News Daily Overviews (${startDate} to ${today}):\n${globalNewsDailySummary}` : ''}
 
 ${weeklies.length > 0 ? `Weekly Briefings:\n${weeklySummary}` : ''}${previousSection}
 
 Write a biweekly strategic intelligence briefing that:
 - Compares the current trajectory against the previous briefing — what accelerated, stalled, or reversed?
-- Identifies cross-domain connections (policy + VC + open source momentum, etc.)
+- Identifies cross-domain connections (tech + geopolitics, policy + VC, climate + supply chains, etc.)
 - Highlights emerging themes gaining signal but not yet mainstream attention
 - Provides 2-3 forward-looking observations for the next 2-4 weeks
 - Uses a mix of analytical paragraphs and bullet points

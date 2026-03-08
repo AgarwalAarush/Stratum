@@ -117,6 +117,22 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
     },
   )
 
+  const { data: globalNewsOverviewData, isLoading: globalNewsOverviewLoading } = useSWR<OverviewData>(
+    isGlobalNewsScope ? `overview:global-news:dev=${devMode}` : null,
+    async () => {
+      const response = await fetch(`/api/global-news/overview${forceParam}`, {
+        headers: { Accept: 'application/json' },
+      })
+      if (!response.ok) return { bullets: [], fetchedAt: new Date().toISOString() }
+      return (await response.json()) as OverviewData
+    },
+    {
+      refreshInterval: SCOPE_REFRESH_INTERVAL_MS,
+      revalidateOnFocus: false,
+      dedupingInterval: devMode ? 0 : 60_000,
+    },
+  )
+
   const fetchPeriodicOverview = async (type: string) => {
     const response = await fetch(`/api/overviews/${type}${forceParam}`, {
       headers: { Accept: 'application/json' },
@@ -126,14 +142,16 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
     return data.content ? data : null
   }
 
+  const needsPeriodicOverviews = isAiResearchScope || isGlobalNewsScope
+
   const { data: weeklyData, isLoading: weeklyLoading } = useSWR<PeriodicOverviewData | null>(
-    isAiResearchScope ? `overview:weekly:dev=${devMode}` : null,
+    needsPeriodicOverviews ? `overview:weekly:dev=${devMode}` : null,
     () => fetchPeriodicOverview('weekly'),
     { refreshInterval: SCOPE_REFRESH_INTERVAL_MS, revalidateOnFocus: false, dedupingInterval: devMode ? 0 : 120_000 },
   )
 
   const { data: monthlyData, isLoading: monthlyLoading } = useSWR<PeriodicOverviewData | null>(
-    isAiResearchScope ? `overview:monthly:dev=${devMode}` : null,
+    needsPeriodicOverviews ? `overview:monthly:dev=${devMode}` : null,
     () => fetchPeriodicOverview('monthly'),
     { refreshInterval: SCOPE_REFRESH_INTERVAL_MS, revalidateOnFocus: false, dedupingInterval: devMode ? 0 : 120_000 },
   )
@@ -230,6 +248,20 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
           </>
         ) : (
           <>
+            {isGlobalNewsScope && (
+              <>
+                <AIOverview
+                  title="Global News Overview"
+                  bullets={globalNewsOverviewData?.bullets ?? []}
+                  isLoading={globalNewsOverviewLoading}
+                />
+                <PeriodicOverview
+                  weekly={weeklyData ?? null}
+                  monthly={monthlyData ?? null}
+                  isLoading={weeklyLoading || monthlyLoading}
+                />
+              </>
+            )}
             {isGlobalNewsScope && <GlobalNewsMap />}
             {scope.sections
               .filter((section) =>

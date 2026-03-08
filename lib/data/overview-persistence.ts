@@ -25,6 +25,43 @@ export async function saveDailyOverview(bullets: string[]): Promise<void> {
     )
 }
 
+export async function saveGlobalNewsDailyOverview(bullets: string[]): Promise<void> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return
+
+  const today = new Date().toISOString().slice(0, 10)
+
+  await supabase
+    .from('overviews')
+    .upsert(
+      { type: 'daily:global-news', content: JSON.stringify(bullets), date: today },
+      { onConflict: 'type,date' },
+    )
+}
+
+export async function fetchGlobalNewsDailyOverviews(
+  startDate: string,
+  endDate: string,
+): Promise<Array<{ date: string; bullets: string[] }>> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('overviews')
+    .select('date, content')
+    .eq('type', 'daily:global-news')
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .order('date', { ascending: true })
+
+  if (error || !data) return []
+
+  return (data as OverviewRow[]).map((row) => ({
+    date: row.date,
+    bullets: JSON.parse(row.content) as string[],
+  }))
+}
+
 export async function fetchDailyOverviews(
   startDate: string,
   endDate: string,
