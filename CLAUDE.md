@@ -41,7 +41,7 @@ Used by the summary feature (`/api/summary`) to extract article text for Claude-
 
 ### Google News proxy (`services/gnews-proxy/`)
 
-A standalone Node.js HTTP server (zero dependencies) deployed on Render that transparently forwards requests to `news.google.com`. Needed because Vercel's shared IPs get rate-limited/blocked by Google News, breaking `decodeGoogleNewsUrl()`. The proxy runs on a non-Vercel IP, sidestepping the blocks. Auth via `x-proxy-key` header; `/health` endpoint for Render health checks. Configured via `GNEWS_PROXY_URL` and `GNEWS_PROXY_KEY` env vars — falls back to direct fetch when unset.
+A Cloudflare Worker that transparently forwards requests to `news.google.com`. Needed because Vercel's shared IPs get rate-limited/blocked by Google News, breaking `decodeGoogleNewsUrl()`. Edge IPs rarely get blocked, no cold starts, and the free tier (100k req/day) is sufficient. Auth via `x-proxy-key` header; `/health` endpoint without auth. Deploy with `wrangler deploy`; set `PROXY_API_KEY` via `wrangler secret put`. Configured via `GNEWS_PROXY_URL` and `GNEWS_PROXY_KEY` env vars — falls back to direct fetch when unset.
 
 ### Item types
 

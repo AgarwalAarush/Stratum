@@ -1,11 +1,12 @@
 {
   "name": "@stratum/gnews-proxy",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
-    "start": "node server.js"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
   },
-  "engines": {
-    "node": ">=18"
+  "devDependencies": {
+    "wrangler": "^4"
   }
 }
