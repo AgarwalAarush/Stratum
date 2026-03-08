@@ -3,6 +3,7 @@ import { arxivScraper } from './arxiv.ts'
 import { githubScraper } from './github.ts'
 import { genericScraper } from './generic.ts'
 import { cachedFetchWithFallback } from '../../server/cache.ts'
+import { getSupabaseClient } from '../../server/supabase.ts'
 
 const scrapers: ArticleScraper[] = [arxivScraper, githubScraper]
 
@@ -54,13 +55,16 @@ class Semaphore {
 
 const gnewsSemaphore = new Semaphore(4)
 
+export function extractGoogleNewsArticleId(url: string): string | null {
+  const match = url.match(/\/(?:articles|read)\/(CB[A-Za-z0-9_-]+)/)
+  return match?.[1] ?? null
+}
+
 async function decodeGoogleNewsUrl(url: string): Promise<string | null> {
   await gnewsSemaphore.acquire()
   try {
-    // Extract article ID from path (after /articles/ or /read/)
-    const match = url.match(/\/(?:articles|read)\/(CB[A-Za-z0-9_-]+)/)
-    if (!match) return null
-    const articleId = match[1]
+    const articleId = extractGoogleNewsArticleId(url)
+    if (!articleId) return null
 
     // Step 1: Fetch the Google News article page to get timestamp + signature
     const pageRes = await gnewsFetch(`https://news.google.com/articles/${articleId}`, {
@@ -145,16 +149,54 @@ async function decodeGoogleNewsUrl(url: string): Promise<string | null> {
   }
 }
 
-export async function cachedDecodeGoogleNewsUrl(url: string): Promise<string | null> {
-  const match = url.match(/\/(?:articles|read)\/(CB[A-Za-z0-9_-]+)/)
-  if (!match) return null
+async function lookupResolvedUrl(articleId: string): Promise<string | null> {
+  try {
+    const supabase = getSupabaseClient()
+    if (!supabase) return null
 
-  const articleId = match[1]
+    const { data } = await supabase
+      .from('gnews_resolved_urls')
+      .select('resolved_url')
+      .eq('article_id', articleId)
+      .single()
+
+    return data?.resolved_url ?? null
+  } catch {
+    return null
+  }
+}
+
+export async function persistResolvedUrl(articleId: string, url: string): Promise<void> {
+  try {
+    const supabase = getSupabaseClient()
+    if (!supabase) return
+
+    await supabase
+      .from('gnews_resolved_urls')
+      .upsert({ article_id: articleId, resolved_url: url, resolved_at: new Date().toISOString() })
+  } catch {
+    // fire-and-forget
+  }
+}
+
+export async function cachedDecodeGoogleNewsUrl(url: string): Promise<string | null> {
+  const articleId = extractGoogleNewsArticleId(url)
+  if (!articleId) return null
   const result = await cachedFetchWithFallback<string>({
     key: `stratum:gnews:url:v1:${articleId}`,
     ttlSeconds: 86400,
     negativeTtlSeconds: 3600,
-    fetcher: () => decodeGoogleNewsUrl(url),
+    fetcher: async () => {
+      // Check Supabase before hitting Google
+      const persisted = await lookupResolvedUrl(articleId)
+      if (persisted) return persisted
+
+      const decoded = await decodeGoogleNewsUrl(url)
+      if (decoded) {
+        void persistResolvedUrl(articleId, decoded)
+      }
+      return decoded
+    },
   })
 
   return result.data ?? null

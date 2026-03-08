@@ -310,8 +310,8 @@ function dedupeItems(items: ParsedFeedItem[]): ParsedFeedItem[] {
   return unique
 }
 
-const RESOLVE_TIMEOUT_MS = 18_000
-const RESOLVE_BATCH_SIZE = 8
+const RESOLVE_TIMEOUT_MS = 10_000
+const RESOLVE_BATCH_SIZE = 4
 
 async function resolveGoogleNewsUrls(items: ParsedFeedItem[]): Promise<void> {
   const googleItems = items.filter(i => i.link?.includes('news.google.com'))

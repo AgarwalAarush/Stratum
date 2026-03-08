@@ -37,7 +37,7 @@ Each file fetches from a specific external source: `arxiv.ts` (arXiv API XML), `
 
 ### Article scrapers (`lib/data/scrapers/`)
 
-Used by the summary feature (`/api/summary`) to extract article text for Claude-generated summaries. Registry (`registry.ts`) resolves Google News redirect URLs and dispatches to domain-specific scrapers (`arxiv.ts`, `github.ts`) or the `generic.ts` fallback. The generic scraper uses linkedom for HTML parsing and extracts text from semantic containers (`<article>`, `<main>`) with a largest-block fallback.
+Used by the summary feature (`/api/summary`) to extract article text for Claude-generated summaries. Registry (`registry.ts`) resolves Google News redirect URLs and dispatches to domain-specific scrapers (`arxiv.ts`, `github.ts`) or the `generic.ts` fallback. The generic scraper uses linkedom for HTML parsing and extracts text from semantic containers (`<article>`, `<main>`) with a largest-block fallback. Resolved Google News URLs are persisted to Supabase (`gnews_resolved_urls` table) for long-term storage beyond the Redis 24h TTL — the resolution flow checks memory → Redis → Supabase → Google.
 
 ### Google News proxy (`services/gnews-proxy/`)
 
@@ -49,11 +49,12 @@ Five item types defined in `lib/types.ts`: `paper`, `discussion`, `repo`, `earni
 
 ### Scheduled jobs (QStash cron)
 
-Three cron jobs trigger POST requests to `/api/cron/*` routes, verified via `@upstash/qstash` signature verification (`verifySignatureAppRouter`). Schedules are configured in the QStash dashboard (not in repo):
+Four cron jobs trigger POST requests to `/api/cron/*` routes, verified via `@upstash/qstash` signature verification (`verifySignatureAppRouter`). Schedules are configured in the QStash dashboard (not in repo):
 
 - `/api/cron/morning-brief` — daily at 12 PM UTC. Calls `generateMorningBrief()` (fetches 14 sources in parallel, synthesizes with Claude Sonnet), saves to Supabase.
 - `/api/cron/weekly-overview` — Mondays at 1 PM UTC. Fetches the week's daily overviews, synthesizes with Claude Sonnet into a 400-600 word briefing.
 - `/api/cron/monthly-overview` — 1st and 15th at 2 PM UTC. Fetches 30 days of dailies + weeklies + previous monthly, synthesizes 600-900 word strategic briefing.
+- `/api/cron/resolve-gnews` — every 30 minutes. Resolves pending Google News redirect URLs in small batches (max 20/run) to avoid rate limits. Persists to `gnews_resolved_urls` table.
 
 All persisted via `overview-persistence.ts` to Supabase `overviews` table (upsert on type+date). Public read routes: `/api/morning-brief`, `/api/overviews/weekly`, `/api/overviews/monthly`.
 
