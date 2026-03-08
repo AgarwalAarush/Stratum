@@ -234,7 +234,8 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
             {scope.sections
               .filter((section) =>
                 (!isFinanceScope || !FINANCE_SPLIT_IDS.has(section.id)) &&
-                !(isGlobalNewsScope && section.id === 'global-supply-chains')
+                !(isGlobalNewsScope && section.id === 'global-supply-chains') &&
+                !(isGlobalNewsScope && section.id === 'global-health')
               )
               .map((section) => {
                 if (isGlobalNewsScope && section.id === 'european-union' && sectionById['global-supply-chains']) {
@@ -242,6 +243,14 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
                     <div key="eu-supply-pair" className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-border">
                       {renderSection('european-union')}
                       {renderSection('global-supply-chains')}
+                    </div>
+                  )
+                }
+                if (isGlobalNewsScope && section.id === 'global-summits' && sectionById['global-health']) {
+                  return (
+                    <div key="summits-health-pair" className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-border">
+                      {renderSection('global-summits')}
+                      {renderSection('global-health')}
                     </div>
                   )
                 }

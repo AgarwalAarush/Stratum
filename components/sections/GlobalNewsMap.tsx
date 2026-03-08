@@ -71,7 +71,7 @@ const WORLD_LEGEND: { label: string; radius: number; opacity: number; isWaterway
   { label: 'high', radius: 3.5, opacity: 0.8 },
   { label: 'critical', radius: 4.5, opacity: 1.0 },
   { label: 'waterway', radius: 2, opacity: 0.6, isWaterway: true },
-  { label: 'conflict zone', radius: 0, opacity: 0.08, isZone: true },
+  { label: 'conflict zone', radius: 0, opacity: 0.1, isZone: true },
 ]
 
 const US_LEGEND: { label: string; render: () => React.ReactNode }[] = [
@@ -156,9 +156,9 @@ export function GlobalNewsMap() {
         {view === 'world' ? (
           <ComposableMap
             projection="geoNaturalEarth1"
-            projectionConfig={{ scale: 120, center: [10, 10] }}
+            projectionConfig={{ scale: 170, center: [10, 10] }}
             width={800}
-            height={340}
+            height={440}
             style={{ width: '100%', height: 'auto' }}
           >
             {/* Country polygons */}
@@ -189,8 +189,8 @@ export function GlobalNewsMap() {
                   <Geography
                     key={geo.rsmKey}
                     geography={geo}
-                    fill="var(--accent)"
-                    fillOpacity={0.08}
+                    fill="var(--red, #ef4444)"
+                    fillOpacity={0.1}
                     stroke="none"
                     style={{
                       default: { outline: 'none' },
@@ -416,7 +416,7 @@ function WorldLegend() {
         <div key={item.label} className="flex items-center gap-1.5">
           {item.isZone ? (
             <svg width={10} height={8}>
-              <rect x={0} y={0} width={10} height={8} fill="var(--accent)" opacity={0.08} rx={1} />
+              <rect x={0} y={0} width={10} height={8} fill="var(--red, #ef4444)" opacity={0.1} rx={1} />
             </svg>
           ) : (
             <svg width={item.radius * 2 + 2} height={item.radius * 2 + 2}>
