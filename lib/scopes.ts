@@ -125,6 +125,13 @@ export const SCOPES: ScopeDef[] = [
     label: 'Global News',
     sections: [
       {
+        id: 'us-news',
+        label: 'US News',
+        sources: ['AP News', 'WSJ', 'Google News'],
+        itemType: 'news',
+        apiPath: '/api/global-news/news/us-news',
+      },
+      {
         id: 'geopolitics',
         label: 'Geopolitics & Conflicts',
         sources: ['Reuters', 'AP News', 'Al Jazeera', 'Foreign Affairs', 'CSIS'],

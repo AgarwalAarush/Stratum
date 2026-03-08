@@ -77,6 +77,18 @@ All persisted via `overview-persistence.ts` to Supabase `overviews` table (upser
 
 Copy `.env.example` to `.env.local`. Redis (`UPSTASH_REDIS_REST_URL`/`TOKEN`) is the only required variable. Supabase (`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`) is needed for overview persistence. QStash signing keys (`QSTASH_CURRENT_SIGNING_KEY`/`QSTASH_NEXT_SIGNING_KEY`) are needed for cron job verification. All others (FMP, FRED, SEC, GitHub, Anthropic) are optional and gracefully degrade.
 
+## Agent workflow
+
+- **Commit incrementally**: Commit after completing each logical chunk of work, not just at the end. Always commit when done with a task.
+- **Co-commit format**: All commits must include both authors using the trailer:
+  ```
+  Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+  ```
+- **Simplify before finishing**: Run `/simplify` on all changed code before considering a task complete.
+- **Keep CLAUDE.md current**: When adding new features, routes, patterns, or architectural decisions, update this file to reflect them. If a section becomes outdated, fix it.
+- **Document mistakes**: If you make an error (wrong assumption, bad pattern, incorrect API usage, etc.) that another Claude instance should not repeat, add a note under a `## Known pitfalls` section at the bottom of this file.
+- **Prune regularly**: Periodically review this file and remove stale, redundant, or irrelevant content to keep it concise and useful.
+
 ## Key conventions
 
 - Path alias: `@/*` maps to project root

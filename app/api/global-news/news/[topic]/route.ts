@@ -5,6 +5,7 @@ import { sectionJsonResponse, type CacheTier } from '../../../../../lib/server/h
 import { persistIfFresh } from '../../../../../lib/server/persist-after-fetch.ts'
 
 type GlobalNewsTopic =
+  | 'us-news'
   | 'geopolitics'
   | 'european-union'
   | 'climate-environment'
@@ -13,6 +14,7 @@ type GlobalNewsTopic =
   | 'global-health'
 
 const GLOBAL_NEWS_TOPICS: GlobalNewsTopic[] = [
+  'us-news',
   'geopolitics',
   'european-union',
   'climate-environment',
@@ -26,6 +28,7 @@ function isGlobalNewsTopic(value: string): value is GlobalNewsTopic {
 }
 
 export const CACHE_TTL_SECONDS: Record<GlobalNewsTopic, number> = {
+  'us-news': 3_600,
   geopolitics: 3_600,
   'european-union': 3_600,
   'climate-environment': 3_600,
@@ -35,6 +38,7 @@ export const CACHE_TTL_SECONDS: Record<GlobalNewsTopic, number> = {
 }
 
 const CACHE_TIER_BY_TOPIC: Record<GlobalNewsTopic, CacheTier> = {
+  'us-news': 'fast',
   geopolitics: 'fast',
   'european-union': 'medium',
   'climate-environment': 'medium',

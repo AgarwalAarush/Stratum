@@ -17,6 +17,7 @@ export type NewsTopic =
   | 'startups'
   | 'infra-hardware'
   | 'tech-events'
+  | 'us-news'
   | 'geopolitics'
   | 'european-union'
   | 'climate-environment'
@@ -59,6 +60,7 @@ export const NEWS_TOPICS: NewsTopic[] = [
   'startups',
   'infra-hardware',
   'tech-events',
+  'us-news',
   'geopolitics',
   'european-union',
   'climate-environment',
@@ -76,6 +78,7 @@ const TOPIC_LABELS: Record<NewsTopic, string> = {
   startups: 'Startups',
   'infra-hardware': 'Infra & Hardware',
   'tech-events': 'Tech Events',
+  'us-news': 'US News',
   geopolitics: 'Geopolitics & Conflicts',
   'european-union': 'European Union',
   'climate-environment': 'Climate & Environment',
@@ -85,6 +88,13 @@ const TOPIC_LABELS: Record<NewsTopic, string> = {
 }
 
 export const NEWS_TOPIC_FEEDS: Record<NewsTopic, ServerFeed[]> = {
+  'us-news': [
+    { name: 'AP News', url: gn('site:apnews.com when:1d') },
+    { name: 'WSJ', url: gn('site:wsj.com when:1d') },
+    { name: 'US Top News', url: gn('(US news OR America OR Washington) when:1d') },
+    { name: 'US Politics', url: gn('(Congress OR Senate OR "White House" OR Biden OR Trump) when:1d') },
+    { name: 'US Economy', url: gn('(US economy OR "Federal Reserve" OR inflation OR jobs) when:3d') },
+  ],
   general: [
     { name: 'AI News', url: gn('(OpenAI OR Anthropic OR "Google AI" OR Gemini OR DeepSeek OR Mistral OR Qwen OR "large language model" OR ChatGPT) when:1d') },
     { name: 'VentureBeat AI', url: 'https://venturebeat.com/category/ai/feed/' },
@@ -268,7 +278,7 @@ function resolveCanonicalSource(item: ParsedFeedItem): string {
   return normalizeSourceName(item.source) ?? item.source
 }
 
-function toNewsItem(item: ParsedFeedItem, topic: NewsTopic): NewsItem {
+export function toNewsItem(item: ParsedFeedItem, topic: NewsTopic): NewsItem {
   return {
     type: 'news',
     id: item.id,
