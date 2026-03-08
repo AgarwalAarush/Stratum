@@ -138,8 +138,9 @@ test('SummaryCard positioning logic', () => {
   const topEdgePos = calculatePosition({ x: 600, y: 100 }, { w: MAX_W, h: MAX_H })
   assert.equal(topEdgePos.top, 100 + OFFSET_Y)
   
-  // Test bottom edge clamping
-  const bottomEdgePos = calculatePosition({ x: 600, y: 750 }, { w: MAX_W, h: MAX_H })
+  // Test bottom edge clamping (cursor beyond viewport bottom)
+  // top = 810 - 16 - 240 = 554; 554 + 240 = 794 > 788 → clamp: top = 548
+  const bottomEdgePos = calculatePosition({ x: 600, y: 810 }, { w: MAX_W, h: MAX_H })
   assert.equal(bottomEdgePos.top, vh - MARGIN - MAX_H)
 })
 

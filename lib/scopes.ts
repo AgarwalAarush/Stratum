@@ -1,5 +1,5 @@
 // lib/scopes.ts
-import type { ScopeDef } from './types'
+import type { ScopeDef } from './types.ts'
 
 export const SCOPES: ScopeDef[] = [
   {

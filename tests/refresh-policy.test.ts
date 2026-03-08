@@ -6,6 +6,7 @@ import { CACHE_TTL_SECONDS as DISCUSSIONS_TTL_SECONDS } from '../app/api/ai-rese
 import { CACHE_TTL_SECONDS as REPOS_TTL_SECONDS } from '../app/api/ai-research/repos/route.ts'
 import { CACHE_TTL_SECONDS as PAPERS_TTL_SECONDS } from '../app/api/ai-research/papers/route.ts'
 import { CACHE_TTL_SECONDS as TOPIC_TTL_SECONDS } from '../app/api/ai-research/news/[topic]/route.ts'
+import { CACHE_TTL_SECONDS as GLOBAL_NEWS_TTL_SECONDS } from '../app/api/global-news/news/[topic]/route.ts'
 import { CACHE_TTL_SECONDS as FINANCE_DEALS_TTL_SECONDS } from '../app/api/finance/deals/route.ts'
 import { CACHE_TTL_SECONDS as FINANCE_EARNINGS_TTL_SECONDS } from '../app/api/finance/earnings/route.ts'
 import { CACHE_TTL_SECONDS as FINANCE_REPORTS_TTL_SECONDS } from '../app/api/finance/reports/route.ts'
@@ -36,8 +37,11 @@ test('research papers route uses daily TTL', () => {
 })
 
 test('all AI topic TTL entries are hourly', () => {
-  for (const topic of NEWS_TOPICS) {
-    assert.equal(TOPIC_TTL_SECONDS[topic], 3_600)
+  for (const topic of Object.keys(TOPIC_TTL_SECONDS)) {
+    assert.equal(TOPIC_TTL_SECONDS[topic as keyof typeof TOPIC_TTL_SECONDS], 3_600)
+  }
+  for (const topic of Object.keys(GLOBAL_NEWS_TTL_SECONDS)) {
+    assert.equal(GLOBAL_NEWS_TTL_SECONDS[topic as keyof typeof GLOBAL_NEWS_TTL_SECONDS], 3_600)
   }
 })
 

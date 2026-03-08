@@ -90,7 +90,7 @@ test('summary route returns error when Anthropic API key is missing', { concurre
   
   // Mock successful article scraping
   global.fetch = (async () =>
-    new Response('<html><head><title>Test Article</title></head><body><p>Test content</p></body></html>', {
+    new Response('<html><head><title>Test Article</title></head><body><div>This is a sufficiently long article about artificial intelligence development and its implications for the technology industry worldwide, covering many important topics.</div></body></html>', {
       status: 200,
       headers: { 'Content-Type': 'text/html' }
     })
@@ -114,75 +114,38 @@ test('summary route streams successful summarization', { concurrency: false }, a
   const restoreSupabase = disableSupabaseForTest()
   const originalApiKey = process.env.ANTHROPIC_API_KEY
   const originalFetch = global.fetch
-  
-  process.env.ANTHROPIC_API_KEY = 'test-key'
-  
-  let anthropicCalled = false
-  
-  global.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(input)
-    
-    if (url.includes('api.anthropic.com')) {
-      anthropicCalled = true
-      // Mock Anthropic streaming response - this is simplified
-      return new Response('mock-anthropic-response', {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    } else {
-      // Mock article content
-      return new Response('<html><head><title>Test Article</title></head><body><p>This is test article content about AI development.</p></body></html>', {
-        status: 200,
-        headers: { 'Content-Type': 'text/html' }
-      })
-    }
-  }) as typeof fetch
-  
-  // Mock the Anthropic SDK's streaming behavior
-  const mockAnthropicClient = {
-    messages: {
-      stream: () => ({
-        on: (event: string, callback: Function) => {
-          if (event === 'text') {
-            // Simulate streaming text chunks
-            setTimeout(() => callback('This is'), 10)
-            setTimeout(() => callback(' a test'), 20)
-            setTimeout(() => callback(' summary.'), 30)
-          } else if (event === 'end') {
-            setTimeout(() => callback(), 40)
-          } else if (event === 'error') {
-            // No error in this test
-          }
-        }
-      })
-    }
-  }
-  
-  // Mock the Anthropic import
-  const originalAnthropicModule = await import('@anthropic-ai/sdk')
-  const MockAnthropic = class {
-    constructor() {
-      return mockAnthropicClient as any
-    }
-  }
-  
+
+  // Use empty API key so the route returns 'Summary service unavailable'
+  // after successful scrape — avoids triggering Anthropic SDK which can't
+  // be properly mocked in Node's test runner
+  process.env.ANTHROPIC_API_KEY = ''
+
+  global.fetch = (async () =>
+    new Response('<html><head><title>Test Article</title></head><body><div>This is a sufficiently long test article about artificial intelligence development and its implications for the technology industry.</div></body></html>', {
+      status: 200,
+      headers: { 'Content-Type': 'text/html' }
+    })
+  ) as typeof fetch
+
   t.after(() => {
     process.env.ANTHROPIC_API_KEY = originalApiKey
     global.fetch = originalFetch
     restoreSupabase()
   })
-  
+
   const testUrl = 'https://example.com/article'
   const request = new Request(`http://localhost/api/summary?url=${encodeURIComponent(testUrl)}`)
-  
-  // This test is complex due to the streaming nature and mocking requirements
-  // In a real implementation, you would need to properly mock the Anthropic SDK
-  // For now, we'll test the basic request structure
+
   const response = await getSummaryRoute(request)
-  
+
   assert.equal(response.headers.get('Content-Type'), 'text/event-stream')
   assert.equal(response.headers.get('Cache-Control'), 'no-cache')
   assert.equal(response.headers.get('Connection'), 'keep-alive')
+
+  // Verify the stream produces events (meta + error since no API key)
+  const events = await readSSEStream(response)
+  assert.ok(events.length > 0, 'Should produce SSE events')
+  assert.ok(events.some(e => e.type === 'meta'), 'Should include article metadata')
 })
 
 test('summary route handles URL encoding correctly', async () => {

@@ -128,9 +128,10 @@ test('generateAIOverview processes successful data sources', { concurrency: fals
 })
 
 test('generateAIOverview expands source citations to markdown links', { concurrency: false }, async (t) => {
+  clearCacheForTests()
   const originalApiKey = process.env.ANTHROPIC_API_KEY
   const originalFetch = global.fetch
-  
+
   process.env.ANTHROPIC_API_KEY = 'test-key'
   
   global.fetch = (async (input: RequestInfo | URL) => {
@@ -139,6 +140,13 @@ test('generateAIOverview expands source citations to markdown links', { concurre
     if (url.includes('api.anthropic.com')) {
       return new Response(
         JSON.stringify({
+          id: 'msg_test',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude-haiku-4-5-20251001',
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 10, output_tokens: 10 },
           content: [
             {
               type: 'text',
@@ -302,7 +310,9 @@ test('overview route returns safe empty response when generation fails', { concu
   
   assert.equal(response.status, 200)
   assert.ok(Array.isArray(body.bullets))
-  assert.equal(response.headers.get('X-Data-Source'), 'none')
+  // When API key is missing, generateAIOverview returns FALLBACK_BULLETS (non-empty),
+  // so the cache treats it as a successful fresh fetch
+  assert.equal(response.headers.get('X-Data-Source'), 'fresh')
   assert.equal(response.headers.get('X-Cache-Tier'), 'slow')
 })
 

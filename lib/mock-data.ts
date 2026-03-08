@@ -1,5 +1,5 @@
 // lib/mock-data.ts
-import type { FeedItem, NewsItem, SectionData } from './types'
+import type { FeedItem, NewsItem, SectionData } from './types.ts'
 
 // ─── AI Research: Papers (accurate publication dates) ───
 const PAPERS: FeedItem[] = [

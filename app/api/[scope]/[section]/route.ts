@@ -1,6 +1,6 @@
 // app/api/[scope]/[section]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { getMockSection } from '../../../lib/mock-data.ts'
+import { getMockSection } from '../../../../lib/mock-data.ts'
 
 export async function GET(
   _req: NextRequest,

@@ -20,7 +20,8 @@ const GOOGLE_NEWS_UA =
 class Semaphore {
   private queue: (() => void)[] = []
   private active = 0
-  constructor(private max: number) {}
+  private max: number
+  constructor(max: number) { this.max = max }
   async acquire(): Promise<void> {
     if (this.active < this.max) {
       this.active++
