@@ -337,7 +337,7 @@ function InfoBar({ selected, onClose }: { selected: SelectedItem; onClose: () =>
           ✕
         </button>
       </div>
-      <p className="font-mono text-[9px] text-text-muted leading-relaxed">
+      <p className="font-mono text-[11px] text-text-muted leading-relaxed">
         {infoDescription(selected)}
       </p>
     </div>
