@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { generateWeeklyOverview } from '../lib/data/overview-generators.ts'
+import { generateMonthlyOverview, generateWeeklyOverview } from '../lib/data/overview-generators.ts'
 
 function openAITextResponse(content: string): Response {
   return new Response(JSON.stringify({
@@ -52,4 +52,32 @@ test('weekly overview generates and persists OpenAI structured content', { concu
   assert.equal(result.date, '2026-07-06')
   assert.match(result.content ?? '', /Weekly signal/)
   assert.deepEqual(persisted[0], ['weekly', '# Weekly signal\n\nInfrastructure demand strengthened.', '2026-07-06', '2026-07-06', '2026-07-12'])
+})
+
+test('monthly overview generates and persists OpenAI structured content', { concurrency: false }, async (t) => {
+  const originalKey = process.env.OPENAI_API_KEY
+  const originalFetch = global.fetch
+  process.env.OPENAI_API_KEY = 'test-key'
+  global.fetch = (async () => openAITextResponse('# Strategic trajectory\n\nAI spending accelerated while policy risk broadened.')) as typeof fetch
+  t.after(() => {
+    process.env.OPENAI_API_KEY = originalKey
+    global.fetch = originalFetch
+  })
+
+  const persisted: unknown[][] = []
+  const result = await generateMonthlyOverview({
+    now: new Date('2026-07-15T12:00:00Z'),
+    loadData: async () => ({
+      dailies: [{ date: '2026-07-01', bullets: ['AI infrastructure accelerated.'] }],
+      globalNewsDailies: [{ date: '2026-07-01', bullets: ['Trade policy tightened.'] }],
+      weeklies: [{ date: '2026-07-06', content: 'Infrastructure demand strengthened.' }],
+      previousMonthly: null,
+    }),
+    persist: async (...args) => { persisted.push(args) },
+  })
+
+  assert.equal(result.success, true)
+  assert.equal(result.date, '2026-07-15')
+  assert.match(result.content ?? '', /Strategic trajectory/)
+  assert.deepEqual(persisted[0], ['monthly', '# Strategic trajectory\n\nAI spending accelerated while policy risk broadened.', '2026-07-15', '2026-06-15', '2026-07-15'])
 })

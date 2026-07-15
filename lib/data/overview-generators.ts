@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { AI_MODELS } from '../ai/config.ts'
 import { generateOpenAIJson } from '../server/openai-responses.ts'
 import {
@@ -8,19 +7,6 @@ import {
   fetchLatestOverview,
   saveOverview,
 } from './overview-persistence.ts'
-
-function getClient(): Anthropic | null {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return null
-  return new Anthropic({ apiKey })
-}
-
-function extractText(message: Anthropic.Message): string {
-  return message.content
-    .filter((b) => b.type === 'text')
-    .map((b) => (b as { type: 'text'; text: string }).text)
-    .join('')
-}
 
 interface WeeklyOverviewOptions {
   now?: Date
@@ -114,27 +100,45 @@ Write in a direct, analytical tone. No fluff or filler. Return the briefing cont
   return { success: true, content, date: startDate }
 }
 
-export async function generateMonthlyOverview(): Promise<{
+interface MonthlyOverviewOptions {
+  now?: Date
+  loadData?: (startDate: string, endDate: string) => Promise<{
+    dailies: Awaited<ReturnType<typeof fetchDailyOverviews>>
+    globalNewsDailies: Awaited<ReturnType<typeof fetchGlobalNewsDailyOverviews>>
+    weeklies: Awaited<ReturnType<typeof fetchWeeklyOverviews>>
+    previousMonthly: Awaited<ReturnType<typeof fetchLatestOverview>>
+  }>
+  persist?: typeof saveOverview
+}
+
+export async function generateMonthlyOverview(options: MonthlyOverviewOptions = {}): Promise<{
   success: boolean
   content?: string
   date?: string
   error?: string
 }> {
-  const client = getClient()
-  if (!client) return { success: false, error: 'No Anthropic API key' }
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) return { success: false, error: 'No OpenAI API key' }
 
-  const now = new Date()
+  const now = options.now ?? new Date()
   const today = now.toISOString().slice(0, 10)
   const thirtyDaysAgo = new Date(now)
   thirtyDaysAgo.setUTCDate(now.getUTCDate() - 30)
   const startDate = thirtyDaysAgo.toISOString().slice(0, 10)
 
-  const [dailies, globalNewsDailies, weeklies, previousMonthly] = await Promise.all([
-    fetchDailyOverviews(startDate, today),
-    fetchGlobalNewsDailyOverviews(startDate, today),
-    fetchWeeklyOverviews(startDate, today),
-    fetchLatestOverview('monthly'),
-  ])
+  const { dailies, globalNewsDailies, weeklies, previousMonthly } = options.loadData
+    ? await options.loadData(startDate, today)
+    : await Promise.all([
+      fetchDailyOverviews(startDate, today),
+      fetchGlobalNewsDailyOverviews(startDate, today),
+      fetchWeeklyOverviews(startDate, today),
+      fetchLatestOverview('monthly'),
+    ]).then(([loadedDailies, loadedGlobalNewsDailies, loadedWeeklies, loadedPreviousMonthly]) => ({
+      dailies: loadedDailies,
+      globalNewsDailies: loadedGlobalNewsDailies,
+      weeklies: loadedWeeklies,
+      previousMonthly: loadedPreviousMonthly,
+    }))
 
   if (dailies.length === 0 && globalNewsDailies.length === 0 && weeklies.length === 0) {
     return { success: false, error: 'No overviews found for the period' }
@@ -172,16 +176,30 @@ Write a biweekly strategic intelligence briefing that:
 - Uses a mix of analytical paragraphs and bullet points
 - Is 600-900 words
 
-Write in a direct, strategic tone. Focus on patterns, not events. Return only the briefing content as markdown.`
+Write in a direct, strategic tone. Focus on patterns, not events. Return the briefing content as markdown in the required field.`
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 3072,
-    messages: [{ role: 'user', content: prompt }],
+  const result = await generateOpenAIJson({
+    apiKey,
+    model: AI_MODELS.scheduledSynthesis,
+    input: prompt,
+    schemaName: 'stratum_monthly_overview',
+    schema: {
+      type: 'object',
+      properties: { content: { type: 'string' } },
+      required: ['content'],
+      additionalProperties: false,
+    },
+    maxOutputTokens: 3_072,
+    validate(value) {
+      if (typeof value !== 'object' || value === null || !('content' in value) || typeof value.content !== 'string') {
+        throw new Error('Monthly overview response is invalid')
+      }
+      return { content: value.content }
+    },
   })
 
-  const content = extractText(message)
-  await saveOverview('monthly', content, today, startDate, today)
+  const content = result.data.content
+  await (options.persist ?? saveOverview)('monthly', content, today, startDate, today)
 
   return { success: true, content, date: today }
 }

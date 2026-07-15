@@ -8,7 +8,7 @@ async function handler() {
     const result = await generateMonthlyOverview()
 
     if (!result.success) {
-      const status = result.error === 'No Anthropic API key' ? 500 : 404
+      const status = result.error === 'No OpenAI API key' ? 500 : 404
       return NextResponse.json({ error: result.error }, { status })
     }
 
