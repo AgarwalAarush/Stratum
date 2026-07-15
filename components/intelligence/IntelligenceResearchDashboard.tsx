@@ -460,7 +460,7 @@ export function IntelligenceResearchDashboard({
         </div>
       </section>
 
-      <section className="intelligence-topic-grid" aria-label="Intelligence topic summaries">
+      <section className="intelligence-topic-grid intelligence-topic-grid-primary" aria-label="Intelligence topic summaries">
         {topicColumns.map((column) => (
           <IntelligenceColumn key={column.id} {...column} onView={openCategory} />
         ))}

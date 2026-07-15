@@ -1582,6 +1582,18 @@ html:has(.intelligence-shell) {
   min-height: 271px;
 }
 
+.intelligence-topic-grid-primary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.intelligence-topic-grid-primary .intelligence-topic-column:nth-child(2) {
+  border-right: 0;
+}
+
+.intelligence-topic-grid-primary .intelligence-topic-column:nth-child(-n + 2) {
+  border-bottom: 1px solid var(--market-border);
+}
+
 .intelligence-topic-grid-company {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.18fr);
 }

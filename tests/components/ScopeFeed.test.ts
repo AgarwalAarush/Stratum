@@ -131,6 +131,7 @@ test('Intelligence dashboard maps the four primary source groups', () => {
   assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'ai-policy-regulation'\)/)
   assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'infra-hardware'\)/)
   assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'repos'\)/)
+  assert.match(intelligenceDashboardSource, /intelligence-topic-grid-primary/)
   assert.match(intelligenceDashboardSource, /source coverage/)
 })
 
