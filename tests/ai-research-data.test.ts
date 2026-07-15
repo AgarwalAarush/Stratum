@@ -349,20 +349,34 @@ test('fetchNewsItemsByTopic preserves canonical publisher metadata for Google Ne
   clearCacheForTests()
 
   const originalFetch = global.fetch
-  global.fetch = (async () =>
-    new Response(
+  const articleId = 'CBTestPublisherMetadata123'
+  global.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+
+    if (url.includes(`news.google.com/articles/${articleId}`)) {
+      return new Response('<main data-n-a-ts="1700000000" data-n-a-sg="test-signature"></main>')
+    }
+
+    if (url.includes('batchexecute')) {
+      const decoded = JSON.stringify([null, 'https://www.reuters.com/world/europe/example'])
+      const payload = JSON.stringify([[null, null, decoded]])
+      return new Response(`123\n\n${payload}`)
+    }
+
+    return new Response(
       `
         <rss><channel>
           <item>
             <title>EU proposes new AI safety guidance</title>
-            <link>https://news.google.com/rss/articles/example-story</link>
+            <link>https://news.google.com/rss/articles/${articleId}</link>
             <pubDate>Thu, 06 Mar 2026 12:00:00 GMT</pubDate>
             <source url="https://www.reuters.com/world/europe/example">Reuters</source>
           </item>
         </channel></rss>
       `,
       { status: 200, headers: { 'Content-Type': 'application/xml' } },
-    )) as typeof fetch
+    )
+  }) as typeof fetch
 
   t.after(() => {
     global.fetch = originalFetch
