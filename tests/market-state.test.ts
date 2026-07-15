@@ -56,6 +56,13 @@ test('market memo output schema is checked in and strict', async () => {
   assert.deepEqual(schema.required, ['changes', 'sectorImplications', 'catalysts', 'risks', 'watchItems'])
 })
 
+test('scheduled intelligence schemas are checked in and strict', async () => {
+  for (const file of ['morning-brief.schema.json', 'periodic-overview.schema.json']) {
+    const schema = JSON.parse(await readFile(new URL(`../schemas/${file}`, import.meta.url), 'utf8'))
+    assert.equal(schema.additionalProperties, false)
+  }
+})
+
 test('market memo keeps deterministic state separate from Codex narrative', async () => {
   const rows = [row('SPY', 1), row('QQQ', 2), row('IWM', 1.5), row('AAPL', 0.5), row('MSFT', -0.2)]
   let prompt = ''

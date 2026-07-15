@@ -1,6 +1,7 @@
 import type { MorningBriefData } from '../types.ts'
 import { AI_MODELS } from '../ai/config.ts'
 import { generateOpenAIJson } from '../server/openai-responses.ts'
+import { runCodexJson } from '../server/codex-exec.ts'
 import { fetchNewsItemsByTopic } from './rss.ts'
 import { fetchArxivPapers } from './arxiv.ts'
 import { fetchTrendingRepos } from './repos.ts'
@@ -194,9 +195,37 @@ function feedItemRowToSourceItem(row: FeedItemRow): SourceItem {
   return { title: row.title, url: row.url, detail: detail || undefined }
 }
 
-export async function generateMorningBrief(): Promise<MorningBriefData> {
+interface MorningBriefGenerationOptions {
+  provider?: 'responses' | 'codex'
+}
+
+interface GeneratedMorningBrief {
+  headline: string
+  sections: Array<{ title: string; bullets: string[] }>
+  watchList: string[]
+}
+
+function validateMorningBrief(value: unknown): GeneratedMorningBrief {
+  if (typeof value !== 'object' || value === null) throw new Error('Morning brief response is invalid')
+  const brief = value as { headline?: unknown; sections?: unknown; watchList?: unknown }
+  if (typeof brief.headline !== 'string' || !Array.isArray(brief.sections) || !Array.isArray(brief.watchList)) {
+    throw new Error('Morning brief response is incomplete')
+  }
+  const sections = brief.sections.map((section) => {
+    if (typeof section !== 'object' || section === null) throw new Error('Morning brief section is invalid')
+    const candidate = section as { title?: unknown; bullets?: unknown }
+    if (typeof candidate.title !== 'string' || !Array.isArray(candidate.bullets) || !candidate.bullets.every((bullet) => typeof bullet === 'string')) {
+      throw new Error('Morning brief section is incomplete')
+    }
+    return { title: candidate.title, bullets: candidate.bullets as string[] }
+  })
+  if (!brief.watchList.every((item) => typeof item === 'string')) throw new Error('Morning brief watch list is invalid')
+  return { headline: brief.headline, sections, watchList: brief.watchList as string[] }
+}
+
+export async function generateMorningBrief(options: MorningBriefGenerationOptions = {}): Promise<MorningBriefData> {
   const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) {
+  if (options.provider !== 'codex' && !apiKey) {
     return { ...FALLBACK_BRIEF, fetchedAt: new Date().toISOString() }
   }
 
@@ -305,12 +334,7 @@ Requirements:
 - Return only the required structured response`
 
   try {
-    const result = await generateOpenAIJson({
-      apiKey,
-      model: AI_MODELS.morningBrief,
-      input: prompt,
-      schemaName: 'stratum_morning_brief',
-      schema: {
+    const schema = {
         type: 'object',
         properties: {
           headline: { type: 'string' },
@@ -332,26 +356,18 @@ Requirements:
         },
         required: ['headline', 'sections', 'watchList'],
         additionalProperties: false,
-      },
-      maxOutputTokens: 3_072,
-      validate(value) {
-        if (typeof value !== 'object' || value === null) throw new Error('Morning brief response is invalid')
-        const brief = value as { headline?: unknown; sections?: unknown; watchList?: unknown }
-        if (typeof brief.headline !== 'string' || !Array.isArray(brief.sections) || !Array.isArray(brief.watchList)) {
-          throw new Error('Morning brief response is incomplete')
-        }
-        const sections = brief.sections.map((section) => {
-          if (typeof section !== 'object' || section === null) throw new Error('Morning brief section is invalid')
-          const candidate = section as { title?: unknown; bullets?: unknown }
-          if (typeof candidate.title !== 'string' || !Array.isArray(candidate.bullets) || !candidate.bullets.every((bullet) => typeof bullet === 'string')) {
-            throw new Error('Morning brief section is incomplete')
-          }
-          return { title: candidate.title, bullets: candidate.bullets as string[] }
-        })
-        if (!brief.watchList.every((item) => typeof item === 'string')) throw new Error('Morning brief watch list is invalid')
-        return { headline: brief.headline, sections, watchList: brief.watchList as string[] }
-      },
-    })
+      }
+    const result = options.provider === 'codex'
+      ? await runCodexJson({ prompt, schemaPath: 'schemas/morning-brief.schema.json', validate: validateMorningBrief })
+      : await generateOpenAIJson({
+        apiKey: apiKey!,
+        model: AI_MODELS.morningBrief,
+        input: prompt,
+        schemaName: 'stratum_morning_brief',
+        schema,
+        maxOutputTokens: 3_072,
+        validate: validateMorningBrief,
+      })
     const parsed = result.data
 
     // Expand bare [n] references into [n](url) markdown links

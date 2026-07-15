@@ -1,5 +1,6 @@
 import { AI_MODELS } from '../ai/config.ts'
 import { generateOpenAIJson } from '../server/openai-responses.ts'
+import { runCodexJson } from '../server/codex-exec.ts'
 import {
   fetchDailyOverviews,
   fetchGlobalNewsDailyOverviews,
@@ -10,6 +11,7 @@ import {
 
 interface WeeklyOverviewOptions {
   now?: Date
+  provider?: 'responses' | 'codex'
   loadData?: (startDate: string, endDate: string) => Promise<{
     dailies: Awaited<ReturnType<typeof fetchDailyOverviews>>
     globalNewsDailies: Awaited<ReturnType<typeof fetchGlobalNewsDailyOverviews>>
@@ -24,7 +26,7 @@ export async function generateWeeklyOverview(options: WeeklyOverviewOptions = {}
   error?: string
 }> {
   const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) return { success: false, error: 'No OpenAI API key' }
+  if (options.provider !== 'codex' && !apiKey) return { success: false, error: 'No OpenAI API key' }
 
   const now = options.now ?? new Date()
   const dayOfWeek = now.getUTCDay()
@@ -74,25 +76,24 @@ Write a weekly intelligence briefing that:
 
 Write in a direct, analytical tone. No fluff or filler. Return the briefing content as markdown in the required field.`
 
-  const result = await generateOpenAIJson({
-    apiKey,
-    model: AI_MODELS.scheduledSynthesis,
-    input: prompt,
-    schemaName: 'stratum_weekly_overview',
-    schema: {
+  const schema = {
       type: 'object',
       properties: { content: { type: 'string' } },
       required: ['content'],
       additionalProperties: false,
-    },
-    maxOutputTokens: 2_048,
-    validate(value) {
-      if (typeof value !== 'object' || value === null || !('content' in value) || typeof value.content !== 'string') {
-        throw new Error('Weekly overview response is invalid')
-      }
-      return { content: value.content }
-    },
-  })
+    }
+  const validate = (value: unknown) => {
+    if (typeof value !== 'object' || value === null || !('content' in value) || typeof value.content !== 'string') {
+      throw new Error('Weekly overview response is invalid')
+    }
+    return { content: value.content }
+  }
+  const result = options.provider === 'codex'
+    ? await runCodexJson({ prompt, schemaPath: 'schemas/periodic-overview.schema.json', validate })
+    : await generateOpenAIJson({
+      apiKey: apiKey!, model: AI_MODELS.scheduledSynthesis, input: prompt,
+      schemaName: 'stratum_weekly_overview', schema, maxOutputTokens: 2_048, validate,
+    })
 
   const content = result.data.content
   await (options.persist ?? saveOverview)('weekly', content, startDate, startDate, endDate)
@@ -102,6 +103,7 @@ Write in a direct, analytical tone. No fluff or filler. Return the briefing cont
 
 interface MonthlyOverviewOptions {
   now?: Date
+  provider?: 'responses' | 'codex'
   loadData?: (startDate: string, endDate: string) => Promise<{
     dailies: Awaited<ReturnType<typeof fetchDailyOverviews>>
     globalNewsDailies: Awaited<ReturnType<typeof fetchGlobalNewsDailyOverviews>>
@@ -118,7 +120,7 @@ export async function generateMonthlyOverview(options: MonthlyOverviewOptions = 
   error?: string
 }> {
   const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) return { success: false, error: 'No OpenAI API key' }
+  if (options.provider !== 'codex' && !apiKey) return { success: false, error: 'No OpenAI API key' }
 
   const now = options.now ?? new Date()
   const today = now.toISOString().slice(0, 10)
@@ -178,25 +180,24 @@ Write a biweekly strategic intelligence briefing that:
 
 Write in a direct, strategic tone. Focus on patterns, not events. Return the briefing content as markdown in the required field.`
 
-  const result = await generateOpenAIJson({
-    apiKey,
-    model: AI_MODELS.scheduledSynthesis,
-    input: prompt,
-    schemaName: 'stratum_monthly_overview',
-    schema: {
+  const schema = {
       type: 'object',
       properties: { content: { type: 'string' } },
       required: ['content'],
       additionalProperties: false,
-    },
-    maxOutputTokens: 3_072,
-    validate(value) {
-      if (typeof value !== 'object' || value === null || !('content' in value) || typeof value.content !== 'string') {
-        throw new Error('Monthly overview response is invalid')
-      }
-      return { content: value.content }
-    },
-  })
+    }
+  const validate = (value: unknown) => {
+    if (typeof value !== 'object' || value === null || !('content' in value) || typeof value.content !== 'string') {
+      throw new Error('Monthly overview response is invalid')
+    }
+    return { content: value.content }
+  }
+  const result = options.provider === 'codex'
+    ? await runCodexJson({ prompt, schemaPath: 'schemas/periodic-overview.schema.json', validate })
+    : await generateOpenAIJson({
+      apiKey: apiKey!, model: AI_MODELS.scheduledSynthesis, input: prompt,
+      schemaName: 'stratum_monthly_overview', schema, maxOutputTokens: 3_072, validate,
+    })
 
   const content = result.data.content
   await (options.persist ?? saveOverview)('monthly', content, today, startDate, today)
