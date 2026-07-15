@@ -17,8 +17,13 @@ function disableSupabaseForTest() {
   }
 }
 
-async function readSSEStream(response: Response): Promise<Array<{ type: string, [key: string]: any }>> {
-  const events: Array<{ type: string, [key: string]: any }> = []
+interface SSEEvent {
+  type: string
+  [key: string]: unknown
+}
+
+async function readSSEStream(response: Response): Promise<SSEEvent[]> {
+  const events: SSEEvent[] = []
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -81,12 +86,12 @@ test('summary route returns error when article scraping fails', { concurrency: f
   assert.ok(events.some(e => e.type === 'error' && e.message === 'Could not fetch article content'))
 })
 
-test('summary route returns error when Anthropic API key is missing', { concurrency: false }, async (t) => {
+test('summary route returns error when OpenAI API key is missing', { concurrency: false }, async (t) => {
   const restoreSupabase = disableSupabaseForTest()
-  const originalApiKey = process.env.ANTHROPIC_API_KEY
+  const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   
-  process.env.ANTHROPIC_API_KEY = ''
+  process.env.OPENAI_API_KEY = ''
   
   // Mock successful article scraping
   global.fetch = (async () =>
@@ -97,7 +102,7 @@ test('summary route returns error when Anthropic API key is missing', { concurre
   ) as typeof fetch
   
   t.after(() => {
-    process.env.ANTHROPIC_API_KEY = originalApiKey
+    process.env.OPENAI_API_KEY = originalApiKey
     global.fetch = originalFetch
     restoreSupabase()
   })
@@ -112,23 +117,29 @@ test('summary route returns error when Anthropic API key is missing', { concurre
 
 test('summary route streams successful summarization', { concurrency: false }, async (t) => {
   const restoreSupabase = disableSupabaseForTest()
-  const originalApiKey = process.env.ANTHROPIC_API_KEY
+  const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
 
-  // Use empty API key so the route returns 'Summary service unavailable'
-  // after successful scrape — avoids triggering Anthropic SDK which can't
-  // be properly mocked in Node's test runner
-  process.env.ANTHROPIC_API_KEY = ''
+  process.env.OPENAI_API_KEY = 'test-openai-key'
 
-  global.fetch = (async () =>
-    new Response('<html><head><title>Test Article</title></head><body><div>This is a sufficiently long test article about artificial intelligence development and its implications for the technology industry.</div></body></html>', {
+  global.fetch = (async (input: RequestInfo | URL) => {
+    if (String(input).includes('api.openai.com')) {
+      return new Response([
+        'data: {"type":"response.output_text.delta","delta":"The article reports a material AI development. "}',
+        'data: {"type":"response.output_text.delta","delta":"It explains the industry impact."}',
+        'data: {"type":"response.completed","response":{"id":"resp_test","object":"response","created_at":0,"status":"completed","output":[]}}',
+        'data: [DONE]',
+        '',
+      ].join('\n\n'), { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+    }
+    return new Response('<html><head><title>Test Article</title></head><body><div>This is a sufficiently long test article about artificial intelligence development and its implications for the technology industry.</div></body></html>', {
       status: 200,
       headers: { 'Content-Type': 'text/html' }
     })
-  ) as typeof fetch
+  }) as typeof fetch
 
   t.after(() => {
-    process.env.ANTHROPIC_API_KEY = originalApiKey
+    process.env.OPENAI_API_KEY = originalApiKey
     global.fetch = originalFetch
     restoreSupabase()
   })
@@ -142,10 +153,10 @@ test('summary route streams successful summarization', { concurrency: false }, a
   assert.equal(response.headers.get('Cache-Control'), 'no-cache')
   assert.equal(response.headers.get('Connection'), 'keep-alive')
 
-  // Verify the stream produces events (meta + error since no API key)
   const events = await readSSEStream(response)
-  assert.ok(events.length > 0, 'Should produce SSE events')
   assert.ok(events.some(e => e.type === 'meta'), 'Should include article metadata')
+  assert.equal(events.filter(e => e.type === 'chunk').length, 2)
+  assert.ok(events.some(e => e.type === 'done' && e.summary === 'The article reports a material AI development. It explains the industry impact.'))
 })
 
 test('summary route handles URL encoding correctly', async () => {
@@ -203,24 +214,28 @@ test('summary route validates URL format', async () => {
 
 test('summary route handles in-flight request deduplication', { concurrency: false }, async (t) => {
   const restoreSupabase = disableSupabaseForTest()
-  const originalApiKey = process.env.ANTHROPIC_API_KEY
+  const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   
-  process.env.ANTHROPIC_API_KEY = 'test-key'
+  process.env.OPENAI_API_KEY = 'test-key'
   
   let scrapeCallCount = 0
-  let anthropicCallCount = 0
+  let openaiCallCount = 0
   
   global.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
     
-    if (url.includes('api.anthropic.com')) {
-      anthropicCallCount++
-      // Add delay to simulate processing
+    if (url.includes('api.openai.com')) {
+      openaiCallCount++
       await new Promise(resolve => setTimeout(resolve, 100))
-      return new Response('mock-response', {
+      return new Response([
+        'data: {"type":"response.output_text.delta","delta":"A concise summary."}',
+        'data: {"type":"response.completed","response":{"id":"resp_test","object":"response","created_at":0,"status":"completed","output":[]}}',
+        'data: [DONE]',
+        '',
+      ].join('\n\n'), {
         status: 200,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'text/event-stream' }
       })
     } else {
       scrapeCallCount++
@@ -232,7 +247,7 @@ test('summary route handles in-flight request deduplication', { concurrency: fal
   }) as typeof fetch
   
   t.after(() => {
-    process.env.ANTHROPIC_API_KEY = originalApiKey
+    process.env.OPENAI_API_KEY = originalApiKey
     global.fetch = originalFetch
     restoreSupabase()
   })
@@ -253,6 +268,7 @@ test('summary route handles in-flight request deduplication', { concurrency: fal
   // Due to deduplication, scraping should happen only once
   // (Though this test might be flaky due to timing)
   assert.ok(scrapeCallCount <= 2, 'Should deduplicate requests for same URL')
+  assert.ok(openaiCallCount <= 1, 'Should make only one OpenAI generation request')
 })
 
 test('summary route returns cached response from Supabase when available', { concurrency: false }, async (t) => {
@@ -366,12 +382,12 @@ test('summary route SSE format is correct', async () => {
 
 test('summary route cleans up resources on client disconnect', { concurrency: false }, async (t) => {
   const restoreSupabase = disableSupabaseForTest()
-  const originalApiKey = process.env.ANTHROPIC_API_KEY
+  const originalApiKey = process.env.OPENAI_API_KEY
   
-  process.env.ANTHROPIC_API_KEY = 'test-key'
+  process.env.OPENAI_API_KEY = 'test-key'
   
   t.after(() => {
-    process.env.ANTHROPIC_API_KEY = originalApiKey
+    process.env.OPENAI_API_KEY = originalApiKey
     restoreSupabase()
   })
   

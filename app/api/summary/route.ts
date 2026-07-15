@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
-import Anthropic from '@anthropic-ai/sdk'
 import { getSupabaseClient } from '../../../lib/server/supabase.ts'
+import { streamOpenAIText } from '../../../lib/server/openai-responses.ts'
+import { AI_MODELS } from '../../../lib/ai/config.ts'
 import { scrapeArticle } from '../../../lib/data/scrapers/registry.ts'
 
 const inflight = new Map<string, Promise<string | null>>()
@@ -82,7 +83,7 @@ export async function GET(request: Request) {
 
         controller.enqueue(encoder.encode(sseEvent({ type: 'meta', title: article.title })))
 
-        const apiKey = process.env.ANTHROPIC_API_KEY
+        const apiKey = process.env.OPENAI_API_KEY
         if (!apiKey) {
           controller.enqueue(encoder.encode(sseEvent({ type: 'error', message: 'Summary service unavailable' })))
           controller.close()
@@ -91,48 +92,30 @@ export async function GET(request: Request) {
           return
         }
 
-        const anthropic = new Anthropic({ apiKey })
-        const messageStream = anthropic.messages.stream({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 256,
-          messages: [
-            {
-              role: 'user',
-              content: `Summarize this article in 2-3 concise sentences. Focus on the key finding, announcement, or insight. Be specific and analytical. Do not include any heading or label like "Summary" — just provide the sentences directly.\n\nTitle: ${article.title}\n\n${article.content}`,
-            },
-          ],
+        const result = await streamOpenAIText({
+          apiKey,
+          model: AI_MODELS.articleSummary,
+          maxOutputTokens: 256,
+          signal: request.signal,
+          input: `Summarize this article in 2-3 concise sentences. Focus on the key finding, announcement, or insight. Be specific and analytical. Do not include any heading or label like "Summary" — provide only the sentences.\n\nTitle: ${article.title}\n\n${article.content}`,
+          onDelta(text) {
+            controller.enqueue(encoder.encode(sseEvent({ type: 'chunk', text })))
+          },
         })
 
-        let fullText = ''
+        controller.enqueue(encoder.encode(sseEvent({ type: 'done', summary: result.text, title: article.title })))
+        controller.close()
+        resolveInflight!(result.text)
+        inflight.delete(urlHash)
 
-        messageStream.on('text', (text) => {
-          fullText += text
-          controller.enqueue(encoder.encode(sseEvent({ type: 'chunk', text })))
-        })
-
-        messageStream.on('end', () => {
-          controller.enqueue(encoder.encode(sseEvent({ type: 'done', summary: fullText, title: article.title })))
-          controller.close()
-          resolveInflight!(fullText)
-          inflight.delete(urlHash)
-
-          // Persist to Supabase (fire-and-forget)
-          if (supabase && fullText) {
-            supabase
-              .from('article_summaries')
-              .upsert({ url_hash: urlHash, url, title: article.title, summary: fullText })
-              .then(() => {})
-          }
-        })
-
-        messageStream.on('error', () => {
-          controller.enqueue(encoder.encode(sseEvent({ type: 'error', message: 'Summary generation failed' })))
-          controller.close()
-          resolveInflight!(null)
-          inflight.delete(urlHash)
-        })
+        if (supabase && result.text) {
+          supabase
+            .from('article_summaries')
+            .upsert({ url_hash: urlHash, url, title: article.title, summary: result.text })
+            .then(() => {})
+        }
       } catch {
-        controller.enqueue(encoder.encode(sseEvent({ type: 'error', message: 'Unexpected error' })))
+        controller.enqueue(encoder.encode(sseEvent({ type: 'error', message: 'Summary generation failed' })))
         controller.close()
         resolveInflight!(null)
         inflight.delete(urlHash)
