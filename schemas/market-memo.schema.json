@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "changes": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "body": { "type": "string" },
+          "source": { "type": "string", "const": "Alpaca market data" },
+          "sourceTime": { "type": "string" }
+        },
+        "required": ["id", "body", "source", "sourceTime"],
+        "additionalProperties": false
+      }
+    },
+    "sectorImplications": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "properties": {
+          "direction": { "type": "string", "enum": ["up", "down"] },
+          "text": { "type": "string" }
+        },
+        "required": ["direction", "text"],
+        "additionalProperties": false
+      }
+    },
+    "catalysts": { "type": "array", "minItems": 2, "maxItems": 4, "items": { "type": "string" } },
+    "risks": { "type": "array", "minItems": 2, "maxItems": 4, "items": { "type": "string" } },
+    "watchItems": { "type": "array", "minItems": 2, "maxItems": 4, "items": { "type": "string" } }
+  },
+  "required": ["changes", "sectorImplications", "catalysts", "risks", "watchItems"],
+  "additionalProperties": false
+}
