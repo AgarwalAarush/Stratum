@@ -6,9 +6,12 @@ import {
   ArrowRight,
   ArrowUp,
   CaretRight,
+  Circuitry,
   Code,
+  CurrencyCircleDollar,
   FileText,
   HardDrives,
+  RocketLaunch,
   Shield,
 } from '@phosphor-icons/react'
 import type { FeedItem, ItemTag, SectionData } from '@/lib/types'
@@ -266,6 +269,12 @@ export function IntelligenceResearchDashboard({
     { id: 'open-source', title: 'Open Source', rows: sectionRows(sections, 'repos'), icon: <Code size={18} aria-hidden="true" /> },
   ]
 
+  const companyTechnologyColumns = [
+    { id: 'venture-capital', title: 'Venture Capital', rows: sectionRows(sections, 'venture-capital'), icon: <CurrencyCircleDollar size={18} aria-hidden="true" /> },
+    { id: 'startups', title: 'Startups', rows: sectionRows(sections, 'startups'), icon: <RocketLaunch size={18} aria-hidden="true" /> },
+    { id: 'new-technology', title: 'New Technology', rows: sectionRows(sections, 'new-technology'), icon: <Circuitry size={18} aria-hidden="true" /> },
+  ]
+
   return (
     <article className="intelligence-dashboard">
       <section className="intelligence-state-hero" aria-labelledby="intelligence-state-title">
@@ -340,6 +349,15 @@ export function IntelligenceResearchDashboard({
 
       <section className="intelligence-topic-grid" aria-label="Intelligence topic summaries">
         {topicColumns.map((column) => (
+          <IntelligenceColumn key={column.id} {...column} />
+        ))}
+      </section>
+
+      <section
+        className="intelligence-topic-grid intelligence-topic-grid-company"
+        aria-label="Venture capital, startup, and technology intelligence"
+      >
+        {companyTechnologyColumns.map((column) => (
           <IntelligenceColumn key={column.id} {...column} />
         ))}
       </section>

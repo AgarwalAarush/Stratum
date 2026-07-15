@@ -134,6 +134,16 @@ test('Intelligence dashboard maps the four primary source groups', () => {
   assert.match(intelligenceDashboardSource, /source coverage/)
 })
 
+test('Intelligence dashboard keeps company and technology feeds as standalone sections', () => {
+  assert.match(intelligenceDashboardSource, /id: 'venture-capital', title: 'Venture Capital'/)
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'venture-capital'\)/)
+  assert.match(intelligenceDashboardSource, /id: 'startups', title: 'Startups'/)
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'startups'\)/)
+  assert.match(intelligenceDashboardSource, /id: 'new-technology', title: 'New Technology'/)
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'new-technology'\)/)
+  assert.match(intelligenceDashboardSource, /intelligence-topic-grid-company/)
+})
+
 test('ScopeFeed no longer renders inline periodic briefings', () => {
   assert.equal(scopeFeedSource.includes('PeriodicOverview'), false)
   assert.equal(scopeFeedSource.includes('/api/overviews/weekly'), false)

@@ -1582,6 +1582,10 @@ html:has(.intelligence-shell) {
   min-height: 271px;
 }
 
+.intelligence-topic-grid-company {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.18fr);
+}
+
 .intelligence-topic-column {
   border-right: 1px solid var(--market-border);
   min-width: 0;
@@ -1681,6 +1685,18 @@ html:has(.intelligence-shell) {
 
   .intelligence-topic-column:nth-child(-n + 2) {
     border-bottom: 1px solid var(--market-border);
+  }
+
+  .intelligence-topic-grid-company {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .intelligence-topic-grid-company .intelligence-topic-column:nth-child(2) {
+    border-right: 1px solid var(--market-border);
+  }
+
+  .intelligence-topic-grid-company .intelligence-topic-column:nth-child(-n + 2) {
+    border-bottom: 0;
   }
 }
 
@@ -1792,6 +1808,18 @@ html:has(.intelligence-shell) {
 
   .intelligence-topic-grid {
     grid-template-columns: 1fr;
+  }
+
+  .intelligence-topic-grid-company {
+    grid-template-columns: 1fr;
+  }
+
+  .intelligence-topic-grid-company .intelligence-topic-column:nth-child(2) {
+    border-right: 0;
+  }
+
+  .intelligence-topic-grid-company .intelligence-topic-column:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--market-border);
   }
 
   .intelligence-topic-column,
