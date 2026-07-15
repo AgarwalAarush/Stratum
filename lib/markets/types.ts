@@ -21,6 +21,29 @@ export interface MarketSnapshot {
   feed: MarketFeed
 }
 
+export interface MarketDailyBar {
+  symbol: string
+  tradingDate: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  tradeCount: number | null
+  vwap: number | null
+  feed: MarketFeed
+  asOf: string
+}
+
+export interface ScreenerSnapshotMeta {
+  id: string
+  feed: MarketFeed
+  status: 'building' | 'complete' | 'failed'
+  dataAsOf: string
+  rowCount: number
+  publishedAt: string | null
+}
+
 export interface MarketInstrument {
   id: string
   label: string
