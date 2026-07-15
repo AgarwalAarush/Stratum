@@ -1,11 +1,6 @@
-import { MarketsPlaceholder } from '@/components/markets/MarketsPlaceholder'
+import { MarketsScreener } from '@/components/markets/MarketsScreener'
+import { DEFAULT_SCREENER_QUERY, runIllustrativeScreener } from '@/lib/markets/screener'
 
 export default function MarketsScreenerPage() {
-  return (
-    <MarketsPlaceholder
-      eyebrow="Private preview"
-      title="Stock screener is being assembled"
-      description="Interactive presets, custom conditions, sorting, pagination, saved screens, and normalized market snapshots arrive in the next committed vertical slice."
-    />
-  )
+  return <MarketsScreener initialResponse={runIllustrativeScreener(DEFAULT_SCREENER_QUERY)} />
 }
