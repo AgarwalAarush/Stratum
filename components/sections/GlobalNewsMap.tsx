@@ -113,7 +113,7 @@ export function GlobalNewsMap() {
   const [view, setView] = useState<'world' | 'us'>('world')
   const [selected, setSelected] = useState<SelectedItem | null>(null)
 
-  const conflictGeoJSON = useMemo(buildConflictZoneGeoJSON, [])
+  const conflictGeoJSON = useMemo(() => buildConflictZoneGeoJSON(), [])
 
   const clearSelection = () => setSelected(null)
 

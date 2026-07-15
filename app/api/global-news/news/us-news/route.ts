@@ -10,7 +10,7 @@ function emptySection(): SectionData {
   return { items: [], fetchedAt: new Date().toISOString() }
 }
 
-export async function GET(_req: Request) {
+export async function GET() {
   try {
     const result = await cachedFetchWithFallback<SectionData>({
       key: 'stratum:global-news:news:us-news:v1',

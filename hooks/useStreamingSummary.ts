@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect -- URL changes intentionally reset this external stream state. */
 import { useState, useEffect, useRef } from 'react'
 
 const summaryCache = new Map<string, { text: string; title: string }>()

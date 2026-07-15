@@ -22,7 +22,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         if (window.innerWidth < 768) {
-            setIsNavOpen(false)
+            queueMicrotask(() => setIsNavOpen(false))
         }
     }, [])
 
@@ -33,7 +33,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
         // Only auto-show if the brief has been generated (past 12 UTC) and not yet seen since then
         const seenAfterGeneration = seen && new Date(seen) >= generationTime
         if (now >= generationTime && !seenAfterGeneration) {
-            setIsBriefOpen(true)
+            queueMicrotask(() => setIsBriefOpen(true))
         }
     }, [])
 

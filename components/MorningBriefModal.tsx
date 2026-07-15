@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import useSWR from 'swr'
 import { X } from 'lucide-react'
 import { parseBulletWithCitations } from '@/lib/citations'
@@ -24,6 +24,11 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
     revalidateOnFocus: false,
   })
 
+  const dismiss = useCallback(() => {
+    localStorage.setItem(MORNING_BRIEF_SEEN_KEY, new Date().toISOString())
+    onClose()
+  }, [onClose])
+
   useEffect(() => {
     if (!open) return
     const previousOverflow = document.body.style.overflow
@@ -38,12 +43,7 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
       document.body.style.overflow = previousOverflow
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [open, isLoading, data])
-
-  function dismiss() {
-    localStorage.setItem(MORNING_BRIEF_SEEN_KEY, new Date().toISOString())
-    onClose()
-  }
+  }, [open, dismiss])
 
   if (!open) return null
 
