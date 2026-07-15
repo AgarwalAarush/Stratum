@@ -20,7 +20,7 @@ cp .env.worker.example .env.worker
 docker compose -f docker-compose.worker.yml up -d --build
 ```
 
-Populate `.env.worker` directly on the host with the Supabase service-role key, Alpaca server credentials, and an OpenAI key that can authenticate the Codex CLI. Never expose these values through `NEXT_PUBLIC_*` variables.
+Populate `.env.worker` directly on the host with the Supabase service-role key, Alpaca server credentials, and an OpenAI key that can authenticate the Codex CLI. Set `ALPACA_TRADING_URL=https://paper-api.alpaca.markets` for paper keys; live keys use `https://api.alpaca.markets`. Never expose these values through `NEXT_PUBLIC_*` variables.
 
 ## Database and Vercel
 

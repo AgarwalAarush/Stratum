@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { AlpacaClient } from '../lib/server/alpaca.ts'
+import { AlpacaClient, getAlpacaClient } from '../lib/server/alpaca.ts'
 
 function jsonResponse(value: unknown, status = 200, headers?: HeadersInit): Response {
   return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json', ...headers } })
@@ -97,4 +97,26 @@ test('AlpacaClient normalizes the market clock', async () => {
   const clock = await client.fetchClock()
   assert.equal(clock.isOpen, true)
   assert.equal(clock.nextClose, '2026-07-15T20:00:00Z')
+})
+
+test('getAlpacaClient honors configured API hosts', async () => {
+  let requestedUrl = ''
+  const client = getAlpacaClient({
+    ALPACA_API_KEY_ID: 'paper-key',
+    ALPACA_API_SECRET_KEY: 'paper-secret',
+    ALPACA_DATA_FEED: 'iex',
+    ALPACA_TRADING_URL: 'https://paper-api.alpaca.markets',
+  }, async (input) => {
+    requestedUrl = String(input)
+    return jsonResponse({
+      timestamp: '2026-07-15T20:00:00Z',
+      is_open: false,
+      next_open: '2026-07-16T13:30:00Z',
+      next_close: '2026-07-16T20:00:00Z',
+    })
+  })
+
+  assert.ok(client)
+  await client.fetchClock()
+  assert.equal(new URL(requestedUrl).origin, 'https://paper-api.alpaca.markets')
 })

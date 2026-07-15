@@ -313,15 +313,25 @@ export class AlpacaClient {
   }
 }
 
-export function getAlpacaClient(): AlpacaClient | null {
-  const keyId = process.env.ALPACA_API_KEY_ID
-  const secretKey = process.env.ALPACA_API_SECRET_KEY
+export function getAlpacaClient(
+  environment: NodeJS.ProcessEnv = process.env,
+  fetchImpl: typeof fetch = fetch,
+): AlpacaClient | null {
+  const keyId = environment.ALPACA_API_KEY_ID
+  const secretKey = environment.ALPACA_API_SECRET_KEY
   if (!keyId || !secretKey) return null
 
-  const configuredFeed = process.env.ALPACA_DATA_FEED
+  const configuredFeed = environment.ALPACA_DATA_FEED
   const feed: AlpacaFeed = configuredFeed === 'sip' || configuredFeed === 'iex' || configuredFeed === 'delayed_sip'
     ? configuredFeed
     : 'delayed_sip'
 
-  return new AlpacaClient({ keyId, secretKey, feed })
+  return new AlpacaClient({
+    keyId,
+    secretKey,
+    feed,
+    dataUrl: environment.ALPACA_DATA_URL,
+    tradingUrl: environment.ALPACA_TRADING_URL,
+    fetchImpl,
+  })
 }
