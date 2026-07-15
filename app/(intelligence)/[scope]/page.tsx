@@ -19,11 +19,7 @@ export default async function ScopePage({ params }: PageProps) {
 
   const scope = getScopeById(scopeId)!
 
-  return (
-    <div className="flex-1 overflow-hidden min-h-0">
-      <ScopeFeed scope={scope} />
-    </div>
-  )
+  return <ScopeFeed scope={scope} />
 }
 
 export function generateStaticParams() {

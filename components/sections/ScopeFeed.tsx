@@ -3,12 +3,12 @@
 import { useMemo } from 'react'
 import useSWR from 'swr'
 import dynamic from 'next/dynamic'
-import { RefreshCw } from 'lucide-react'
 import type { OverviewData, ScopeDef, SectionData } from '@/lib/types'
 import { formatRelativeTime } from '@/lib/utils'
 import { useSettingsStore } from '@/store/settings'
 import { ScopeSection } from './ScopeSection'
 import { AIOverview } from './AIOverview'
+import { IntelligenceResearchDashboard } from '@/components/intelligence/IntelligenceResearchDashboard'
 
 const GlobalNewsMap = dynamic(
   () => import('./GlobalNewsMap').then((m) => ({ default: m.GlobalNewsMap })),
@@ -32,8 +32,6 @@ interface SectionRenderOptions {
   fillByColumn?: boolean
   viewportMode?: 'fixed' | 'fill' | 'natural'
 }
-
-const FINANCE_SPLIT_IDS = new Set(['research-reports', 'macro'])
 
 async function fetchSection(apiPath: string): Promise<SectionData> {
   try {
@@ -96,7 +94,6 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
     return isLoading ? 'loading...' : 'just now'
   }, [data, isLoading, scope.sections])
 
-  const isFinanceScope = scope.id === 'finance'
   const isAiResearchScope = scope.id === 'ai-research'
   const isGlobalNewsScope = scope.id === 'global-news'
 
@@ -165,112 +162,55 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
   }
 
   return (
-    <div className="w-full h-full min-h-0 flex flex-col bg-[var(--bg)]">
-      <header className="h-[var(--top-header-height)] flex items-center justify-between px-6 border-b border-border shrink-0 gap-4">
-        <div className="min-w-0">
-          <h1 className="text-[15px] font-semibold text-[var(--text)] leading-[1.3]">
-            {scope.label}
-          </h1>
-        </div>
-
-        <div className="flex items-center gap-1.5 shrink-0 border-l border-border pl-3">
-          <RefreshCw size={11} className="text-text-muted" />
-          <span className="font-mono text-[11px] text-text-muted whitespace-nowrap">
-            {lastUpdatedLabel}
-          </span>
-        </div>
-      </header>
-
-      <div className="flex-1 overflow-y-auto main-scroll">
-        {isAiResearchScope ? (
-          <>
-            <AIOverview
-              bullets={overviewData?.bullets ?? []}
-              isLoading={overviewLoading}
-            />
-
-            <div className="grid grid-cols-1 xl:grid-cols-3 ai-research-grid xl:divide-x xl:divide-border">
-              <div className="xl:col-span-2 xl:row-start-1">
-                {renderSection('ai-news-general')}
-              </div>
-              <div className="xl:col-span-2 xl:row-start-2">
-                {renderSection('ai-policy-regulation')}
-              </div>
-              <div className="xl:col-start-3 xl:row-start-1 xl:row-span-2 xl:[&>section]:h-full xl:[&>section]:min-h-0">
-                {renderSection('tech-events', { viewportMode: 'fill' })}
-              </div>
-            </div>
-
-            {renderSection('papers')}
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-border">
-              {renderSection('venture-capital')}
-              {renderSection('startups')}
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-3 xl:divide-x xl:divide-border">
-              {renderSection('infra-hardware')}
-              {renderSection('cybersecurity')}
-              {renderSection('new-technology')}
-            </div>
-
-            {renderSection('repos')}
-          </>
-        ) : (
-          <>
-            {isGlobalNewsScope && (
-              <>
-                <AIOverview
-                  title="Global News Overview"
-                  bullets={globalNewsOverviewData?.bullets ?? []}
-                  isLoading={globalNewsOverviewLoading}
-                />
-              </>
-            )}
-            {isGlobalNewsScope && <GlobalNewsMap />}
-            {scope.sections
-              .filter((section) =>
-                (!isFinanceScope || !FINANCE_SPLIT_IDS.has(section.id)) &&
-                !(isGlobalNewsScope && section.id === 'global-supply-chains') &&
-                !(isGlobalNewsScope && section.id === 'global-health')
-              )
-              .map((section) => {
-                if (isGlobalNewsScope && section.id === 'european-union' && sectionById['global-supply-chains']) {
-                  return (
-                    <div key="eu-supply-pair" className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-border">
-                      {renderSection('european-union')}
-                      {renderSection('global-supply-chains')}
-                    </div>
-                  )
-                }
-                if (isGlobalNewsScope && section.id === 'global-summits' && sectionById['global-health']) {
-                  return (
-                    <div key="summits-health-pair" className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-border">
-                      {renderSection('global-summits')}
-                      {renderSection('global-health')}
-                    </div>
-                  )
-                }
-                return renderSection(
-                  section.id,
-                  (section.id === 'geopolitics' || section.id === 'us-news') ? { columns: 2 } : {}
+    <div className="w-full min-w-0 bg-[var(--bg)]">
+      {isAiResearchScope ? (
+        <IntelligenceResearchDashboard
+          sections={data ?? {}}
+          overviewBullets={overviewData?.bullets ?? []}
+          isLoading={isLoading}
+          overviewLoading={overviewLoading}
+          lastUpdatedLabel={lastUpdatedLabel}
+          totalSectionCount={scope.sections.length}
+        />
+      ) : (
+        <div className="intelligence-legacy-feed">
+          <AIOverview
+            title="Global News Overview"
+            bullets={globalNewsOverviewData?.bullets ?? []}
+            isLoading={globalNewsOverviewLoading}
+          />
+          <GlobalNewsMap />
+          {scope.sections
+            .filter((section) => section.id !== 'global-supply-chains' && section.id !== 'global-health')
+            .map((section) => {
+              if (section.id === 'european-union' && sectionById['global-supply-chains']) {
+                return (
+                  <div key="eu-supply-pair" className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-border">
+                    {renderSection('european-union')}
+                    {renderSection('global-supply-chains')}
+                  </div>
                 )
-              })}
-
-            {isFinanceScope && sectionById['research-reports'] && sectionById.macro && (
-              <div className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-border">
-                {renderSection('research-reports')}
-                {renderSection('macro')}
-              </div>
-            )}
-          </>
-        )}
-        <div className="px-6 py-8">
-          <p className="font-mono text-[11px] text-text-muted text-center">
-            — END OF FEED —
-          </p>
+              }
+              if (section.id === 'global-summits' && sectionById['global-health']) {
+                return (
+                  <div key="summits-health-pair" className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-border">
+                    {renderSection('global-summits')}
+                    {renderSection('global-health')}
+                  </div>
+                )
+              }
+              return renderSection(
+                section.id,
+                (section.id === 'geopolitics' || section.id === 'us-news') ? { columns: 2 } : {},
+              )
+            })}
+          <div className="px-6 py-8">
+            <p className="font-mono text-[11px] text-text-muted text-center">
+              — END OF FEED —
+            </p>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

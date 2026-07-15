@@ -38,6 +38,11 @@ const scopeFeedSource = readFileSync(
   'utf8',
 )
 
+const intelligenceDashboardSource = readFileSync(
+  join(process.cwd(), 'components/intelligence/IntelligenceResearchDashboard.tsx'),
+  'utf8',
+)
+
 // Test the viewport mode logic from ScopeFeed
 function getViewportModeForSection(sectionId: string, options?: { viewportMode?: 'fixed' | 'fill' | 'natural' }) {
   return options?.viewportMode
@@ -115,14 +120,18 @@ test('ScopeFeed uses hourly refresh interval', () => {
   assert.match(scopeFeedSource, /refreshInterval:\s*SCOPE_REFRESH_INTERVAL_MS/)
 })
 
-test('AI Research layout renders repos section at the bottom before end marker', () => {
-  const newTechnologyIndex = scopeFeedSource.indexOf("{renderSection('new-technology')}")
-  const reposIndex = scopeFeedSource.indexOf("{renderSection('repos')}")
-  const endMarkerIndex = scopeFeedSource.indexOf('END OF FEED')
+test('AI Research renders the live intelligence dashboard', () => {
+  assert.match(scopeFeedSource, /<IntelligenceResearchDashboard/)
+  assert.match(scopeFeedSource, /sections=\{data \?\? \{\}\}/)
+  assert.match(scopeFeedSource, /overviewBullets=\{overviewData\?\.bullets \?\? \[\]\}/)
+})
 
-  assert.ok(newTechnologyIndex >= 0)
-  assert.ok(reposIndex > newTechnologyIndex)
-  assert.ok(endMarkerIndex > reposIndex)
+test('Intelligence dashboard maps the four primary source groups', () => {
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'papers'\)/)
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'ai-policy-regulation'\)/)
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'infra-hardware'\)/)
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'repos'\)/)
+  assert.match(intelligenceDashboardSource, /source coverage/)
 })
 
 test('ScopeFeed no longer renders inline periodic briefings', () => {
