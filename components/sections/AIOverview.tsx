@@ -60,7 +60,7 @@ export function AIOverview({ title = 'AI Overview', bullets, isLoading }: AIOver
           )}
         </div>
         <span className="font-mono text-[10px] text-text-muted tracking-[0.05em]">
-          claude-powered
+          openai-powered
         </span>
       </header>
 

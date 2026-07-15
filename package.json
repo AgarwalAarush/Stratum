@@ -10,7 +10,6 @@
     "test": "node --test --experimental-strip-types tests/*.test.ts tests/**/*.test.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
     "@phosphor-icons/react": "^2.1.10",
     "@supabase/supabase-js": "^2.98.0",
     "@upstash/qstash": "^2.9.0",

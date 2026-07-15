@@ -179,7 +179,7 @@ Suggested initial tables or equivalent entities:
 
 Copy `.env.example` to `.env.local`. Redis (`UPSTASH_REDIS_REST_URL`/`TOKEN`) is the only required variable for the current feed cache. Supabase (`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`) is needed for overview and future market-data persistence. QStash signing keys (`QSTASH_CURRENT_SIGNING_KEY`/`QSTASH_NEXT_SIGNING_KEY`) are needed for cron job verification. FMP, FRED, SEC, GitHub, proxy, and the current Anthropic integration are optional and gracefully degrade.
 
-Planned additions include Alpaca credentials plus server-only OpenAI/Codex worker credentials. Never expose these through `NEXT_PUBLIC_*`. `ANTHROPIC_API_KEY` remains required only for legacy workflows until each migration is complete and should then be removed from code, tests, deployment configuration, and documentation.
+Markets uses Alpaca credentials plus server-only OpenAI/Codex worker credentials. Never expose these through `NEXT_PUBLIC_*`. Anthropic is no longer part of the runtime or deployment configuration.
 
 ## Deployment topology
 

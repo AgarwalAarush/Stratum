@@ -412,13 +412,13 @@ Active scope is derived from the URL (Next.js route param), not stored in Zustan
 | Data fetching | SWR | Simple client-side revalidation; pairs with Edge Functions |
 | API layer | Vercel Edge Functions | Low latency, same repo, matches worldmonitor's gateway pattern |
 | Caching | Upstash Redis | Serverless Redis, works on Edge runtime |
-| AI | Anthropic Claude API (`claude-sonnet-4-6`) | Summaries, tagging, semantic analysis |
+| AI | OpenAI Responses API and Codex (`gpt-5.6-luna` / `gpt-5.6-terra`) | Summaries, tagging, semantic analysis |
 | Embeddings | ONNX (all-MiniLM-L6-v2) in Web Worker | Local vector search, no API cost |
 | Deployment | Vercel | Co-located with Edge Functions |
 
 **Required env vars (add to `.env.local`):**
 ```
-ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
 UPSTASH_REDIS_URL=
 UPSTASH_REDIS_TOKEN=
 CRUNCHBASE_API_KEY=     # v0.3+
