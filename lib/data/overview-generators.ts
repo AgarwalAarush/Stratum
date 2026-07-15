@@ -1,4 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { AI_MODELS } from '../ai/config.ts'
+import { generateOpenAIJson } from '../server/openai-responses.ts'
 import {
   fetchDailyOverviews,
   fetchGlobalNewsDailyOverviews,
@@ -20,16 +22,25 @@ function extractText(message: Anthropic.Message): string {
     .join('')
 }
 
-export async function generateWeeklyOverview(): Promise<{
+interface WeeklyOverviewOptions {
+  now?: Date
+  loadData?: (startDate: string, endDate: string) => Promise<{
+    dailies: Awaited<ReturnType<typeof fetchDailyOverviews>>
+    globalNewsDailies: Awaited<ReturnType<typeof fetchGlobalNewsDailyOverviews>>
+  }>
+  persist?: typeof saveOverview
+}
+
+export async function generateWeeklyOverview(options: WeeklyOverviewOptions = {}): Promise<{
   success: boolean
   content?: string
   date?: string
   error?: string
 }> {
-  const client = getClient()
-  if (!client) return { success: false, error: 'No Anthropic API key' }
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) return { success: false, error: 'No OpenAI API key' }
 
-  const now = new Date()
+  const now = options.now ?? new Date()
   const dayOfWeek = now.getUTCDay()
   const mondayOffset = dayOfWeek === 0 ? 7 : dayOfWeek
   const prevMonday = new Date(now)
@@ -40,10 +51,15 @@ export async function generateWeeklyOverview(): Promise<{
   const startDate = prevMonday.toISOString().slice(0, 10)
   const endDate = prevSunday.toISOString().slice(0, 10)
 
-  const [dailies, globalNewsDailies] = await Promise.all([
-    fetchDailyOverviews(startDate, endDate),
-    fetchGlobalNewsDailyOverviews(startDate, endDate),
-  ])
+  const { dailies, globalNewsDailies } = options.loadData
+    ? await options.loadData(startDate, endDate)
+    : await Promise.all([
+      fetchDailyOverviews(startDate, endDate),
+      fetchGlobalNewsDailyOverviews(startDate, endDate),
+    ]).then(([loadedDailies, loadedGlobalNewsDailies]) => ({
+      dailies: loadedDailies,
+      globalNewsDailies: loadedGlobalNewsDailies,
+    }))
   if (dailies.length === 0 && globalNewsDailies.length === 0) {
     return { success: false, error: 'No daily overviews found for the period' }
   }
@@ -70,16 +86,30 @@ Write a weekly intelligence briefing that:
 - Uses a mix of analytical paragraphs and bullet points
 - Is 400-600 words
 
-Write in a direct, analytical tone. No fluff or filler. Return only the briefing content as markdown.`
+Write in a direct, analytical tone. No fluff or filler. Return the briefing content as markdown in the required field.`
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
-    messages: [{ role: 'user', content: prompt }],
+  const result = await generateOpenAIJson({
+    apiKey,
+    model: AI_MODELS.scheduledSynthesis,
+    input: prompt,
+    schemaName: 'stratum_weekly_overview',
+    schema: {
+      type: 'object',
+      properties: { content: { type: 'string' } },
+      required: ['content'],
+      additionalProperties: false,
+    },
+    maxOutputTokens: 2_048,
+    validate(value) {
+      if (typeof value !== 'object' || value === null || !('content' in value) || typeof value.content !== 'string') {
+        throw new Error('Weekly overview response is invalid')
+      }
+      return { content: value.content }
+    },
   })
 
-  const content = extractText(message)
-  await saveOverview('weekly', content, startDate, startDate, endDate)
+  const content = result.data.content
+  await (options.persist ?? saveOverview)('weekly', content, startDate, startDate, endDate)
 
   return { success: true, content, date: startDate }
 }
