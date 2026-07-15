@@ -1,22 +1,19 @@
 import { NextResponse } from 'next/server'
-import { generateMorningBrief } from '../../../../lib/data/morning-brief.ts'
-import { saveMorningBrief } from '../../../../lib/data/overview-persistence.ts'
+import { buildAgentJobDedupeKey, enqueueAgentJob } from '../../../../lib/server/agent-jobs.ts'
 
 export const dynamic = 'force-dynamic'
 
 async function handler() {
   try {
-    const brief = await generateMorningBrief()
-    await saveMorningBrief(brief)
-
+    const jobType = 'generate-morning-brief' as const
+    const job = await enqueueAgentJob(jobType, {}, buildAgentJobDedupeKey(jobType))
     return NextResponse.json({
-      success: true,
-      date: new Date().toISOString().slice(0, 10),
-      sectionCount: brief.sections.length,
-    })
+      accepted: true,
+      ...job,
+    }, { status: 202 })
   } catch (err) {
     return NextResponse.json(
-      { error: 'Failed to generate morning brief', detail: String(err) },
+      { error: 'Failed to enqueue morning brief', detail: String(err) },
       { status: 500 },
     )
   }

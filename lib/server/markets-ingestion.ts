@@ -24,25 +24,15 @@ export interface MaterializeMarketsOptions {
   client?: AlpacaClient
   now?: Date
   symbols?: string[]
+  assets?: MarketAsset[]
 }
 
-export interface MaterializeMarketsResult {
-  snapshotId: string
-  feed: Exclude<MarketFeed, 'illustrative'>
-  rowCount: number
-  dataAsOf: string
-}
-
-export async function materializeAlpacaScreener(options: MaterializeMarketsOptions = {}): Promise<MaterializeMarketsResult> {
-  const client = options.client ?? getAlpacaClient()
+export async function syncAlpacaAssets(client: AlpacaClient = getAlpacaClient()!, now = new Date()): Promise<MarketAsset[]> {
   const supabase = getSupabaseClient()
   if (!client) throw new Error('Alpaca credentials are not configured')
   if (!supabase) throw new Error('Supabase service credentials are not configured')
 
-  const now = options.now ?? new Date()
-  const allAssets = await client.fetchAssets()
-  const requestedSymbols = options.symbols ? new Set(options.symbols.map((symbol) => symbol.toUpperCase())) : null
-  const assets = allAssets.filter((asset) => asset.active && asset.tradable && (!requestedSymbols || requestedSymbols.has(asset.symbol)))
+  const assets = (await client.fetchAssets()).filter((asset) => asset.active && asset.tradable)
   if (assets.length === 0) throw new Error('Alpaca returned no eligible US equity assets')
 
   for (const batch of batches(assets)) {
@@ -61,6 +51,46 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
     })), { onConflict: 'symbol' })
     if (error) throw new Error(`Unable to persist market assets: ${error.message}`)
   }
+  return assets
+}
+
+export async function fetchPersistedMarketAssets(): Promise<MarketAsset[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data, error } = await supabase
+    .from('market_assets')
+    .select('symbol,name,exchange,asset_class,tradable,active')
+    .eq('active', true)
+    .eq('tradable', true)
+  if (error) throw new Error(`Unable to load market assets: ${error.message}`)
+  return (data ?? []).map((asset) => ({
+    symbol: asset.symbol,
+    name: asset.name,
+    exchange: asset.exchange,
+    assetClass: 'us_equity',
+    tradable: asset.tradable,
+    active: asset.active,
+  }))
+}
+
+export interface MaterializeMarketsResult {
+  snapshotId: string
+  feed: Exclude<MarketFeed, 'illustrative'>
+  rowCount: number
+  dataAsOf: string
+}
+
+export async function materializeAlpacaScreener(options: MaterializeMarketsOptions = {}): Promise<MaterializeMarketsResult> {
+  const client = options.client ?? getAlpacaClient()
+  const supabase = getSupabaseClient()
+  if (!client) throw new Error('Alpaca credentials are not configured')
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+
+  const now = options.now ?? new Date()
+  const allAssets = options.assets ?? await syncAlpacaAssets(client, now)
+  const requestedSymbols = options.symbols ? new Set(options.symbols.map((symbol) => symbol.toUpperCase())) : null
+  const assets = allAssets.filter((asset) => asset.active && asset.tradable && (!requestedSymbols || requestedSymbols.has(asset.symbol)))
+  if (assets.length === 0) throw new Error('No eligible US equity assets are available')
 
   const symbols = assets.map((asset) => asset.symbol)
   const snapshotsResult = await client.fetchSnapshots(symbols)

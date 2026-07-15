@@ -81,3 +81,20 @@ test('AlpacaClient normalizes paginated daily bars', async () => {
   assert.equal(result.data[1]?.tradeCount, 10)
   assert.equal(result.data[1]?.vwap, 1.8)
 })
+
+test('AlpacaClient normalizes the market clock', async () => {
+  const client = new AlpacaClient({
+    keyId: 'key',
+    secretKey: 'secret',
+    fetchImpl: async () => jsonResponse({
+      timestamp: '2026-07-15T14:30:00Z',
+      is_open: true,
+      next_open: '2026-07-16T13:30:00Z',
+      next_close: '2026-07-15T20:00:00Z',
+    }),
+  })
+
+  const clock = await client.fetchClock()
+  assert.equal(clock.isOpen, true)
+  assert.equal(clock.nextClose, '2026-07-15T20:00:00Z')
+})

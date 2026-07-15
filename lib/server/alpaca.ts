@@ -43,6 +43,20 @@ interface AlpacaSnapshotsResponse {
   snapshots?: Record<string, AlpacaSnapshotPayload>
 }
 
+interface AlpacaClockResponse {
+  timestamp?: string
+  is_open?: boolean
+  next_open?: string
+  next_close?: string
+}
+
+export interface AlpacaMarketClock {
+  timestamp: string
+  isOpen: boolean
+  nextOpen: string
+  nextClose: string
+}
+
 export interface AlpacaResult<T> {
   data: T
   feed: AlpacaFeed
@@ -190,6 +204,19 @@ export class AlpacaClient {
         active: asset.status === 'active',
       }]
     })
+  }
+
+  async fetchClock(): Promise<AlpacaMarketClock> {
+    const clock = await this.requestJson<AlpacaClockResponse>(this.tradingUrl, '/v2/clock')
+    if (!clock.timestamp || typeof clock.is_open !== 'boolean' || !clock.next_open || !clock.next_close) {
+      throw new Error('Alpaca market clock response is incomplete')
+    }
+    return {
+      timestamp: clock.timestamp,
+      isOpen: clock.is_open,
+      nextOpen: clock.next_open,
+      nextClose: clock.next_close,
+    }
   }
 
   async fetchSnapshots(symbols: string[], requestedFeed = this.preferredFeed): Promise<AlpacaResult<MarketSnapshot[]>> {

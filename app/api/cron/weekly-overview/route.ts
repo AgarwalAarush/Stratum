@@ -1,25 +1,19 @@
 import { NextResponse } from 'next/server'
-import { generateWeeklyOverview } from '../../../../lib/data/overview-generators.ts'
+import { buildAgentJobDedupeKey, enqueueAgentJob } from '../../../../lib/server/agent-jobs.ts'
 
 export const dynamic = 'force-dynamic'
 
 async function handler() {
   try {
-    const result = await generateWeeklyOverview()
-
-    if (!result.success) {
-      const status = result.error === 'No OpenAI API key' ? 500 : 404
-      return NextResponse.json({ error: result.error }, { status })
-    }
-
+    const jobType = 'generate-weekly-overview' as const
+    const job = await enqueueAgentJob(jobType, {}, buildAgentJobDedupeKey(jobType))
     return NextResponse.json({
-      success: true,
-      date: result.date,
-      wordCount: result.content!.split(/\s+/).length,
-    })
+      accepted: true,
+      ...job,
+    }, { status: 202 })
   } catch (err) {
     return NextResponse.json(
-      { error: 'Failed to generate weekly overview', detail: String(err) },
+      { error: 'Failed to enqueue weekly overview', detail: String(err) },
       { status: 500 },
     )
   }
