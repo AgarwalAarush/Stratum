@@ -1,5 +1,4 @@
-// app/[scope]/page.tsx
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { getScopeById, isValidScopeId, SCOPE_IDS } from '@/lib/scopes'
 import { ScopeFeed } from '@/components/sections/ScopeFeed'
 
@@ -9,6 +8,10 @@ interface PageProps {
 
 export default async function ScopePage({ params }: PageProps) {
   const { scope: scopeId } = await params
+
+  if (scopeId === 'finance') {
+    redirect('/markets')
+  }
 
   if (!isValidScopeId(scopeId)) {
     notFound()

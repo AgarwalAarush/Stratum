@@ -75,6 +75,34 @@ export function NavPanel({
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-3">
+        <div
+          className={[
+            'mb-4 border border-[var(--border)] bg-[var(--bg)] font-mono text-[9px]',
+            isOpen ? 'grid grid-cols-2 p-0.5' : 'flex justify-center border-0 bg-transparent',
+          ].join(' ')}
+          aria-label="Product mode"
+        >
+          {isOpen && (
+            <Link
+              href="/ai-research"
+              className="px-1.5 py-1.5 text-center bg-[var(--surface-2)] text-[var(--text)]"
+              aria-current="page"
+            >
+              Intelligence
+            </Link>
+          )}
+          <Link
+            href="/markets"
+            className={[
+              'px-1.5 py-1.5 text-center text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors',
+              isOpen ? '' : 'w-8',
+            ].join(' ')}
+            aria-label="Markets"
+            title={!isOpen ? 'Markets' : undefined}
+          >
+            {isOpen ? 'Markets' : 'MK'}
+          </Link>
+        </div>
         <button
           onClick={onOpenBrief}
           aria-label="Morning Brief"

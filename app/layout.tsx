@@ -1,9 +1,8 @@
 // app/layout.tsx
 import type { Metadata } from 'next'
-import { IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google'
+import { IBM_Plex_Mono, IBM_Plex_Sans, Instrument_Serif } from 'next/font/google'
 import '@/app/globals.css'
 import { ThemeScript } from '@/components/ThemeScript'
-import { ClientLayout } from '@/components/layout/ClientLayout'
 
 const ibmPlexSans = IBM_Plex_Sans({
   subsets: ['latin'],
@@ -19,9 +18,16 @@ const ibmPlexMono = IBM_Plex_Mono({
   display: 'swap',
 })
 
+const instrumentSerif = Instrument_Serif({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-instrument-serif',
+  display: 'swap',
+})
+
 export const metadata: Metadata = {
   title: 'Stratum',
-  description: 'Minimalist tech intelligence dashboard',
+  description: 'Technology intelligence and market analysis',
 }
 
 export default function RootLayout({
@@ -34,16 +40,12 @@ export default function RootLayout({
       lang="en"
       data-theme="light"
       suppressHydrationWarning
-      className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}
+      className={`${ibmPlexSans.variable} ${ibmPlexMono.variable} ${instrumentSerif.variable}`}
     >
       <head>
         <ThemeScript />
       </head>
-      <body className="bg-[var(--surface-2)] text-[var(--text)] font-sans antialiased">
-        <ClientLayout>
-          {children}
-        </ClientLayout>
-      </body>
+      <body className="bg-[var(--bg)] text-[var(--text)] font-sans antialiased">{children}</body>
     </html>
   )
 }
