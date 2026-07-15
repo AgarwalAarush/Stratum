@@ -605,6 +605,7 @@
   margin-top: 10px;
   min-height: 50px;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
 }
 
