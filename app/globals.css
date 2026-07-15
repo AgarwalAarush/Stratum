@@ -461,7 +461,10 @@
 
 /* Markets screener */
 .market-screener {
+  max-width: 100%;
+  min-width: 0;
   padding: 30px 32px 0;
+  width: 100%;
 }
 
 .market-screener-heading h1 {
@@ -650,8 +653,11 @@
 }
 
 .market-screen-table-wrap {
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   transition: opacity 150ms ease;
+  width: 100%;
 }
 
 .market-screen-table-loading {
@@ -1121,6 +1127,11 @@ body.theme-ready *::after {
 .markets-shell {
   color-scheme: light;
   font-family: var(--font-ibm-plex-sans), system-ui, -apple-system, sans-serif;
+  overflow-x: clip;
+}
+
+html:has(.markets-shell) {
+  overflow-x: clip;
 }
 
 [data-theme="dark"] .markets-shell {
