@@ -196,7 +196,7 @@
 .market-overview-evidence-grid {
   border-bottom: 1px solid var(--market-border);
   display: grid;
-  grid-template-columns: 1.12fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   min-height: 337px;
 }
 
@@ -292,7 +292,7 @@
 .market-implication-grid {
   border-bottom: 1px solid var(--market-border);
   display: grid;
-  grid-template-columns: 1.08fr 1.1fr 1.08fr 1.08fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
   min-height: 176px;
 }
 
