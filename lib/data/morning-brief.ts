@@ -1,5 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk'
 import type { MorningBriefData } from '../types.ts'
+import { AI_MODELS } from '../ai/config.ts'
+import { generateOpenAIJson } from '../server/openai-responses.ts'
 import { fetchNewsItemsByTopic } from './rss.ts'
 import { fetchArxivPapers } from './arxiv.ts'
 import { fetchTrendingRepos } from './repos.ts'
@@ -194,7 +195,7 @@ function feedItemRowToSourceItem(row: FeedItemRow): SourceItem {
 }
 
 export async function generateMorningBrief(): Promise<MorningBriefData> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
     return { ...FALLBACK_BRIEF, fetchedAt: new Date().toISOString() }
   }
@@ -301,35 +302,57 @@ Requirements:
 - Citations as [n] using the headline numbers, placed at the end of relevant clauses
 - headline: one sharp, specific sentence (not generic)
 - watchList: forward-looking items only
-- Return ONLY valid JSON, no markdown fences`
+- Return only the required structured response`
 
   try {
-    const client = new Anthropic({ apiKey })
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 3072,
-      messages: [{ role: 'user', content: prompt }],
+    const result = await generateOpenAIJson({
+      apiKey,
+      model: AI_MODELS.morningBrief,
+      input: prompt,
+      schemaName: 'stratum_morning_brief',
+      schema: {
+        type: 'object',
+        properties: {
+          headline: { type: 'string' },
+          sections: {
+            type: 'array',
+            minItems: 3,
+            maxItems: 5,
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                bullets: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 5 },
+              },
+              required: ['title', 'bullets'],
+              additionalProperties: false,
+            },
+          },
+          watchList: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 5 },
+        },
+        required: ['headline', 'sections', 'watchList'],
+        additionalProperties: false,
+      },
+      maxOutputTokens: 3_072,
+      validate(value) {
+        if (typeof value !== 'object' || value === null) throw new Error('Morning brief response is invalid')
+        const brief = value as { headline?: unknown; sections?: unknown; watchList?: unknown }
+        if (typeof brief.headline !== 'string' || !Array.isArray(brief.sections) || !Array.isArray(brief.watchList)) {
+          throw new Error('Morning brief response is incomplete')
+        }
+        const sections = brief.sections.map((section) => {
+          if (typeof section !== 'object' || section === null) throw new Error('Morning brief section is invalid')
+          const candidate = section as { title?: unknown; bullets?: unknown }
+          if (typeof candidate.title !== 'string' || !Array.isArray(candidate.bullets) || !candidate.bullets.every((bullet) => typeof bullet === 'string')) {
+            throw new Error('Morning brief section is incomplete')
+          }
+          return { title: candidate.title, bullets: candidate.bullets as string[] }
+        })
+        if (!brief.watchList.every((item) => typeof item === 'string')) throw new Error('Morning brief watch list is invalid')
+        return { headline: brief.headline, sections, watchList: brief.watchList as string[] }
+      },
     })
-
-    const text = message.content
-      .filter((b) => b.type === 'text')
-      .map((b) => (b as { type: 'text'; text: string }).text)
-      .join('')
-
-    const match = text.match(/\{[\s\S]*\}/)
-    if (!match) {
-      return { ...FALLBACK_BRIEF, fetchedAt: new Date().toISOString() }
-    }
-
-    const parsed = JSON.parse(match[0]) as {
-      headline: string
-      sections: Array<{ title: string; bullets: string[] }>
-      watchList: string[]
-    }
-
-    if (!parsed.headline || !Array.isArray(parsed.sections)) {
-      return { ...FALLBACK_BRIEF, fetchedAt: new Date().toISOString() }
-    }
+    const parsed = result.data
 
     // Expand bare [n] references into [n](url) markdown links
     const sourceMap = new Map(sourceIndex.map((s) => [s.n, s.url]))
