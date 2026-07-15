@@ -45,13 +45,13 @@ test('AlpacaClient falls back to IEX only for feed entitlement errors', async ()
       const feed = new URL(String(input)).searchParams.get('feed') ?? ''
       requestedFeeds.push(feed)
       if (feed === 'delayed_sip') return jsonResponse({ message: 'subscription does not permit feed' }, 403)
-      return jsonResponse({ snapshots: {
+      return jsonResponse({
         MSFT: {
           latestTrade: { p: 500, t: '2026-07-15T20:00:00Z' },
           dailyBar: { o: 495, h: 501, l: 493, c: 500, v: 750_000, t: '2026-07-15T20:00:00Z' },
           prevDailyBar: { c: 490 },
         },
-      } })
+      })
     },
   })
 
@@ -61,13 +61,37 @@ test('AlpacaClient falls back to IEX only for feed entitlement errors', async ()
   assert.equal(result.data[0]?.feed, 'iex')
 })
 
-test('AlpacaClient normalizes paginated daily bars', async () => {
-  let page = 0
+test('AlpacaClient maps delayed SIP history to SIP and preserves IEX fallback provenance', async () => {
+  const requestedFeeds: string[] = []
   const client = new AlpacaClient({
     keyId: 'key',
     secretKey: 'secret',
-    fetchImpl: async () => {
+    maxAttempts: 1,
+    fetchImpl: async (input) => {
+      const feed = new URL(String(input)).searchParams.get('feed') ?? ''
+      requestedFeeds.push(feed)
+      if (feed === 'sip') return jsonResponse({ message: 'subscription does not permit feed' }, 422)
+      return jsonResponse({ bars: {
+        AAPL: [{ t: '2026-07-15T04:00:00Z', o: 220, h: 226, l: 219, c: 225, v: 1_000_000 }],
+      } })
+    },
+  })
+
+  const result = await client.fetchDailyBars(['AAPL'], '2026-07-14', '2026-07-15')
+  assert.deepEqual(requestedFeeds, ['sip', 'iex'])
+  assert.equal(result.feed, 'iex')
+  assert.equal(result.data[0]?.feed, 'iex')
+})
+
+test('AlpacaClient normalizes paginated daily bars', async () => {
+  let page = 0
+  const requestedFeeds: string[] = []
+  const client = new AlpacaClient({
+    keyId: 'key',
+    secretKey: 'secret',
+    fetchImpl: async (input) => {
       page += 1
+      requestedFeeds.push(new URL(String(input)).searchParams.get('feed') ?? '')
       return jsonResponse({
         bars: { AAPL: [{ t: `2026-07-${page === 1 ? '14' : '15'}T04:00:00Z`, o: 1, h: 3, l: 0.5, c: 2, v: 100, n: 10, vw: 1.8 }] },
         next_page_token: page === 1 ? 'next' : null,
@@ -77,6 +101,9 @@ test('AlpacaClient normalizes paginated daily bars', async () => {
 
   const result = await client.fetchDailyBars(['AAPL'], '2026-01-01', '2026-07-15')
   assert.equal(result.data.length, 2)
+  assert.deepEqual(requestedFeeds, ['sip', 'sip'])
+  assert.equal(result.feed, 'delayed_sip')
+  assert.equal(result.data[0]?.feed, 'delayed_sip')
   assert.equal(result.data[0]?.tradingDate, '2026-07-14')
   assert.equal(result.data[1]?.tradeCount, 10)
   assert.equal(result.data[1]?.vwap, 1.8)

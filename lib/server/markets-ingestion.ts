@@ -93,11 +93,15 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
   if (assets.length === 0) throw new Error('No eligible US equity assets are available')
 
   const symbols = assets.map((asset) => asset.symbol)
-  const snapshotsResult = await client.fetchSnapshots(symbols)
-  const feed = snapshotsResult.feed
+  let snapshotsResult = await client.fetchSnapshots(symbols)
+  let feed = snapshotsResult.feed
   const start = new Date(now)
   start.setUTCDate(start.getUTCDate() - MARKET_LOOKBACK_DAYS)
   const barsResult = await client.fetchDailyBars(symbols, isoDate(start), isoDate(now), feed)
+  if (barsResult.feed !== feed) {
+    snapshotsResult = await client.fetchSnapshots(symbols, barsResult.feed)
+    feed = snapshotsResult.feed
+  }
   if (barsResult.feed !== feed) throw new Error(`Alpaca returned inconsistent feeds: ${feed} and ${barsResult.feed}`)
 
   for (const batch of batches(barsResult.data)) {

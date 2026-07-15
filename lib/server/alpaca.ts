@@ -39,8 +39,8 @@ interface AlpacaBarsResponse {
   next_page_token?: string | null
 }
 
-interface AlpacaSnapshotsResponse {
-  snapshots?: Record<string, AlpacaSnapshotPayload>
+type AlpacaSnapshotsResponse = Record<string, AlpacaSnapshotPayload> | {
+  snapshots: Record<string, AlpacaSnapshotPayload>
 }
 
 interface AlpacaClockResponse {
@@ -227,9 +227,12 @@ export class AlpacaClient {
       for (const batch of splitIntoBatches(symbols)) {
         const parameters = new URLSearchParams({ symbols: batch.join(','), feed })
         const payload = await this.requestJson<AlpacaSnapshotsResponse>(this.dataUrl, '/v2/stocks/snapshots', parameters)
+        const snapshotMap: Record<string, AlpacaSnapshotPayload> = 'snapshots' in payload
+          ? (payload as { snapshots: Record<string, AlpacaSnapshotPayload> }).snapshots
+          : payload as Record<string, AlpacaSnapshotPayload>
 
         for (const symbol of batch) {
-          const snapshot = payload.snapshots?.[symbol]
+          const snapshot = snapshotMap[symbol]
           if (!snapshot) continue
           const price = finiteNumber(snapshot.latestTrade?.p) ?? finiteNumber(snapshot.dailyBar?.c)
           const previousClose = finiteNumber(snapshot.prevDailyBar?.c)
@@ -267,6 +270,7 @@ export class AlpacaClient {
 
     return this.withFeedFallback(async (feed) => {
       const bars: MarketDailyBar[] = []
+      const historicalFeed = feed === 'delayed_sip' ? 'sip' : feed
       for (const batch of splitIntoBatches(symbols)) {
         let pageToken: string | null = null
         do {
@@ -276,7 +280,7 @@ export class AlpacaClient {
             start,
             end,
             adjustment: 'all',
-            feed,
+            feed: historicalFeed,
             limit: '10000',
           })
           if (pageToken) parameters.set('page_token', pageToken)
