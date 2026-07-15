@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { NavPanel } from './NavPanel'
 import { SettingsModal } from './SettingsModal'
 import { MorningBriefModal, MORNING_BRIEF_SEEN_KEY } from '@/components/MorningBriefModal'
+import { IntelligenceBriefingsModal } from '@/components/IntelligenceBriefingsModal'
 
 // Brief is generated daily at 12:00 UTC. Returns that timestamp for today.
 function getTodayGenerationTime() {
@@ -17,6 +18,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
     const [isNavOpen, setIsNavOpen] = useState(true)
     const [isSettingsOpen, setIsSettingsOpen] = useState(false)
     const [isBriefOpen, setIsBriefOpen] = useState(false)
+    const [isIntelligenceBriefingsOpen, setIsIntelligenceBriefingsOpen] = useState(false)
 
     useEffect(() => {
         if (window.innerWidth < 768) {
@@ -42,6 +44,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
                 setIsOpen={setIsNavOpen}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onOpenBrief={() => setIsBriefOpen(true)}
+                onOpenIntelligenceBriefings={() => setIsIntelligenceBriefingsOpen(true)}
             />
             <main className="flex-1 min-w-0 flex flex-col w-full">
                 {children}
@@ -53,6 +56,10 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
             <MorningBriefModal
                 open={isBriefOpen}
                 onClose={() => setIsBriefOpen(false)}
+            />
+            <IntelligenceBriefingsModal
+                open={isIntelligenceBriefingsOpen}
+                onClose={() => setIsIntelligenceBriefingsOpen(false)}
             />
         </div>
     )

@@ -21,9 +21,16 @@ interface NavPanelProps {
   setIsOpen: (b: boolean) => void
   onOpenSettings: () => void
   onOpenBrief: () => void
+  onOpenIntelligenceBriefings: () => void
 }
 
-export function NavPanel({ isOpen, setIsOpen, onOpenSettings, onOpenBrief }: NavPanelProps) {
+export function NavPanel({
+  isOpen,
+  setIsOpen,
+  onOpenSettings,
+  onOpenBrief,
+  onOpenIntelligenceBriefings,
+}: NavPanelProps) {
   const params = useParams()
   const activeScope = params?.scope as string | undefined
   const { theme } = useThemeStore()
@@ -97,6 +104,37 @@ export function NavPanel({ isOpen, setIsOpen, onOpenSettings, onOpenBrief }: Nav
             </>
           ) : (
             <span className="text-[10px] font-mono font-medium">{NAV_ABBR['morning-brief']}</span>
+          )}
+        </button>
+        <button
+          onClick={onOpenIntelligenceBriefings}
+          aria-label="Weekly Briefs"
+          title={!isOpen ? 'Weekly Briefs' : undefined}
+          className={[
+            'flex items-center rounded-[3px] text-[12px] transition-colors duration-150 font-mono mb-3 cursor-pointer w-full',
+            isOpen ? 'gap-2 px-2 py-1.5 justify-start' : 'h-8 px-0 justify-center',
+            'font-normal text-[var(--text-dim)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
+          ].join(' ')}
+        >
+          {isOpen ? (
+            <>
+              <span className="w-[5px] h-[5px] rounded-full bg-current opacity-50 shrink-0" />
+              <span
+                className="whitespace-nowrap"
+                style={{
+                  opacity: isOpen ? 1 : 0,
+                  transform: isOpen ? 'translateX(0)' : 'translateX(-6px)',
+                  pointerEvents: isOpen ? 'auto' : 'none',
+                  transitionProperty: 'opacity, transform',
+                  transitionDuration: 'var(--sidebar-motion-duration)',
+                  transitionTimingFunction: 'var(--sidebar-motion-easing)',
+                }}
+              >
+                Weekly Briefs
+              </span>
+            </>
+          ) : (
+            <span className="text-[10px] font-mono font-medium">WB</span>
           )}
         </button>
         <p

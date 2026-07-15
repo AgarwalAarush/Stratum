@@ -4,12 +4,11 @@ import { useMemo } from 'react'
 import useSWR from 'swr'
 import dynamic from 'next/dynamic'
 import { RefreshCw } from 'lucide-react'
-import type { OverviewData, PeriodicOverviewData, ScopeDef, SectionData } from '@/lib/types'
+import type { OverviewData, ScopeDef, SectionData } from '@/lib/types'
 import { formatRelativeTime } from '@/lib/utils'
 import { useSettingsStore } from '@/store/settings'
 import { ScopeSection } from './ScopeSection'
 import { AIOverview } from './AIOverview'
-import { PeriodicOverview } from './PeriodicOverview'
 
 const GlobalNewsMap = dynamic(
   () => import('./GlobalNewsMap').then((m) => ({ default: m.GlobalNewsMap })),
@@ -133,29 +132,6 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
     },
   )
 
-  const fetchPeriodicOverview = async (type: string) => {
-    const response = await fetch(`/api/overviews/${type}${forceParam}`, {
-      headers: { Accept: 'application/json' },
-    })
-    if (!response.ok) return null
-    const data = (await response.json()) as PeriodicOverviewData
-    return data.content ? data : null
-  }
-
-  const needsPeriodicOverviews = isAiResearchScope || isGlobalNewsScope
-
-  const { data: weeklyData, isLoading: weeklyLoading } = useSWR<PeriodicOverviewData | null>(
-    needsPeriodicOverviews ? `overview:weekly:dev=${devMode}` : null,
-    () => fetchPeriodicOverview('weekly'),
-    { refreshInterval: SCOPE_REFRESH_INTERVAL_MS, revalidateOnFocus: false, dedupingInterval: devMode ? 0 : 120_000 },
-  )
-
-  const { data: monthlyData, isLoading: monthlyLoading } = useSWR<PeriodicOverviewData | null>(
-    needsPeriodicOverviews ? `overview:monthly:dev=${devMode}` : null,
-    () => fetchPeriodicOverview('monthly'),
-    { refreshInterval: SCOPE_REFRESH_INTERVAL_MS, revalidateOnFocus: false, dedupingInterval: devMode ? 0 : 120_000 },
-  )
-
   const sectionById = useMemo<Record<string, ScopeSectionDef>>(
     () =>
       Object.fromEntries(
@@ -213,12 +189,6 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
               isLoading={overviewLoading}
             />
 
-            <PeriodicOverview
-              weekly={weeklyData ?? null}
-              monthly={monthlyData ?? null}
-              isLoading={weeklyLoading || monthlyLoading}
-            />
-
             <div className="grid grid-cols-1 xl:grid-cols-3 ai-research-grid xl:divide-x xl:divide-border">
               <div className="xl:col-span-2 xl:row-start-1">
                 {renderSection('ai-news-general')}
@@ -254,11 +224,6 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
                   title="Global News Overview"
                   bullets={globalNewsOverviewData?.bullets ?? []}
                   isLoading={globalNewsOverviewLoading}
-                />
-                <PeriodicOverview
-                  weekly={weeklyData ?? null}
-                  monthly={monthlyData ?? null}
-                  isLoading={weeklyLoading || monthlyLoading}
                 />
               </>
             )}

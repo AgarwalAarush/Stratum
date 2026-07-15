@@ -124,3 +124,9 @@ test('AI Research layout renders repos section at the bottom before end marker',
   assert.ok(reposIndex > newTechnologyIndex)
   assert.ok(endMarkerIndex > reposIndex)
 })
+
+test('ScopeFeed no longer renders inline periodic briefings', () => {
+  assert.equal(scopeFeedSource.includes('PeriodicOverview'), false)
+  assert.equal(scopeFeedSource.includes('/api/overviews/weekly'), false)
+  assert.equal(scopeFeedSource.includes('/api/overviews/monthly'), false)
+})
