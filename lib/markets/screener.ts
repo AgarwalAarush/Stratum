@@ -95,7 +95,20 @@ function sortValue(row: ScreenerRow, field: ScreenerSortField): number | string 
 }
 
 export function runIllustrativeScreener(query: ScreenerQuery): ScreenerResponse {
-  const filtered = ILLUSTRATIVE_SCREENER_ROWS.filter((row) => query.filters.every((filter) => matchesFilter(row, filter)))
+  return runScreener(query, ILLUSTRATIVE_SCREENER_ROWS, {
+    feed: 'illustrative',
+    dataAsOf: '2026-07-15T20:00:00.000Z',
+    snapshotId: 'illustrative-2026-07-15-close',
+    stale: false,
+  })
+}
+
+export function runScreener(
+  query: ScreenerQuery,
+  rows: ScreenerRow[],
+  metadata: Pick<ScreenerResponse, 'feed' | 'dataAsOf' | 'snapshotId' | 'stale'>,
+): ScreenerResponse {
+  const filtered = rows.filter((row) => query.filters.every((filter) => matchesFilter(row, filter)))
   filtered.sort((left, right) => {
     const a = sortValue(left, query.sort)
     const b = sortValue(right, query.sort)
@@ -109,9 +122,6 @@ export function runIllustrativeScreener(query: ScreenerQuery): ScreenerResponse 
     total: filtered.length,
     page: query.page,
     pageSize: query.pageSize,
-    feed: 'illustrative',
-    dataAsOf: '2026-07-15T20:00:00.000Z',
-    snapshotId: 'illustrative-2026-07-15-close',
-    stale: false,
+    ...metadata,
   }
 }

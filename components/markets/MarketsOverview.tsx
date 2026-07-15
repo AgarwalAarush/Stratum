@@ -9,6 +9,21 @@ interface MarketsOverviewProps {
   overview: MarketOverviewResponse
 }
 
+function feedLabel(feed: MarketOverviewResponse['feed']): string {
+  if (feed === 'illustrative') return 'Illustrative'
+  if (feed === 'delayed_sip') return 'Delayed SIP'
+  return feed.toUpperCase()
+}
+
+function formatMarketTime(value: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(new Date(value))
+}
+
 export function MarketsOverview({ overview }: MarketsOverviewProps) {
   const [selectedEvidenceId, setSelectedEvidenceId] = useState(overview.evidence[0]?.id ?? '')
 
@@ -21,7 +36,7 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
         </h1>
         <div className="market-overview-meta">
           <span>{overview.state.confidence}% confidence</span>
-          <span>Illustrative</span>
+          <span>{feedLabel(overview.feed)}{overview.stale ? ' · Stale' : ''}</span>
         </div>
       </section>
 
@@ -106,8 +121,8 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
       </section>
 
       <footer className="market-overview-footer">
-        <span>Illustrative data · Data as of 4:00 PM ET</span>
-        <span>US equities · illustrative feed</span>
+        <span>{feedLabel(overview.feed)} data · Data as of {formatMarketTime(overview.dataAsOf)}</span>
+        <span>US equities · {overview.feed} feed{overview.stale ? ' · stale' : ''}</span>
       </footer>
     </article>
   )

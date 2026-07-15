@@ -19,7 +19,17 @@ function isActivePath(pathname: string, href: string): boolean {
   return pathname.startsWith(href)
 }
 
-export function MarketsShell({ children }: { children: React.ReactNode }) {
+function formatMarketTime(value?: string): string {
+  if (!value) return '4:00 PM ET'
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(new Date(value))
+}
+
+export function MarketsShell({ children, dataAsOf }: { children: React.ReactNode; dataAsOf?: string }) {
   const pathname = usePathname()
   const router = useRouter()
   const [refreshing, setRefreshing] = useState(false)
@@ -58,7 +68,7 @@ export function MarketsShell({ children }: { children: React.ReactNode }) {
             <ArrowClockwise size={17} weight="regular" className={refreshing ? 'markets-refreshing' : ''} />
           </button>
           <span className="markets-status-dot" aria-hidden="true" />
-          <span className="markets-status-copy">Updated 4:00 PM ET</span>
+          <span className="markets-status-copy">Updated {formatMarketTime(dataAsOf)}</span>
           <button
             type="button"
             className="markets-mobile-menu-button"

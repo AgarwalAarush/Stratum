@@ -79,6 +79,21 @@ function formatVolume(value: number): string {
   return value.toLocaleString('en-US')
 }
 
+function feedLabel(feed: ScreenerResponse['feed']): string {
+  if (feed === 'illustrative') return 'Illustrative'
+  if (feed === 'delayed_sip') return 'Delayed SIP'
+  return feed.toUpperCase()
+}
+
+function formatMarketTime(value: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(new Date(value))
+}
+
 export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   const [preset, setPreset] = useState<ScreenerPreset>(DEFAULT_SCREENER_QUERY.preset)
   const [filters, setFilters] = useState<ScreenerFilter[]>(DEFAULT_SCREENER_FILTERS)
@@ -171,7 +186,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
     <section className="market-screener" aria-labelledby="stock-screener-title">
       <header className="market-screener-heading">
         <h1 id="stock-screener-title" className="markets-display">Stock Screener</h1>
-        <p>Private preview · Illustrative data · As of 4:00 PM ET</p>
+        <p>Private preview · {feedLabel(response.feed)} data · As of {formatMarketTime(response.dataAsOf)}{response.stale ? ' · Stale' : ''}</p>
       </header>
 
       <div className="market-filter-bar">
@@ -274,7 +289,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
                     </div>
                   </td>
                   <td>{row.exchange}</td>
-                  <td>4:00 PM ET</td>
+                  <td>{formatMarketTime(row.asOf)}</td>
                   <td>{selected && <Link href={`/markets/research?symbol=${row.symbol}`}>View research</Link>}</td>
                 </tr>
               )
@@ -294,7 +309,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
           {totalPages > 4 && <button type="button" onClick={() => void execute({ page: totalPages })}>{totalPages}</button>}
           <button type="button" aria-label="Next page" disabled={response.page >= totalPages} onClick={() => void execute({ page: response.page + 1 })}><CaretRight size={14} /></button>
         </nav>
-        <span>US equities · illustrative feed</span>
+        <span>US equities · {response.feed} feed{response.stale ? ' · stale' : ''}</span>
         <span>Snapshot calculated from normalized market data</span>
       </footer>
     </section>

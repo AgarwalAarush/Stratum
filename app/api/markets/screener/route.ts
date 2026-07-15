@@ -1,11 +1,12 @@
 import { parseScreenerQuery, runIllustrativeScreener, ScreenerValidationError } from '../../../../lib/markets/screener.ts'
+import { fetchLatestScreener } from '../../../../lib/server/markets-repository.ts'
 
 export const CACHE_TTL_SECONDS = 60
 
 export async function POST(request: Request) {
   try {
     const query = parseScreenerQuery(await request.json())
-    const response = runIllustrativeScreener(query)
+    const response = await fetchLatestScreener(query) ?? runIllustrativeScreener(query)
 
     return Response.json(response, {
       headers: {
