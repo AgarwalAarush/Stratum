@@ -18,12 +18,30 @@ function disableRedisForTest() {
   }
 }
 
+function openAIOverviewResponse(bullets: string[]): Response {
+  return new Response(JSON.stringify({
+    id: 'resp_test',
+    object: 'response',
+    created_at: 0,
+    status: 'completed',
+    model: 'gpt-5.6-luna',
+    output: [{
+      id: 'msg_test',
+      type: 'message',
+      status: 'completed',
+      role: 'assistant',
+      content: [{ type: 'output_text', text: JSON.stringify({ bullets }), annotations: [] }],
+    }],
+    usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+}
+
 test('generateAIOverview returns fallback bullets when API key is missing', { concurrency: false }, async (t) => {
-  const originalApiKey = process.env.ANTHROPIC_API_KEY
+  const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   
   // Remove API key
-  process.env.ANTHROPIC_API_KEY = ''
+  process.env.OPENAI_API_KEY = ''
   
   // Mock fetch to return some content (should not be called)
   global.fetch = (async () =>
@@ -33,7 +51,7 @@ test('generateAIOverview returns fallback bullets when API key is missing', { co
     )) as typeof fetch
 
   t.after(() => {
-    process.env.ANTHROPIC_API_KEY = originalApiKey
+    process.env.OPENAI_API_KEY = originalApiKey
     global.fetch = originalFetch
   })
 
@@ -50,10 +68,10 @@ test('generateAIOverview returns fallback bullets when API key is missing', { co
 })
 
 test('generateAIOverview handles fetch failures gracefully', { concurrency: false }, async (t) => {
-  const originalApiKey = process.env.ANTHROPIC_API_KEY
+  const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   
-  process.env.ANTHROPIC_API_KEY = 'test-key'
+  process.env.OPENAI_API_KEY = 'test-key'
   
   // Mock all fetches to fail
   global.fetch = (async () => {
@@ -61,7 +79,7 @@ test('generateAIOverview handles fetch failures gracefully', { concurrency: fals
   }) as typeof fetch
 
   t.after(() => {
-    process.env.ANTHROPIC_API_KEY = originalApiKey
+    process.env.OPENAI_API_KEY = originalApiKey
     global.fetch = originalFetch
   })
 
@@ -74,31 +92,24 @@ test('generateAIOverview handles fetch failures gracefully', { concurrency: fals
 })
 
 test('generateAIOverview processes successful data sources', { concurrency: false }, async (t) => {
-  const originalApiKey = process.env.ANTHROPIC_API_KEY
+  const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   
-  process.env.ANTHROPIC_API_KEY = 'test-key'
+  process.env.OPENAI_API_KEY = 'test-key'
   
   let fetchCallCount = 0
   
-  // Mock successful data fetch and Anthropic API response
+  // Mock successful data fetch and OpenAI Responses API response
   global.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
     fetchCallCount++
     
-    if (url.includes('api.anthropic.com')) {
-      // Mock Anthropic API response with valid JSON array
-      return new Response(
-        JSON.stringify({
-          content: [
-            {
-              type: 'text',
-              text: '["AI development accelerates with new breakthrough [1]", "Policy changes impact tech industry [2]", "Venture funding reaches new milestone [3]"]'
-            }
-          ]
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      )
+    if (url.includes('api.openai.com')) {
+      return openAIOverviewResponse([
+        'AI development accelerates with new breakthrough [1]',
+        'Policy changes impact tech industry [2]',
+        'Venture funding reaches new milestone [3]',
+      ])
     } else {
       // Mock RSS/API responses
       return new Response(
@@ -115,7 +126,7 @@ test('generateAIOverview processes successful data sources', { concurrency: fals
   }) as typeof fetch
 
   t.after(() => {
-    process.env.ANTHROPIC_API_KEY = originalApiKey
+    process.env.OPENAI_API_KEY = originalApiKey
     global.fetch = originalFetch
   })
 
@@ -129,33 +140,19 @@ test('generateAIOverview processes successful data sources', { concurrency: fals
 
 test('generateAIOverview expands source citations to markdown links', { concurrency: false }, async (t) => {
   clearCacheForTests()
-  const originalApiKey = process.env.ANTHROPIC_API_KEY
+  const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
 
-  process.env.ANTHROPIC_API_KEY = 'test-key'
+  process.env.OPENAI_API_KEY = 'test-key'
   
   global.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
     
-    if (url.includes('api.anthropic.com')) {
-      return new Response(
-        JSON.stringify({
-          id: 'msg_test',
-          type: 'message',
-          role: 'assistant',
-          model: 'claude-haiku-4-5-20251001',
-          stop_reason: 'end_turn',
-          stop_sequence: null,
-          usage: { input_tokens: 10, output_tokens: 10 },
-          content: [
-            {
-              type: 'text',
-              text: '["Major AI breakthrough announced [1]", "New policy framework released [2]"]'
-            }
-          ]
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      )
+    if (url.includes('api.openai.com')) {
+      return openAIOverviewResponse([
+        'Major AI breakthrough announced [1]',
+        'New policy framework released [2]',
+      ])
     } else {
       return new Response(
         `<rss><channel>
@@ -171,7 +168,7 @@ test('generateAIOverview expands source citations to markdown links', { concurre
   }) as typeof fetch
 
   t.after(() => {
-    process.env.ANTHROPIC_API_KEY = originalApiKey
+    process.env.OPENAI_API_KEY = originalApiKey
     global.fetch = originalFetch
   })
 
@@ -188,21 +185,16 @@ test('overview route returns fresh data when force=true', { concurrency: false }
   clearCacheForTests()
   const restoreRedis = disableRedisForTest()
   
-  const originalApiKey = process.env.ANTHROPIC_API_KEY
+  const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   
-  process.env.ANTHROPIC_API_KEY = 'test-key'
+  process.env.OPENAI_API_KEY = 'test-key'
   
   global.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
     
-    if (url.includes('api.anthropic.com')) {
-      return new Response(
-        JSON.stringify({
-          content: [{ type: 'text', text: '["Forced refresh overview bullet [1]"]' }]
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      )
+    if (url.includes('api.openai.com')) {
+      return openAIOverviewResponse(['Forced refresh overview bullet [1]'])
     } else {
       return new Response(
         `<rss><channel><item><title>Force refresh test</title><link>https://example.com/force</link><pubDate>Thu, 06 Mar 2026 10:00:00 GMT</pubDate></item></channel></rss>`,
@@ -212,7 +204,7 @@ test('overview route returns fresh data when force=true', { concurrency: false }
   }) as typeof fetch
 
   t.after(() => {
-    process.env.ANTHROPIC_API_KEY = originalApiKey
+    process.env.OPENAI_API_KEY = originalApiKey
     global.fetch = originalFetch
     restoreRedis()
   })
@@ -231,23 +223,18 @@ test('overview route uses cached data by default', { concurrency: false }, async
   clearCacheForTests()
   const restoreRedis = disableRedisForTest()
   
-  const originalApiKey = process.env.ANTHROPIC_API_KEY
+  const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   
-  process.env.ANTHROPIC_API_KEY = 'test-key'
+  process.env.OPENAI_API_KEY = 'test-key'
   let fetchCount = 0
   
   global.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
     fetchCount++
     
-    if (url.includes('api.anthropic.com')) {
-      return new Response(
-        JSON.stringify({
-          content: [{ type: 'text', text: '["Cached overview test bullet"]' }]
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      )
+    if (url.includes('api.openai.com')) {
+      return openAIOverviewResponse(['Cached overview test bullet'])
     } else {
       return new Response(
         `<rss><channel><item><title>Cache test</title><link>https://example.com/cache</link><pubDate>Thu, 06 Mar 2026 10:00:00 GMT</pubDate></item></channel></rss>`,
@@ -257,7 +244,7 @@ test('overview route uses cached data by default', { concurrency: false }, async
   }) as typeof fetch
 
   t.after(() => {
-    process.env.ANTHROPIC_API_KEY = originalApiKey
+    process.env.OPENAI_API_KEY = originalApiKey
     global.fetch = originalFetch
     restoreRedis()
   })
@@ -287,11 +274,11 @@ test('overview route returns safe empty response when generation fails', { concu
   clearCacheForTests()
   const restoreRedis = disableRedisForTest()
   
-  const originalApiKey = process.env.ANTHROPIC_API_KEY
+  const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   
   // Remove API key to force fallback
-  process.env.ANTHROPIC_API_KEY = ''
+  process.env.OPENAI_API_KEY = ''
   
   // Make all data sources fail
   global.fetch = (async () => {
@@ -299,7 +286,7 @@ test('overview route returns safe empty response when generation fails', { concu
   }) as typeof fetch
 
   t.after(() => {
-    process.env.ANTHROPIC_API_KEY = originalApiKey
+    process.env.OPENAI_API_KEY = originalApiKey
     global.fetch = originalFetch
     restoreRedis()
   })
@@ -320,10 +307,10 @@ test('overview route handles malformed force parameter', { concurrency: false },
   clearCacheForTests()
   const restoreRedis = disableRedisForTest()
   
-  const originalApiKey = process.env.ANTHROPIC_API_KEY
+  const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   
-  process.env.ANTHROPIC_API_KEY = ''
+  process.env.OPENAI_API_KEY = ''
   
   global.fetch = (async () =>
     new Response(
@@ -332,7 +319,7 @@ test('overview route handles malformed force parameter', { concurrency: false },
     )) as typeof fetch
 
   t.after(() => {
-    process.env.ANTHROPIC_API_KEY = originalApiKey
+    process.env.OPENAI_API_KEY = originalApiKey
     global.fetch = originalFetch
     restoreRedis()
   })
@@ -399,17 +386,17 @@ test('overview route sets correct cache headers', { concurrency: false }, async 
   clearCacheForTests()
   const restoreRedis = disableRedisForTest()
   
-  const originalApiKey = process.env.ANTHROPIC_API_KEY
+  const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   
-  process.env.ANTHROPIC_API_KEY = ''
+  process.env.OPENAI_API_KEY = ''
   
   global.fetch = (async () =>
     new Response('{"items": []}', { status: 200, headers: { 'Content-Type': 'application/json' } })
   ) as typeof fetch
 
   t.after(() => {
-    process.env.ANTHROPIC_API_KEY = originalApiKey
+    process.env.OPENAI_API_KEY = originalApiKey
     global.fetch = originalFetch
     restoreRedis()
   })

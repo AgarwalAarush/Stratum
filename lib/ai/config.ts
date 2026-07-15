@@ -2,6 +2,7 @@ export const AI_PROVIDER = 'openai' as const
 
 export const AI_MODELS = {
   articleSummary: process.env.OPENAI_ARTICLE_SUMMARY_MODEL ?? 'gpt-5.6-luna',
+  dailyOverview: process.env.OPENAI_DAILY_OVERVIEW_MODEL ?? 'gpt-5.6-luna',
   scheduledSynthesis: process.env.CODEX_SYNTHESIS_MODEL ?? 'gpt-5.6-terra',
 } as const
 

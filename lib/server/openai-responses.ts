@@ -16,6 +16,73 @@ export interface StreamTextResult {
   metadata: GenerationMetadata
 }
 
+interface GenerateJsonOptions<T> {
+  apiKey: string
+  model: string
+  input: string
+  schemaName: string
+  schema: Record<string, unknown>
+  maxOutputTokens: number
+  fetchImpl?: typeof fetch
+  validate: (value: unknown) => T
+}
+
+export interface GenerateJsonResult<T> {
+  data: T
+  metadata: GenerationMetadata
+}
+
+export async function generateOpenAIJson<T>(options: GenerateJsonOptions<T>): Promise<GenerateJsonResult<T>> {
+  const startedAt = Date.now()
+  const client = new OpenAI({
+    apiKey: options.apiKey,
+    fetch: options.fetchImpl,
+    maxRetries: 2,
+    timeout: 45_000,
+  })
+
+  try {
+    const response = await client.responses.create({
+      model: options.model,
+      input: options.input,
+      max_output_tokens: options.maxOutputTokens,
+      reasoning: { effort: 'low' },
+      text: {
+        verbosity: 'low',
+        format: {
+          type: 'json_schema',
+          name: options.schemaName,
+          schema: options.schema,
+          strict: true,
+        },
+      },
+      store: false,
+    })
+
+    const data = options.validate(JSON.parse(response.output_text))
+    return {
+      data,
+      metadata: {
+        provider: AI_PROVIDER,
+        model: options.model,
+        durationMs: Date.now() - startedAt,
+        status: 'succeeded',
+      },
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw Object.assign(new Error(message), {
+      metadata: {
+        provider: AI_PROVIDER,
+        model: options.model,
+        durationMs: Date.now() - startedAt,
+        status: 'failed' as const,
+        error: message,
+      } satisfies GenerationMetadata,
+    })
+  }
+}
+
 export async function streamOpenAIText(options: StreamTextOptions): Promise<StreamTextResult> {
   const startedAt = Date.now()
   const client = new OpenAI({
