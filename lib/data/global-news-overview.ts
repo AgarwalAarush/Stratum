@@ -1,5 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk'
 import type { OverviewData } from '../types.ts'
+import { AI_MODELS } from '../ai/config.ts'
+import { generateOpenAIJson } from '../server/openai-responses.ts'
 import { fetchNewsItemsByTopic } from './rss.ts'
 
 interface SourceItem {
@@ -62,7 +63,7 @@ const FALLBACK_BULLETS = [
 ]
 
 export async function generateGlobalNewsOverview(): Promise<OverviewData> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
     return { bullets: FALLBACK_BULLETS, fetchedAt: new Date().toISOString() }
   }
@@ -103,30 +104,33 @@ Generate 6–10 concise bullet points summarizing the key takeaways, emerging cr
 
 When a bullet draws from a specific headline, cite it as [n] using the headline number. Place citations at the end of the relevant clause. A bullet may have 0-3 citations.
 
-Return only a JSON array of strings.`
+Return the bullets in the required structured format.`
 
   try {
-    const client = new Anthropic({ apiKey })
-    const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: prompt }],
+    const result = await generateOpenAIJson({
+      apiKey,
+      model: AI_MODELS.dailyOverview,
+      input: prompt,
+      schemaName: 'daily_global_news_overview',
+      schema: {
+        type: 'object',
+        properties: {
+          bullets: { type: 'array', items: { type: 'string' }, minItems: 6, maxItems: 10 },
+        },
+        required: ['bullets'],
+        additionalProperties: false,
+      },
+      maxOutputTokens: 1_024,
+      validate(value) {
+        if (typeof value !== 'object' || value === null || !('bullets' in value)) throw new Error('Overview response is missing bullets')
+        const bullets = (value as { bullets: unknown }).bullets
+        if (!Array.isArray(bullets) || bullets.length === 0 || !bullets.every((bullet) => typeof bullet === 'string')) {
+          throw new Error('Overview bullets are invalid')
+        }
+        return { bullets }
+      },
     })
-
-    const text = message.content
-      .filter((b) => b.type === 'text')
-      .map((b) => (b as { type: 'text'; text: string }).text)
-      .join('')
-
-    const match = text.match(/\[[\s\S]*\]/)
-    if (!match) {
-      return { bullets: FALLBACK_BULLETS, fetchedAt: new Date().toISOString() }
-    }
-
-    const bullets = JSON.parse(match[0]) as string[]
-    if (!Array.isArray(bullets) || bullets.length === 0) {
-      return { bullets: FALLBACK_BULLETS, fetchedAt: new Date().toISOString() }
-    }
+    const bullets = result.data.bullets
 
     const sourceMap = new Map(sourceIndex.map((s) => [s.n, s.url]))
     const processed = bullets.map((b) =>
