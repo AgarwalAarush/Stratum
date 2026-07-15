@@ -1632,7 +1632,187 @@ html:has(.intelligence-shell) {
 }
 
 .intelligence-topic-link {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
   margin-top: 19px;
+  padding: 0;
+}
+
+.intelligence-topic-link:active {
+  transform: translateY(1px);
+}
+
+.intelligence-category-overlay {
+  align-items: center;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 38px;
+  position: fixed;
+  z-index: 60;
+}
+
+.intelligence-category-backdrop {
+  background: rgba(19, 20, 22, 0.34);
+  border: 0;
+  cursor: default;
+  inset: 0;
+  position: absolute;
+}
+
+.intelligence-category-dialog {
+  background: var(--market-bg);
+  border: 1px solid var(--market-border-strong);
+  display: flex;
+  flex-direction: column;
+  height: min(760px, calc(100dvh - 76px));
+  max-width: 1020px;
+  min-height: 0;
+  position: relative;
+  width: 100%;
+}
+
+.intelligence-category-header {
+  align-items: center;
+  border-bottom: 1px solid var(--market-border);
+  display: flex;
+  justify-content: space-between;
+  min-height: 104px;
+  padding: 19px 24px 18px;
+}
+
+.intelligence-category-header p,
+.intelligence-category-header-meta > span {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.intelligence-category-header h2 {
+  align-items: center;
+  display: flex;
+  font-size: 24px;
+  font-weight: 500;
+  gap: 12px;
+  letter-spacing: -0.025em;
+  margin-top: 8px;
+}
+
+.intelligence-category-header-meta {
+  align-items: center;
+  display: flex;
+  gap: 20px;
+}
+
+.intelligence-category-header-meta button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--market-border);
+  color: var(--market-text-dim);
+  cursor: pointer;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
+  width: 36px;
+}
+
+.intelligence-category-header-meta button:hover {
+  background: var(--market-surface-soft);
+  color: var(--market-text);
+}
+
+.intelligence-category-header-meta button:active {
+  transform: translateY(1px);
+}
+
+.intelligence-category-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.intelligence-category-body ol {
+  padding: 0 24px 24px;
+}
+
+.intelligence-category-body li {
+  align-items: center;
+  border-bottom: 1px solid var(--market-border);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 28px minmax(0, 1fr) auto 76px 18px;
+  min-height: 64px;
+}
+
+.intelligence-category-body li > span,
+.intelligence-category-body time,
+.intelligence-category-body small,
+.intelligence-category-body em {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+}
+
+.intelligence-category-body li > span,
+.intelligence-category-body time {
+  color: var(--market-text-muted);
+  font-size: 10px;
+}
+
+.intelligence-category-body time {
+  text-align: right;
+}
+
+.intelligence-category-body li > a {
+  min-width: 0;
+}
+
+.intelligence-category-body strong {
+  color: var(--market-text);
+  display: block;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.intelligence-category-body small {
+  color: var(--market-text-muted);
+  display: block;
+  font-size: 9px;
+  margin-top: 4px;
+}
+
+.intelligence-category-body em {
+  border: 1px solid var(--market-border-strong);
+  color: var(--market-text-dim);
+  font-size: 8px;
+  font-style: normal;
+  padding: 2px 5px;
+  text-transform: uppercase;
+}
+
+.intelligence-category-body li > svg {
+  color: var(--market-text-muted);
+}
+
+.intelligence-category-empty {
+  padding: 48px 24px;
+}
+
+.intelligence-category-empty p {
+  color: var(--market-text);
+  font-size: 14px;
+}
+
+.intelligence-category-empty span {
+  color: var(--market-text-muted);
+  display: block;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  margin-top: 7px;
 }
 
 .intelligence-brief-skeleton,
@@ -1832,6 +2012,58 @@ html:has(.intelligence-shell) {
 
   .intelligence-topic-column:last-child {
     border-bottom: 0;
+  }
+
+  .intelligence-category-overlay {
+    padding: 0;
+  }
+
+  .intelligence-category-dialog {
+    border: 0;
+    height: 100dvh;
+    max-width: none;
+  }
+
+  .intelligence-category-header {
+    align-items: flex-start;
+    min-height: 94px;
+    padding: 16px;
+  }
+
+  .intelligence-category-header h2 {
+    font-size: 20px;
+  }
+
+  .intelligence-category-header-meta > span {
+    display: none;
+  }
+
+  .intelligence-category-body ol {
+    padding: 0 16px 24px;
+  }
+
+  .intelligence-category-body li {
+    align-items: start;
+    gap: 9px;
+    grid-template-columns: 22px minmax(0, 1fr) 14px;
+    min-height: 78px;
+    padding: 14px 0;
+  }
+
+  .intelligence-category-body time {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: left;
+  }
+
+  .intelligence-category-body em {
+    display: none;
+  }
+
+  .intelligence-category-body li > svg {
+    grid-column: 3;
+    grid-row: 1;
+    margin-top: 2px;
   }
 }
 

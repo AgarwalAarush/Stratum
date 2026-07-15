@@ -1,9 +1,10 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowDown,
   ArrowRight,
+  ArrowSquareOut,
   ArrowUp,
   CaretRight,
   Circuitry,
@@ -13,6 +14,7 @@ import {
   HardDrives,
   RocketLaunch,
   Shield,
+  X,
 } from '@phosphor-icons/react'
 import type { FeedItem, ItemTag, SectionData } from '@/lib/types'
 import { getTag } from '@/lib/tags'
@@ -43,6 +45,14 @@ interface IntelligenceSignal {
   label: string
   status: string
   direction: SignalDirection
+}
+
+interface IntelligenceCategory {
+  id: string
+  title: string
+  viewLabel: string
+  rows: IntelligenceRow[]
+  icon: ReactNode
 }
 
 const CITATION_RE = /\[(\d+)\]\((https?:\/\/[^\s)]+)\)/g
@@ -195,14 +205,11 @@ function SignalArrow({ direction }: { direction: SignalDirection }) {
 function IntelligenceColumn({
   id,
   title,
+  viewLabel,
   rows,
   icon,
-}: {
-  id: string
-  title: string
-  rows: IntelligenceRow[]
-  icon: ReactNode
-}) {
+  onView,
+}: IntelligenceCategory & { onView: (categoryId: string, trigger: HTMLButtonElement) => void }) {
   const visibleRows = rows.slice(0, 3)
 
   return (
@@ -229,11 +236,105 @@ function IntelligenceColumn({
       )}
 
       {visibleRows[0] && (
-        <a className="intelligence-topic-link" href={visibleRows[0].url} target="_blank" rel="noopener noreferrer">
-          Open latest <CaretRight size={13} aria-hidden="true" />
-        </a>
+        <button
+          type="button"
+          className="intelligence-topic-link"
+          onClick={(event) => onView(id, event.currentTarget)}
+          aria-haspopup="dialog"
+        >
+          View {viewLabel} <CaretRight size={13} aria-hidden="true" />
+        </button>
       )}
     </section>
+  )
+}
+
+function CategoryDetailDialog({
+  category,
+  lastUpdatedLabel,
+  onClose,
+}: {
+  category: IntelligenceCategory | null
+  lastUpdatedLabel: string
+  onClose: () => void
+}) {
+  const open = category !== null
+
+  useEffect(() => {
+    if (!open) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [onClose, open])
+
+  if (!category) return null
+
+  return (
+    <div className="intelligence-category-overlay">
+      <div
+        className="intelligence-category-backdrop"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      <section
+        className="intelligence-category-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="intelligence-category-title"
+      >
+        <header className="intelligence-category-header">
+          <div>
+            <p>AI Research · {category.rows.length} current items</p>
+            <h2 id="intelligence-category-title">
+              {category.icon}
+              <span>{category.title}</span>
+            </h2>
+          </div>
+          <div className="intelligence-category-header-meta">
+            <span>Updated {lastUpdatedLabel}</span>
+            <button type="button" onClick={onClose} autoFocus aria-label={`Close ${category.title} view`}>
+              <X size={18} aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+
+        <div className="intelligence-category-body">
+          {category.rows.length > 0 ? (
+            <ol>
+              {category.rows.map((row, index) => (
+                <li key={`${row.id}-${index}`}>
+                  <span>{String(index + 1).padStart(2, '0')}</span>
+                  <a href={row.url} target="_blank" rel="noopener noreferrer">
+                    <strong>{row.title}</strong>
+                    <small>{row.source}</small>
+                  </a>
+                  {row.tag && <em>{row.tag}</em>}
+                  <time>{row.time}</time>
+                  <ArrowSquareOut size={15} aria-hidden="true" />
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <div className="intelligence-category-empty">
+              <p>No current items are available for this category.</p>
+              <span>The feed will populate after the next successful source refresh.</span>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
   )
 }
 
@@ -245,6 +346,16 @@ export function IntelligenceResearchDashboard({
   lastUpdatedLabel,
   totalSectionCount,
 }: IntelligenceResearchDashboardProps) {
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
+  const categoryTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const openCategory = useCallback((categoryId: string, trigger: HTMLButtonElement) => {
+    categoryTriggerRef.current = trigger
+    setActiveCategoryId(categoryId)
+  }, [])
+  const closeCategory = useCallback(() => {
+    setActiveCategoryId(null)
+    window.requestAnimationFrame(() => categoryTriggerRef.current?.focus())
+  }, [])
   const sourceStream = [
     ...sectionRows(sections, 'ai-news-general').slice(0, 1),
     ...sectionRows(sections, 'ai-policy-regulation').slice(0, 1),
@@ -262,18 +373,20 @@ export function IntelligenceResearchDashboard({
   const signals = buildSignals(sections)
   const headline = makeHeadline(overviewBullets)
 
-  const topicColumns = [
-    { id: 'research-papers', title: 'Research Papers', rows: sectionRows(sections, 'papers'), icon: <FileText size={18} aria-hidden="true" /> },
-    { id: 'policy-regulation', title: 'Policy & Regulation', rows: sectionRows(sections, 'ai-policy-regulation'), icon: <Shield size={18} aria-hidden="true" /> },
-    { id: 'infrastructure', title: 'Infrastructure', rows: sectionRows(sections, 'infra-hardware'), icon: <HardDrives size={18} aria-hidden="true" /> },
-    { id: 'open-source', title: 'Open Source', rows: sectionRows(sections, 'repos'), icon: <Code size={18} aria-hidden="true" /> },
+  const topicColumns: IntelligenceCategory[] = [
+    { id: 'research-papers', title: 'Research Papers', viewLabel: 'papers', rows: sectionRows(sections, 'papers'), icon: <FileText size={18} aria-hidden="true" /> },
+    { id: 'policy-regulation', title: 'Policy & Regulation', viewLabel: 'policy', rows: sectionRows(sections, 'ai-policy-regulation'), icon: <Shield size={18} aria-hidden="true" /> },
+    { id: 'infrastructure', title: 'Infrastructure', viewLabel: 'infrastructure', rows: sectionRows(sections, 'infra-hardware'), icon: <HardDrives size={18} aria-hidden="true" /> },
+    { id: 'open-source', title: 'Open Source', viewLabel: 'open source', rows: sectionRows(sections, 'repos'), icon: <Code size={18} aria-hidden="true" /> },
   ]
 
-  const companyTechnologyColumns = [
-    { id: 'venture-capital', title: 'Venture Capital', rows: sectionRows(sections, 'venture-capital'), icon: <CurrencyCircleDollar size={18} aria-hidden="true" /> },
-    { id: 'startups', title: 'Startups', rows: sectionRows(sections, 'startups'), icon: <RocketLaunch size={18} aria-hidden="true" /> },
-    { id: 'new-technology', title: 'New Technology', rows: sectionRows(sections, 'new-technology'), icon: <Circuitry size={18} aria-hidden="true" /> },
+  const companyTechnologyColumns: IntelligenceCategory[] = [
+    { id: 'venture-capital', title: 'Venture Capital', viewLabel: 'venture capital', rows: sectionRows(sections, 'venture-capital'), icon: <CurrencyCircleDollar size={18} aria-hidden="true" /> },
+    { id: 'startups', title: 'Startups', viewLabel: 'startups', rows: sectionRows(sections, 'startups'), icon: <RocketLaunch size={18} aria-hidden="true" /> },
+    { id: 'new-technology', title: 'New Technology', viewLabel: 'new technology', rows: sectionRows(sections, 'new-technology'), icon: <Circuitry size={18} aria-hidden="true" /> },
   ]
+  const categories = [...topicColumns, ...companyTechnologyColumns]
+  const activeCategory = categories.find((category) => category.id === activeCategoryId) ?? null
 
   return (
     <article className="intelligence-dashboard">
@@ -349,7 +462,7 @@ export function IntelligenceResearchDashboard({
 
       <section className="intelligence-topic-grid" aria-label="Intelligence topic summaries">
         {topicColumns.map((column) => (
-          <IntelligenceColumn key={column.id} {...column} />
+          <IntelligenceColumn key={column.id} {...column} onView={openCategory} />
         ))}
       </section>
 
@@ -358,9 +471,15 @@ export function IntelligenceResearchDashboard({
         aria-label="Venture capital, startup, and technology intelligence"
       >
         {companyTechnologyColumns.map((column) => (
-          <IntelligenceColumn key={column.id} {...column} />
+          <IntelligenceColumn key={column.id} {...column} onView={openCategory} />
         ))}
       </section>
+
+      <CategoryDetailDialog
+        category={activeCategory}
+        lastUpdatedLabel={lastUpdatedLabel}
+        onClose={closeCategory}
+      />
     </article>
   )
 }

@@ -144,6 +144,15 @@ test('Intelligence dashboard keeps company and technology feeds as standalone se
   assert.match(intelligenceDashboardSource, /intelligence-topic-grid-company/)
 })
 
+test('Intelligence category actions open an in-app category view', () => {
+  assert.match(intelligenceDashboardSource, /View \{viewLabel\}/)
+  assert.match(intelligenceDashboardSource, /aria-haspopup="dialog"/)
+  assert.match(intelligenceDashboardSource, /role="dialog"/)
+  assert.match(intelligenceDashboardSource, /category\.rows\.map/)
+  assert.match(intelligenceDashboardSource, /if \(event\.key === 'Escape'\) onClose\(\)/)
+  assert.equal(intelligenceDashboardSource.includes('Open latest'), false)
+})
+
 test('ScopeFeed no longer renders inline periodic briefings', () => {
   assert.equal(scopeFeedSource.includes('PeriodicOverview'), false)
   assert.equal(scopeFeedSource.includes('/api/overviews/weekly'), false)
