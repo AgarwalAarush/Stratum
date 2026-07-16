@@ -131,6 +131,8 @@ The AI must not invent current prices, economic values, or source claims. Numeri
 Alpaca is the planned primary source for US equity assets, quotes, trades, snapshots, and historical bars. It is appropriate for a price/volume/technical screener, but it is not the complete fundamentals source.
 
 - Synchronize the active asset universe on a schedule.
+- The published screener universe must contain the active, tradable S&P 500 constituents at minimum, plus every symbol in Stratum watchlists. A narrow smoke-test snapshot must never replace that production universe.
+- Resolve S&P 500 membership from State Street's official daily SPY holdings, persist the normalized membership, and retain the last complete universe when the upstream workbook is temporarily unavailable.
 - Fetch multi-symbol snapshots and bars in batches on the server/worker; never call Alpaca from the browser.
 - Materialize computed screener rows in Supabase/Postgres. Do not call Alpaca once per visitor or calculate the whole universe during a request.
 - Initial filters should focus on price, daily change, gap, volume, relative volume, intraday range, moving averages, 52-week position, exchange, and tradability attributes.
