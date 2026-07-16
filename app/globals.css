@@ -1062,10 +1062,10 @@
   padding: 0 4px;
 }
 
-.market-screen-summary button {
-  align-items: center;
-  display: flex;
-  gap: 8px;
+.market-screen-update-status {
+  color: var(--market-accent);
+  min-width: 64px;
+  text-align: right;
 }
 
 .market-screen-table-wrap {
@@ -1105,10 +1105,12 @@
 .market-screen-table th button {
   align-items: center;
   display: flex;
+  gap: 5px;
   height: 100%;
 }
 
-.market-screen-table th button:hover {
+.market-screen-table th button:hover,
+.market-screen-table th button.market-sort-active {
   color: var(--market-accent);
 }
 
@@ -1440,11 +1442,7 @@
   .market-filter-actions {
     display: grid;
     gap: 8px;
-    grid-template-columns: 1.2fr 0.8fr 1fr;
-  }
-
-  .market-filter-actions .markets-primary-button {
-    min-height: 40px;
+    grid-template-columns: 0.8fr 1fr;
   }
 
   .market-action-divider {

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { POST } from '../app/api/markets/screener/route.ts'
-import { DEFAULT_SCREENER_QUERY, parseScreenerQuery, runIllustrativeScreener } from '../lib/markets/screener.ts'
+import { DEFAULT_SCREENER_QUERY, nextScreenerSort, parseScreenerQuery, runIllustrativeScreener } from '../lib/markets/screener.ts'
 
 test('default screener applies deterministic conditions and relative-volume sorting', () => {
   const response = runIllustrativeScreener(DEFAULT_SCREENER_QUERY)
@@ -11,6 +11,17 @@ test('default screener applies deterministic conditions and relative-volume sort
   assert.ok(response.total > 10)
   assert.ok(response.rows.every((row) => row.price > 10 && row.dailyChange > 0 && row.relativeVolume > 0.8 && row.price > row.fiftyDayAverage))
   assert.ok(response.rows[0]!.relativeVolume >= response.rows[1]!.relativeVolume)
+})
+
+test('sortable headers cycle descending, ascending, then preset ordering', () => {
+  const presetDefault = { sort: 'relativeVolume' as const, direction: 'desc' as const }
+  const descending = nextScreenerSort('price', presetDefault, presetDefault)
+  const ascending = nextScreenerSort('price', descending, presetDefault)
+  const restored = nextScreenerSort('price', ascending, presetDefault)
+
+  assert.deepEqual(descending, { sort: 'price', direction: 'desc' })
+  assert.deepEqual(ascending, { sort: 'price', direction: 'asc' })
+  assert.deepEqual(restored, presetDefault)
 })
 
 test('screener parser rejects unsupported fields and oversized pages', () => {

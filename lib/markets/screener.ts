@@ -15,6 +15,8 @@ const FILTER_FIELDS: ScreenerFilterField[] = ['price', 'dailyChange', 'gap', 'vo
 const FILTER_OPERATORS: ScreenerFilterOperator[] = ['gt', 'gte', 'lt', 'lte', 'eq']
 const SORT_FIELDS: ScreenerSortField[] = ['symbol', 'price', 'dailyChange', 'gap', 'volume', 'relativeVolume', 'fiftyDayAverage', 'fiftyTwoWeekPosition']
 
+export type ScreenerSort = Pick<ScreenerQuery, 'sort' | 'direction'>
+
 export const DEFAULT_SCREENER_FILTERS: ScreenerFilter[] = [
   { id: 'price-min', field: 'price', operator: 'gt', value: 10, label: 'Price > $10' },
   { id: 'change-min', field: 'dailyChange', operator: 'gt', value: 0, label: 'Daily change > 0%' },
@@ -30,6 +32,16 @@ export const DEFAULT_SCREENER_QUERY: ScreenerQuery = {
   direction: 'desc',
   page: 1,
   pageSize: 10,
+}
+
+export function nextScreenerSort(
+  field: ScreenerSortField,
+  current: ScreenerSort,
+  presetDefault: ScreenerSort,
+): ScreenerSort {
+  if (current.sort !== field) return { sort: field, direction: 'desc' }
+  if (current.direction === 'desc') return { sort: field, direction: 'asc' }
+  return presetDefault
 }
 
 export class ScreenerValidationError extends Error {

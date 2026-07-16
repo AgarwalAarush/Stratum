@@ -13,6 +13,12 @@ import { getSupabaseClient } from './supabase.ts'
 
 const DATABASE_PAGE_SIZE = 1_000
 const STALE_AFTER_MS = 20 * 60 * 1_000
+const SNAPSHOT_META_CACHE_MS = 10_000
+const MAX_CACHED_SNAPSHOTS = 2
+
+let snapshotMetaCache: { expiresAt: number; value: SnapshotRecord } | null = null
+const snapshotRowsCache = new Map<string, ScreenerRow[]>()
+const snapshotRowsInflight = new Map<string, Promise<ScreenerRow[] | null>>()
 
 interface SnapshotRecord {
   id: string
@@ -125,6 +131,7 @@ function normalizeScreenerRow(row: ScreenerRowRecord): ScreenerRow {
 export async function fetchLatestSnapshotMeta(): Promise<SnapshotRecord | null> {
   const supabase = getSupabaseClient()
   if (!supabase) return null
+  if (snapshotMetaCache && snapshotMetaCache.expiresAt > Date.now()) return snapshotMetaCache.value
 
   const { data, error } = await supabase
     .from('market_snapshots')
@@ -133,7 +140,33 @@ export async function fetchLatestSnapshotMeta(): Promise<SnapshotRecord | null> 
     .eq('is_latest', true)
     .maybeSingle()
   if (error || !data) return null
-  return data as SnapshotRecord
+  const snapshot = data as SnapshotRecord
+  snapshotMetaCache = { expiresAt: Date.now() + SNAPSHOT_META_CACHE_MS, value: snapshot }
+  return snapshot
+}
+
+export async function getCachedSnapshotRows(
+  snapshotId: string,
+  loader: () => Promise<ScreenerRow[] | null>,
+): Promise<ScreenerRow[] | null> {
+  const cached = snapshotRowsCache.get(snapshotId)
+  if (cached) return cached
+  const pending = snapshotRowsInflight.get(snapshotId)
+  if (pending) return pending
+
+  const load = loader().then((rows) => {
+    if (rows) {
+      snapshotRowsCache.set(snapshotId, rows)
+      while (snapshotRowsCache.size > MAX_CACHED_SNAPSHOTS) {
+        const oldest = snapshotRowsCache.keys().next().value
+        if (typeof oldest !== 'string') break
+        snapshotRowsCache.delete(oldest)
+      }
+    }
+    return rows
+  }).finally(() => snapshotRowsInflight.delete(snapshotId))
+  snapshotRowsInflight.set(snapshotId, load)
+  return load
 }
 
 export async function fetchLatestScreener(query: ScreenerQuery): Promise<ScreenerResponse | null> {
@@ -141,18 +174,22 @@ export async function fetchLatestScreener(query: ScreenerQuery): Promise<Screene
   const snapshot = await fetchLatestSnapshotMeta()
   if (!supabase || !snapshot) return null
 
-  const rows: ScreenerRow[] = []
-  for (let from = 0; ; from += DATABASE_PAGE_SIZE) {
-    const { data, error } = await supabase
-      .from('screener_rows')
-      .select('symbol,company,price,daily_change,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,tradable,data_as_of')
-      .eq('snapshot_id', snapshot.id)
-      .range(from, from + DATABASE_PAGE_SIZE - 1)
-    if (error) return null
-    const page = (data ?? []) as ScreenerRowRecord[]
-    rows.push(...page.map(normalizeScreenerRow))
-    if (page.length < DATABASE_PAGE_SIZE) break
-  }
+  const rows = await getCachedSnapshotRows(snapshot.id, async () => {
+    const loaded: ScreenerRow[] = []
+    for (let from = 0; ; from += DATABASE_PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from('screener_rows')
+        .select('symbol,company,price,daily_change,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,tradable,data_as_of')
+        .eq('snapshot_id', snapshot.id)
+        .range(from, from + DATABASE_PAGE_SIZE - 1)
+      if (error) return null
+      const page = (data ?? []) as ScreenerRowRecord[]
+      loaded.push(...page.map(normalizeScreenerRow))
+      if (page.length < DATABASE_PAGE_SIZE) break
+    }
+    return loaded
+  })
+  if (!rows) return null
 
   return runScreener(query, rows, {
     feed: snapshot.feed,

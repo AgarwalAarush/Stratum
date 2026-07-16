@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { CaretDown, CaretLeft, CaretRight, CaretUp, Funnel } from '@phosphor-icons/react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MarketSparkline } from './MarketSparkline'
 import { ScreenerConditionBuilder } from './ScreenerConditionBuilder'
 import {
   DEFAULT_SCREENER_FILTERS,
   DEFAULT_SCREENER_QUERY,
+  nextScreenerSort,
 } from '@/lib/markets/screener'
 import type {
   ScreenerFilter,
@@ -19,6 +20,26 @@ import type {
 
 interface MarketsScreenerProps {
   initialResponse: ScreenerResponse
+}
+
+interface SortableHeaderProps {
+  direction: 'asc' | 'desc'
+  field: ScreenerSortField
+  label: string
+  onSort: (field: ScreenerSortField) => void
+  sort: ScreenerSortField
+}
+
+function SortableHeader({ direction, field, label, onSort, sort }: SortableHeaderProps) {
+  const active = sort === field
+  return (
+    <th aria-sort={active ? (direction === 'desc' ? 'descending' : 'ascending') : undefined}>
+      <button type="button" className={active ? 'market-sort-active' : ''} onClick={() => onSort(field)}>
+        <span>{label}</span>
+        {active && (direction === 'desc' ? <CaretDown size={12} aria-hidden="true" /> : <CaretUp size={12} aria-hidden="true" />)}
+      </button>
+    </th>
+  )
 }
 
 const PRESETS: Array<{ id: ScreenerPreset; label: string }> = [
@@ -99,6 +120,9 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const requestRef = useRef<AbortController | null>(null)
+
+  useEffect(() => () => requestRef.current?.abort(), [])
 
   const execute = async (nextQuery?: Partial<ScreenerQuery>) => {
     const query: ScreenerQuery = {
@@ -110,6 +134,9 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
       pageSize: 10,
     }
 
+    requestRef.current?.abort()
+    const controller = new AbortController()
+    requestRef.current = controller
     setLoading(true)
     setError('')
     try {
@@ -117,14 +144,20 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(query),
+        signal: controller.signal,
       })
       const payload = await result.json()
       if (!result.ok) throw new Error(payload?.error?.message ?? 'The screen could not be run')
+      if (requestRef.current !== controller) return
       setResponse(payload as ScreenerResponse)
     } catch (caught) {
+      if (caught instanceof DOMException && caught.name === 'AbortError') return
       setError(caught instanceof Error ? caught.message : 'The screen could not be run')
     } finally {
-      setLoading(false)
+      if (requestRef.current === controller) {
+        requestRef.current = null
+        setLoading(false)
+      }
     }
   }
 
@@ -141,6 +174,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   const changeFilters = (nextFilters: ScreenerFilter[]) => {
     setFilters(nextFilters)
     setSaved(false)
+    void execute({ filters: nextFilters, page: 1 })
   }
 
   const resetScreen = () => {
@@ -158,10 +192,11 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   }
 
   const changeSort = (field: ScreenerSortField) => {
-    const nextDirection = field === sort && direction === 'desc' ? 'asc' : 'desc'
-    setSort(field)
-    setDirection(nextDirection)
-    void execute({ sort: field, direction: nextDirection, page: 1 })
+    const presetDefault = PRESET_QUERIES[preset]
+    const next = nextScreenerSort(field, { sort, direction }, presetDefault)
+    setSort(next.sort)
+    setDirection(next.direction)
+    void execute({ sort: next.sort, direction: next.direction, page: 1 })
   }
 
   const totalPages = Math.max(1, Math.ceil(response.total / response.pageSize))
@@ -190,9 +225,6 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
           <ScreenerConditionBuilder filters={filters} onChange={changeFilters} />
         </div>
         <div className="market-filter-actions">
-          <button type="button" className="markets-primary-button" onClick={() => void execute()} disabled={loading}>
-            {loading ? 'Running…' : 'Run screen'}
-          </button>
           <button type="button" className="market-action-link" onClick={resetScreen}>Reset</button>
           <span className="market-action-divider" aria-hidden="true" />
           <button type="button" className="market-action-link" onClick={saveScreen}>{saved ? 'Saved locally' : 'Save screen'}</button>
@@ -217,9 +249,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
 
       <div className="market-screen-summary">
         <span>{response.total} matches</span>
-        <button type="button" onClick={() => changeSort('relativeVolume')}>
-          Relative volume {sort === 'relativeVolume' && direction === 'desc' ? <CaretDown size={14} /> : <CaretUp size={14} />}
-        </button>
+        <span className="market-screen-update-status" aria-live="polite">{loading ? 'Updating…' : ''}</span>
       </div>
 
       <div className={`market-screen-table-wrap scrollbar-none ${loading ? 'market-screen-table-loading' : ''}`} aria-busy={loading}>
@@ -228,14 +258,14 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
             <tr>
               <th>Symbol</th>
               <th>Company</th>
-              <th><button type="button" onClick={() => changeSort('price')}>Price</button></th>
-              <th><button type="button" onClick={() => changeSort('dailyChange')}>Change</button></th>
-              <th><button type="button" onClick={() => changeSort('gap')}>Gap</button></th>
-              <th><button type="button" onClick={() => changeSort('volume')}>Volume</button></th>
-              <th><button type="button" onClick={() => changeSort('relativeVolume')}>Rel. volume</button></th>
+              <SortableHeader field="price" label="Price" sort={sort} direction={direction} onSort={changeSort} />
+              <SortableHeader field="dailyChange" label="Change" sort={sort} direction={direction} onSort={changeSort} />
+              <SortableHeader field="gap" label="Gap" sort={sort} direction={direction} onSort={changeSort} />
+              <SortableHeader field="volume" label="Volume" sort={sort} direction={direction} onSort={changeSort} />
+              <SortableHeader field="relativeVolume" label="Rel. volume" sort={sort} direction={direction} onSort={changeSort} />
               <th>Range</th>
-              <th><button type="button" onClick={() => changeSort('fiftyDayAverage')}>50D MA</button></th>
-              <th><button type="button" onClick={() => changeSort('fiftyTwoWeekPosition')}>52W position</button></th>
+              <SortableHeader field="fiftyDayAverage" label="50D MA" sort={sort} direction={direction} onSort={changeSort} />
+              <SortableHeader field="fiftyTwoWeekPosition" label="52W position" sort={sort} direction={direction} onSort={changeSort} />
               <th>Exchange</th>
               <th>As of</th>
               <th><span className="sr-only">Research</span></th>

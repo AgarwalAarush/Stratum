@@ -299,7 +299,15 @@ export function ScreenerConditionBuilder({ filters, onChange }: ScreenerConditio
   }
 
   const applyEdit = () => {
-    onChange(filters.map((filter) => filter.id === editingId ? withLabel(draft) : filter))
+    const current = filters.find((filter) => filter.id === editingId)
+    const committed = withLabel(draft)
+    if (current && (
+      current.field !== committed.field
+      || current.operator !== committed.operator
+      || current.value !== committed.value
+    )) {
+      onChange(filters.map((filter) => filter.id === editingId ? committed : filter))
+    }
     setEditingId(null)
   }
 
@@ -333,7 +341,7 @@ export function ScreenerConditionBuilder({ filters, onChange }: ScreenerConditio
 
             {editingId === filter.id && (
               <>
-                <button type="button" className="market-condition-popover-scrim" tabIndex={-1} aria-hidden="true" onClick={() => setEditingId(null)} />
+                <button type="button" className="market-condition-popover-scrim" tabIndex={-1} aria-hidden="true" onClick={applyEdit} />
                 <section ref={editorRef} className="market-condition-popover" role="dialog" aria-label={`Edit ${definitionFor(filter.field).title} condition`}>
                   <header>
                     <strong>{definitionFor(filter.field).title}</strong>

@@ -16,6 +16,8 @@ const conditionBuilderSource = readFileSync(
 test('screener delegates filter editing to the condition builder', () => {
   assert.match(screenerSource, /<ScreenerConditionBuilder filters=\{filters\} onChange=\{changeFilters\}/)
   assert.match(screenerSource, /market-screen-table-wrap scrollbar-none/)
+  assert.equal(screenerSource.includes('Run screen'), false)
+  assert.match(screenerSource, /void execute\(\{ filters: nextFilters, page: 1 \}\)/)
   assert.equal(screenerSource.includes('ADDITIONAL_FILTERS'), false)
 })
 
@@ -50,4 +52,5 @@ test('existing conditions update in place and new fields append', () => {
   assert.match(conditionBuilderSource, /filters\.map\(\(filter\) => filter\.id === editingId/)
   assert.match(conditionBuilderSource, /onChange\(\[\.\.\.filters, withLabel/)
   assert.match(conditionBuilderSource, /This will update the existing condition/)
+  assert.match(conditionBuilderSource, /market-condition-popover-scrim[\s\S]*onClick=\{applyEdit\}/)
 })
