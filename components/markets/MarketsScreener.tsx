@@ -151,7 +151,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
       if (requestRef.current !== controller) return
       setResponse(payload as ScreenerResponse)
     } catch (caught) {
-      if (caught instanceof DOMException && caught.name === 'AbortError') return
+      if (caught instanceof Error && caught.name === 'AbortError') return
       setError(caught instanceof Error ? caught.message : 'The screen could not be run')
     } finally {
       if (requestRef.current === controller) {
