@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { CaretDown, CaretLeft, CaretRight, CaretUp, Funnel, X } from '@phosphor-icons/react'
+import { CaretDown, CaretLeft, CaretRight, CaretUp, Funnel } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { MarketSparkline } from './MarketSparkline'
+import { ScreenerConditionBuilder } from './ScreenerConditionBuilder'
 import {
   DEFAULT_SCREENER_FILTERS,
   DEFAULT_SCREENER_QUERY,
@@ -57,13 +58,6 @@ const PRESET_QUERIES: Record<ScreenerPreset, Pick<ScreenerQuery, 'filters' | 'so
     direction: 'desc',
   },
 }
-
-const ADDITIONAL_FILTERS: ScreenerFilter[] = [
-  { id: 'volume-min', field: 'volume', operator: 'gt', value: 5_000_000, label: 'Volume > 5M' },
-  { id: 'near-high', field: 'fiftyTwoWeekPosition', operator: 'gte', value: 85, label: '52W position ≥ 85%' },
-  { id: 'nasdaq', field: 'exchange', operator: 'eq', value: 'NASDAQ', label: 'Exchange = NASDAQ' },
-  { id: 'price-max', field: 'price', operator: 'lt', value: 100, label: 'Price < $100' },
-]
 
 function formatPrice(value: number): string {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
@@ -144,15 +138,8 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
     void execute({ preset: nextPreset, filters: next.filters, sort: next.sort, direction: next.direction, page: 1 })
   }
 
-  const removeFilter = (id: string) => {
-    setFilters((current) => current.filter((filter) => filter.id !== id))
-    setSaved(false)
-  }
-
-  const addCondition = () => {
-    const next = ADDITIONAL_FILTERS.find((candidate) => !filters.some((filter) => filter.id === candidate.id))
-    if (!next) return
-    setFilters((current) => [...current, next])
+  const changeFilters = (nextFilters: ScreenerFilter[]) => {
+    setFilters(nextFilters)
     setSaved(false)
   }
 
@@ -200,19 +187,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
         </button>
         <div className={`market-filter-conditions ${filtersOpen ? 'market-filter-conditions-open' : ''}`}>
           <span className="market-filter-prefix">Show US equities where</span>
-          <div className="market-filter-chips">
-            {filters.map((filter) => (
-              <span key={filter.id} className="market-filter-chip">
-                {filter.label}
-                <button type="button" onClick={() => removeFilter(filter.id)} aria-label={`Remove ${filter.label}`}>
-                  <X size={12} />
-                </button>
-              </span>
-            ))}
-            <button type="button" className="market-add-condition" onClick={addCondition} disabled={filters.length >= DEFAULT_SCREENER_FILTERS.length + ADDITIONAL_FILTERS.length}>
-              + Add condition
-            </button>
-          </div>
+          <ScreenerConditionBuilder filters={filters} onChange={changeFilters} />
         </div>
         <div className="market-filter-actions">
           <button type="button" className="markets-primary-button" onClick={() => void execute()} disabled={loading}>
