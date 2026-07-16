@@ -4,6 +4,7 @@ import { getAlpacaClient, type AlpacaClient } from './alpaca.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 const DATABASE_BATCH_SIZE = 500
+const DATABASE_PAGE_SIZE = 1_000
 const MARKET_LOOKBACK_DAYS = 380
 
 function batches<T>(items: T[], size = DATABASE_BATCH_SIZE): T[][] {
@@ -16,8 +17,9 @@ function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
 
-function newestTimestamp(rows: Array<{ asOf: string }>, fallback: string): string {
-  return rows.reduce((latest, row) => row.asOf > latest ? row.asOf : latest, fallback)
+export function newestTimestamp(rows: Array<{ asOf: string }>, fallback: string): string {
+  if (rows.length === 0) return fallback
+  return rows.reduce((latest, row) => row.asOf > latest ? row.asOf : latest, rows[0]!.asOf)
 }
 
 export interface MaterializeMarketsOptions {
@@ -57,13 +59,30 @@ export async function syncAlpacaAssets(client: AlpacaClient = getAlpacaClient()!
 export async function fetchPersistedMarketAssets(): Promise<MarketAsset[]> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const { data, error } = await supabase
-    .from('market_assets')
-    .select('symbol,name,exchange,asset_class,tradable,active')
-    .eq('active', true)
-    .eq('tradable', true)
-  if (error) throw new Error(`Unable to load market assets: ${error.message}`)
-  return (data ?? []).map((asset) => ({
+  const rows: Array<{
+    symbol: string
+    name: string
+    exchange: string
+    asset_class: string
+    tradable: boolean
+    active: boolean
+  }> = []
+
+  for (let page = 0; ; page += 1) {
+    const from = page * DATABASE_PAGE_SIZE
+    const { data, error } = await supabase
+      .from('market_assets')
+      .select('symbol,name,exchange,asset_class,tradable,active')
+      .eq('active', true)
+      .eq('tradable', true)
+      .order('symbol', { ascending: true })
+      .range(from, from + DATABASE_PAGE_SIZE - 1)
+    if (error) throw new Error(`Unable to load market assets: ${error.message}`)
+    rows.push(...(data ?? []))
+    if ((data ?? []).length < DATABASE_PAGE_SIZE) break
+  }
+
+  return rows.map((asset) => ({
     symbol: asset.symbol,
     name: asset.name,
     exchange: asset.exchange,

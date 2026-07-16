@@ -3,6 +3,7 @@ import { generateMonthlyOverview, generateWeeklyOverview } from '../data/overvie
 import { saveMorningBrief } from '../data/overview-persistence.ts'
 import { getAlpacaClient } from './alpaca.ts'
 import { materializeMarketMemo } from './market-memo.ts'
+import { resolveMarketUniverse } from './market-universe.ts'
 import {
   fetchPersistedMarketAssets,
   materializeAlpacaScreener,
@@ -73,7 +74,11 @@ export async function enqueueAgentJob(
 }
 
 async function executeJob(job: AgentJobRecord): Promise<unknown> {
-  if (job.job_type === 'sync-market-assets') return { count: (await syncAlpacaAssets()).length }
+  if (job.job_type === 'sync-market-assets') {
+    const assets = await syncAlpacaAssets()
+    const universe = await resolveMarketUniverse(assets, { forceRefresh: true })
+    return { count: assets.length, screenerUniverseCount: universe.length }
+  }
 
   if (job.job_type === 'refresh-market-screener') {
     const client = getAlpacaClient()
@@ -83,6 +88,7 @@ async function executeJob(job: AgentJobRecord): Promise<unknown> {
 
     let assets = await fetchPersistedMarketAssets()
     if (assets.length === 0) assets = await syncAlpacaAssets(client)
+    assets = await resolveMarketUniverse(assets)
     const snapshot = await materializeAlpacaScreener({ client, assets })
     await enqueueAgentJob('generate-market-memo', { snapshotId: snapshot.snapshotId })
     return snapshot
