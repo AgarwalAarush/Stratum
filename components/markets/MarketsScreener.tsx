@@ -222,7 +222,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
         </button>
       </div>
 
-      <div className={`market-screen-table-wrap ${loading ? 'market-screen-table-loading' : ''}`} aria-busy={loading}>
+      <div className={`market-screen-table-wrap scrollbar-none ${loading ? 'market-screen-table-loading' : ''}`} aria-busy={loading}>
         <table className="market-screen-table">
           <thead>
             <tr>

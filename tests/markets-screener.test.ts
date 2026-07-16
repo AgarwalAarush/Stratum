@@ -9,7 +9,7 @@ test('default screener applies deterministic conditions and relative-volume sort
   assert.equal(response.feed, 'illustrative')
   assert.equal(response.pageSize, 10)
   assert.ok(response.total > 10)
-  assert.ok(response.rows.every((row) => row.price > 10 && row.dailyChange > 2 && row.relativeVolume > 1.5 && row.price > row.fiftyDayAverage))
+  assert.ok(response.rows.every((row) => row.price > 10 && row.dailyChange > 0 && row.relativeVolume > 0.8 && row.price > row.fiftyDayAverage))
   assert.ok(response.rows[0]!.relativeVolume >= response.rows[1]!.relativeVolume)
 })
 

@@ -15,6 +15,7 @@ const conditionBuilderSource = readFileSync(
 
 test('screener delegates filter editing to the condition builder', () => {
   assert.match(screenerSource, /<ScreenerConditionBuilder filters=\{filters\} onChange=\{changeFilters\}/)
+  assert.match(screenerSource, /market-screen-table-wrap scrollbar-none/)
   assert.equal(screenerSource.includes('ADDITIONAL_FILTERS'), false)
 })
 

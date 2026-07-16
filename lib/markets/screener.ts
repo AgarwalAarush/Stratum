@@ -17,8 +17,8 @@ const SORT_FIELDS: ScreenerSortField[] = ['symbol', 'price', 'dailyChange', 'gap
 
 export const DEFAULT_SCREENER_FILTERS: ScreenerFilter[] = [
   { id: 'price-min', field: 'price', operator: 'gt', value: 10, label: 'Price > $10' },
-  { id: 'change-min', field: 'dailyChange', operator: 'gt', value: 2, label: 'Daily change > 2%' },
-  { id: 'relative-volume-min', field: 'relativeVolume', operator: 'gt', value: 1.5, label: 'Relative volume > 1.5×' },
+  { id: 'change-min', field: 'dailyChange', operator: 'gt', value: 0, label: 'Daily change > 0%' },
+  { id: 'relative-volume-min', field: 'relativeVolume', operator: 'gt', value: 0.8, label: 'Relative volume > 0.8×' },
   { id: 'above-50-day', field: 'above50DayAverage', operator: 'eq', value: true, label: 'Above 50D MA' },
   { id: 'tradable', field: 'tradable', operator: 'eq', value: true, label: 'Tradable' },
 ]
