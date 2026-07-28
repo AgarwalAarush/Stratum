@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 import { calculateMarketState } from '../lib/markets/state.ts'
-import { buildCodexExecArgs } from '../lib/server/codex-exec.ts'
+import { buildCodexExecArgs, buildCodexExecEnv } from '../lib/server/codex-exec.ts'
 import { generateMarketMemo } from '../lib/server/market-memo.ts'
 import type { ScreenerRow } from '../lib/markets/types.ts'
 
@@ -43,11 +43,42 @@ test('Codex runner arguments enforce ephemeral read-only schema output', () => {
     cwd: '/repo',
   })
   assert.deepEqual(args, [
-    'exec', '--model', 'gpt-5.6-terra', '--ephemeral', '--sandbox', 'read-only',
-    '--config', 'approval_policy="never"', '--cd', '/repo',
+    'exec', '--model', 'gpt-5.6-terra', '--ephemeral',
+    '--ignore-user-config', '--ignore-rules', '--sandbox', 'read-only',
+    '--config', 'approval_policy="never"',
+    '--config', 'shell_environment_policy.inherit="none"', '--cd', '/repo',
     '--output-schema', '/repo/schemas/market-memo.schema.json',
     '--output-last-message', '/tmp/output.json', '-',
   ])
+})
+
+test('Codex runner receives only the scoped credential and safe process settings', () => {
+  const env = buildCodexExecEnv({
+    PATH: '/usr/bin',
+    HOME: '/Users/worker',
+    OPENAI_API_KEY: 'worker-key',
+    SUPABASE_SERVICE_ROLE_KEY: 'must-not-leak',
+    ALPACA_API_SECRET_KEY: 'must-not-leak',
+  })
+
+  assert.deepEqual(env, {
+    PATH: '/usr/bin',
+    HOME: '/Users/worker',
+    CODEX_API_KEY: 'worker-key',
+  })
+  assert.equal(env.SUPABASE_SERVICE_ROLE_KEY, undefined)
+  assert.equal(env.ALPACA_API_SECRET_KEY, undefined)
+})
+
+test('Codex runner can fall back to cached CLI authentication without leaking secrets', () => {
+  assert.deepEqual(buildCodexExecEnv({
+    PATH: '/usr/bin',
+    HOME: '/Users/worker',
+    SUPABASE_SERVICE_ROLE_KEY: 'must-not-leak',
+  }), {
+    PATH: '/usr/bin',
+    HOME: '/Users/worker',
+  })
 })
 
 test('market memo output schema is checked in and strict', async () => {

@@ -31,6 +31,18 @@ interface AgentJobRecord {
   max_attempts: number
 }
 
+export function normalizeClaimedAgentJob(data: unknown): AgentJobRecord | null {
+  const job = Array.isArray(data) ? data[0] : data
+  if (!job || typeof job !== 'object') return null
+  const record = job as Partial<AgentJobRecord>
+  if (
+    typeof record.id !== 'string'
+    || typeof record.job_type !== 'string'
+    || !AGENT_JOB_TYPES.includes(record.job_type as AgentJobType)
+  ) return null
+  return record as AgentJobRecord
+}
+
 export function parseAgentJobType(value: unknown): AgentJobType {
   if (typeof value !== 'string' || !AGENT_JOB_TYPES.includes(value as AgentJobType)) {
     throw new Error('Unsupported agent job type')
@@ -125,7 +137,7 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
 
   const { data, error } = await supabase.rpc('claim_agent_job', { p_worker_id: workerId })
   if (error) throw new Error(`Unable to claim agent job: ${error.message}`)
-  const job = data as AgentJobRecord | null
+  const job = normalizeClaimedAgentJob(data)
   if (!job) return false
 
   const startedAt = Date.now()

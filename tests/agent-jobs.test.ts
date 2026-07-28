@@ -2,7 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
-import { buildAgentJobDedupeKey, parseAgentJobType } from '../lib/server/agent-jobs.ts'
+import {
+  buildAgentJobDedupeKey,
+  normalizeClaimedAgentJob,
+  parseAgentJobType,
+} from '../lib/server/agent-jobs.ts'
 
 test('agent job parser rejects unknown work', () => {
   assert.equal(parseAgentJobType('refresh-market-screener'), 'refresh-market-screener')
@@ -17,6 +21,18 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
   assert.equal(
     buildAgentJobDedupeKey('generate-market-memo', new Date(), { snapshotId: 'snapshot-123' }),
     'generate-market-memo:snapshot-123',
+  )
+})
+
+test('empty PostgREST RPC results normalize to no claimed job', () => {
+  assert.equal(normalizeClaimedAgentJob([]), null)
+  assert.equal(
+    normalizeClaimedAgentJob([{ id: null, job_type: null, payload: null, attempts: null, max_attempts: null }]),
+    null,
+  )
+  assert.deepEqual(
+    normalizeClaimedAgentJob([{ id: 'job-123', job_type: 'sync-market-assets', payload: {}, attempts: 1, max_attempts: 3 }]),
+    { id: 'job-123', job_type: 'sync-market-assets', payload: {}, attempts: 1, max_attempts: 3 },
   )
 })
 
