@@ -22,7 +22,7 @@ export interface CodexExecResult<T> {
   metadata: GenerationMetadata
 }
 
-export function buildCodexExecEnv(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+export function buildCodexExecEnv(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const apiKey = source.CODEX_API_KEY ?? source.OPENAI_API_KEY
 
   return Object.fromEntries(
@@ -74,7 +74,7 @@ export async function runCodexJson<T>(options: CodexExecOptions<T>): Promise<Cod
     await new Promise<void>((resolvePromise, reject) => {
       const child = spawn(options.executable ?? 'codex', args, {
         cwd,
-        env: childEnv,
+        env: childEnv as NodeJS.ProcessEnv,
         stdio: ['pipe', 'ignore', 'pipe'],
       })
       let stderr = ''
