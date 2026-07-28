@@ -158,9 +158,7 @@ async function fetchFmpDeals(): Promise<NewsItem[]> {
   if (!apiKey) return []
 
   const candidateUrls = [
-    `https://financialmodelingprep.com/api/v4/mergers-acquisitions-rss-feed?page=0&apikey=${apiKey}`,
-    `https://financialmodelingprep.com/stable/news/mergers-acquisitions?apikey=${apiKey}&limit=50`,
-    `https://financialmodelingprep.com/api/v3/stock_news?limit=100&apikey=${apiKey}`,
+    `https://financialmodelingprep.com/stable/news/stock-latest?page=0&limit=100&apikey=${apiKey}`,
   ]
 
   for (const url of candidateUrls) {

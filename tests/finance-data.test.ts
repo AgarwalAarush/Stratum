@@ -36,7 +36,7 @@ test('fetchFinanceEarnings normalizes FMP rows and marks beat/miss', { concurren
   global.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
 
-    if (url.includes('financialmodelingprep.com/api/v3/earning_calendar')) {
+    if (url.includes('financialmodelingprep.com/stable/earnings-calendar')) {
       return new Response(
         JSON.stringify([
           {
@@ -44,9 +44,9 @@ test('fetchFinanceEarnings normalizes FMP rows and marks beat/miss', { concurren
             name: 'NVIDIA Corp',
             date: '2026-03-05',
             fiscalDateEnding: '2026-01-31',
-            eps: 1.02,
+            epsActual: 1.02,
             epsEstimated: 0.9,
-            revenue: 25000,
+            revenueActual: 25000,
             revenueEstimated: 24000,
           },
           {
@@ -54,7 +54,7 @@ test('fetchFinanceEarnings normalizes FMP rows and marks beat/miss', { concurren
             name: 'Microsoft Corp',
             date: '2026-03-10',
             fiscalDateEnding: '2026-03-31',
-            eps: 2.5,
+            epsActual: 2.5,
             epsEstimated: 2.6,
           },
         ]),

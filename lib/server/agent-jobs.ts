@@ -1,6 +1,7 @@
 import { generateMorningBrief } from '../data/morning-brief.ts'
 import { generateMonthlyOverview, generateWeeklyOverview } from '../data/overview-generators.ts'
 import { saveMorningBrief } from '../data/overview-persistence.ts'
+import { syncFmpMarketIntelligence } from '../data/fmp-intelligence.ts'
 import { getAlpacaClient } from './alpaca.ts'
 import { materializeMarketMemo } from './market-memo.ts'
 import { resolveMarketUniverse } from './market-universe.ts'
@@ -15,6 +16,7 @@ import { getSupabaseClient } from './supabase.ts'
 export const AGENT_JOB_TYPES = [
   'sync-market-assets',
   'refresh-market-screener',
+  'refresh-fmp-intelligence',
   'generate-market-memo',
   'generate-morning-brief',
   'generate-weekly-overview',
@@ -22,6 +24,7 @@ export const AGENT_JOB_TYPES = [
 ] as const
 
 export type AgentJobType = typeof AGENT_JOB_TYPES[number]
+export type AgentJobProvider = 'alpaca' | 'fmp' | 'codex'
 
 interface AgentJobRecord {
   id: string
@@ -57,7 +60,18 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 5) * 5, 0, 0)
     return `${jobType}:${bucket.toISOString()}`
   }
+  if (jobType === 'refresh-fmp-intelligence') {
+    const bucket = new Date(now)
+    bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
+    return `${jobType}:${bucket.toISOString()}`
+  }
   return `${jobType}:${now.toISOString().slice(0, 10)}`
+}
+
+export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
+  if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
+  if (jobType === 'refresh-fmp-intelligence') return 'fmp'
+  return 'codex'
 }
 
 export async function enqueueAgentJob(
@@ -106,6 +120,10 @@ async function executeJob(job: AgentJobRecord): Promise<unknown> {
     return snapshot
   }
 
+  if (job.job_type === 'refresh-fmp-intelligence') {
+    return syncFmpMarketIntelligence()
+  }
+
   if (job.job_type === 'generate-market-memo') {
     const snapshotId = typeof job.payload.snapshotId === 'string'
       ? job.payload.snapshotId
@@ -141,9 +159,11 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
   if (!job) return false
 
   const startedAt = Date.now()
+  const provider = agentJobProvider(job.job_type)
+  const model = provider === 'codex' ? (process.env.CODEX_SYNTHESIS_MODEL ?? 'gpt-5.6-terra') : null
   const { data: run, error: runError } = await supabase
     .from('agent_runs')
-    .insert({ job_id: job.id, worker_id: workerId, status: 'running', input_refs: [job.payload] })
+    .insert({ job_id: job.id, worker_id: workerId, status: 'running', provider, model, input_refs: [job.payload] })
     .select('id')
     .single()
   if (runError || !run) throw new Error(`Unable to create agent run: ${runError?.message ?? 'unknown error'}`)
@@ -152,8 +172,7 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
     const output = await executeJob(job)
     await Promise.all([
       supabase.from('agent_runs').update({
-        status: 'succeeded', output, provider: 'codex', model: process.env.CODEX_SYNTHESIS_MODEL ?? 'gpt-5.6-terra',
-        finished_at: new Date().toISOString(), duration_ms: Date.now() - startedAt,
+        status: 'succeeded', output, finished_at: new Date().toISOString(), duration_ms: Date.now() - startedAt,
       }).eq('id', run.id),
       supabase.from('agent_jobs').update({ status: 'succeeded', updated_at: new Date().toISOString() }).eq('id', job.id),
     ])

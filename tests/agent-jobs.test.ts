@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 import {
+  agentJobProvider,
   buildAgentJobDedupeKey,
   normalizeClaimedAgentJob,
   parseAgentJobType,
@@ -22,6 +23,17 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
     buildAgentJobDedupeKey('generate-market-memo', new Date(), { snapshotId: 'snapshot-123' }),
     'generate-market-memo:snapshot-123',
   )
+  assert.equal(
+    buildAgentJobDedupeKey('refresh-fmp-intelligence', new Date('2026-07-15T14:33:42Z')),
+    'refresh-fmp-intelligence:2026-07-15T14:30:00.000Z',
+  )
+})
+
+test('agent jobs retain their actual data provider', () => {
+  assert.equal(agentJobProvider('sync-market-assets'), 'alpaca')
+  assert.equal(agentJobProvider('refresh-market-screener'), 'alpaca')
+  assert.equal(agentJobProvider('refresh-fmp-intelligence'), 'fmp')
+  assert.equal(agentJobProvider('generate-market-memo'), 'codex')
 })
 
 test('empty PostgREST RPC results normalize to no claimed job', () => {

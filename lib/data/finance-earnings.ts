@@ -18,8 +18,10 @@ interface FmpEarningsCalendarRow {
   date?: string
   fiscalDateEnding?: string
   eps?: number | string | null
+  epsActual?: number | string | null
   epsEstimated?: number | string | null
   revenue?: number | string | null
+  revenueActual?: number | string | null
   revenueEstimated?: number | string | null
 }
 
@@ -234,9 +236,9 @@ function normalizeFmpRow(row: FmpEarningsCalendarRow): EarningsItem | null {
   const reportDate = safeIso(rawDate)
   if (!reportDate) return null
 
-  const epsActual = parseNumber(row.eps)
+  const epsActual = parseNumber(row.epsActual ?? row.eps)
   const epsEstimate = parseNumber(row.epsEstimated)
-  const revenueActual = parseNumber(row.revenue)
+  const revenueActual = parseNumber(row.revenueActual ?? row.revenue)
   const revenueEstimate = parseNumber(row.revenueEstimated)
 
   let beat: boolean | undefined
@@ -276,7 +278,7 @@ async function fetchFmpEarnings(now: Date): Promise<EarningsItem[]> {
     apikey: apiKey,
   })
 
-  const url = `https://financialmodelingprep.com/api/v3/earning_calendar?${params.toString()}`
+  const url = `https://financialmodelingprep.com/stable/earnings-calendar?${params.toString()}`
 
   try {
     const response = await fetch(url, {

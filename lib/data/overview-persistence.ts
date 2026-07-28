@@ -201,9 +201,13 @@ export async function persistFeedItems(
   scope: string,
   section: string,
   items: FeedItem[],
+  options: { strict?: boolean } = {},
 ): Promise<void> {
   const supabase = getSupabaseClient()
-  if (!supabase) return
+  if (!supabase) {
+    if (options.strict) throw new Error('Supabase service credentials are not configured')
+    return
+  }
 
   try {
     const rows = items.map((item) => {
@@ -229,10 +233,12 @@ export async function persistFeedItems(
       }
     })
 
-    await supabase
+    const { error } = await supabase
       .from('feed_items')
       .upsert(rows, { onConflict: 'item_type,url' })
-  } catch {
+    if (error) throw new Error(`Unable to persist feed items: ${error.message}`)
+  } catch (error) {
+    if (options.strict) throw error
     // fire-and-forget — don't break the request
   }
 }
