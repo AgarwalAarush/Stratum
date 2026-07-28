@@ -4,10 +4,10 @@
 
 - **Vercel** serves the Next.js interface, cached reads, and signed enqueue-only cron routes.
 - **Supabase** stores normalized market data, immutable snapshots, intelligence artifacts, and the worker queue.
-- **Upstash Redis/QStash** caches responses and dispatches signed schedules to Vercel.
-- **macserver** runs the private worker for Alpaca ingestion, deterministic calculations, and `codex exec` synthesis.
+- **Upstash Redis/QStash** caches responses and can dispatch signed schedules to Vercel as an operationally independent backup.
+- **macserver** runs the private worker for Alpaca ingestion, FMP news/document ingestion, deterministic calculations, and `codex exec` synthesis.
 
-The worker is not an HTTP backend and opens no inbound application port. It polls Supabase and needs only outbound HTTPS to Alpaca, Supabase, and OpenAI. The website never starts `codex exec` or waits for a Codex run.
+The worker is not an HTTP backend and opens no inbound application port. It schedules due jobs, polls Supabase, and needs only outbound HTTPS to Alpaca, Financial Modeling Prep, Supabase, and OpenAI. The website never starts `codex exec` or waits for a Codex run.
 
 ## macserver
 
@@ -17,7 +17,7 @@ Prerequisites:
 
 - Node.js 22 and Codex CLI installed on the host.
 - A proper USB-C PD charger connected; do not operate the worker while macOS is power-throttling the machine.
-- `.env.worker` containing Supabase service credentials and Alpaca server credentials.
+- `.env.worker` containing Supabase service credentials plus Alpaca and FMP server credentials.
 - Codex authenticated with a scoped `CODEX_API_KEY` (recommended) or a persisted `codex login --device-auth` session on this trusted host.
 - The repository dependencies installed with `npm ci`.
 
@@ -67,19 +67,22 @@ The worker process needs Supabase and Alpaca credentials to execute jobs. When c
 3. Configure Supabase, QStash signing keys, and read-side cache values in Vercel.
 4. Keep Alpaca and Codex credentials on macserver unless direct OpenAI Responses generation is intentionally enabled on Vercel.
 
-## QStash schedules
+## Worker schedule and optional QStash redundancy
 
-All requests are signed POSTs.
+The worker scheduler is enabled by default and checks once per minute. It creates the jobs below with deterministic deduplication keys, so restarting the Mac or also configuring QStash cannot execute the same logical interval twice.
 
-| Schedule | Route/body | Purpose |
+| Schedule | Worker job | Optional signed QStash route/body |
 | --- | --- | --- |
-| Daily before market open | `/api/cron/agent-jobs` with `{"jobType":"sync-market-assets"}` | Refresh the tradable US-equity universe |
-| Every five minutes | `/api/cron/agent-jobs` with `{"jobType":"refresh-market-screener"}` | Refresh only when Alpaca reports the market open |
-| Daily | `/api/cron/morning-brief` | Enqueue Morning Brief synthesis |
-| Mondays | `/api/cron/weekly-overview` | Enqueue the weekly briefing |
-| 1st and 15th | `/api/cron/monthly-overview` | Enqueue the strategic briefing |
+| Daily | `sync-market-assets` | `/api/cron/agent-jobs` with `{"jobType":"sync-market-assets"}` |
+| Every five minutes | `refresh-market-screener` | `/api/cron/agent-jobs` with `{"jobType":"refresh-market-screener"}` |
+| Every fifteen minutes | `refresh-fmp-intelligence` | `/api/cron/agent-jobs` with `{"jobType":"refresh-fmp-intelligence"}` |
+| Daily after 12:00 UTC | `generate-morning-brief` | `/api/cron/morning-brief` |
+| Mondays after 13:00 UTC | `generate-weekly-overview` | `/api/cron/weekly-overview` |
+| 1st and 15th after 14:00 UTC | `generate-monthly-overview` | `/api/cron/monthly-overview` |
 
-Every enqueue receives a deterministic deduplication key. A market snapshot is published only after all rows are written; its follow-up memo is a separate job tied to the immutable snapshot ID.
+The screener job refreshes only when Alpaca reports the market open. A market snapshot is published only after all rows are written; its follow-up memo is a separate job tied to the immutable snapshot ID.
+
+Set `WORKER_SCHEDULER_ENABLED=false` only when an external scheduler is intentionally the sole source of jobs. QStash requests must remain signed POSTs.
 
 Monitor queued/running/failed rows in `agent_jobs` and execution metadata in `agent_runs`. Keep market-data displays private until Alpaca display and redistribution terms are confirmed.
 
