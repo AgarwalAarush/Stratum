@@ -1,6 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mergeMarketDailyBars, newestTimestamp } from '../lib/server/markets-ingestion.ts'
+import {
+  appendMarketDailyBars,
+  mergeMarketDailyBars,
+  newestTimestamp,
+} from '../lib/server/markets-ingestion.ts'
 import type { MarketDailyBar } from '../lib/markets/types.ts'
 
 test('market snapshot provenance uses the newest observation rather than worker time', () => {
@@ -43,4 +47,13 @@ test('incremental history replaces revised dates and keeps newest bars bounded',
     ['2026-07-29', 103],
     ['2026-07-28', 102],
   ])
+})
+
+test('history accumulation handles a full-universe backfill without a spread overflow', () => {
+  const source = Array.from({ length: 150_000 }, () => bar('2026-07-29', 103))
+  const target: MarketDailyBar[] = []
+
+  appendMarketDailyBars(target, source)
+
+  assert.equal(target.length, source.length)
 })

@@ -53,6 +53,13 @@ export function mergeMarketDailyBars(
     .slice(0, maximumBars)
 }
 
+export function appendMarketDailyBars(
+  target: MarketDailyBar[],
+  source: MarketDailyBar[],
+): void {
+  for (const bar of source) target.push(bar)
+}
+
 function normalizeDailyBarRow(row: DailyBarRow): MarketDailyBar {
   return {
     symbol: row.symbol,
@@ -153,7 +160,7 @@ async function loadScreenerHistory(
 
   if (backfillSymbols.length > 0) {
     const backfill = await client.fetchDailyBars(backfillSymbols, isoDate(start), today, feed)
-    fetched.push(...backfill.data)
+    appendMarketDailyBars(fetched, backfill.data)
     resultFeed = backfill.feed
   }
 
@@ -161,7 +168,7 @@ async function loadScreenerHistory(
     const incrementalStart = new Date(now)
     incrementalStart.setUTCDate(incrementalStart.getUTCDate() - INCREMENTAL_LOOKBACK_DAYS)
     const incremental = await client.fetchDailyBars(symbols, isoDate(incrementalStart), today, feed)
-    fetched.push(...incremental.data)
+    appendMarketDailyBars(fetched, incremental.data)
     resultFeed = incremental.feed
   }
 
