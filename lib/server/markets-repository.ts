@@ -20,6 +20,7 @@ import { buildDeterministicMarketMemo, type MarketStateInputs } from '../markets
 import { crossAssetMarketInstrument } from './cross-asset.ts'
 import { normalizeStockLeadershipRow } from './market-leadership.ts'
 import { AsyncTtlCache } from './async-ttl-cache.ts'
+import { cachedFetchWithFallback } from './cache.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 const DATABASE_PAGE_SIZE = 1_000
@@ -49,6 +50,20 @@ const marketLeadershipSummaryCache = new AsyncTtlCache<MarketLeadershipSnapshot>
 const candidateCache = new AsyncTtlCache<CandidateBrief[]>({ maxEntries: 4 })
 const crossAssetCache = new AsyncTtlCache<CrossAssetSnapshot>({ maxEntries: 1 })
 const stockViewerSharedCache = new AsyncTtlCache<StockViewerData>({ maxEntries: 64 })
+
+async function fetchSharedArtifact<T>(
+  key: string,
+  ttlSeconds: number,
+  fetcher: () => Promise<T | null>,
+): Promise<T | null> {
+  const result = await cachedFetchWithFallback({
+    key,
+    ttlSeconds,
+    fetcher,
+    negativeTtlSeconds: Math.min(ttlSeconds, 10),
+  })
+  return result.data
+}
 
 interface StateRecord {
   id: string
@@ -324,7 +339,15 @@ async function loadLatestMarketOverview(): Promise<MarketOverviewResponse | null
 }
 
 export async function fetchLatestMarketOverview(): Promise<MarketOverviewResponse | null> {
-  return marketOverviewCache.get('latest', MARKET_OVERVIEW_CACHE_MS, loadLatestMarketOverview)
+  return marketOverviewCache.get(
+    'latest',
+    MARKET_OVERVIEW_CACHE_MS,
+    () => fetchSharedArtifact(
+      'stratum:markets:overview:v1',
+      MARKET_OVERVIEW_CACHE_MS / 1_000,
+      loadLatestMarketOverview,
+    ),
+  )
 }
 
 interface LeadershipSnapshotRecord {
@@ -410,7 +433,15 @@ async function loadLatestMarketLeadership(): Promise<MarketLeadershipSnapshot | 
 }
 
 export async function fetchLatestMarketLeadership(): Promise<MarketLeadershipSnapshot | null> {
-  return marketLeadershipCache.get('latest', MARKET_LEADERSHIP_CACHE_MS, loadLatestMarketLeadership)
+  return marketLeadershipCache.get(
+    'latest',
+    MARKET_LEADERSHIP_CACHE_MS,
+    () => fetchSharedArtifact(
+      'stratum:markets:leadership:v1',
+      MARKET_LEADERSHIP_CACHE_MS / 1_000,
+      loadLatestMarketLeadership,
+    ),
+  )
 }
 
 async function loadLatestMarketLeadershipSummary(): Promise<MarketLeadershipSnapshot | null> {
@@ -456,7 +487,11 @@ export async function fetchLatestMarketLeadershipSummary(): Promise<MarketLeader
   return marketLeadershipSummaryCache.get(
     'latest',
     MARKET_LEADERSHIP_CACHE_MS,
-    loadLatestMarketLeadershipSummary,
+    () => fetchSharedArtifact(
+      'stratum:markets:leadership-summary:v1',
+      MARKET_LEADERSHIP_CACHE_MS / 1_000,
+      loadLatestMarketLeadershipSummary,
+    ),
   )
 }
 
@@ -660,5 +695,13 @@ async function loadLatestCrossAssetSnapshot(): Promise<CrossAssetSnapshot | null
 }
 
 export async function fetchLatestCrossAssetSnapshot(): Promise<CrossAssetSnapshot | null> {
-  return crossAssetCache.get('latest', CROSS_ASSET_CACHE_MS, loadLatestCrossAssetSnapshot)
+  return crossAssetCache.get(
+    'latest',
+    CROSS_ASSET_CACHE_MS,
+    () => fetchSharedArtifact(
+      'stratum:markets:cross-asset:v1',
+      CROSS_ASSET_CACHE_MS / 1_000,
+      loadLatestCrossAssetSnapshot,
+    ),
+  )
 }
