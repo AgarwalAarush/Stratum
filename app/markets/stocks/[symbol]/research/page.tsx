@@ -12,8 +12,20 @@ import {
 import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { formatMarketDate } from '@/lib/markets/format-date'
 import { researchMemoMarkdown } from '@/lib/markets/research-presentation'
-import type { CompanyPacket } from '@/lib/markets/types'
+import type { CompanyPacket, EquityResearchSection } from '@/lib/markets/types'
 import { fetchStockViewerData } from '@/lib/server/markets-repository'
+
+const SCENARIO_SECTION_IDS = new Set(['bull_case', 'base_case', 'bear_case'])
+
+const REPORT_CHAPTERS = [
+  { label: 'The thesis', ids: ['snapshot', 'business_model_and_moat', 'financial_profile', 'market_and_competition', 'growth_drivers', 'management_and_capital_allocation'] },
+  { label: 'Price and catalysts', ids: ['valuation', 'catalysts'] },
+  { label: 'Decision and monitoring', ids: ['risk_factors', 'sentiment_and_positioning', 'verdict', 'kill_criteria'] },
+] as const
+
+function chapterForSection(id: string): string | null {
+  return REPORT_CHAPTERS.find((chapter) => chapter.ids.includes(id as never))?.label ?? null
+}
 
 function numeric(record: Record<string, unknown>, key: string): number | null {
   const value = record[key]
@@ -84,6 +96,36 @@ function estimateRows(packet: CompanyPacket | null) {
     .slice(0, 5)
 }
 
+function ScenarioComparison({ sections }: { sections: EquityResearchSection[] }) {
+  return (
+    <section className="research-scenarios" id="scenarios" aria-labelledby="scenarios-title">
+      <header>
+        <div>
+          <p className="markets-eyebrow">Scenario framework</p>
+          <h2 id="scenarios-title">What has to happen for the stock to work</h2>
+        </div>
+        <p>Read across the three cases before deciding whether today’s price offers enough reward for the risk.</p>
+      </header>
+      <div className="research-scenario-grid">
+        {sections.map((section) => (
+          <article key={section.id} data-scenario={section.id.replace('_case', '')}>
+            <header>
+              <span>{section.id.replace('_case', '')} case</span>
+              <h3>{section.title}</h3>
+            </header>
+            <div className="research-memo-copy">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{researchMemoMarkdown(section.content)}</ReactMarkdown>
+            </div>
+            <div className="research-evidence-copy">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export default async function EquityResearchPage({ params }: { params: Promise<{ symbol: string }> }) {
   const [{ symbol: rawSymbol }, user] = await Promise.all([params, requireAllowedMarketUser()])
   const symbol = rawSymbol.toUpperCase()
@@ -95,6 +137,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
   const estimates = estimateRows(packet)
   const sources = packet?.sources.filter((source) => research?.sourceIds.includes(source.id)) ?? []
   const confidence = research && research.confidence <= 1 ? research.confidence * 100 : research?.confidence
+  const scenarioSections = research?.sections.filter((section) => SCENARIO_SECTION_IDS.has(section.id)) ?? []
 
   return (
     <article className="equity-research-note" data-research-presentation>
@@ -130,10 +173,10 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
           </section>
 
           <section className="equity-research-debate-grid" aria-label="Executive read">
-            <div><span>Key debate</span><p>{research.keyDebate}</p></div>
-            <div><span>Mispricing</span><p>{research.mispricing}</p></div>
-            <div><span>Fastest kill signal</span><p>{research.fastestKillSignal}</p></div>
-            <div><span>Entry decision</span><p>{research.entryAction.replaceAll('_', ' ')}</p></div>
+            <div><span>Key debate</span><div className="research-executive-copy"><ReactMarkdown remarkPlugins={[remarkGfm]}>{researchMemoMarkdown(research.keyDebate)}</ReactMarkdown></div></div>
+            <div><span>Mispricing</span><div className="research-executive-copy"><ReactMarkdown remarkPlugins={[remarkGfm]}>{researchMemoMarkdown(research.mispricing)}</ReactMarkdown></div></div>
+            <div><span>Fastest kill signal</span><div className="research-executive-copy"><ReactMarkdown remarkPlugins={[remarkGfm]}>{researchMemoMarkdown(research.fastestKillSignal)}</ReactMarkdown></div></div>
+            <div><span>Entry decision</span><div className="research-executive-copy"><p>{research.entryAction.replaceAll('_', ' ')}</p></div></div>
           </section>
 
           <aside className="research-evidence-legend" aria-label="Evidence mode explanation">
@@ -207,14 +250,27 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
           <div className="equity-research-body">
             <nav aria-label="Research sections">
               <p>Full analysis</p>
-              {research.sections.map((section, index) => <a key={section.id} href={`#${section.id}`}><span>{String(index + 1).padStart(2, '0')}</span>{section.title}</a>)}
+              {REPORT_CHAPTERS.map((chapter) => (
+                <div className="research-nav-chapter" key={chapter.label}>
+                  <strong>{chapter.label}</strong>
+                  {research.sections.filter((section) => chapter.ids.includes(section.id as never)).map((section) => (
+                    <a key={section.id} href={`#${section.id}`}><span>{String(research.sections.indexOf(section) + 1).padStart(2, '0')}</span>{section.title}</a>
+                  ))}
+                </div>
+              ))}
+              {scenarioSections.length === 3 ? <div className="research-nav-chapter"><strong>Scenarios</strong><a href="#scenarios"><span>09–11</span>Compare outcomes</a></div> : null}
             </nav>
             <div className="equity-research-analysis-content">
               <div className="equity-research-sections">
                 {research.sections.map((section, index) => {
+                  if (section.id === 'bull_case' && scenarioSections.length === 3) return <ScenarioComparison key="scenarios" sections={scenarioSections} />
+                  if (SCENARIO_SECTION_IDS.has(section.id) && scenarioSections.length === 3) return null
                   const sectionSources = packet?.sources.filter((source) => section.sourceIds.includes(source.id)) ?? []
+                  const chapter = chapterForSection(section.id)
+                  const isFirstInChapter = chapter !== null && research.sections.findIndex((item) => item.id === section.id) === research.sections.findIndex((item) => chapterForSection(item.id) === chapter)
                   return (
                     <section key={section.id} id={section.id}>
+                      {isFirstInChapter ? <p className="research-chapter-heading">{chapter}</p> : null}
                       <p className="markets-eyebrow research-section-counter">Section {String(index + 1).padStart(2, '0')} of 15</p>
                       <h2>{section.title}</h2>
                       <div className="research-memo-copy">

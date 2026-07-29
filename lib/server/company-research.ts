@@ -323,7 +323,7 @@ function researchPrompt(packet: CompanyPacket): string {
     'Financial Profile must analyze the available 6-8 quarter history and call out growth, margin, cash-flow, balance-sheet, and share-count inflections.',
     'Business Model & Moat must cover revenue mechanics, customer value, geographic/FX exposure, concentration, switching costs, and a none/narrow/wide moat judgment.',
     'Valuation must reconcile growth assumptions with the current multiple and perform a reverse-DCF-style implied-expectations analysis. If inputs are inadequate, explicitly say which calculation cannot be completed.',
-    'Bull, Base, and Bear must each state assumptions, fair value, implied return, and the evidence that makes the scenario plausible.',
+    'Bull, Base, and Bear must be three genuinely comparable mini-cases: lead each with the outcome, then use the same four compact bullets—operating assumptions, proof point, fair value / implied return, and what breaks the case. Do not repeat the general business description across scenarios.',
     'Verdict must cover ownership fit, current setup, behavior near highs and on weakness, entry action, better trigger, sizing, liquidity, and horizon.',
     'Kill Criteria must contain 3-5 specific numeric thresholds or observable events—not vibes.',
     'When evidence is unavailable (TAM, 13F, short interest, options, geographic mix, unit economics, etc.), say “Not available in the current packet” and explain what source would be required.',
