@@ -16,14 +16,15 @@ export default async function MarketsEventsPage({
   const focusedSymbol = /^[A-Z][A-Z0-9.-]{0,11}$/.test(requestedSymbol.toUpperCase())
     ? requestedSymbol.toUpperCase()
     : ''
-  const user = await requireAllowedMarketUser()
-  const [fmp, deals, macro, research] = await Promise.all([
+  const userPromise = requireAllowedMarketUser()
+  const portfolioPromise = userPromise.then((user) => fetchPortfolioWorkspace(user.id))
+  const [fmp, deals, macro, research, portfolio] = await Promise.all([
     fetchPersistedFmpMarketItems(['fmp-stock-news', 'fmp-press-releases', 'fmp-sec-filings'], 50).catch(() => []),
     fetchFinanceDeals(16).catch(() => []),
     fetchMacroIndicators(16).catch(() => []),
     fetchFinanceReports(16).catch(() => []),
+    portfolioPromise,
   ])
-  const portfolio = await fetchPortfolioWorkspace(user.id)
   const relevantSymbols = [
     focusedSymbol,
     ...portfolio.positions.map((position) => position.symbol),

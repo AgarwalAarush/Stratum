@@ -1,7 +1,7 @@
 'use client'
 
-import Link from 'next/link'
 import { useState } from 'react'
+import { MarketsIntentLink } from './MarketsIntentLink'
 import { MarketsScreener } from './MarketsScreener'
 import type { MarketGroupMetric, MarketLeadershipSnapshot, ScreenerResponse } from '@/lib/markets/types'
 
@@ -70,14 +70,14 @@ function GroupTable({
           <h3><span>Constituents</span><span>{Math.min(20, constituents.length)} of {constituents.length} · ranked 30d</span></h3>
           <div className="market-group-constituents">
             {constituents.slice(0, 20).map((stock) => (
-              <Link href={`/markets/stocks/${stock.symbol}`} key={stock.symbol}>
+              <MarketsIntentLink href={`/markets/stocks/${stock.symbol}`} key={stock.symbol}>
                 <span>{stock.symbol}</span><span>{percent(stock.return30d)}</span>
-              </Link>
+              </MarketsIntentLink>
             ))}
           </div>
-          <Link className="market-group-filter-link" href={`/markets/explore?view=stocks&group=${encodeURIComponent(group.label)}`}>
+          <MarketsIntentLink className="market-group-filter-link" href={`/markets/explore?view=stocks&group=${encodeURIComponent(group.label)}`}>
             Open as filtered stock screen →
-          </Link>
+          </MarketsIntentLink>
         </aside>
       ) : null}
     </div>
@@ -108,7 +108,7 @@ export function MarketsExplore({
           ['sectors', 'Sectors'],
           ['sub-industries', 'Sub-industries'],
         ] as const).map(([id, label]) => (
-          <Link key={id} href={`/markets/explore?view=${id}`} aria-current={initialView === id ? 'page' : undefined}>{label}</Link>
+          <MarketsIntentLink key={id} href={`/markets/explore?view=${id}`} aria-current={initialView === id ? 'page' : undefined}>{label}</MarketsIntentLink>
         ))}
       </nav>
       {initialView === 'stocks' ? <MarketsScreener initialResponse={screener} /> : (

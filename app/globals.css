@@ -898,6 +898,8 @@
 
 .equity-research-sections > section {
   border-bottom: 1px solid var(--market-border);
+  contain-intrinsic-size: auto 520px;
+  content-visibility: auto;
   max-width: 850px;
   padding: 52px 0;
   scroll-margin-top: 110px;
@@ -3528,6 +3530,8 @@ body:has(.markets-shell) {
 }
 
 .markets-feed-list li {
+  contain-intrinsic-size: auto 112px;
+  content-visibility: auto;
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) 28px;
   gap: 18px;
@@ -4997,6 +5001,8 @@ body:has(.markets-shell) {
 
 .portfolio-history-list article {
   border-top: 1px solid var(--market-border);
+  contain-intrinsic-size: auto 280px;
+  content-visibility: auto;
   padding: 22px 0;
 }
 

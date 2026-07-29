@@ -1,8 +1,8 @@
-import Link from 'next/link'
 import type { StockViewerData } from '@/lib/markets/types'
 import { CapitalDecisionRail } from './CapitalDecisionRail'
 import { CandidateActions } from './CandidateActions'
 import { InteractivePriceChart } from './InteractivePriceChart'
+import { MarketsIntentLink } from './MarketsIntentLink'
 
 function money(value: number): string {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
@@ -122,7 +122,7 @@ export function StockViewer({ data }: { data: StockViewerData }) {
             {packet?.events.slice(0, 3).map((event) => (
               <p key={`${event.url}-${event.publishedAt}`}><a href={event.url} target="_blank" rel="noreferrer">{event.title}</a> · {new Date(event.publishedAt).toLocaleDateString()}</p>
             ))}
-            <Link href={`/markets/events?symbol=${data.symbol}`}>Open events relevant to {data.symbol} →</Link>
+            <MarketsIntentLink href={`/markets/events?symbol=${data.symbol}`}>Open events relevant to {data.symbol} →</MarketsIntentLink>
           </section>
 
           <section className="stock-viewer-section stock-viewer-research-summary" id="research">
@@ -141,7 +141,7 @@ export function StockViewer({ data }: { data: StockViewerData }) {
               </div>
             ) : null}
             {candidate?.status === 'new' ? <CandidateActions candidateId={candidate.id} /> : null}
-            <Link href={`/markets/stocks/${data.symbol}/research`}>Read full analysis →</Link>
+            <MarketsIntentLink href={`/markets/stocks/${data.symbol}/research`}>Read full analysis →</MarketsIntentLink>
           </section>
         </div>
 

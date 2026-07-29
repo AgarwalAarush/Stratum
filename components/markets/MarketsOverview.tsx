@@ -1,8 +1,8 @@
 'use client'
 
-import Link from 'next/link'
 import { ArrowDown, ArrowSquareOut, ArrowUp } from '@phosphor-icons/react'
 import { useState } from 'react'
+import { MarketsIntentLink } from './MarketsIntentLink'
 import type { MarketOverviewResponse } from '@/lib/markets/types'
 
 interface MarketsOverviewProps {
@@ -134,7 +134,7 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
               <p className="markets-eyebrow">Hermes market structure</p>
               <h2 id="market-structure-title">Today&apos;s Market Structure</h2>
             </div>
-            <Link href="/markets/explore?view=sub-industries">Explore all groups →</Link>
+            <MarketsIntentLink href="/markets/explore?view=sub-industries">Explore all groups →</MarketsIntentLink>
           </div>
           <div className="market-breadth-strip">
             <div><strong>{overview.leadership.advancingPercent.toFixed(0)}%</strong><span>advancing</span></div>
@@ -145,12 +145,12 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
             <div>
               <h3>Leading sub-industries</h3>
               {overview.leadership.subIndustries.slice(0, 5).map((group) => (
-                <Link key={`${group.sector}-${group.label}`} href={`/markets/explore?view=sub-industries&group=${encodeURIComponent(group.label)}`}>
+                <MarketsIntentLink key={`${group.sector}-${group.label}`} href={`/markets/explore?view=sub-industries&group=${encodeURIComponent(group.label)}`}>
                   <span>{group.label}</span>
                   <span className={(group.return1y ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>
                     {group.return1y === null ? '—' : `${group.return1y >= 0 ? '+' : ''}${group.return1y.toFixed(1)}%`}
                   </span>
-                </Link>
+                </MarketsIntentLink>
               ))}
             </div>
             <div>
@@ -174,14 +174,14 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
           </div>
           <div className="market-candidate-grid">
             {overview.candidates.map((candidate) => (
-              <Link key={candidate.id} href={`/markets/stocks/${candidate.symbol}`} className="market-candidate-card">
+              <MarketsIntentLink key={candidate.id} href={`/markets/stocks/${candidate.symbol}`} className="market-candidate-card">
                 <div>
                   <strong>{candidate.symbol}</strong>
                   <span>{candidate.company}</span>
                 </div>
                 <p>{candidate.whySurfaced}</p>
                 <span>{candidate.subIndustry} · Review candidate →</span>
-              </Link>
+              </MarketsIntentLink>
             ))}
           </div>
         </section>
@@ -198,9 +198,9 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
               </li>
             ))}
           </ul>
-          <Link href="/markets/explore?view=stocks" className="market-open-screener">
+          <MarketsIntentLink href="/markets/explore?view=stocks" className="market-open-screener">
             Explore Stocks <span aria-hidden="true">→</span>
-          </Link>
+          </MarketsIntentLink>
         </div>
         <div>
           <h2>Catalysts</h2>

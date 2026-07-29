@@ -19,14 +19,19 @@ import { runScreener } from '../markets/screener.ts'
 import { buildDeterministicMarketMemo, type MarketStateInputs } from '../markets/state.ts'
 import { crossAssetMarketInstrument } from './cross-asset.ts'
 import { normalizeStockLeadershipRow } from './market-leadership.ts'
+import { AsyncTtlCache } from './async-ttl-cache.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 const DATABASE_PAGE_SIZE = 1_000
 const STALE_AFTER_MS = 20 * 60 * 1_000
 const SNAPSHOT_META_CACHE_MS = 10_000
+const MARKET_OVERVIEW_CACHE_MS = 30_000
+const MARKET_LEADERSHIP_CACHE_MS = 60_000
+const CANDIDATE_CACHE_MS = 5_000
+const CROSS_ASSET_CACHE_MS = 30_000
+const STOCK_VIEWER_SHARED_CACHE_MS = 20_000
 const MAX_CACHED_SNAPSHOTS = 2
 
-let snapshotMetaCache: { expiresAt: number; value: SnapshotRecord } | null = null
 const snapshotRowsCache = new Map<string, ScreenerRow[]>()
 const snapshotRowsInflight = new Map<string, Promise<ScreenerRow[] | null>>()
 
@@ -36,6 +41,14 @@ interface SnapshotRecord {
   data_as_of: string
   published_at: string | null
 }
+
+const snapshotMetaCache = new AsyncTtlCache<SnapshotRecord>({ maxEntries: 1 })
+const marketOverviewCache = new AsyncTtlCache<MarketOverviewResponse>({ maxEntries: 1 })
+const marketLeadershipCache = new AsyncTtlCache<MarketLeadershipSnapshot>({ maxEntries: 1 })
+const marketLeadershipSummaryCache = new AsyncTtlCache<MarketLeadershipSnapshot>({ maxEntries: 1 })
+const candidateCache = new AsyncTtlCache<CandidateBrief[]>({ maxEntries: 4 })
+const crossAssetCache = new AsyncTtlCache<CrossAssetSnapshot>({ maxEntries: 1 })
+const stockViewerSharedCache = new AsyncTtlCache<StockViewerData>({ maxEntries: 64 })
 
 interface StateRecord {
   id: string
@@ -184,18 +197,15 @@ function normalizeScreenerRow(row: ScreenerRowRecord): ScreenerRow {
 export async function fetchLatestSnapshotMeta(): Promise<SnapshotRecord | null> {
   const supabase = getSupabaseClient()
   if (!supabase) return null
-  if (snapshotMetaCache && snapshotMetaCache.expiresAt > Date.now()) return snapshotMetaCache.value
-
-  const { data, error } = await supabase
-    .from('market_snapshots')
-    .select('id,feed,data_as_of,published_at')
-    .eq('status', 'complete')
-    .eq('is_latest', true)
-    .maybeSingle()
-  if (error || !data) return null
-  const snapshot = data as SnapshotRecord
-  snapshotMetaCache = { expiresAt: Date.now() + SNAPSHOT_META_CACHE_MS, value: snapshot }
-  return snapshot
+  return snapshotMetaCache.get('latest', SNAPSHOT_META_CACHE_MS, async () => {
+    const { data, error } = await supabase
+      .from('market_snapshots')
+      .select('id,feed,data_as_of,published_at')
+      .eq('status', 'complete')
+      .eq('is_latest', true)
+      .maybeSingle()
+    return error || !data ? null : data as SnapshotRecord
+  })
 }
 
 export async function getCachedSnapshotRows(
@@ -252,11 +262,16 @@ export async function fetchLatestScreener(query: ScreenerQuery): Promise<Screene
   })
 }
 
-export async function fetchLatestMarketOverview(): Promise<MarketOverviewResponse | null> {
+async function loadLatestMarketOverview(): Promise<MarketOverviewResponse | null> {
   const supabase = getSupabaseClient()
   const snapshot = await fetchLatestSnapshotMeta()
   if (!supabase || !snapshot) return null
 
+  const contextPromise = Promise.all([
+    fetchLatestCrossAssetSnapshot(),
+    fetchLatestMarketLeadershipSummary(),
+    fetchLatestCandidates(),
+  ])
   const { data: stateData, error: stateError } = await supabase
     .from('market_states')
     .select('id,regime,confidence,inputs,data_as_of,generated_at')
@@ -281,11 +296,7 @@ export async function fetchLatestMarketOverview(): Promise<MarketOverviewRespons
     generatedAt,
   )
 
-  const [crossAsset, leadership, candidates] = await Promise.all([
-    fetchLatestCrossAssetSnapshot(),
-    fetchLatestMarketLeadership(),
-    fetchLatestCandidates(),
-  ])
+  const [crossAsset, leadership, candidates] = await contextPromise
 
   return {
     state: {
@@ -310,6 +321,10 @@ export async function fetchLatestMarketOverview(): Promise<MarketOverviewRespons
     leadership: leadership ?? undefined,
     candidates,
   }
+}
+
+export async function fetchLatestMarketOverview(): Promise<MarketOverviewResponse | null> {
+  return marketOverviewCache.get('latest', MARKET_OVERVIEW_CACHE_MS, loadLatestMarketOverview)
 }
 
 interface LeadershipSnapshotRecord {
@@ -353,7 +368,7 @@ function normalizeDivergence(row: Record<string, unknown>): MarketDivergenceSign
   }
 }
 
-export async function fetchLatestMarketLeadership(): Promise<MarketLeadershipSnapshot | null> {
+async function loadLatestMarketLeadership(): Promise<MarketLeadershipSnapshot | null> {
   const supabase = getSupabaseClient()
   if (!supabase) return null
   const { data: snapshotData, error: snapshotError } = await supabase
@@ -394,7 +409,58 @@ export async function fetchLatestMarketLeadership(): Promise<MarketLeadershipSna
   }
 }
 
-export async function fetchLatestCandidates(limit = 5): Promise<CandidateBrief[]> {
+export async function fetchLatestMarketLeadership(): Promise<MarketLeadershipSnapshot | null> {
+  return marketLeadershipCache.get('latest', MARKET_LEADERSHIP_CACHE_MS, loadLatestMarketLeadership)
+}
+
+async function loadLatestMarketLeadershipSummary(): Promise<MarketLeadershipSnapshot | null> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+  const { data: snapshotData, error: snapshotError } = await supabase
+    .from('market_leadership_snapshots')
+    .select('id,trading_date,data_as_of,generated_at,universe_count,usable_count,fresh_count,advancing_percent,above_50_day_percent')
+    .eq('status', 'complete')
+    .eq('is_latest', true)
+    .maybeSingle()
+  if (snapshotError || !snapshotData) return null
+  const snapshot = snapshotData as LeadershipSnapshotRecord
+  const [{ data: groupRows, error: groupError }, { data: divergenceRows, error: divergenceError }] = await Promise.all([
+    supabase.from('market_group_metrics').select('*').eq('snapshot_id', snapshot.id),
+    supabase.from('market_divergence_signals').select('*').eq('snapshot_id', snapshot.id),
+  ])
+  if (groupError || divergenceError) return null
+  const groups = (groupRows ?? []).map((row) => normalizeGroupMetric(row))
+  return {
+    id: snapshot.id,
+    tradingDate: snapshot.trading_date,
+    dataAsOf: snapshot.data_as_of,
+    generatedAt: snapshot.generated_at,
+    universeCount: snapshot.universe_count,
+    usableCount: snapshot.usable_count,
+    freshCount: snapshot.fresh_count,
+    advancingPercent: Number(snapshot.advancing_percent),
+    above50DayPercent: Number(snapshot.above_50_day_percent),
+    sectors: [],
+    subIndustries: groups
+      .filter((group) => group.groupType === 'sub_industry')
+      .sort((left, right) => (right.return1y ?? -Infinity) - (left.return1y ?? -Infinity))
+      .slice(0, 5),
+    stocks: [],
+    leaders: [],
+    laggards: [],
+    divergences: (divergenceRows ?? []).map((row) => normalizeDivergence(row)).slice(0, 5),
+  }
+}
+
+export async function fetchLatestMarketLeadershipSummary(): Promise<MarketLeadershipSnapshot | null> {
+  return marketLeadershipSummaryCache.get(
+    'latest',
+    MARKET_LEADERSHIP_CACHE_MS,
+    loadLatestMarketLeadershipSummary,
+  )
+}
+
+async function loadLatestCandidates(limit: number): Promise<CandidateBrief[]> {
   const supabase = getSupabaseClient()
   if (!supabase) return []
   const { data: latest } = await supabase
@@ -418,17 +484,27 @@ export async function fetchLatestCandidates(limit = 5): Promise<CandidateBrief[]
   })
 }
 
-export async function fetchStockViewerData(symbolInput: string, ownerId?: string): Promise<StockViewerData | null> {
-  const symbol = symbolInput.trim().toUpperCase()
-  if (!/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol)) return null
+export async function fetchLatestCandidates(limit = 5): Promise<CandidateBrief[]> {
+  return candidateCache.get(String(limit), CANDIDATE_CACHE_MS, () => loadLatestCandidates(limit))
+    .then((candidates) => candidates ?? [])
+}
+
+async function loadSharedStockViewerData(symbol: string): Promise<StockViewerData | null> {
   const supabase = getSupabaseClient()
   if (!supabase) return null
-  const [{ data: latestMarket }, { data: latestLeadership }] = await Promise.all([
-    supabase.from('market_snapshots').select('id,feed,data_as_of').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
-    supabase.from('market_leadership_snapshots').select('id').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
+  const latestMarketPromise = fetchLatestSnapshotMeta()
+  const latestLeadershipPromise = supabase
+    .from('market_leadership_snapshots')
+    .select('id')
+    .eq('status', 'complete')
+    .eq('is_latest', true)
+    .maybeSingle()
+  const [latestMarket, { data: latestLeadership }] = await Promise.all([
+    latestMarketPromise,
+    latestLeadershipPromise,
   ])
   if (!latestMarket) return null
-  const [{ data: screener }, { data: asset }, { data: bars }, leadershipResult, candidateResult] = await Promise.all([
+  const [{ data: screener }, { data: asset }, { data: bars }, leadershipResult] = await Promise.all([
     supabase.from('screener_rows').select('symbol,company,price,daily_change,relative_volume,fifty_day_average,fifty_two_week_position,exchange,data_as_of')
       .eq('snapshot_id', latestMarket.id).eq('symbol', symbol).maybeSingle(),
     supabase.from('market_assets').select('name,exchange').eq('symbol', symbol).maybeSingle(),
@@ -437,21 +513,9 @@ export async function fetchStockViewerData(symbolInput: string, ownerId?: string
     latestLeadership
       ? supabase.from('market_stock_metrics').select('*').eq('snapshot_id', latestLeadership.id).eq('symbol', symbol).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-    supabase.from('candidate_briefs').select('content,status').eq('symbol', symbol).order('trading_date', { ascending: false }).limit(1).maybeSingle(),
   ])
   if (!screener && !asset) return null
   const leadership = leadershipResult.data ? normalizeStockLeadershipRow(leadershipResult.data) : null
-  const candidate = candidateResult.data && isRecord(candidateResult.data.content)
-    ? { ...candidateResult.data.content, status: candidateResult.data.status } as unknown as CandidateBrief
-    : null
-  const [companyPacket, researchNote, decision, position] = ownerId
-    ? await Promise.all([
-        import('./company-research.ts').then((module) => module.fetchLatestCompanyPacket(ownerId, symbol)),
-        import('./company-research.ts').then((module) => module.fetchLatestEquityResearch(ownerId, symbol)),
-        import('./portfolio.ts').then((module) => module.fetchLatestDecision(ownerId, symbol)),
-        import('./portfolio.ts').then((module) => module.fetchManualPosition(ownerId, symbol)),
-      ])
-    : [null, null, null, null]
   return {
     symbol,
     company: screener?.company ?? asset?.name ?? symbol,
@@ -466,16 +530,60 @@ export async function fetchStockViewerData(symbolInput: string, ownerId?: string
     dataAsOf: screener?.data_as_of ?? leadership?.asOf ?? latestMarket.data_as_of,
     feed: latestMarket.feed,
     leadership,
-    candidate,
-    companyPacket,
-    researchNote,
-    decision,
-    position,
+    candidate: null,
+    companyPacket: null,
+    researchNote: null,
+    decision: null,
+    position: null,
     history: (bars ?? []).map((bar) => ({
       tradingDate: bar.trading_date,
       close: Number(bar.close),
       volume: Number(bar.volume),
     })).reverse(),
+  }
+}
+
+export async function fetchStockViewerData(symbolInput: string, ownerId?: string): Promise<StockViewerData | null> {
+  const symbol = symbolInput.trim().toUpperCase()
+  if (!/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol)) return null
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+  const sharedPromise = stockViewerSharedCache.get(
+    symbol,
+    STOCK_VIEWER_SHARED_CACHE_MS,
+    () => loadSharedStockViewerData(symbol),
+  )
+  const ownerDataPromise = ownerId
+    ? Promise.all([
+        import('./company-research.ts').then((module) => module.fetchLatestCompanyPacket(ownerId, symbol)),
+        import('./company-research.ts').then((module) => module.fetchLatestEquityResearch(ownerId, symbol)),
+        import('./portfolio.ts').then((module) => module.fetchLatestDecision(ownerId, symbol)),
+        import('./portfolio.ts').then((module) => module.fetchManualPosition(ownerId, symbol)),
+      ])
+    : Promise.resolve([null, null, null, null] as const)
+  const candidatePromise = supabase
+    .from('candidate_briefs')
+    .select('content,status')
+    .eq('symbol', symbol)
+    .order('trading_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const [shared, [companyPacket, researchNote, decision, position], candidateResult] = await Promise.all([
+    sharedPromise,
+    ownerDataPromise,
+    candidatePromise,
+  ])
+  if (!shared) return null
+  const candidate = candidateResult.data && isRecord(candidateResult.data.content)
+    ? { ...candidateResult.data.content, status: candidateResult.data.status } as unknown as CandidateBrief
+    : null
+  return {
+    ...shared,
+    candidate,
+    companyPacket,
+    researchNote,
+    decision,
+    position,
   }
 }
 
@@ -504,7 +612,7 @@ interface CrossAssetObservationRecord {
   data_status: CrossAssetObservation['dataStatus']
 }
 
-export async function fetchLatestCrossAssetSnapshot(): Promise<CrossAssetSnapshot | null> {
+async function loadLatestCrossAssetSnapshot(): Promise<CrossAssetSnapshot | null> {
   const supabase = getSupabaseClient()
   if (!supabase) return null
   const { data: snapshotData, error: snapshotError } = await supabase
@@ -549,4 +657,8 @@ export async function fetchLatestCrossAssetSnapshot(): Promise<CrossAssetSnapsho
     retrievedAt: snapshot.retrieved_at,
     publishedAt: snapshot.published_at,
   }
+}
+
+export async function fetchLatestCrossAssetSnapshot(): Promise<CrossAssetSnapshot | null> {
+  return crossAssetCache.get('latest', CROSS_ASSET_CACHE_MS, loadLatestCrossAssetSnapshot)
 }

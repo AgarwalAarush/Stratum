@@ -3,18 +3,14 @@ import { notFound } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import { ResearchActionButton } from '@/components/markets/ResearchActionButton'
 import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
-import { fetchLatestEquityResearch } from '@/lib/server/company-research'
 import { fetchStockViewerData } from '@/lib/server/markets-repository'
 
 export default async function EquityResearchPage({ params }: { params: Promise<{ symbol: string }> }) {
-  const { symbol: rawSymbol } = await params
+  const [{ symbol: rawSymbol }, user] = await Promise.all([params, requireAllowedMarketUser()])
   const symbol = rawSymbol.toUpperCase()
-  const user = await requireAllowedMarketUser()
-  const [stock, research] = await Promise.all([
-    fetchStockViewerData(symbol, user.id),
-    fetchLatestEquityResearch(user.id, symbol),
-  ])
+  const stock = await fetchStockViewerData(symbol, user.id)
   if (!stock) notFound()
+  const research = stock.researchNote
 
   return (
     <article className="equity-research-note">

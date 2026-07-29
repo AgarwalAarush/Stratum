@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ArrowClockwise, List, X } from '@phosphor-icons/react'
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 
 const MARKET_NAV_ITEMS = [
   { href: '/markets', label: 'Overview' },
@@ -33,6 +33,13 @@ export function MarketsShell({ children, dataAsOf }: { children: React.ReactNode
   const router = useRouter()
   const [refreshing, setRefreshing] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const prefetchedRoutes = useRef(new Set<string>())
+
+  const prefetchRoute = useCallback((href: string) => {
+    if (prefetchedRoutes.current.has(href)) return
+    prefetchedRoutes.current.add(href)
+    router.prefetch(href)
+  }, [router])
 
   const refresh = () => {
     setRefreshing(true)
@@ -43,16 +50,36 @@ export function MarketsShell({ children, dataAsOf }: { children: React.ReactNode
   return (
     <div className="markets-shell min-h-[100dvh] bg-[var(--market-bg)] text-[var(--market-text)]">
       <header className="markets-header">
-        <Link href="/markets" className="markets-wordmark" aria-label="Stratum Markets home">
+        <Link
+          href="/markets"
+          prefetch={false}
+          className="markets-wordmark"
+          aria-label="Stratum Markets home"
+          onMouseEnter={() => prefetchRoute('/markets')}
+          onFocus={() => prefetchRoute('/markets')}
+        >
           STRATUM
         </Link>
 
         <nav className="markets-mode-switch" aria-label="Product mode">
-          <Link href="/ai-research" className="markets-mode-link">
+          <Link
+            href="/ai-research"
+            prefetch={false}
+            className="markets-mode-link"
+            onMouseEnter={() => prefetchRoute('/ai-research')}
+            onFocus={() => prefetchRoute('/ai-research')}
+          >
             Intelligence
           </Link>
           <span aria-hidden="true" className="markets-mode-divider" />
-          <Link href="/markets" className="markets-mode-link markets-mode-link-active" aria-current="page">
+          <Link
+            href="/markets"
+            prefetch={false}
+            className="markets-mode-link markets-mode-link-active"
+            aria-current="page"
+            onMouseEnter={() => prefetchRoute('/markets')}
+            onFocus={() => prefetchRoute('/markets')}
+          >
             Markets
           </Link>
         </nav>
@@ -92,8 +119,11 @@ export function MarketsShell({ children, dataAsOf }: { children: React.ReactNode
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               aria-current={active ? 'page' : undefined}
               className={`markets-subnav-link ${active ? 'markets-subnav-link-active' : ''}`}
+              onMouseEnter={() => prefetchRoute(item.href)}
+              onFocus={() => prefetchRoute(item.href)}
               onClick={() => setMobileNavOpen(false)}
             >
               {item.label}

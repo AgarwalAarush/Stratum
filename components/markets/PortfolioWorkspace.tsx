@@ -1,7 +1,7 @@
 'use client'
 
-import Link from 'next/link'
 import { FormEvent, useState } from 'react'
+import { MarketsIntentLink } from './MarketsIntentLink'
 import { MarketsWatchlists } from './MarketsWatchlists'
 import type { PortfolioWorkspaceData, ScreenerResponse } from '@/lib/markets/types'
 
@@ -112,9 +112,9 @@ export function PortfolioWorkspace({
       {view === 'ideas' ? (
         <div className="portfolio-record-list">
           {ideas.length === 0 ? <p>No classified ideas yet. Save a Stock Viewer decision as Watch or Avoid.</p> : ideas.map((decision) => (
-            <Link key={decision.id} href={`/markets/stocks/${decision.symbol}`}>
+            <MarketsIntentLink key={decision.id} href={`/markets/stocks/${decision.symbol}`}>
               <strong>{decision.symbol}</strong><span>{decision.disposition} · {decision.formalRating} · {decision.entryAction.replaceAll('_', ' ')}</span>
-            </Link>
+            </MarketsIntentLink>
           ))}
         </div>
       ) : null}
@@ -133,10 +133,10 @@ export function PortfolioWorkspace({
           </form>
           <div className="portfolio-position-list">
             {positions.length === 0 ? <p>No manually entered positions.</p> : positions.map((position) => (
-              <Link key={position.id} href={`/markets/stocks/${position.symbol}`}>
+              <MarketsIntentLink key={position.id} href={`/markets/stocks/${position.symbol}`}>
                 <strong>{position.symbol}</strong>
                 <span>{position.shares.toLocaleString()} shares · ${position.costBasisPerShare.toFixed(2)} basis</span>
-              </Link>
+              </MarketsIntentLink>
             ))}
           </div>
         </div>
@@ -146,7 +146,7 @@ export function PortfolioWorkspace({
           {inbox.length === 0 ? <p>Nothing requires a decision right now.</p> : inbox.map((item) => (
             <article key={item.id}>
               <div><span>{item.type.replaceAll('_', ' ')}</span><time>{new Date(item.occurredAt).toLocaleString()}</time></div>
-              <h2><Link href={`/markets/stocks/${item.symbol}`}>{item.title}</Link></h2>
+              <h2><MarketsIntentLink href={`/markets/stocks/${item.symbol}`}>{item.title}</MarketsIntentLink></h2>
               <p>{item.summary}</p>
               <footer><button type="button" onClick={() => closeInbox(item.id, 'resolved')}>Resolve</button><button type="button" onClick={() => closeInbox(item.id, 'dismissed')}>Dismiss</button></footer>
             </article>

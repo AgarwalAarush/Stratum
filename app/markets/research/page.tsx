@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import { MarketsFeedPage } from '@/components/markets/MarketsFeedPage'
+import { MarketsIntentLink } from '@/components/markets/MarketsIntentLink'
 import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { fetchFinanceReports } from '@/lib/data/finance-reports'
 import { fetchPersistedFmpMarketItems } from '@/lib/data/fmp-intelligence'
@@ -7,9 +7,9 @@ import { mergeMarketNews } from '@/lib/markets/news'
 import { fetchEquityResearchLibrary } from '@/lib/server/company-research'
 
 export default async function MarketsResearchPage() {
-  const user = await requireAllowedMarketUser()
+  const userPromise = requireAllowedMarketUser()
   const [notes, reports, filings] = await Promise.all([
-    fetchEquityResearchLibrary(user.id),
+    userPromise.then((user) => fetchEquityResearchLibrary(user.id)),
     fetchFinanceReports(30).catch(() => []),
     fetchPersistedFmpMarketItems(['fmp-sec-filings'], 30).catch(() => []),
   ])
@@ -22,11 +22,11 @@ export default async function MarketsResearchPage() {
       </header>
       <section className="research-artifact-grid">
         {notes.length === 0 ? <p>No full research artifacts yet. Promote a Candidate Scout brief or generate one from a Stock Viewer.</p> : notes.map((note) => (
-          <Link key={note.id} href={`/markets/stocks/${note.symbol}/research`}>
+          <MarketsIntentLink key={note.id} href={`/markets/stocks/${note.symbol}/research`}>
             <div><strong>{note.symbol}</strong><span>v{note.version}</span></div>
             <h2>{note.keyDebate || `${note.status} research version`}</h2>
             <footer><span>{note.formalRating}</span><span>{note.entryAction.replaceAll('_', ' ')}</span><time>{new Date(note.generatedAt).toLocaleDateString()}</time></footer>
-          </Link>
+          </MarketsIntentLink>
         ))}
       </section>
       <MarketsFeedPage

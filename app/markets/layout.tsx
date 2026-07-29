@@ -18,7 +18,9 @@ export default async function MarketsLayout({
   children: React.ReactNode
   modal: React.ReactNode
 }) {
-  await requireAllowedMarketUser()
-  const snapshot = await fetchLatestSnapshotMeta()
+  const [, snapshot] = await Promise.all([
+    requireAllowedMarketUser(),
+    fetchLatestSnapshotMeta(),
+  ])
   return <MarketsShell dataAsOf={snapshot?.data_as_of}>{children}{modal}</MarketsShell>
 }

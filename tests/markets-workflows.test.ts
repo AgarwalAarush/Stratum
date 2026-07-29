@@ -17,6 +17,17 @@ test('Markets navigation exposes workflow destinations and removes the old taxon
   }
 })
 
+test('Markets prefetches expensive destinations on intent instead of at first paint', () => {
+  const shell = source('components/markets/MarketsShell.tsx')
+  const intentLink = source('components/markets/MarketsIntentLink.tsx')
+  const screener = source('components/markets/MarketsScreener.tsx')
+  assert.match(shell, /prefetch=\{false\}/)
+  assert.match(shell, /onMouseEnter=\{\(\) => prefetchRoute\(item\.href\)\}/)
+  assert.match(intentLink, /prefetch=\{false\}/)
+  assert.match(intentLink, /onMouseEnter=\{\(event\) =>/)
+  assert.match(screener, /onMouseEnter=\{\(\) => preloadStock\(row\.symbol\)\}/)
+})
+
 test('legacy routes preserve compatibility through explicit redirects', () => {
   assert.match(source('app/markets/screener/page.tsx'), /redirect\('\/markets\/explore\?view=stocks'\)/)
   assert.match(source('app/markets/news/page.tsx'), /redirect\('\/markets\/events'\)/)

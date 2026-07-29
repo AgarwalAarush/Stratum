@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import {
   Check,
   MagnifyingGlass,
@@ -11,6 +10,7 @@ import {
 } from '@phosphor-icons/react'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { MarketSparkline } from './MarketSparkline'
+import { MarketsIntentLink } from './MarketsIntentLink'
 import {
   createDefaultWatchlistState,
   isValidWatchlistSymbol,
@@ -368,7 +368,7 @@ export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount 
               <WatchlistRow key={symbol} row={row} onRemove={removeSymbol} />
             ) : (
               <tr key={symbol}>
-                <td><Link className="market-symbol-button" href={`/markets/stocks/${symbol}`} scroll={false}>{symbol}</Link></td>
+                <td><MarketsIntentLink className="market-symbol-button" href={`/markets/stocks/${symbol}`} scroll={false}>{symbol}</MarketsIntentLink></td>
                 <td colSpan={8} className="market-watchlist-missing">No data in the current snapshot. The ticker remains saved and will resolve when market data becomes available.</td>
                 <td>—</td>
                 <td><button type="button" className="market-watchlist-remove" onClick={() => removeSymbol(symbol)} aria-label={`Remove ${symbol} from ${activeList.name}`}><X size={13} /> Remove</button></td>
@@ -391,7 +391,7 @@ export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount 
 function WatchlistRow({ row, onRemove }: { row: ScreenerRow; onRemove: (symbol: string) => void }) {
   return (
     <tr>
-      <td><Link className="market-symbol-button" href={`/markets/stocks/${row.symbol}`} scroll={false}>{row.symbol}</Link></td>
+      <td><MarketsIntentLink className="market-symbol-button" href={`/markets/stocks/${row.symbol}`} scroll={false}>{row.symbol}</MarketsIntentLink></td>
       <td>{row.company}</td>
       <td>{formatPrice(row.price)}</td>
       <td className={row.dailyChange >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(row.dailyChange)}</td>
@@ -408,7 +408,7 @@ function WatchlistRow({ row, onRemove }: { row: ScreenerRow; onRemove: (symbol: 
       <td>{formatMarketTime(row.asOf)}</td>
       <td>
         <div className="market-watchlist-row-actions">
-          <Link href={`/markets/stocks/${row.symbol}`} scroll={false}>Open</Link>
+          <MarketsIntentLink href={`/markets/stocks/${row.symbol}`} scroll={false}>Open</MarketsIntentLink>
           <button type="button" className="market-watchlist-remove" onClick={() => onRemove(row.symbol)} aria-label={`Remove ${row.symbol} from watchlist`}><X size={13} /> Remove</button>
         </div>
       </td>

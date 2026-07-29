@@ -204,6 +204,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   const startRow = response.total === 0 ? 0 : (response.page - 1) * response.pageSize + 1
   const endRow = Math.min(response.page * response.pageSize, response.total)
   const openStock = (symbol: string) => router.push(`/markets/stocks/${symbol}`, { scroll: false })
+  const preloadStock = (symbol: string) => router.prefetch(`/markets/stocks/${symbol}`)
 
   return (
     <section className="market-screener" aria-labelledby="stock-screener-title">
@@ -282,6 +283,8 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
                   role="link"
                   tabIndex={0}
                   aria-label={`Open ${row.company} (${row.symbol})`}
+                  onMouseEnter={() => preloadStock(row.symbol)}
+                  onFocus={() => preloadStock(row.symbol)}
                   onClick={() => openStock(row.symbol)}
                   onKeyDown={(event) => {
                     if (event.key !== 'Enter' && event.key !== ' ') return
