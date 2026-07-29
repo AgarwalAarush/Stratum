@@ -1,7 +1,8 @@
 import Link from 'next/link'
-import type { StockPricePoint, StockViewerData } from '@/lib/markets/types'
+import type { StockViewerData } from '@/lib/markets/types'
 import { CapitalDecisionRail } from './CapitalDecisionRail'
 import { CandidateActions } from './CandidateActions'
+import { InteractivePriceChart } from './InteractivePriceChart'
 
 function money(value: number): string {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
@@ -23,25 +24,6 @@ function compact(value: unknown, style: 'number' | 'currency' = 'number'): strin
 
 function multiple(value: number | null | undefined): string {
   return value === null || value === undefined ? '—' : `${value.toFixed(1)}×`
-}
-
-function StockHistoryChart({ history, symbol }: { history: StockPricePoint[]; symbol: string }) {
-  if (history.length < 2) return <div className="stock-viewer-chart-empty">Price history is not available in the current snapshot.</div>
-  const values = history.map((point) => point.close)
-  const minimum = Math.min(...values)
-  const maximum = Math.max(...values)
-  const spread = Math.max(maximum - minimum, 1)
-  const points = values.map((value, index) => {
-    const x = (index / (values.length - 1)) * 100
-    const y = 92 - ((value - minimum) / spread) * 82
-    return `${x},${y}`
-  }).join(' ')
-  return (
-    <svg className="stock-viewer-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`${symbol} one-year price history`}>
-      <line x1="0" x2="100" y1="92" y2="92" />
-      <polyline points={points} />
-    </svg>
-  )
 }
 
 export function StockViewer({ data }: { data: StockViewerData }) {
@@ -78,7 +60,7 @@ export function StockViewer({ data }: { data: StockViewerData }) {
       <div className="stock-viewer-layout">
         <div className="stock-viewer-main">
           <section className="stock-viewer-chart-section">
-            <StockHistoryChart history={data.history} symbol={data.symbol} />
+            <InteractivePriceChart history={data.history} symbol={data.symbol} />
             <div className="stock-viewer-stat-grid">
               <div><span>30d return</span><strong>{percent(metric?.return30d ?? null)}</strong></div>
               <div><span>1yr return</span><strong>{percent(metric?.return1y ?? null)}</strong></div>

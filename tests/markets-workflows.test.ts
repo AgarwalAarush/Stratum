@@ -28,7 +28,8 @@ test('ticker surfaces converge on the canonical Stock Viewer route', () => {
   const watchlists = source('components/markets/MarketsWatchlists.tsx')
   const viewer = source('components/markets/StockViewer.tsx')
   const decisionRail = source('components/markets/CapitalDecisionRail.tsx')
-  assert.match(screener, /href=\{`\/markets\/stocks\/\$\{row\.symbol\}`\}/)
+  assert.match(screener, /router\.push\(`\/markets\/stocks\/\$\{symbol\}`/)
+  assert.match(screener, /className="market-screen-stock-row"[\s\S]*role="link"/)
   assert.match(watchlists, /href=\{`\/markets\/stocks\/\$\{row\.symbol\}`\}/)
   assert.match(decisionRail, /Decision, not execution/)
   assert.match(decisionRail, /Formal rating/)
@@ -42,4 +43,21 @@ test('Stock Viewer supports intercepted desktop routing and a canonical deep lin
   assert.match(source('app/markets/@modal/(.)stocks/[symbol]/page.tsx'), /<StockViewerModal/)
   assert.match(source('components/markets/StockViewerModal.tsx'), /router\.back\(\)/)
   assert.match(source('components/markets/StockViewerModal.tsx'), /event\.key === 'Escape'/)
+})
+
+test('Stock Viewer chart is interactive and modal navigation sticks to the modal edge', () => {
+  const chart = source('components/markets/InteractivePriceChart.tsx')
+  const styles = source('app/globals.css')
+  assert.match(chart, /onPointerMove=\{selectFromPointer\}/)
+  assert.match(chart, /event\.key !== 'ArrowLeft'/)
+  assert.match(chart, /formatPrice\(active\.close\)/)
+  assert.match(styles, /\.stock-viewer-modal \.stock-viewer-outline \{\s*top: 0;/)
+  assert.match(styles, /\.stock-viewer-chart polyline[\s\S]*stroke-width: 1\.75;/)
+})
+
+test('group rows expose full-row selection and a balanced constituent grid', () => {
+  const explore = source('components/markets/MarketsExplore.tsx')
+  const styles = source('app/globals.css')
+  assert.match(explore, /role="button"[\s\S]*onClick=\{\(\) => setSelected\(item\.label\)\}/)
+  assert.match(styles, /\.market-group-constituents \{[\s\S]*grid-template-columns: repeat\(2,/)
 })

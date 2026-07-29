@@ -31,8 +31,21 @@ function GroupTable({
           <thead><tr><th>Group</th><th>n</th><th>30d</th><th>50d</th><th>200d</th><th>1yr</th><th>vs50</th><th>vs200</th></tr></thead>
           <tbody>
             {groups.map((item) => (
-              <tr key={`${item.sector}-${item.label}`} className={item.label === group?.label ? 'market-group-selected' : ''}>
-                <td><button type="button" onClick={() => setSelected(item.label)}>{item.label}</button></td>
+              <tr
+                key={`${item.sector}-${item.label}`}
+                className={item.label === group?.label ? 'market-group-selected' : ''}
+                role="button"
+                tabIndex={0}
+                aria-pressed={item.label === group?.label}
+                aria-label={`Show ${item.label} details`}
+                onClick={() => setSelected(item.label)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return
+                  event.preventDefault()
+                  setSelected(item.label)
+                }}
+              >
+                <td>{item.label}</td>
                 <td>{item.constituentCount}</td>
                 <td className={(item.return30d ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{percent(item.return30d)}</td>
                 <td>{percent(item.return50d)}</td>
@@ -54,7 +67,7 @@ function GroupTable({
             <div><strong>{percent(group.return1y)}</strong><span>1 year</span></div>
             <div><strong>{percent(group.vs200DayAverage)}</strong><span>vs 200d</span></div>
           </div>
-          <h3>Constituents</h3>
+          <h3><span>Constituents</span><span>{Math.min(20, constituents.length)} of {constituents.length} · ranked 30d</span></h3>
           <div className="market-group-constituents">
             {constituents.slice(0, 20).map((stock) => (
               <Link href={`/markets/stocks/${stock.symbol}`} key={stock.symbol}>

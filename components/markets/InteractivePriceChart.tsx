@@ -1,0 +1,121 @@
+'use client'
+
+import { useState, type KeyboardEvent, type PointerEvent } from 'react'
+import type { StockPricePoint } from '@/lib/markets/types'
+
+interface ChartPoint extends StockPricePoint {
+  x: number
+  y: number
+}
+
+function formatPrice(value: number): string {
+  return value.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+  })
+}
+
+function formatDate(value: string, includeYear = false): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(includeYear ? { year: 'numeric' } : {}),
+    timeZone: 'UTC',
+  }).format(new Date(`${value}T00:00:00Z`))
+}
+
+function buildPoints(history: StockPricePoint[]): ChartPoint[] {
+  const values = history.map((point) => point.close)
+  const minimum = Math.min(...values)
+  const maximum = Math.max(...values)
+  const spread = Math.max(maximum - minimum, 1)
+
+  return history.map((point, index) => ({
+    ...point,
+    x: (index / (history.length - 1)) * 100,
+    y: 92 - ((point.close - minimum) / spread) * 82,
+  }))
+}
+
+export function InteractivePriceChart({ history, symbol }: { history: StockPricePoint[]; symbol: string }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
+
+  if (history.length < 2) {
+    return <div className="stock-viewer-chart-empty">Price history is not available in the current snapshot.</div>
+  }
+
+  const points = buildPoints(history)
+  const active = activeIndex === null ? null : points[activeIndex]
+  const midpoint = history[Math.floor((history.length - 1) / 2)]
+
+  const selectFromPointer = (event: PointerEvent<SVGSVGElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const fraction = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width))
+    const nextIndex = Math.round(fraction * (points.length - 1))
+    setActiveIndex((current) => current === nextIndex ? current : nextIndex)
+  }
+
+  const selectFromKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    const current = activeIndex ?? points.length - 1
+    setActiveIndex(event.key === 'ArrowLeft'
+      ? Math.max(0, current - 1)
+      : Math.min(points.length - 1, current + 1))
+  }
+
+  return (
+    <div
+      className="stock-price-chart"
+      tabIndex={0}
+      onFocus={() => setActiveIndex((current) => current ?? points.length - 1)}
+      onBlur={() => setActiveIndex(null)}
+      onKeyDown={selectFromKeyboard}
+      aria-label={`${symbol} one-year price history. Use left and right arrow keys to inspect daily closes.`}
+    >
+      <div className="stock-price-chart-heading">
+        <span>1-year price history</span>
+        <strong>{active ? `${formatDate(active.tradingDate, true)} · ${formatPrice(active.close)}` : 'Hover to inspect'}</strong>
+      </div>
+      <div className="stock-price-chart-plot">
+        <svg
+          className="stock-viewer-chart"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          role="img"
+          aria-label={`${symbol} one-year closing-price chart`}
+          onPointerMove={selectFromPointer}
+          onPointerEnter={selectFromPointer}
+          onPointerLeave={() => setActiveIndex(null)}
+        >
+          <line className="stock-chart-baseline" x1="0" x2="100" y1="92" y2="92" />
+          <polyline points={points.map((point) => `${point.x},${point.y}`).join(' ')} vectorEffect="non-scaling-stroke" />
+          {active ? (
+            <>
+              <line className="stock-chart-crosshair" x1={active.x} x2={active.x} y1="5" y2="92" vectorEffect="non-scaling-stroke" />
+            </>
+          ) : null}
+        </svg>
+        {active ? (
+          <>
+            <i className="stock-price-chart-point" style={{ left: `${active.x}%`, top: `${active.y}%` }} aria-hidden="true" />
+            <div
+              className={`stock-price-chart-tooltip ${active.y < 25 ? 'stock-price-chart-tooltip-below' : ''}`}
+              style={{ left: `clamp(54px, ${active.x}%, calc(100% - 54px))`, top: `${active.y}%` }}
+              aria-hidden="true"
+            >
+              <strong>{formatPrice(active.close)}</strong>
+              <span>{formatDate(active.tradingDate, true)}</span>
+            </div>
+          </>
+        ) : null}
+      </div>
+      <div className="stock-price-chart-axis" aria-hidden="true">
+        <time>{formatDate(history[0].tradingDate, true)}</time>
+        <time>{formatDate(midpoint.tradingDate)}</time>
+        <time>{formatDate(history.at(-1)!.tradingDate, true)}</time>
+      </div>
+    </div>
+  )
+}

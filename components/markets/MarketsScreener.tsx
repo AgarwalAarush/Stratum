@@ -1,7 +1,7 @@
 'use client'
 
-import Link from 'next/link'
 import { CaretDown, CaretLeft, CaretRight, CaretUp, Funnel } from '@phosphor-icons/react'
+import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { MarketSparkline } from './MarketSparkline'
 import { ScreenerConditionBuilder } from './ScreenerConditionBuilder'
@@ -110,6 +110,7 @@ function formatMarketTime(value: string): string {
 }
 
 export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
+  const router = useRouter()
   const [preset, setPreset] = useState<ScreenerPreset>(DEFAULT_SCREENER_QUERY.preset)
   const [filters, setFilters] = useState<ScreenerFilter[]>(DEFAULT_SCREENER_FILTERS)
   const [sort, setSort] = useState<ScreenerSortField>(DEFAULT_SCREENER_QUERY.sort)
@@ -202,6 +203,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   const visiblePages = Array.from({ length: Math.min(totalPages, 4) }, (_, index) => index + 1)
   const startRow = response.total === 0 ? 0 : (response.page - 1) * response.pageSize + 1
   const endRow = Math.min(response.page * response.pageSize, response.total)
+  const openStock = (symbol: string) => router.push(`/markets/stocks/${symbol}`, { scroll: false })
 
   return (
     <section className="market-screener" aria-labelledby="stock-screener-title">
@@ -267,16 +269,27 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
               <SortableHeader field="fiftyTwoWeekPosition" label="52W position" sort={sort} direction={direction} onSort={changeSort} />
               <th>Exchange</th>
               <th>As of</th>
-              <th><span className="sr-only">Research</span></th>
             </tr>
           </thead>
           <tbody>
             {response.rows.length === 0 ? (
-              <tr><td colSpan={13} className="market-screen-empty">No equities match these conditions. Remove a filter or choose another preset.</td></tr>
+              <tr><td colSpan={12} className="market-screen-empty">No equities match these conditions. Remove a filter or choose another preset.</td></tr>
             ) : response.rows.map((row) => {
               return (
-                <tr key={row.symbol}>
-                  <td><Link className="market-symbol-button" href={`/markets/stocks/${row.symbol}`} scroll={false}>{row.symbol}</Link></td>
+                <tr
+                  key={row.symbol}
+                  className="market-screen-stock-row"
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`Open ${row.company} (${row.symbol})`}
+                  onClick={() => openStock(row.symbol)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return
+                    event.preventDefault()
+                    openStock(row.symbol)
+                  }}
+                >
+                  <td><span className="market-symbol-button">{row.symbol}</span></td>
                   <td>{row.company}</td>
                   <td>{formatPrice(row.price)}</td>
                   <td className={row.dailyChange >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(row.dailyChange)}</td>
@@ -293,7 +306,6 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
                   </td>
                   <td>{row.exchange}</td>
                   <td>{formatMarketTime(row.asOf)}</td>
-                  <td><Link href={`/markets/stocks/${row.symbol}`} scroll={false}>Open</Link></td>
                 </tr>
               )
             })}
