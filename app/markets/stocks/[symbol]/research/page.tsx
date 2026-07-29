@@ -250,7 +250,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
           <div className="equity-research-body">
             <nav aria-label="Research sections">
               <p>Full analysis</p>
-              {REPORT_CHAPTERS.map((chapter) => (
+              {REPORT_CHAPTERS.slice(0, 2).map((chapter) => (
                 <div className="research-nav-chapter" key={chapter.label}>
                   <strong>{chapter.label}</strong>
                   {research.sections.filter((section) => chapter.ids.includes(section.id as never)).map((section) => (
@@ -259,6 +259,14 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
                 </div>
               ))}
               {scenarioSections.length === 3 ? <div className="research-nav-chapter"><strong>Scenarios</strong><a href="#scenarios"><span>09–11</span>Compare outcomes</a></div> : null}
+              {REPORT_CHAPTERS.slice(2).map((chapter) => (
+                <div className="research-nav-chapter" key={chapter.label}>
+                  <strong>{chapter.label}</strong>
+                  {research.sections.filter((section) => chapter.ids.includes(section.id as never)).map((section) => (
+                    <a key={section.id} href={`#${section.id}`}><span>{String(research.sections.indexOf(section) + 1).padStart(2, '0')}</span>{section.title}</a>
+                  ))}
+                </div>
+              ))}
             </nav>
             <div className="equity-research-analysis-content">
               <div className="equity-research-sections">
