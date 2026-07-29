@@ -1,4 +1,4 @@
-import type { MarketInstrument, MarketState, ScreenerRow } from './types.ts'
+import type { MarketInstrument, MarketMemo, MarketState, ScreenerRow } from './types.ts'
 
 const INSTRUMENTS = [
   { symbol: 'SPY', label: 'S&P 500 ETF' },
@@ -16,6 +16,47 @@ export interface MarketStateInputs {
   leaders: Array<{ symbol: string; change: number; relativeVolume: number }>
   laggards: Array<{ symbol: string; change: number; relativeVolume: number }>
   instruments: MarketInstrument[]
+}
+
+function signedPercent(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+}
+
+export function buildDeterministicMarketMemo(
+  inputs: MarketStateInputs,
+  dataAsOf: string,
+  generatedAt = new Date().toISOString(),
+): MarketMemo {
+  const leaders = inputs.leaders.slice(0, 3).map((item) => `${item.symbol} ${signedPercent(item.change)}`).join(', ')
+  const laggards = inputs.laggards.slice(0, 3).map((item) => `${item.symbol} ${signedPercent(item.change)}`).join(', ')
+
+  return {
+    changes: [
+      {
+        id: 'breadth',
+        body: `${inputs.advancingPercent.toFixed(2)}% of the tracked universe is advancing and ${inputs.aboveFiftyDayPercent.toFixed(2)}% trades above its 50-day average.`,
+        source: 'Alpaca market data',
+        sourceTime: dataAsOf,
+      },
+      {
+        id: 'average-change',
+        body: `The average daily move across the tracked universe is ${signedPercent(inputs.averageChange)}.`,
+        source: 'Alpaca market data',
+        sourceTime: dataAsOf,
+      },
+      {
+        id: 'leadership',
+        body: `Current leaders: ${leaders || 'unavailable'}. Current laggards: ${laggards || 'unavailable'}.`,
+        source: 'Alpaca market data',
+        sourceTime: dataAsOf,
+      },
+    ],
+    sectorImplications: [],
+    catalysts: ['Watch whether advancing participation and 50-day breadth confirm the current regime.'],
+    risks: ['Leadership, breadth, and relative-volume signals can reverse between refreshes.'],
+    watchItems: ['Advancing participation', '50-day breadth', 'Leadership and laggard dispersion'],
+    generatedAt,
+  }
 }
 
 function round(value: number): number {

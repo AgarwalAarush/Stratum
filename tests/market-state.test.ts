@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
-import { calculateMarketState } from '../lib/markets/state.ts'
+import { buildDeterministicMarketMemo, calculateMarketState } from '../lib/markets/state.ts'
 import { buildCodexExecArgs, buildCodexExecEnv } from '../lib/server/codex-exec.ts'
 import { generateMarketMemo } from '../lib/server/market-memo.ts'
 import type { ScreenerRow } from '../lib/markets/types.ts'
@@ -33,6 +33,18 @@ test('market state is calculated deterministically from normalized rows', () => 
   assert.equal(result.inputs.advancingPercent, 80)
   assert.equal(result.inputs.aboveFiftyDayPercent, 100)
   assert.deepEqual(result.inputs.instruments.map((instrument) => instrument.id), ['spy', 'qqq', 'iwm'])
+})
+
+test('market overview has a source-backed deterministic memo without Codex', () => {
+  const rows = [row('SPY', 1), row('QQQ', 2), row('IWM', -1), row('AAPL', 0.5), row('MSFT', -0.2)]
+  const { inputs } = calculateMarketState(rows, '2026-07-15T20:00:00Z')
+  const memo = buildDeterministicMarketMemo(inputs, '2026-07-15T20:00:00Z', '2026-07-15T20:01:00Z')
+
+  assert.equal(memo.changes.length, 3)
+  assert.ok(memo.changes.every((change) => change.source === 'Alpaca market data'))
+  assert.match(memo.changes[0]?.body ?? '', /tracked universe/)
+  assert.match(memo.changes[2]?.body ?? '', /QQQ \+2.00%/)
+  assert.equal(memo.generatedAt, '2026-07-15T20:01:00Z')
 })
 
 test('Codex runner arguments enforce ephemeral read-only schema output', () => {

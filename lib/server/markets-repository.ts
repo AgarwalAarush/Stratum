@@ -9,6 +9,7 @@ import type {
   ScreenerRow,
 } from '../markets/types.ts'
 import { runScreener } from '../markets/screener.ts'
+import { buildDeterministicMarketMemo, type MarketStateInputs } from '../markets/state.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 const DATABASE_PAGE_SIZE = 1_000
@@ -78,6 +79,40 @@ function marketInstruments(value: unknown): MarketInstrument[] | null {
       && (item.direction === 'up' || item.direction === 'down')
   })
   return instruments.length > 0 ? instruments : null
+}
+
+function marketStateInputs(value: unknown): MarketStateInputs | null {
+  if (!isRecord(value)) return null
+  const instruments = marketInstruments(value.instruments)
+  const leaders = Array.isArray(value.leaders) ? value.leaders : null
+  const laggards = Array.isArray(value.laggards) ? value.laggards : null
+  if (
+    !instruments
+    || !leaders
+    || !laggards
+    || typeof value.advancingPercent !== 'number'
+    || typeof value.aboveFiftyDayPercent !== 'number'
+    || typeof value.averageChange !== 'number'
+  ) return null
+
+  const normalizeMovers = (items: unknown[]) => items.flatMap((item) => {
+    if (
+      !isRecord(item)
+      || typeof item.symbol !== 'string'
+      || typeof item.change !== 'number'
+      || typeof item.relativeVolume !== 'number'
+    ) return []
+    return [{ symbol: item.symbol, change: item.change, relativeVolume: item.relativeVolume }]
+  })
+
+  return {
+    advancingPercent: value.advancingPercent,
+    aboveFiftyDayPercent: value.aboveFiftyDayPercent,
+    averageChange: value.averageChange,
+    leaders: normalizeMovers(leaders),
+    laggards: normalizeMovers(laggards),
+    instruments,
+  }
 }
 
 function marketEvidence(value: unknown): MarketEvidence[] {
@@ -217,11 +252,16 @@ export async function fetchLatestMarketOverview(): Promise<MarketOverviewRespons
     .select('content,sources,generated_at')
     .eq('market_state_id', state.id)
     .maybeSingle()
-  if (memoError || !memoData) return null
-  const memoRecord = memoData as MemoRecord
-  const memo = marketMemo(memoRecord.content, memoRecord.generated_at)
-  const instruments = isRecord(state.inputs) ? marketInstruments(state.inputs.instruments) : null
-  if (!memo || !instruments) return null
+  const memoRecord = !memoError && memoData ? memoData as MemoRecord : null
+  const generatedAt = memoRecord?.generated_at ?? state.generated_at
+  const storedMemo = memoRecord ? marketMemo(memoRecord.content, memoRecord.generated_at) : null
+  const inputs = marketStateInputs(state.inputs)
+  if (!inputs) return null
+  const memo = storedMemo ?? buildDeterministicMarketMemo(
+    inputs,
+    state.data_as_of,
+    generatedAt,
+  )
 
   return {
     state: {
@@ -230,11 +270,18 @@ export async function fetchLatestMarketOverview(): Promise<MarketOverviewRespons
       dataAsOf: state.data_as_of,
     },
     memo,
-    instruments,
-    evidence: marketEvidence(memoRecord.sources),
+    instruments: inputs.instruments,
+    evidence: memoRecord
+      ? marketEvidence(memoRecord.sources)
+      : [{
+          id: 'alpaca-market-data',
+          source: 'Alpaca Market Data',
+          publishedAt: state.data_as_of,
+          url: 'https://alpaca.markets/data',
+        }],
     feed: snapshot.feed,
     dataAsOf: snapshot.data_as_of,
-    generatedAt: memoRecord.generated_at,
+    generatedAt,
     stale: isStale(snapshot.data_as_of),
   }
 }

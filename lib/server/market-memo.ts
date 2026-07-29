@@ -94,21 +94,23 @@ export async function materializeMarketMemo(snapshotId: string): Promise<{ marke
     if (page.length < ROW_PAGE_SIZE) break
   }
 
-  const generated = await generateMarketMemo(rows, snapshot.data_as_of)
+  const deterministic = calculateMarketState(rows, snapshot.data_as_of)
+  const stateGeneratedAt = new Date().toISOString()
   const { data: stateRecord, error: stateError } = await supabase
     .from('market_states')
     .upsert({
       snapshot_id: snapshotId,
-      regime: generated.state.regime,
-      confidence: generated.state.confidence,
-      inputs: generated.inputs,
-      data_as_of: generated.state.dataAsOf,
-      generated_at: generated.memo.generatedAt,
+      regime: deterministic.state.regime,
+      confidence: deterministic.state.confidence,
+      inputs: deterministic.inputs,
+      data_as_of: deterministic.state.dataAsOf,
+      generated_at: stateGeneratedAt,
     }, { onConflict: 'snapshot_id' })
     .select('id')
     .single()
   if (stateError || !stateRecord) throw new Error(`Unable to persist market state: ${stateError?.message ?? 'unknown error'}`)
 
+  const generated = await generateMarketMemo(rows, snapshot.data_as_of)
   const evidence = [{
     id: 'alpaca-market-data',
     source: 'Alpaca Market Data',
