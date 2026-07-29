@@ -88,7 +88,13 @@ function segmentRows(periods: CompanySegmentPeriod[]) {
   if (!latest) return []
   const prior = periods.slice(1).find((period) =>
     !latest.period || period.period === latest.period) ?? periods[1]
-  const priorValues = new Map(prior?.values.map((value) => [value.label, value.revenue]) ?? [])
+  const latestLabels = latest.values.map((value) => value.label).sort()
+  const priorLabels = prior?.values.map((value) => value.label).sort() ?? []
+  const comparableTaxonomy = latestLabels.length === priorLabels.length
+    && latestLabels.every((label, index) => label === priorLabels[index])
+  const priorValues = new Map(comparableTaxonomy
+    ? prior?.values.map((value) => [value.label, value.revenue])
+    : [])
   const total = latest.values.reduce((sum, value) => sum + value.revenue, 0)
   return latest.values.slice(0, 12).map((value) => {
     const previousRevenue = priorValues.get(value.label)
@@ -256,7 +262,7 @@ function BusinessEconomics({ packet }: { packet: CompanyPacket | null }) {
       {hasSegments ? (
         <div className="research-business-economics-grid">
           <RevenueMix eyebrow="Product and service mix" title="Revenue by business line" periods={product} />
-          <RevenueMix eyebrow="Geographic mix" title="Revenue by reported geography" periods={geographic} />
+          <RevenueMix eyebrow="Reported geography / segment mix" title="Revenue by geography or segment" periods={geographic} />
         </div>
       ) : (
         <div className="research-segment-empty">
