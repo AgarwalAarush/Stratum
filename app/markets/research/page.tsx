@@ -4,6 +4,7 @@ import { ResearchQueue } from '@/components/markets/ResearchQueue'
 import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { fetchFinanceReports } from '@/lib/data/finance-reports'
 import { fetchPersistedFmpMarketItems } from '@/lib/data/fmp-intelligence'
+import { formatMarketDate } from '@/lib/markets/format-date'
 import { mergeMarketNews } from '@/lib/markets/news'
 import { fetchEquityResearchLibrary } from '@/lib/server/company-research'
 import { fetchResearchJobs } from '@/lib/server/research-jobs'
@@ -29,7 +30,7 @@ export default async function MarketsResearchPage() {
           <MarketsIntentLink key={note.id} href={`/markets/stocks/${note.symbol}/research`}>
             <div><strong>{note.symbol}</strong><span>v{note.version}</span></div>
             <h2>{note.keyDebate || `${note.status} research version`}</h2>
-            <footer><span>{note.formalRating}</span><span>{note.entryAction.replaceAll('_', ' ')}</span><time>{new Date(note.generatedAt).toLocaleDateString()}</time></footer>
+            <footer><span>{note.formalRating}</span><span>{note.entryAction.replaceAll('_', ' ')}</span><time dateTime={note.generatedAt}>{formatMarketDate(note.generatedAt)}</time></footer>
           </MarketsIntentLink>
         ))}
       </section>

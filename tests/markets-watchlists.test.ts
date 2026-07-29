@@ -64,3 +64,13 @@ test('legacy watchlists route redirects into the private Portfolio workflow', ()
   assert.match(workspace, /Decision Inbox/)
   assert.match(workspace, /initialData\.decisionHistory\.map/)
 })
+
+test('server watchlist persistence remains owner-scoped without relying on a partial-index upsert', () => {
+  const source = readFileSync(join(process.cwd(), 'lib/server/portfolio.ts'), 'utf8')
+  const replacement = source.slice(source.indexOf('export async function replaceUserWatchlists'), source.indexOf('export async function upsertManualPosition'))
+  assert.match(replacement, /\.eq\('owner_id', ownerId\)/)
+  assert.match(replacement, /\.eq\('client_id', list\.id\)/)
+  assert.match(replacement, /existingList[\s\S]*\.update\(/)
+  assert.match(replacement, /\.insert\(/)
+  assert.doesNotMatch(replacement, /onConflict:\s*'owner_id,client_id'/)
+})

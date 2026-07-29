@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { formatMarketDateTime } from '@/lib/markets/format-date'
 import type { ResearchJobStatus } from '@/lib/markets/types'
 import { ResearchProgressRing } from './ResearchProgressRing'
 
@@ -49,7 +50,7 @@ export function ResearchQueue({ initialJobs }: { initialJobs: ResearchJobStatus[
         {jobs.map((job) => (
           <Link key={job.id} href={`/markets/stocks/${job.symbol}/research`}>
             <ResearchProgressRing job={job} compact />
-            <time dateTime={job.updatedAt}>{new Date(job.updatedAt).toLocaleString()}</time>
+            <time dateTime={job.updatedAt}>{formatMarketDateTime(job.updatedAt)}</time>
           </Link>
         ))}
       </div>

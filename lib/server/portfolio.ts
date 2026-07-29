@@ -142,12 +142,25 @@ export async function replaceUserWatchlists(ownerId: string, input: unknown): Pr
   const state = parseWatchlistState(input, createDefaultWatchlistState([]))
   const retainedIds: string[] = []
   for (const list of state.lists) {
-    const { data: stored, error } = await supabase.from('market_watchlists').upsert({
-      owner_id: ownerId,
-      client_id: list.id,
-      name: list.name,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'owner_id,client_id' }).select('id').single()
+    const { data: existingList, error: lookupError } = await supabase
+      .from('market_watchlists')
+      .select('id')
+      .eq('owner_id', ownerId)
+      .eq('client_id', list.id)
+      .maybeSingle()
+    if (lookupError) throw new Error(`Unable to find watchlist ${list.name}: ${lookupError.message}`)
+    const mutation = existingList
+      ? supabase.from('market_watchlists').update({
+          name: list.name,
+          updated_at: new Date().toISOString(),
+        }).eq('id', existingList.id).eq('owner_id', ownerId)
+      : supabase.from('market_watchlists').insert({
+          owner_id: ownerId,
+          client_id: list.id,
+          name: list.name,
+          updated_at: new Date().toISOString(),
+        })
+    const { data: stored, error } = await mutation.select('id').single()
     if (error || !stored) throw new Error(`Unable to persist watchlist ${list.name}: ${error?.message ?? 'unknown error'}`)
     retainedIds.push(stored.id)
     const { error: deleteError } = await supabase.from('market_watchlist_items').delete().eq('watchlist_id', stored.id)
