@@ -68,6 +68,8 @@ test('research packet includes quarterly evidence, SEC filings, and skill-aligne
   assert.match(source, /period: 'quarter', limit: 8/)
   assert.match(source, /data\.sec\.gov\/submissions/)
   assert.match(source, /1,800-2,500 total words/)
+  assert.match(source, /Write an investor memo, not an audit workpaper/)
+  assert.match(source, /prefix each distinct claim paragraph with \*\*FACT:\*\*/)
   assert.match(source, /Business Model & Moat/)
   assert.match(source, /Kill Criteria must contain 3-5 specific numeric thresholds/)
   assert.match(schema, /"business_model_and_moat"/)

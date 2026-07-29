@@ -69,6 +69,63 @@
   min-width: 170px;
 }
 
+.research-evidence-toggle {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--market-border);
+  color: var(--market-text-muted);
+  display: inline-flex;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 9px;
+  gap: 18px;
+  justify-content: space-between;
+  letter-spacing: 0.04em;
+  min-width: 170px;
+  padding: 10px 12px;
+  text-transform: uppercase;
+}
+
+.research-evidence-toggle span {
+  color: var(--market-text);
+}
+
+.research-evidence-toggle[aria-pressed="true"] {
+  border-color: var(--market-text);
+  color: var(--market-text);
+}
+
+.research-evidence-toggle[aria-pressed="true"] span {
+  color: var(--market-blue);
+}
+
+.research-evidence-legend {
+  align-items: baseline;
+  background: var(--market-surface);
+  border-bottom: 1px solid var(--market-border);
+  border-top: 1px solid var(--market-border);
+  display: none;
+  gap: 14px;
+  margin-top: 24px;
+  padding: 13px 16px;
+}
+
+.research-evidence-legend strong,
+.research-evidence-legend span {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.research-evidence-legend strong {
+  color: var(--market-text);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.research-evidence-legend span {
+  color: var(--market-text-muted);
+}
+
 .equity-research-executive-strip {
   border-top: 1px solid var(--market-border);
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -432,6 +489,41 @@
 
 .equity-research-sections > section > footer a {
   color: var(--market-accent);
+}
+
+.research-evidence-copy {
+  display: none;
+}
+
+.equity-research-note.evidence-mode .research-memo-copy {
+  display: none;
+}
+
+.equity-research-note.evidence-mode .research-evidence-copy,
+.equity-research-note.evidence-mode .research-evidence-legend {
+  display: flex;
+}
+
+.equity-research-note.evidence-mode .research-evidence-copy {
+  display: block;
+}
+
+.equity-research-note.evidence-mode .research-section-counter {
+  color: var(--market-blue);
+}
+
+.equity-research-note:not(.evidence-mode) .equity-research-sections > section > footer {
+  gap: 7px 12px;
+  margin-top: 18px;
+}
+
+.equity-research-note:not(.evidence-mode) .equity-research-sections > section > footer span {
+  display: none;
+}
+
+.equity-research-note:not(.evidence-mode) .equity-research-sections > section > footer a::before {
+  color: var(--market-text-muted);
+  content: 'Source: ';
 }
 
 .equity-research-sources {
@@ -6265,10 +6357,26 @@ body:has(.equity-research-note) {
   padding: 38px 0;
 }
 
+.equity-research-sections > section > h2 {
+  margin-bottom: 17px;
+}
+
 .equity-research-sections > section > footer {
   border-top: 0;
   margin-top: 22px;
   padding-top: 0;
+}
+
+@media (max-width: 767px) {
+  .research-evidence-toggle {
+    min-width: 150px;
+  }
+
+  .research-evidence-legend {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
 }
 
 .equity-research-sources {

@@ -4,12 +4,14 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { InteractivePriceChart } from '@/components/markets/InteractivePriceChart'
 import { ResearchActionButton } from '@/components/markets/ResearchActionButton'
+import { ResearchEvidenceToggle } from '@/components/markets/ResearchEvidenceToggle'
 import {
   ResearchFinancialChart,
   type ResearchFinancialPoint,
 } from '@/components/markets/ResearchFinancialChart'
 import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { formatMarketDate } from '@/lib/markets/format-date'
+import { researchMemoMarkdown } from '@/lib/markets/research-presentation'
 import type { CompanyPacket } from '@/lib/markets/types'
 import { fetchStockViewerData } from '@/lib/server/markets-repository'
 
@@ -95,7 +97,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
   const confidence = research && research.confidence <= 1 ? research.confidence * 100 : research?.confidence
 
   return (
-    <article className="equity-research-note">
+    <article className="equity-research-note" data-research-presentation>
       <header className="equity-research-header">
         <div>
           <p className="markets-eyebrow">Equity research · GARP · 12-month valuation / 1–2 year ownership</p>
@@ -104,6 +106,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
         </div>
         <div className="equity-research-header-actions">
           <Link href={`/markets/stocks/${symbol}`}>← Stock Viewer</Link>
+          {research?.status === 'complete' ? <ResearchEvidenceToggle /> : null}
           {research?.status === 'complete' ? <ResearchActionButton symbol={symbol} hasResearch /> : null}
         </div>
       </header>
@@ -132,6 +135,11 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
             <div><span>Fastest kill signal</span><p>{research.fastestKillSignal}</p></div>
             <div><span>Entry decision</span><p>{research.entryAction.replaceAll('_', ' ')}</p></div>
           </section>
+
+          <aside className="research-evidence-legend" aria-label="Evidence mode explanation">
+            <strong>Evidence mode</strong>
+            <span>Shows the source-attached claim types used during analysis: fact, consensus, view, and estimate.</span>
+          </aside>
 
           <section className="equity-research-visuals" aria-labelledby="research-evidence-title">
             <header>
@@ -207,9 +215,14 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
                   const sectionSources = packet?.sources.filter((source) => section.sourceIds.includes(source.id)) ?? []
                   return (
                     <section key={section.id} id={section.id}>
-                      <p className="markets-eyebrow">Section {String(index + 1).padStart(2, '0')} of 15</p>
+                      <p className="markets-eyebrow research-section-counter">Section {String(index + 1).padStart(2, '0')} of 15</p>
                       <h2>{section.title}</h2>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
+                      <div className="research-memo-copy">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{researchMemoMarkdown(section.content)}</ReactMarkdown>
+                      </div>
+                      <div className="research-evidence-copy">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
+                      </div>
                       {sectionSources.length > 0 ? (
                         <footer>
                           <span>Evidence</span>
