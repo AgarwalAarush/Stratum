@@ -15,6 +15,7 @@ import type {
   ScreenerResponse,
   ScreenerRow,
 } from '../markets/types.ts'
+import { rankDailySubIndustries } from '../markets/leadership.ts'
 import { runScreener } from '../markets/screener.ts'
 import { buildDeterministicMarketMemo, type MarketStateInputs } from '../markets/state.ts'
 import { crossAssetMarketInstrument } from './cross-asset.ts'
@@ -378,6 +379,7 @@ function normalizeGroupMetric(row: Record<string, unknown>): MarketGroupMetric {
     label: String(row.label),
     sector: row.group_type === 'sector' ? null : String(row.sector),
     constituentCount: Number(row.constituent_count),
+    dayReturn: nullable(row.day_return),
     return30d: nullable(row.return_30d),
     return50d: nullable(row.return_50d),
     return200d: nullable(row.return_200d),
@@ -464,12 +466,19 @@ async function loadLatestMarketLeadershipSummary(): Promise<MarketLeadershipSnap
     .maybeSingle()
   if (snapshotError || !snapshotData) return null
   const snapshot = snapshotData as LeadershipSnapshotRecord
-  const [{ data: groupRows, error: groupError }, { data: divergenceRows, error: divergenceError }] = await Promise.all([
-    supabase.from('market_group_metrics').select('*').eq('snapshot_id', snapshot.id),
+  const [
+    { data: stockDailyRows, error: stockDailyError },
+    { data: divergenceRows, error: divergenceError },
+  ] = await Promise.all([
+    supabase.from('market_stock_metrics').select('sector,sub_industry,day_return').eq('snapshot_id', snapshot.id),
     supabase.from('market_divergence_signals').select('*').eq('snapshot_id', snapshot.id),
   ])
-  if (groupError || divergenceError) return null
-  const groups = (groupRows ?? []).map((row) => normalizeGroupMetric(row))
+  if (stockDailyError || divergenceError) return null
+  const dailySubIndustries = rankDailySubIndustries((stockDailyRows ?? []).map((row) => ({
+    sector: String(row.sector),
+    subIndustry: String(row.sub_industry),
+    dayReturn: row.day_return === null || row.day_return === undefined ? null : Number(row.day_return),
+  })))
   return {
     id: snapshot.id,
     tradingDate: snapshot.trading_date,
@@ -481,10 +490,19 @@ async function loadLatestMarketLeadershipSummary(): Promise<MarketLeadershipSnap
     advancingPercent: Number(snapshot.advancing_percent),
     above50DayPercent: Number(snapshot.above_50_day_percent),
     sectors: [],
-    subIndustries: groups
-      .filter((group) => group.groupType === 'sub_industry')
-      .sort((left, right) => (right.return1y ?? -Infinity) - (left.return1y ?? -Infinity))
-      .slice(0, 5),
+    subIndustries: dailySubIndustries.map((group) => ({
+      groupType: 'sub_industry',
+      label: group.label,
+      sector: group.sector,
+      constituentCount: group.constituentCount,
+      dayReturn: group.dayReturn,
+      return30d: null,
+      return50d: null,
+      return200d: null,
+      return1y: null,
+      vs50DayAverage: null,
+      vs200DayAverage: null,
+    })),
     stocks: [],
     leaders: [],
     laggards: [],
@@ -497,7 +515,7 @@ export async function fetchLatestMarketLeadershipSummary(): Promise<MarketLeader
     'latest',
     MARKET_LEADERSHIP_CACHE_MS,
     () => fetchSharedArtifact(
-      'stratum:markets:leadership-summary:v1',
+      'stratum:markets:leadership-summary:v2',
       MARKET_LEADERSHIP_CACHE_MS / 1_000,
       loadLatestMarketLeadershipSummary,
     ),

@@ -143,12 +143,12 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
           </div>
           <div className="market-structure-columns">
             <div>
-              <h3>Leading sub-industries</h3>
+              <h3>Leading sub-industries <span>Today</span></h3>
               {overview.leadership.subIndustries.slice(0, 5).map((group) => (
                 <MarketsIntentLink key={`${group.sector}-${group.label}`} href={`/markets/explore?view=sub-industries&group=${encodeURIComponent(group.label)}`}>
                   <span>{group.label}</span>
-                  <span className={(group.return1y ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>
-                    {group.return1y === null ? '—' : `${group.return1y >= 0 ? '+' : ''}${group.return1y.toFixed(1)}%`}
+                  <span className={(group.dayReturn ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>
+                    {group.dayReturn === null ? '—' : `${group.dayReturn >= 0 ? '+' : ''}${group.dayReturn.toFixed(1)}%`}
                   </span>
                 </MarketsIntentLink>
               ))}

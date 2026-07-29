@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useState } from 'react'
+import { formatEntryAction } from '@/lib/markets/research-presentation'
 import type { CandidateBrief, EquityResearchNote, ThesisDecision } from '@/lib/markets/types'
 import { ResearchActionButton } from './ResearchActionButton'
 
@@ -73,7 +74,7 @@ export function CapitalDecisionRail({
         <form className="capital-decision-form" onSubmit={save}>
           <label>Disposition<select name="disposition" defaultValue={decision?.disposition ?? 'watch'}><option value="own">Own</option><option value="watch">Watch</option><option value="avoid">Avoid</option></select></label>
           <label>Formal rating<select name="formalRating" defaultValue={decision?.formalRating ?? research?.formalRating ?? 'NOT_RATED'}><option>BUY</option><option>HOLD</option><option>SELL</option><option>NOT_RATED</option></select></label>
-          <label>Entry action<select name="entryAction" defaultValue={decision?.entryAction ?? research?.entryAction ?? 'wait'}><option value="buy_now">Buy now</option><option value="nibble">Nibble</option><option value="wait">Wait</option><option value="add_on_weakness">Add on weakness</option><option value="avoid">Avoid</option></select></label>
+          <label>Entry action<select name="entryAction" defaultValue={decision?.entryAction ?? research?.entryAction ?? 'wait'}><option value="buy_now">Buy now</option><option value="nibble">Start with a small position</option><option value="wait">Wait for a better setup</option><option value="add_on_weakness">Add on weakness</option><option value="avoid">Avoid</option></select></label>
           <label>Fair value<input name="fairValue" type="number" step="0.01" defaultValue={decision?.fairValue ?? research?.fairValue ?? ''} /></label>
           <div><label>Entry low<input name="entryZoneLow" type="number" step="0.01" defaultValue={decision?.entryZoneLow ?? research?.entryZoneLow ?? ''} /></label><label>Entry high<input name="entryZoneHigh" type="number" step="0.01" defaultValue={decision?.entryZoneHigh ?? research?.entryZoneHigh ?? ''} /></label></div>
           <label>Conviction<select name="conviction" defaultValue={decision?.conviction ?? ''}><option value="">—</option>{[1, 2, 3, 4, 5].map((value) => <option key={value}>{value}</option>)}</select></label>
@@ -98,7 +99,7 @@ export function CapitalDecisionRail({
       <dl>
         <div><dt>Disposition</dt><dd>{decision?.disposition ?? 'Unclassified'}</dd></div>
         <div><dt>Formal rating</dt><dd>{decision?.formalRating ?? research?.formalRating ?? 'Not researched'}</dd></div>
-        <div><dt>Entry action</dt><dd>{(decision?.entryAction ?? research?.entryAction ?? 'wait').replaceAll('_', ' ')}</dd></div>
+        <div><dt>Entry action</dt><dd>{formatEntryAction(decision?.entryAction ?? research?.entryAction ?? 'wait')}</dd></div>
         <div><dt>Fair value</dt><dd>{decision?.fairValue ?? research?.fairValue ?? '—'}</dd></div>
         <div><dt>Entry zone</dt><dd>{decision?.entryZoneLow ?? research?.entryZoneLow ?? '—'} – {decision?.entryZoneHigh ?? research?.entryZoneHigh ?? '—'}</dd></div>
         <div><dt>Conviction</dt><dd>{decision?.conviction ? `${decision.conviction}/5` : '—'}</dd></div>

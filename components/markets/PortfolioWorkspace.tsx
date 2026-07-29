@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useState } from 'react'
+import { formatEntryAction } from '@/lib/markets/research-presentation'
 import { MarketsIntentLink } from './MarketsIntentLink'
 import { MarketsWatchlists } from './MarketsWatchlists'
 import type { PortfolioWorkspaceData, ScreenerResponse } from '@/lib/markets/types'
@@ -113,7 +114,7 @@ export function PortfolioWorkspace({
         <div className="portfolio-record-list">
           {ideas.length === 0 ? <p>No classified ideas yet. Save a Stock Viewer decision as Watch or Avoid.</p> : ideas.map((decision) => (
             <MarketsIntentLink key={decision.id} href={`/markets/stocks/${decision.symbol}`}>
-              <strong>{decision.symbol}</strong><span>{decision.disposition} · {decision.formalRating} · {decision.entryAction.replaceAll('_', ' ')}</span>
+              <strong>{decision.symbol}</strong><span>{decision.disposition} · {decision.formalRating} · {formatEntryAction(decision.entryAction)}</span>
             </MarketsIntentLink>
           ))}
         </div>
@@ -171,7 +172,7 @@ export function PortfolioWorkspace({
                       : `${decision.priceAtDecision.toFixed(2)} at decision → ${priceBySymbol.get(decision.symbol)!.toFixed(2)} now (${(((priceBySymbol.get(decision.symbol)! / decision.priceAtDecision) - 1) * 100).toFixed(1)}%).`}
                   </p>
                 </div>
-                <div><span>Decision</span><p>{decision.formalRating} · {decision.entryAction.replaceAll('_', ' ')} · fair value {decision.fairValue ?? '—'}</p></div>
+                <div><span>Decision</span><p>{decision.formalRating} · {formatEntryAction(decision.entryAction)} · fair value {decision.fairValue ?? '—'}</p></div>
               </div>
               {reviewByDecision.get(decision.id) ? (
                 <div className="portfolio-review-summary">

@@ -103,6 +103,7 @@ function normalizeGroup(row: Record<string, unknown>): MarketGroupMetric {
     label: String(row.label),
     sector: row.group_type === 'sector' ? null : String(row.sector),
     constituentCount: Number(row.constituent_count),
+    dayReturn: nullable(row.day_return),
     return30d: nullable(row.return_30d),
     return50d: nullable(row.return_50d),
     return200d: nullable(row.return_200d),

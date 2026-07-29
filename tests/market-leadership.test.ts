@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
-import { buildMarketLeadershipSnapshot } from '../lib/markets/leadership.ts'
+import { buildMarketLeadershipSnapshot, rankDailySubIndustries } from '../lib/markets/leadership.ts'
 import { parseGicsConstituents, renderLeadershipSlack } from '../lib/server/market-leadership.ts'
 
 function bars(symbol: string, slope: number) {
@@ -35,6 +35,13 @@ test('leadership builds equal-weight groups, breadth, divergences, and coverage'
   assert.equal(snapshot.subIndustries[0]?.label, 'Systems')
   assert.equal(snapshot.subIndustries[0]?.constituentCount, 2)
   assert.equal(snapshot.stocks.find((stock) => stock.symbol === 'AAA')?.relativeVolume, 1.4)
+  const dailyLeaders = rankDailySubIndustries(snapshot.stocks)
+  assert.deepEqual(dailyLeaders, [{
+    label: 'Systems',
+    sector: 'Technology',
+    constituentCount: 2,
+    dayReturn: 0.03,
+  }])
   assert.match(renderLeadershipSlack(snapshot), /Data quality/)
 })
 

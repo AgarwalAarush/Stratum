@@ -76,71 +76,73 @@ export function StockViewer({ data }: { data: StockViewerData }) {
             </div>
           </section>
 
-          <section className="stock-viewer-section" id="financials">
-            <p className="markets-eyebrow">{packet ? `CompanyPacket v${packet.version} · ${new Date(packet.dataAsOf).toLocaleDateString()}` : 'Deterministic packet'}</p>
-            <h2>Financials</h2>
-            {latestFinancials ? (
-              <div className="stock-viewer-stat-grid">
-                <div><span>Revenue</span><strong>{compact(latestFinancials.revenue, 'currency')}</strong></div>
-                <div><span>Net income</span><strong>{compact(latestFinancials.netIncome, 'currency')}</strong></div>
-                <div><span>EPS</span><strong>{compact(latestFinancials.eps)}</strong></div>
-                <div><span>Reported period</span><strong>{String(latestFinancials.calendarYear ?? latestFinancials.date ?? '—')}</strong></div>
-              </div>
-            ) : <p>Revenue, margins, cash flow, balance-sheet trends, and estimate history are assembled into the versioned CompanyPacket before full research runs.</p>}
-          </section>
+          <div className="stock-viewer-insight-grid">
+            <section className="stock-viewer-section stock-viewer-section-compact" id="financials">
+              <p className="markets-eyebrow">{packet ? `CompanyPacket v${packet.version} · ${new Date(packet.dataAsOf).toLocaleDateString()}` : 'Deterministic packet'}</p>
+              <h2>Financials</h2>
+              {latestFinancials ? (
+                <div className="stock-viewer-stat-grid">
+                  <div><span>Revenue</span><strong>{compact(latestFinancials.revenue, 'currency')}</strong></div>
+                  <div><span>Net income</span><strong>{compact(latestFinancials.netIncome, 'currency')}</strong></div>
+                  <div><span>EPS</span><strong>{compact(latestFinancials.eps)}</strong></div>
+                  <div><span>Reported period</span><strong>{String(latestFinancials.calendarYear ?? latestFinancials.date ?? '—')}</strong></div>
+                </div>
+              ) : <p>Revenue, margins, cash flow, balance-sheet trends, and estimate history are assembled into the versioned CompanyPacket before full research runs.</p>}
+            </section>
 
-          <section className="stock-viewer-section" id="valuation">
-            <p className="markets-eyebrow">Price versus expectations</p>
-            <h2>Valuation</h2>
-            {packet ? (
-              <div className="stock-viewer-stat-grid">
-                <div><span>P/E</span><strong>{multiple(packet.ratios.peRatio)}</strong></div>
-                <div><span>Price / sales</span><strong>{multiple(packet.ratios.priceToSales)}</strong></div>
-                <div><span>Return on equity</span><strong>{percent(packet.ratios.returnOnEquity === null ? null : packet.ratios.returnOnEquity * 100)}</strong></div>
-                <div><span>Net margin</span><strong>{percent(packet.ratios.netMargin === null ? null : packet.ratios.netMargin * 100)}</strong></div>
-              </div>
-            ) : <p>{candidate?.valuationSnapshot ?? 'Current and historical valuation context will appear after the CompanyPacket is materialized.'}</p>}
-          </section>
+            <section className="stock-viewer-section stock-viewer-section-compact" id="valuation">
+              <p className="markets-eyebrow">Price versus expectations</p>
+              <h2>Valuation</h2>
+              {packet ? (
+                <div className="stock-viewer-stat-grid">
+                  <div><span>P/E</span><strong>{multiple(packet.ratios.peRatio)}</strong></div>
+                  <div><span>Price / sales</span><strong>{multiple(packet.ratios.priceToSales)}</strong></div>
+                  <div><span>Return on equity</span><strong>{percent(packet.ratios.returnOnEquity === null ? null : packet.ratios.returnOnEquity * 100)}</strong></div>
+                  <div><span>Net margin</span><strong>{percent(packet.ratios.netMargin === null ? null : packet.ratios.netMargin * 100)}</strong></div>
+                </div>
+              ) : <p>{candidate?.valuationSnapshot ?? 'Current and historical valuation context will appear after the CompanyPacket is materialized.'}</p>}
+            </section>
 
-          <section className="stock-viewer-section" id="industry-context">
-            <p className="markets-eyebrow">{data.subIndustry}</p>
-            <h2>Industry Context</h2>
-            <p>{candidate?.industryContext ?? `${data.symbol} is compared against equal-weight ${data.subIndustry} leadership, breadth, and constituent performance.`}</p>
-            {candidate ? (
-              <div className="stock-viewer-dimensions">
-                {candidate.dimensions.map((dimension) => (
-                  <div key={dimension.name}>
-                    <span>{dimension.label}</span>
-                    <strong data-assessment={dimension.assessment}>{dimension.assessment}</strong>
-                    <p>{dimension.evidence}</p>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {candidate?.status === 'new' ? <CandidateActions candidateId={candidate.id} /> : null}
-          </section>
+            <section className="stock-viewer-section stock-viewer-section-compact" id="industry-context">
+              <p className="markets-eyebrow">{data.subIndustry}</p>
+              <h2>Industry Context</h2>
+              <p>{candidate?.industryContext ?? `${data.symbol} is compared against equal-weight ${data.subIndustry} leadership, breadth, and constituent performance.`}</p>
+              {candidate ? (
+                <div className="stock-viewer-dimensions">
+                  {candidate.dimensions.map((dimension) => (
+                    <div key={dimension.name}>
+                      <span>{dimension.label}</span>
+                      <strong data-assessment={dimension.assessment}>{dimension.assessment}</strong>
+                      <p>{dimension.evidence}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {candidate?.status === 'new' ? <CandidateActions candidateId={candidate.id} /> : null}
+            </section>
 
-          <section className="stock-viewer-section" id="earnings">
-            <p className="markets-eyebrow">Expectations and inflections</p>
-            <h2>Earnings</h2>
-            {latestEstimate ? (
-              <div className="stock-viewer-stat-grid">
-                <div><span>Estimate period</span><strong>{String(latestEstimate.date ?? latestEstimate.calendarYear ?? '—')}</strong></div>
-                <div><span>Estimated revenue</span><strong>{compact(latestEstimate.estimatedRevenueAvg, 'currency')}</strong></div>
-                <div><span>Estimated EPS</span><strong>{compact(latestEstimate.estimatedEpsAvg)}</strong></div>
-                <div><span>Next catalyst</span><strong>{data.decision?.nextCatalyst ?? candidate?.catalyst ?? '—'}</strong></div>
-              </div>
-            ) : <p>{candidate?.catalyst ?? 'The next earnings event and estimate revisions will be shown from the normalized company packet.'}</p>}
-          </section>
+            <section className="stock-viewer-section stock-viewer-section-compact" id="earnings">
+              <p className="markets-eyebrow">Expectations and inflections</p>
+              <h2>Earnings</h2>
+              {latestEstimate ? (
+                <div className="stock-viewer-stat-grid">
+                  <div><span>Estimate period</span><strong>{String(latestEstimate.date ?? latestEstimate.calendarYear ?? '—')}</strong></div>
+                  <div><span>Estimated revenue</span><strong>{compact(latestEstimate.estimatedRevenueAvg, 'currency')}</strong></div>
+                  <div><span>Estimated EPS</span><strong>{compact(latestEstimate.estimatedEpsAvg)}</strong></div>
+                  <div><span>Next catalyst</span><strong>{data.decision?.nextCatalyst ?? candidate?.catalyst ?? '—'}</strong></div>
+                </div>
+              ) : <p>{candidate?.catalyst ?? 'The next earnings event and estimate revisions will be shown from the normalized company packet.'}</p>}
+            </section>
 
-          <section className="stock-viewer-section" id="events">
-            <p className="markets-eyebrow">Filings, news, and catalysts</p>
-            <h2>Events</h2>
-            {packet?.events.slice(0, 3).map((event) => (
-              <p key={`${event.url}-${event.publishedAt}`}><a href={event.url} target="_blank" rel="noreferrer">{event.title}</a> · {new Date(event.publishedAt).toLocaleDateString()}</p>
-            ))}
-            <MarketsIntentLink href={`/markets/events?symbol=${data.symbol}`}>Open events relevant to {data.symbol} →</MarketsIntentLink>
-          </section>
+            <section className="stock-viewer-section stock-viewer-section-compact stock-viewer-events" id="events">
+              <p className="markets-eyebrow">Filings, news, and catalysts</p>
+              <h2>Events</h2>
+              {packet?.events.slice(0, 3).map((event) => (
+                <p key={`${event.url}-${event.publishedAt}`}><a href={event.url} target="_blank" rel="noreferrer">{event.title}</a> · {new Date(event.publishedAt).toLocaleDateString()}</p>
+              ))}
+              <MarketsIntentLink href={`/markets/events?symbol=${data.symbol}`}>Open events relevant to {data.symbol} →</MarketsIntentLink>
+            </section>
+          </div>
         </div>
 
         <CapitalDecisionRail

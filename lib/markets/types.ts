@@ -160,6 +160,7 @@ export interface MarketGroupMetric {
   label: string
   sector: string | null
   constituentCount: number
+  dayReturn: number | null
   return30d: number | null
   return50d: number | null
   return200d: number | null

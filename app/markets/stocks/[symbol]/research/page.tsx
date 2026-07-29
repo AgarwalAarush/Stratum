@@ -12,7 +12,11 @@ import {
 } from '@/components/markets/ResearchFinancialChart'
 import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { formatMarketDate } from '@/lib/markets/format-date'
-import { researchMemoMarkdown } from '@/lib/markets/research-presentation'
+import {
+  formatEntryAction,
+  researchEvidenceMarkdown,
+  researchMemoMarkdown,
+} from '@/lib/markets/research-presentation'
 import type {
   CompanyPacket,
   CompanyPacketSource,
@@ -197,7 +201,7 @@ function ScenarioComparison({ sections }: { sections: EquityResearchSection[] })
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{researchMemoMarkdown(section.content)}</ReactMarkdown>
             </div>
             <div className="research-evidence-copy">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{researchEvidenceMarkdown(section.content)}</ReactMarkdown>
             </div>
           </article>
         ))}
@@ -295,7 +299,7 @@ function ResearchSection({
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{researchMemoMarkdown(section.content)}</ReactMarkdown>
       </div>
       <div className="research-evidence-copy">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{researchEvidenceMarkdown(section.content)}</ReactMarkdown>
       </div>
       {sources.length > 0 ? (
         <footer>
@@ -350,7 +354,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
         <>
           <section className="equity-research-executive-strip" aria-label="Research decision summary">
             <div><span>Formal rating</span><strong data-rating={research.formalRating}>{research.formalRating}</strong><small>12-month view</small></div>
-            <div><span>Entry decision</span><strong>{research.entryAction.replaceAll('_', ' ')}</strong><small>What to do today</small></div>
+            <div><span>Entry decision</span><strong>{formatEntryAction(research.entryAction)}</strong><small>What to do today</small></div>
             <div><span>Current price</span><strong>{money(stock.price)}</strong><small>{percent(stock.dailyChange)} today</small></div>
             <div><span>Base fair value</span><strong>{money(research.fairValue)}</strong><small>{research.fairValue ? `${percent((research.fairValue / stock.price - 1) * 100)} implied` : 'Not established'}</small></div>
             <div><span>Entry zone</span><strong>{research.entryZoneLow === null ? '—' : `${money(research.entryZoneLow)}–${money(research.entryZoneHigh)}`}</strong><small>Risk/reward threshold</small></div>
@@ -361,7 +365,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
             <div><span>Key debate</span><div className="research-executive-copy"><ReactMarkdown remarkPlugins={[remarkGfm]}>{researchMemoMarkdown(research.keyDebate)}</ReactMarkdown></div></div>
             <div><span>Mispricing</span><div className="research-executive-copy"><ReactMarkdown remarkPlugins={[remarkGfm]}>{researchMemoMarkdown(research.mispricing)}</ReactMarkdown></div></div>
             <div><span>Fastest kill signal</span><div className="research-executive-copy"><ReactMarkdown remarkPlugins={[remarkGfm]}>{researchMemoMarkdown(research.fastestKillSignal)}</ReactMarkdown></div></div>
-            <div><span>Entry decision</span><div className="research-executive-copy"><p>{research.entryAction.replaceAll('_', ' ')}</p></div></div>
+            <div><span>Entry decision</span><div className="research-executive-copy"><p>{formatEntryAction(research.entryAction)}</p></div></div>
           </section>
 
           <aside className="research-evidence-legend" aria-label="Evidence mode explanation">

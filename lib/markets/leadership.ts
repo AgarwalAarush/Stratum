@@ -24,6 +24,13 @@ export interface BuildLeadershipOptions {
   relativeVolumeBySymbol?: ReadonlyMap<string, number>
 }
 
+export interface DailySubIndustryLeader {
+  label: string
+  sector: string
+  constituentCount: number
+  dayReturn: number
+}
+
 export function buildStockLeadershipMetrics(
   companies: LeadershipCompany[],
   bars: LeadershipPriceBar[],
@@ -128,6 +135,7 @@ export function aggregateLeadershipGroups(
     label: groupType === 'sector' ? rows[0]!.sector : rows[0]!.subIndustry,
     sector: groupType === 'sector' ? null : rows[0]!.sector,
     constituentCount: rows.length,
+    dayReturn: average(rows.map((row) => row.dayReturn)),
     return30d: average(rows.map((row) => row.return30d)),
     return50d: average(rows.map((row) => row.return50d)),
     return200d: average(rows.map((row) => row.return200d)),
@@ -135,6 +143,29 @@ export function aggregateLeadershipGroups(
     vs50DayAverage: average(rows.map((row) => row.vs50DayAverage)),
     vs200DayAverage: average(rows.map((row) => row.vs200DayAverage)),
   }))
+}
+
+export function rankDailySubIndustries(
+  stocks: Array<Pick<StockLeadershipMetric, 'sector' | 'subIndustry' | 'dayReturn'>>,
+  limit = 5,
+): DailySubIndustryLeader[] {
+  const grouped = new Map<string, Array<Pick<StockLeadershipMetric, 'sector' | 'subIndustry' | 'dayReturn'>>>()
+  for (const stock of stocks) {
+    if (stock.dayReturn === null || !Number.isFinite(stock.dayReturn)) continue
+    const key = `${stock.sector}\u0000${stock.subIndustry}`
+    grouped.set(key, [...(grouped.get(key) ?? []), stock])
+  }
+
+  return [...grouped.values()]
+    .filter((rows) => rows.length >= 2)
+    .map((rows) => ({
+      label: rows[0]!.subIndustry,
+      sector: rows[0]!.sector,
+      constituentCount: rows.length,
+      dayReturn: average(rows.map((row) => row.dayReturn))!,
+    }))
+    .sort((left, right) => right.dayReturn - left.dayReturn)
+    .slice(0, Math.max(0, limit))
 }
 
 function buildDivergences(
