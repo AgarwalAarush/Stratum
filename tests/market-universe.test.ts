@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { strToU8, zipSync } from 'fflate'
 import type { MarketAsset } from '../lib/markets/types.ts'
 import {
+  MARKET_BENCHMARK_SYMBOLS,
   MIN_SP500_ASSETS,
   parseSpyHoldingsWorkbook,
   selectMarketUniverseAssets,
@@ -49,6 +50,10 @@ test('market universe includes S&P 500 and watchlist assets only once', () => {
   const selected = selectMarketUniverseAssets(assets, ['AAPL', 'MSFT'], ['PLTR', 'AAPL', 'OLD', 'LOCKED'])
 
   assert.deepEqual(selected.map((item) => item.symbol), ['AAPL', 'MSFT', 'PLTR'])
+})
+
+test('market universe always carries the overview benchmark instruments', () => {
+  assert.deepEqual(MARKET_BENCHMARK_SYMBOLS, ['SPY', 'QQQ', 'IWM', 'TLT', 'UUP', 'USO'])
 })
 
 test('market universe migrations keep membership private and foreign keys indexed', () => {

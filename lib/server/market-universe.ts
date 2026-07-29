@@ -4,6 +4,7 @@ import { getSupabaseClient } from './supabase.ts'
 
 export const SPY_HOLDINGS_URL = 'https://www.ssga.com/library-content/products/fund-data/etfs/us/holdings-daily-us-en-spy.xlsx'
 export const MIN_SP500_ASSETS = 450
+export const MARKET_BENCHMARK_SYMBOLS = ['SPY', 'QQQ', 'IWM', 'TLT', 'UUP', 'USO'] as const
 const UNIVERSE_CACHE_MS = 20 * 60 * 60 * 1_000
 const SOURCE_NAME = 'state-street-spy-holdings'
 
@@ -135,7 +136,10 @@ export async function resolveMarketUniverse(
   const universe = selectMarketUniverseAssets(
     assets,
     sp500Symbols,
-    (watchlistRows ?? []).map((row) => row.symbol),
+    [
+      ...(watchlistRows ?? []).map((row) => row.symbol),
+      ...MARKET_BENCHMARK_SYMBOLS,
+    ],
   )
   if (universe.length < MIN_SP500_ASSETS) throw new Error(`Resolved market universe contains only ${universe.length} assets`)
   return universe
