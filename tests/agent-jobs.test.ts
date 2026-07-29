@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises'
 import {
   agentJobProvider,
   buildAgentJobDedupeKey,
+  isMissingDedupeConstraint,
   normalizeClaimedAgentJob,
   parseAgentJobType,
 } from '../lib/server/agent-jobs.ts'
@@ -34,6 +35,14 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('refresh-market-screener'), 'alpaca')
   assert.equal(agentJobProvider('refresh-fmp-intelligence'), 'fmp')
   assert.equal(agentJobProvider('generate-market-memo'), 'codex')
+})
+
+test('agent jobs recognize a database missing the dedupe index', () => {
+  assert.equal(
+    isMissingDedupeConstraint('there is no unique or exclusion constraint matching the ON CONFLICT specification'),
+    true,
+  )
+  assert.equal(isMissingDedupeConstraint('permission denied'), false)
 })
 
 test('empty PostgREST RPC results normalize to no claimed job', () => {

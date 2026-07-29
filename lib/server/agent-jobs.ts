@@ -74,6 +74,10 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   return 'codex'
 }
 
+export function isMissingDedupeConstraint(message: string): boolean {
+  return message.includes('no unique or exclusion constraint matching the ON CONFLICT specification')
+}
+
 export async function enqueueAgentJob(
   jobType: AgentJobType,
   payload: Record<string, unknown> = {},
@@ -87,16 +91,29 @@ export async function enqueueAgentJob(
     .upsert({ job_type: jobType, payload, dedupe_key: dedupeKey }, { onConflict: 'dedupe_key', ignoreDuplicates: true })
     .select('id')
     .maybeSingle()
-  if (error) throw new Error(`Unable to enqueue agent job: ${error.message}`)
+  if (error && !isMissingDedupeConstraint(error.message)) {
+    throw new Error(`Unable to enqueue agent job: ${error.message}`)
+  }
   if (data) return { id: data.id, deduplicated: false }
 
   const { data: existing, error: existingError } = await supabase
     .from('agent_jobs')
     .select('id')
     .eq('dedupe_key', dedupeKey)
+    .maybeSingle()
+  if (existingError) throw new Error(`Unable to find deduplicated agent job: ${existingError.message}`)
+  if (existing) return { id: existing.id, deduplicated: true }
+
+  if (!error) throw new Error(`Unable to find deduplicated agent job: ${dedupeKey}`)
+  const { data: inserted, error: insertError } = await supabase
+    .from('agent_jobs')
+    .insert({ job_type: jobType, payload, dedupe_key: dedupeKey })
+    .select('id')
     .single()
-  if (existingError || !existing) throw new Error(`Unable to find deduplicated agent job: ${existingError?.message ?? dedupeKey}`)
-  return { id: existing.id, deduplicated: true }
+  if (insertError || !inserted) {
+    throw new Error(`Unable to enqueue agent job without the dedupe index: ${insertError?.message ?? dedupeKey}`)
+  }
+  return { id: inserted.id, deduplicated: false }
 }
 
 async function executeJob(job: AgentJobRecord): Promise<unknown> {
