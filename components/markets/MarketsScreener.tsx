@@ -115,7 +115,6 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   const [sort, setSort] = useState<ScreenerSortField>(DEFAULT_SCREENER_QUERY.sort)
   const [direction, setDirection] = useState<'asc' | 'desc'>(DEFAULT_SCREENER_QUERY.direction)
   const [response, setResponse] = useState(initialResponse)
-  const [selectedSymbol, setSelectedSymbol] = useState('PLTR')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -275,10 +274,9 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
             {response.rows.length === 0 ? (
               <tr><td colSpan={13} className="market-screen-empty">No equities match these conditions. Remove a filter or choose another preset.</td></tr>
             ) : response.rows.map((row) => {
-              const selected = row.symbol === selectedSymbol
               return (
-                <tr key={row.symbol} className={selected ? 'market-screen-row-selected' : ''}>
-                  <td><button type="button" className="market-symbol-button" onClick={() => setSelectedSymbol(row.symbol)}>{row.symbol}</button></td>
+                <tr key={row.symbol}>
+                  <td><Link className="market-symbol-button" href={`/markets/stocks/${row.symbol}`} scroll={false}>{row.symbol}</Link></td>
                   <td>{row.company}</td>
                   <td>{formatPrice(row.price)}</td>
                   <td className={row.dailyChange >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(row.dailyChange)}</td>
@@ -295,7 +293,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
                   </td>
                   <td>{row.exchange}</td>
                   <td>{formatMarketTime(row.asOf)}</td>
-                  <td>{selected && <Link href={`/markets/research?symbol=${row.symbol}`}>View research</Link>}</td>
+                  <td><Link href={`/markets/stocks/${row.symbol}`} scroll={false}>Open</Link></td>
                 </tr>
               )
             })}

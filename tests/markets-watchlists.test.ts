@@ -48,14 +48,15 @@ test('watchlist updates stay scoped to the active list', () => {
   assert.equal(isValidWatchlistSymbol('bad ticker'), false)
 })
 
-test('watchlists route is functional and no longer gated on authentication', () => {
-  const page = readFileSync(join(process.cwd(), 'app/markets/watchlists/page.tsx'), 'utf8')
+test('legacy watchlists route redirects into the private Portfolio workflow', () => {
+  const legacyPage = readFileSync(join(process.cwd(), 'app/markets/watchlists/page.tsx'), 'utf8')
+  const page = readFileSync(join(process.cwd(), 'app/markets/portfolio/page.tsx'), 'utf8')
   const component = readFileSync(join(process.cwd(), 'components/markets/MarketsWatchlists.tsx'), 'utf8')
+  assert.match(legacyPage, /redirect\('\/markets\/portfolio\?view=watchlists'\)/)
   assert.match(page, /<MarketsWatchlists universe=/)
   assert.match(component, /localStorage\.setItem\(WATCHLIST_STORAGE_KEY/)
   assert.match(component, /createList/)
   assert.match(component, /removeSymbol/)
   assert.match(component, /Search symbol or company/)
-  assert.equal(page.includes('require an account'), false)
-  assert.equal(component.includes('authentication'), false)
+  assert.match(page, /Decision Inbox/)
 })

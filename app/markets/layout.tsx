@@ -11,8 +11,14 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic'
 
-export default async function MarketsLayout({ children }: { children: React.ReactNode }) {
+export default async function MarketsLayout({
+  children,
+  modal,
+}: {
+  children: React.ReactNode
+  modal: React.ReactNode
+}) {
   await requireAllowedMarketUser()
   const snapshot = await fetchLatestSnapshotMeta()
-  return <MarketsShell dataAsOf={snapshot?.data_as_of}>{children}</MarketsShell>
+  return <MarketsShell dataAsOf={snapshot?.data_as_of}>{children}{modal}</MarketsShell>
 }

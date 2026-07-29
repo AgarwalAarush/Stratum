@@ -10,6 +10,7 @@ import type {
   MarketGroupMetric,
   MarketDivergenceSignal,
   CandidateBrief,
+  StockViewerData,
   ScreenerQuery,
   ScreenerResponse,
   ScreenerRow,
@@ -414,6 +415,55 @@ export async function fetchLatestCandidates(limit = 5): Promise<CandidateBrief[]
     if (!isRecord(row.content) || typeof row.content.symbol !== 'string') return []
     return [row.content as unknown as CandidateBrief]
   })
+}
+
+export async function fetchStockViewerData(symbolInput: string): Promise<StockViewerData | null> {
+  const symbol = symbolInput.trim().toUpperCase()
+  if (!/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol)) return null
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+  const [{ data: latestMarket }, { data: latestLeadership }] = await Promise.all([
+    supabase.from('market_snapshots').select('id,feed,data_as_of').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
+    supabase.from('market_leadership_snapshots').select('id').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
+  ])
+  if (!latestMarket) return null
+  const [{ data: screener }, { data: asset }, { data: bars }, leadershipResult, candidateResult] = await Promise.all([
+    supabase.from('screener_rows').select('symbol,company,price,daily_change,relative_volume,fifty_day_average,fifty_two_week_position,exchange,data_as_of')
+      .eq('snapshot_id', latestMarket.id).eq('symbol', symbol).maybeSingle(),
+    supabase.from('market_assets').select('name,exchange').eq('symbol', symbol).maybeSingle(),
+    supabase.from('market_bars_daily').select('trading_date,close,volume').eq('symbol', symbol).eq('feed', latestMarket.feed)
+      .order('trading_date', { ascending: false }).limit(260),
+    latestLeadership
+      ? supabase.from('market_stock_metrics').select('*').eq('snapshot_id', latestLeadership.id).eq('symbol', symbol).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    supabase.from('candidate_briefs').select('content').eq('symbol', symbol).order('trading_date', { ascending: false }).limit(1).maybeSingle(),
+  ])
+  if (!screener && !asset) return null
+  const leadership = leadershipResult.data ? normalizeStockLeadershipRow(leadershipResult.data) : null
+  const candidate = candidateResult.data && isRecord(candidateResult.data.content)
+    ? candidateResult.data.content as unknown as CandidateBrief
+    : null
+  return {
+    symbol,
+    company: screener?.company ?? asset?.name ?? symbol,
+    exchange: screener?.exchange ?? asset?.exchange ?? 'US',
+    sector: leadership?.sector ?? 'Classification pending',
+    subIndustry: leadership?.subIndustry ?? 'Classification pending',
+    price: Number(screener?.price ?? leadership?.price ?? 0),
+    dailyChange: screener ? Number(screener.daily_change) : leadership?.dayReturn ?? null,
+    relativeVolume: screener ? Number(screener.relative_volume) : leadership?.relativeVolume ?? null,
+    fiftyDayAverage: screener ? Number(screener.fifty_day_average) : null,
+    fiftyTwoWeekPosition: screener ? Number(screener.fifty_two_week_position) : null,
+    dataAsOf: screener?.data_as_of ?? leadership?.asOf ?? latestMarket.data_as_of,
+    feed: latestMarket.feed,
+    leadership,
+    candidate,
+    history: (bars ?? []).map((bar) => ({
+      tradingDate: bar.trading_date,
+      close: Number(bar.close),
+      volume: Number(bar.volume),
+    })).reverse(),
+  }
 }
 
 interface CrossAssetSnapshotRecord {

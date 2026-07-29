@@ -7,11 +7,10 @@ import { useState } from 'react'
 
 const MARKET_NAV_ITEMS = [
   { href: '/markets', label: 'Overview' },
-  { href: '/markets/screener', label: 'Screener' },
-  { href: '/markets/macro', label: 'Macro' },
-  { href: '/markets/news', label: 'News' },
+  { href: '/markets/explore', label: 'Explore' },
+  { href: '/markets/portfolio', label: 'Portfolio' },
   { href: '/markets/research', label: 'Research' },
-  { href: '/markets/watchlists', label: 'Watchlists' },
+  { href: '/markets/events', label: 'Events' },
 ] as const
 
 function isActivePath(pathname: string, href: string): boolean {

@@ -326,7 +326,7 @@ export function MarketsWatchlists({ universe }: MarketsWatchlistsProps) {
               <WatchlistRow key={symbol} row={row} onRemove={removeSymbol} />
             ) : (
               <tr key={symbol}>
-                <td><span className="market-symbol-button">{symbol}</span></td>
+                <td><Link className="market-symbol-button" href={`/markets/stocks/${symbol}`} scroll={false}>{symbol}</Link></td>
                 <td colSpan={8} className="market-watchlist-missing">No data in the current snapshot. The ticker remains saved and will resolve when market data becomes available.</td>
                 <td>—</td>
                 <td><button type="button" className="market-watchlist-remove" onClick={() => removeSymbol(symbol)} aria-label={`Remove ${symbol} from ${activeList.name}`}><X size={13} /> Remove</button></td>
@@ -349,7 +349,7 @@ export function MarketsWatchlists({ universe }: MarketsWatchlistsProps) {
 function WatchlistRow({ row, onRemove }: { row: ScreenerRow; onRemove: (symbol: string) => void }) {
   return (
     <tr>
-      <td><span className="market-symbol-button">{row.symbol}</span></td>
+      <td><Link className="market-symbol-button" href={`/markets/stocks/${row.symbol}`} scroll={false}>{row.symbol}</Link></td>
       <td>{row.company}</td>
       <td>{formatPrice(row.price)}</td>
       <td className={row.dailyChange >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(row.dailyChange)}</td>
@@ -366,7 +366,7 @@ function WatchlistRow({ row, onRemove }: { row: ScreenerRow; onRemove: (symbol: 
       <td>{formatMarketTime(row.asOf)}</td>
       <td>
         <div className="market-watchlist-row-actions">
-          <Link href={`/markets/research?symbol=${row.symbol}`}>Research</Link>
+          <Link href={`/markets/stocks/${row.symbol}`} scroll={false}>Open</Link>
           <button type="button" className="market-watchlist-remove" onClick={() => onRemove(row.symbol)} aria-label={`Remove ${row.symbol} from watchlist`}><X size={13} /> Remove</button>
         </div>
       </td>

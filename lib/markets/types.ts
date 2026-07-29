@@ -246,6 +246,30 @@ export interface CandidateBrief {
   generatedAt: string
 }
 
+export interface StockPricePoint {
+  tradingDate: string
+  close: number
+  volume: number
+}
+
+export interface StockViewerData {
+  symbol: string
+  company: string
+  exchange: string
+  sector: string
+  subIndustry: string
+  price: number
+  dailyChange: number | null
+  relativeVolume: number | null
+  fiftyDayAverage: number | null
+  fiftyTwoWeekPosition: number | null
+  dataAsOf: string
+  feed: MarketFeed
+  leadership: StockLeadershipMetric | null
+  candidate: CandidateBrief | null
+  history: StockPricePoint[]
+}
+
 export type ScreenerPreset = 'momentum' | 'unusual-volume' | 'near-highs' | 'gap-movers'
 
 export type ScreenerFilterField =
