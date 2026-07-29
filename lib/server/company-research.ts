@@ -5,6 +5,7 @@ import type {
   EquityResearchSection,
   EquityResearchSectionId,
 } from '../markets/types.ts'
+import { normalizeCompanySegmentPeriods } from '../markets/company-segments.ts'
 import { fetchFmpStableJson } from './fmp.ts'
 import { fetchLatestDecision } from './portfolio.ts'
 import { runCodexJson } from './codex-exec.ts'
@@ -133,11 +134,21 @@ export async function materializeCompanyPacket(
   ])
   const profile = serializableRecord(records(profileResult)[0] ?? record(profileResult))
   const ratiosRaw = records(ratiosResult)[0] ?? record(ratiosResult)
-  const [incomeQuarterlyResult, cashQuarterlyResult, keyMetricsResult, gradesResult, secFilings] = await Promise.all([
+  const [
+    incomeQuarterlyResult,
+    cashQuarterlyResult,
+    keyMetricsResult,
+    gradesResult,
+    productSegmentsResult,
+    geographicSegmentsResult,
+    secFilings,
+  ] = await Promise.all([
     request<unknown>('income-statement', { period: 'quarter', limit: 8 }).catch(() => []),
     request<unknown>('cash-flow-statement', { period: 'quarter', limit: 8 }).catch(() => []),
     request<unknown>('key-metrics-ttm').catch(() => []),
     request<unknown>('grades-consensus').catch(() => []),
+    request<unknown>('revenue-product-segmentation', { period: 'annual', limit: 6 }).catch(() => []),
+    request<unknown>('revenue-geographic-segmentation', { period: 'annual', limit: 6 }).catch(() => []),
     fetchRecentSecFilings(profile.cik).catch(() => []),
   ])
   const incomeAnnual = records(incomeResult).map(serializableRecord)
@@ -147,6 +158,8 @@ export async function materializeCompanyPacket(
   const cashFlowQuarterly = records(cashQuarterlyResult).map(serializableRecord)
   const keyMetrics = serializableRecord(records(keyMetricsResult)[0] ?? record(keyMetricsResult))
   const gradesConsensus = serializableRecord(records(gradesResult)[0] ?? record(gradesResult))
+  const productSegments = normalizeCompanySegmentPeriods(productSegmentsResult)
+  const geographicSegments = normalizeCompanySegmentPeriods(geographicSegmentsResult)
   const filingsAndEvents = await supabase.from('feed_items').select('title,url,published_at,metadata,section')
     .eq('scope', 'markets').contains('metadata', { topic: `company:${symbol}` })
     .order('published_at', { ascending: false }).limit(50)
@@ -161,6 +174,20 @@ export async function materializeCompanyPacket(
     { id: 'fmp-profile', label: 'FMP company profile', url: `https://financialmodelingprep.com/stable/profile?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
     { id: 'fmp-financials', label: 'FMP financial statements', url: `https://financialmodelingprep.com/stable/income-statement?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
     { id: 'fmp-estimates', label: 'FMP analyst estimates', url: `https://financialmodelingprep.com/stable/analyst-estimates?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
+    ...(productSegments.length > 0 ? [{
+      id: 'fmp-product-segments',
+      label: 'FMP revenue by product',
+      url: `https://financialmodelingprep.com/stable/revenue-product-segmentation?symbol=${symbol}`,
+      source: 'FMP',
+      asOf: productSegments[0]?.date || now.toISOString(),
+    }] : []),
+    ...(geographicSegments.length > 0 ? [{
+      id: 'fmp-geographic-segments',
+      label: 'FMP revenue by geography',
+      url: `https://financialmodelingprep.com/stable/revenue-geographic-segmentation?symbol=${symbol}`,
+      source: 'FMP',
+      asOf: geographicSegments[0]?.date || now.toISOString(),
+    }] : []),
     ...secFilings.map((filing, index) => ({
       id: `sec-filing-${index + 1}`,
       label: filing.title,
@@ -216,6 +243,10 @@ export async function materializeCompanyPacket(
       debtToEquity: number(ratiosRaw.debtToEquityRatioTTM),
     },
     sentiment: { gradesConsensus, keyMetrics },
+    segmentRevenue: {
+      product: productSegments,
+      geographic: geographicSegments,
+    },
     estimates: records(estimatesResult).map((item) =>
       Object.fromEntries(Object.entries(serializableRecord(item)).flatMap(([key, value]) =>
         typeof value === 'string' || typeof value === 'number' || value === null ? [[key, value]] : []))),
@@ -322,6 +353,7 @@ function researchPrompt(packet: CompanyPacket): string {
     'Cite supporting CompanyPacket source IDs in each section. Never imply a claim is sourced if the supporting source is absent.',
     'Financial Profile must analyze the available 6-8 quarter history and call out growth, margin, cash-flow, balance-sheet, and share-count inflections.',
     'Business Model & Moat must cover revenue mechanics, customer value, geographic/FX exposure, concentration, switching costs, and a none/narrow/wide moat judgment.',
+    'When segmentRevenue is present, Business Model & Moat must identify which product or service lines drive revenue, growth, and mix shifts. Do not confuse product revenue categories with reportable operating segments or imply segment profit data that the packet does not contain.',
     'Valuation must reconcile growth assumptions with the current multiple and perform a reverse-DCF-style implied-expectations analysis. If inputs are inadequate, explicitly say which calculation cannot be completed.',
     'Bull, Base, and Bear must be three genuinely comparable mini-cases: lead each with the outcome, then use the same four compact bullets—operating assumptions, proof point, fair value / implied return, and what breaks the case. Do not repeat the general business description across scenarios.',
     'Verdict must cover ownership fit, current setup, behavior near highs and on weakness, entry action, better trigger, sizing, liquidity, and horizon.',

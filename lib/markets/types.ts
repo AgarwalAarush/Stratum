@@ -282,6 +282,19 @@ export interface CompanyPacketSource {
   asOf: string
 }
 
+export interface CompanySegmentValue {
+  label: string
+  revenue: number
+}
+
+export interface CompanySegmentPeriod {
+  date: string
+  fiscalYear: string | null
+  period: string | null
+  reportedCurrency: string | null
+  values: CompanySegmentValue[]
+}
+
 export interface CompanyPacket {
   id: string
   symbol: string
@@ -308,6 +321,10 @@ export interface CompanyPacket {
   sentiment?: {
     gradesConsensus: Record<string, string | number | boolean | null>
     keyMetrics: Record<string, string | number | boolean | null>
+  }
+  segmentRevenue?: {
+    product: CompanySegmentPeriod[]
+    geographic: CompanySegmentPeriod[]
   }
   estimates: Array<Record<string, string | number | null>>
   peers: string[]

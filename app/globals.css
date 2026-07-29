@@ -6582,3 +6582,506 @@ body:has(.equity-research-note) {
     margin-left: 0;
   }
 }
+
+/* Five-chapter equity-research composition. The 15 analytical modules remain
+   intact beneath a decision-oriented reading sequence. */
+.equity-research-chapters {
+  min-width: 0;
+  padding-left: 52px;
+}
+
+.research-report-chapter {
+  border-top: 1px solid var(--market-border);
+  contain-intrinsic-size: auto 1050px;
+  content-visibility: auto;
+  padding: 44px 0 30px;
+  scroll-margin-top: 24px;
+}
+
+.research-report-chapter:first-child {
+  border-top: 0;
+}
+
+.research-report-chapter-header {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  margin-bottom: 30px;
+  max-width: 1050px;
+}
+
+.research-report-chapter-header > span {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 22px;
+  font-weight: 300;
+  padding-top: 7px;
+}
+
+.research-report-chapter-header h2 {
+  font-family: var(--font-instrument-serif), Georgia, serif;
+  font-size: 46px;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  line-height: 1.02;
+  margin: 7px 0 12px;
+}
+
+.research-report-chapter-header > div > p:last-child {
+  color: var(--market-text-dim);
+  font-size: 14px;
+  line-height: 1.65;
+  margin: 0;
+  max-width: 760px;
+}
+
+.research-report-chapter-content {
+  display: grid;
+  gap: 0 42px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 1140px;
+}
+
+.research-report-section {
+  border-top: 1px solid var(--market-border);
+  min-width: 0;
+  padding: 24px 0 28px;
+  scroll-margin-top: 24px;
+}
+
+.research-report-section > h3 {
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  margin: 8px 0 18px;
+}
+
+.research-report-section p,
+.research-report-section li {
+  color: var(--market-text-dim);
+  font-size: 14px;
+  line-height: 1.72;
+  margin: 10px 0;
+}
+
+.research-report-section ul,
+.research-report-section ol {
+  padding-left: 20px;
+}
+
+.research-report-section ul {
+  list-style: disc;
+}
+
+.research-report-section ol {
+  list-style: decimal;
+}
+
+.research-report-section strong {
+  color: var(--market-text);
+  font-weight: 600;
+}
+
+.research-report-section table {
+  border-collapse: collapse;
+  display: block;
+  margin: 18px 0;
+  max-width: 100%;
+  overflow-x: auto;
+  width: 100%;
+}
+
+.research-report-section th,
+.research-report-section td {
+  border-bottom: 1px solid var(--market-border);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 9px;
+  padding: 9px 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.research-report-section th:first-child,
+.research-report-section td:first-child {
+  text-align: left;
+}
+
+.research-report-section th {
+  color: var(--market-text-muted);
+  font-weight: 400;
+}
+
+.research-report-section > footer {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 13px;
+  margin-top: 18px;
+}
+
+.research-report-section > footer span,
+.research-report-section > footer a {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 8px;
+}
+
+.research-report-section > footer span {
+  color: var(--market-text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.research-report-section > footer a {
+  color: var(--market-accent);
+}
+
+.research-report-section > small {
+  color: var(--market-text-muted);
+  display: block;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 8px;
+  margin-top: 18px;
+}
+
+.equity-research-note:not(.evidence-mode) .research-report-section > footer span {
+  display: none;
+}
+
+.equity-research-note:not(.evidence-mode) .research-report-section > footer a::before {
+  color: var(--market-text-muted);
+  content: 'Source: ';
+}
+
+.research-report-chapter[data-chapter="investment-case"] .research-report-section,
+.research-report-chapter[data-chapter="business-engine"] #business-economics,
+.research-report-chapter[data-chapter="earnings-engine"] #financial_profile,
+.research-report-chapter[data-chapter="expectations-setup"] #catalysts,
+.research-report-chapter[data-chapter="decision-monitoring"] .research-scenarios,
+.research-report-chapter[data-chapter="decision-monitoring"] #kill_criteria {
+  grid-column: 1 / -1;
+}
+
+.research-report-chapter[data-chapter="earnings-engine"] #financial_profile {
+  max-width: none;
+}
+
+.research-report-chapter[data-chapter="decision-monitoring"] #kill_criteria {
+  max-width: 760px;
+}
+
+.research-chapter-bridge {
+  align-items: start;
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  gap: 28px;
+  grid-template-columns: 190px minmax(0, 1fr);
+  margin-top: 8px;
+  max-width: 1140px;
+  padding: 20px 0 0 48px;
+}
+
+.research-chapter-bridge span {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.research-chapter-bridge p {
+  color: var(--market-text);
+  font-family: var(--font-instrument-serif), Georgia, serif;
+  font-size: 21px;
+  line-height: 1.35;
+  margin: 0;
+  max-width: 710px;
+}
+
+.research-nav-chapter + .research-nav-chapter {
+  border-top: 1px solid var(--market-border);
+  margin-top: 11px;
+  padding-top: 11px;
+}
+
+.equity-research-body > nav .research-nav-chapter-link {
+  border: 0;
+  font-size: 13px;
+  grid-template-columns: 25px minmax(0, 1fr);
+  padding: 3px 0 7px;
+}
+
+.research-nav-chapter-link strong {
+  color: var(--market-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.research-nav-chapter > div {
+  padding-left: 35px;
+}
+
+.equity-research-body > nav .research-nav-chapter > div > a {
+  border: 0;
+  color: var(--market-text-dim);
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.35;
+  padding: 4px 0;
+}
+
+.research-business-economics {
+  border-top: 1px solid var(--market-border);
+  grid-column: 1 / -1;
+  padding: 28px 0 30px;
+  scroll-margin-top: 24px;
+}
+
+.research-business-economics > header {
+  align-items: end;
+  display: grid;
+  gap: 40px;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  margin-bottom: 22px;
+}
+
+.research-business-economics > header h2 {
+  font-family: var(--font-instrument-serif), Georgia, serif;
+  font-size: 38px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin: 7px 0 0;
+}
+
+.research-business-economics > header > p {
+  color: var(--market-text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.research-business-economics-grid {
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.research-revenue-mix {
+  min-width: 0;
+  padding: 22px 24px 8px 0;
+}
+
+.research-revenue-mix + .research-revenue-mix {
+  border-left: 1px solid var(--market-border);
+  padding-left: 24px;
+  padding-right: 0;
+}
+
+.research-revenue-mix:only-child {
+  grid-column: 1 / -1;
+  max-width: 760px;
+}
+
+.research-revenue-mix > header {
+  align-items: start;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.research-revenue-mix > header span,
+.research-revenue-mix > header small {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.research-revenue-mix > header h3 {
+  font-size: 18px;
+  font-weight: 500;
+  margin: 5px 0 0;
+}
+
+.research-revenue-mix-rows > div {
+  border-top: 1px solid var(--market-border);
+  padding: 10px 0;
+}
+
+.research-revenue-mix-rows > div > div:first-child {
+  align-items: baseline;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(120px, 1.5fr) 72px 88px minmax(105px, 1fr);
+}
+
+.research-revenue-mix-rows strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.research-revenue-mix-rows span {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 8px;
+}
+
+.research-revenue-mix-rows span[data-direction="up"] {
+  color: var(--market-green);
+}
+
+.research-revenue-mix-rows span[data-direction="down"] {
+  color: var(--market-red);
+}
+
+.research-revenue-mix-rows > div > div:last-child {
+  background: var(--market-surface-2);
+  height: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.research-revenue-mix-rows > div > div:last-child span {
+  background: var(--market-accent);
+  display: block;
+  height: 100%;
+}
+
+.research-segment-empty {
+  border-top: 1px solid var(--market-border);
+  padding: 22px 0 4px;
+}
+
+.research-segment-empty strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.research-segment-empty p {
+  color: var(--market-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 7px 0;
+  max-width: 720px;
+}
+
+.research-business-economics > footer {
+  align-items: baseline;
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 220px minmax(0, 1fr);
+  margin-top: 20px;
+  padding-top: 14px;
+}
+
+.research-business-economics > footer span {
+  color: var(--market-text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.research-business-economics > footer p {
+  color: var(--market-text-muted);
+  font-size: 10px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.research-report-chapter-content .research-scenarios {
+  border-top: 1px solid var(--market-border);
+  margin: 0;
+  max-width: none;
+  padding: 26px 0 32px;
+}
+
+.equity-research-sources {
+  padding-left: 52px;
+}
+
+.equity-research-footer {
+  margin-left: 52px;
+}
+
+@media (max-width: 1150px) {
+  .research-report-chapter-content {
+    grid-template-columns: 1fr;
+  }
+
+  .research-report-chapter-content > *,
+  .research-report-chapter-content #financial_profile,
+  .research-report-chapter-content #catalysts,
+  .research-report-chapter-content #kill_criteria {
+    grid-column: auto;
+    grid-row: auto;
+    max-width: none;
+  }
+
+  .research-business-economics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .research-revenue-mix + .research-revenue-mix {
+    border-left: 0;
+    border-top: 1px solid var(--market-border);
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .equity-research-chapters {
+    padding-left: 0;
+  }
+
+  .research-report-chapter {
+    padding: 34px 0 24px;
+  }
+
+  .research-report-chapter-header {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .research-report-chapter-header h2 {
+    font-size: 36px;
+  }
+
+  .research-chapter-bridge {
+    gap: 8px;
+    grid-template-columns: 1fr;
+    padding-left: 0;
+  }
+
+  .research-business-economics > header {
+    align-items: start;
+    gap: 8px;
+    grid-template-columns: 1fr;
+  }
+
+  .research-business-economics > header h2 {
+    font-size: 32px;
+  }
+
+  .research-revenue-mix-rows > div > div:first-child {
+    grid-template-columns: minmax(110px, 1fr) 72px;
+  }
+
+  .research-revenue-mix-rows > div > div:first-child span:nth-of-type(n + 2) {
+    display: none;
+  }
+
+  .research-business-economics > footer {
+    gap: 6px;
+    grid-template-columns: 1fr;
+  }
+
+  .equity-research-sources {
+    padding-left: 0;
+  }
+
+  .equity-research-footer {
+    margin-left: 0;
+  }
+}

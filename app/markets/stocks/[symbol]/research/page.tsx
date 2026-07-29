@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { Fragment } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { InteractivePriceChart } from '@/components/markets/InteractivePriceChart'
@@ -12,19 +13,93 @@ import {
 import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { formatMarketDate } from '@/lib/markets/format-date'
 import { researchMemoMarkdown } from '@/lib/markets/research-presentation'
-import type { CompanyPacket, EquityResearchSection } from '@/lib/markets/types'
+import type {
+  CompanyPacket,
+  CompanyPacketSource,
+  CompanySegmentPeriod,
+  EquityResearchSection,
+} from '@/lib/markets/types'
 import { fetchStockViewerData } from '@/lib/server/markets-repository'
 
 const SCENARIO_SECTION_IDS = new Set(['bull_case', 'base_case', 'bear_case'])
 
 const REPORT_CHAPTERS = [
-  { label: 'The thesis', ids: ['snapshot', 'business_model_and_moat', 'financial_profile', 'market_and_competition', 'growth_drivers', 'management_and_capital_allocation'] },
-  { label: 'Price and catalysts', ids: ['valuation', 'catalysts'] },
-  { label: 'Decision and monitoring', ids: ['risk_factors', 'sentiment_and_positioning', 'verdict', 'kill_criteria'] },
+  {
+    id: 'investment-case',
+    number: '01',
+    label: 'Investment case',
+    title: 'The decision in one coherent view',
+    description: 'Start with the thesis, the market’s debate, and the reason this security deserves—or does not deserve—portfolio capital.',
+    ids: ['snapshot'],
+    bridgeLabel: 'From thesis to business',
+    bridge: 'The investment case only holds if the underlying revenue engine and competitive advantages can support it.',
+  },
+  {
+    id: 'business-engine',
+    number: '02',
+    label: 'Business & competitive engine',
+    title: 'How the company makes money—and keeps it',
+    description: 'Revenue composition, customer value, moat, and competitive pressure belong together because they determine the durability of the economics.',
+    ids: ['business_model_and_moat', 'market_and_competition'],
+    bridgeLabel: 'From advantage to earnings',
+    bridge: 'The next question is whether those business advantages are converting into growth, margins, and free cash flow.',
+  },
+  {
+    id: 'earnings-engine',
+    number: '03',
+    label: 'Earnings engine',
+    title: 'How operating execution becomes cash flow',
+    description: 'Financial inflections, growth drivers, and capital allocation are read as one system rather than three isolated checklists.',
+    ids: ['financial_profile', 'growth_drivers', 'management_and_capital_allocation'],
+    bridgeLabel: 'From earnings to expectations',
+    bridge: 'Business quality creates value; the investment outcome depends on how much of that value the current price already assumes.',
+  },
+  {
+    id: 'expectations-setup',
+    number: '04',
+    label: 'Expectations & setup',
+    title: 'What the price assumes—and what could change',
+    description: 'Valuation, positioning, and catalysts sit together so price is judged against both fundamental expectations and the market’s current stance.',
+    ids: ['valuation', 'sentiment_and_positioning', 'catalysts'],
+    bridgeLabel: 'From expectations to action',
+    bridge: 'The final decision weighs the priced-in outcome against scenario asymmetry, independent risks, and observable failure conditions.',
+  },
+  {
+    id: 'decision-monitoring',
+    number: '05',
+    label: 'Decision & monitoring',
+    title: 'What to do, what to watch, and what proves us wrong',
+    description: 'Scenarios, risks, the formal verdict, entry discipline, and kill criteria resolve the analysis into a capital-allocation decision.',
+    ids: ['bull_case', 'base_case', 'bear_case', 'risk_factors', 'verdict', 'kill_criteria'],
+    bridgeLabel: null,
+    bridge: null,
+  },
 ] as const
 
-function chapterForSection(id: string): string | null {
-  return REPORT_CHAPTERS.find((chapter) => chapter.ids.includes(id as never))?.label ?? null
+function segmentPeriodLabel(period: CompanySegmentPeriod): string {
+  if (period.fiscalYear && period.period) return `${period.fiscalYear} ${period.period}`
+  if (period.fiscalYear) return period.fiscalYear
+  if (period.date) return formatMarketDate(period.date)
+  return 'Latest reported period'
+}
+
+function segmentRows(periods: CompanySegmentPeriod[]) {
+  const latest = periods[0]
+  if (!latest) return []
+  const prior = periods.slice(1).find((period) =>
+    !latest.period || period.period === latest.period) ?? periods[1]
+  const priorValues = new Map(prior?.values.map((value) => [value.label, value.revenue]) ?? [])
+  const total = latest.values.reduce((sum, value) => sum + value.revenue, 0)
+  return latest.values.slice(0, 12).map((value) => {
+    const previousRevenue = priorValues.get(value.label)
+    return {
+      ...value,
+      mix: total > 0 ? value.revenue / total : null,
+      growth: previousRevenue && previousRevenue > 0
+        ? value.revenue / previousRevenue - 1
+        : null,
+    }
+  })
 }
 
 function numeric(record: Record<string, unknown>, key: string): number | null {
@@ -125,6 +200,109 @@ function ScenarioComparison({ sections }: { sections: EquityResearchSection[] })
   )
 }
 
+function RevenueMix({
+  eyebrow,
+  title,
+  periods,
+}: {
+  eyebrow: string
+  title: string
+  periods: CompanySegmentPeriod[]
+}) {
+  const latest = periods[0]
+  const rows = segmentRows(periods)
+  if (!latest || rows.length === 0) return null
+  return (
+    <article className="research-revenue-mix">
+      <header>
+        <div>
+          <span>{eyebrow}</span>
+          <h3>{title}</h3>
+        </div>
+        <small>{segmentPeriodLabel(latest)} · {latest.reportedCurrency ?? 'Reported currency'}</small>
+      </header>
+      <div className="research-revenue-mix-rows">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <div>
+              <strong>{row.label}</strong>
+              <span>{compactMoney(row.revenue)}</span>
+              <span>{percent(row.mix, true)} of disclosed mix</span>
+              <span data-direction={row.growth === null ? 'flat' : row.growth >= 0 ? 'up' : 'down'}>
+                {row.growth === null ? 'Prior comparison unavailable' : `${percent(row.growth, true)} vs prior`}
+              </span>
+            </div>
+            <div aria-hidden="true"><span style={{ width: `${Math.max(2, (row.mix ?? 0) * 100)}%` }} /></div>
+          </div>
+        ))}
+      </div>
+    </article>
+  )
+}
+
+function BusinessEconomics({ packet }: { packet: CompanyPacket | null }) {
+  const product = packet?.segmentRevenue?.product ?? []
+  const geographic = packet?.segmentRevenue?.geographic ?? []
+  const hasSegments = product.length > 0 || geographic.length > 0
+  return (
+    <section className="research-business-economics" id="business-economics" aria-labelledby="business-economics-title">
+      <header>
+        <div>
+          <p className="markets-eyebrow">Deterministic business economics</p>
+          <h2 id="business-economics-title">Where the revenue comes from</h2>
+        </div>
+        <p>Product categories and reportable operating segments are kept distinct. Values shown here come from the CompanyPacket, not generated prose.</p>
+      </header>
+      {hasSegments ? (
+        <div className="research-business-economics-grid">
+          <RevenueMix eyebrow="Product and service mix" title="Revenue by business line" periods={product} />
+          <RevenueMix eyebrow="Geographic mix" title="Revenue by reported geography" periods={geographic} />
+        </div>
+      ) : (
+        <div className="research-segment-empty">
+          <strong>Segment history is not attached to this report version.</strong>
+          <p>Refresh the research to request the product and geographic revenue series. If the provider does not return them, the report will continue to mark the breakdown unavailable instead of estimating it.</p>
+        </div>
+      )}
+      <footer>
+        <span>Revenue composition is not profit composition.</span>
+        <p>Segment operating income will only appear after an authoritative filing-level series is normalized; the report does not infer it from revenue mix.</p>
+      </footer>
+    </section>
+  )
+}
+
+function ResearchSection({
+  section,
+  sectionNumber,
+  sources,
+}: {
+  section: EquityResearchSection
+  sectionNumber: number
+  sources: CompanyPacketSource[]
+}) {
+  return (
+    <article className="research-report-section" id={section.id}>
+      <p className="markets-eyebrow research-section-counter">Underlying module {String(sectionNumber).padStart(2, '0')} of 15</p>
+      <h3>{section.title}</h3>
+      <div className="research-memo-copy">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{researchMemoMarkdown(section.content)}</ReactMarkdown>
+      </div>
+      <div className="research-evidence-copy">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
+      </div>
+      {sources.length > 0 ? (
+        <footer>
+          <span>Evidence</span>
+          {sources.map((source) => (
+            <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.label} ↗</a>
+          ))}
+        </footer>
+      ) : <small>No section-specific source was attached; treat unsupported claims as analyst view.</small>}
+    </article>
+  )
+}
+
 export default async function EquityResearchPage({ params }: { params: Promise<{ symbol: string }> }) {
   const [{ symbol: rawSymbol }, user] = await Promise.all([params, requireAllowedMarketUser()])
   const symbol = rawSymbol.toUpperCase()
@@ -137,6 +315,8 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
   const sources = packet?.sources.filter((source) => research?.sourceIds.includes(source.id)) ?? []
   const confidence = research && research.confidence <= 1 ? research.confidence * 100 : research?.confidence
   const scenarioSections = research?.sections.filter((section) => SCENARIO_SECTION_IDS.has(section.id)) ?? []
+  const sectionsById = new Map(research?.sections.map((section) => [section.id, section]) ?? [])
+  const sectionNumberById = new Map(research?.sections.map((section, index) => [section.id, index + 1]) ?? [])
 
   return (
     <article className="equity-research-note" data-research-presentation>
@@ -247,53 +427,71 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
           </section>
 
           <div className="equity-research-body">
-            <nav aria-label="Research sections">
-              <p>Full analysis</p>
-              {REPORT_CHAPTERS.slice(0, 2).map((chapter) => (
+            <nav aria-label="Research chapters">
+              <p>Investment analysis</p>
+              {REPORT_CHAPTERS.map((chapter) => (
                 <div className="research-nav-chapter" key={chapter.label}>
-                  <strong>{chapter.label}</strong>
-                  {research.sections.filter((section) => chapter.ids.includes(section.id as never)).map((section) => (
-                    <a key={section.id} href={`#${section.id}`}><span>{String(research.sections.indexOf(section) + 1).padStart(2, '0')}</span>{section.title}</a>
-                  ))}
-                </div>
-              ))}
-              {scenarioSections.length === 3 ? <div className="research-nav-chapter"><strong>Scenarios</strong><a href="#scenarios"><span>09–11</span>Compare outcomes</a></div> : null}
-              {REPORT_CHAPTERS.slice(2).map((chapter) => (
-                <div className="research-nav-chapter" key={chapter.label}>
-                  <strong>{chapter.label}</strong>
-                  {research.sections.filter((section) => chapter.ids.includes(section.id as never)).map((section) => (
-                    <a key={section.id} href={`#${section.id}`}><span>{String(research.sections.indexOf(section) + 1).padStart(2, '0')}</span>{section.title}</a>
-                  ))}
+                  <a className="research-nav-chapter-link" href={`#${chapter.id}`}>
+                    <span>{chapter.number}</span>
+                    <strong>{chapter.label}</strong>
+                  </a>
+                  <div>
+                    {chapter.ids.flatMap((id) => {
+                      if (id === 'base_case' || id === 'bear_case') return []
+                      if (id === 'bull_case' && scenarioSections.length === 3) {
+                        return [<a key="scenarios" href="#scenarios">Scenario comparison</a>]
+                      }
+                      const section = sectionsById.get(id)
+                      return section ? [<a key={section.id} href={`#${section.id}`}>{section.title}</a>] : []
+                    })}
+                    {chapter.id === 'business-engine' ? <a href="#business-economics">Revenue composition</a> : null}
+                  </div>
                 </div>
               ))}
             </nav>
             <div className="equity-research-analysis-content">
-              <div className="equity-research-sections">
-                {research.sections.map((section, index) => {
-                  if (section.id === 'bull_case' && scenarioSections.length === 3) return <ScenarioComparison key="scenarios" sections={scenarioSections} />
-                  if (SCENARIO_SECTION_IDS.has(section.id) && scenarioSections.length === 3) return null
-                  const sectionSources = packet?.sources.filter((source) => section.sourceIds.includes(source.id)) ?? []
-                  const chapter = chapterForSection(section.id)
-                  const isFirstInChapter = chapter !== null && research.sections.findIndex((item) => item.id === section.id) === research.sections.findIndex((item) => chapterForSection(item.id) === chapter)
+              <div className="equity-research-chapters">
+                {REPORT_CHAPTERS.map((chapter) => {
+                  const chapterSections = chapter.ids.flatMap((id) => {
+                    const section = sectionsById.get(id)
+                    return section ? [section] : []
+                  })
                   return (
-                    <section key={section.id} id={section.id}>
-                      {isFirstInChapter ? <p className="research-chapter-heading">{chapter}</p> : null}
-                      <p className="markets-eyebrow research-section-counter">Section {String(index + 1).padStart(2, '0')} of 15</p>
-                      <h2>{section.title}</h2>
-                      <div className="research-memo-copy">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{researchMemoMarkdown(section.content)}</ReactMarkdown>
+                    <section className="research-report-chapter" id={chapter.id} key={chapter.id} data-chapter={chapter.id}>
+                      <header className="research-report-chapter-header">
+                        <span>{chapter.number}</span>
+                        <div>
+                          <p className="markets-eyebrow">{chapter.label}</p>
+                          <h2>{chapter.title}</h2>
+                          <p>{chapter.description}</p>
+                        </div>
+                      </header>
+                      <div className="research-report-chapter-content">
+                        {chapterSections.map((section) => {
+                          if (section.id === 'bull_case' && scenarioSections.length === 3) {
+                            return <ScenarioComparison key="scenarios" sections={scenarioSections} />
+                          }
+                          if (SCENARIO_SECTION_IDS.has(section.id) && scenarioSections.length === 3) return null
+                          const sectionSources = packet?.sources.filter((source) => section.sourceIds.includes(source.id)) ?? []
+                          const sectionNumber = sectionNumberById.get(section.id) ?? 0
+                          return (
+                            <Fragment key={section.id}>
+                              <ResearchSection
+                                section={section}
+                                sectionNumber={sectionNumber}
+                                sources={sectionSources}
+                              />
+                              {section.id === 'market_and_competition' ? <BusinessEconomics packet={packet} /> : null}
+                            </Fragment>
+                          )
+                        })}
                       </div>
-                      <div className="research-evidence-copy">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
-                      </div>
-                      {sectionSources.length > 0 ? (
-                        <footer>
-                          <span>Evidence</span>
-                          {sectionSources.map((source) => (
-                            <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.label} ↗</a>
-                          ))}
+                      {chapter.bridge && chapter.bridgeLabel ? (
+                        <footer className="research-chapter-bridge">
+                          <span>{chapter.bridgeLabel}</span>
+                          <p>{chapter.bridge}</p>
                         </footer>
-                      ) : <small>No section-specific source was attached; treat unsupported claims as analyst view.</small>}
+                      ) : null}
                     </section>
                   )
                 })}
