@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getAllowedMarketUser } from '@/lib/auth/supabase-server'
+import { getAllowedMarketUser } from '@/lib/auth/markets-session'
 import { enqueueAgentJob } from '@/lib/server/agent-jobs'
 import { getSupabaseClient } from '@/lib/server/supabase'
 import { addSymbolToPrimaryWatchlist } from '@/lib/server/portfolio'

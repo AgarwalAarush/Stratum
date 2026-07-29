@@ -1,5 +1,5 @@
 import { PortfolioWorkspace } from '@/components/markets/PortfolioWorkspace'
-import { requireAllowedMarketUser } from '@/lib/auth/supabase-server'
+import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { runIllustrativeScreener } from '@/lib/markets/screener'
 import type { ScreenerQuery, ScreenerResponse } from '@/lib/markets/types'
 import { fetchPortfolioWorkspace } from '@/lib/server/portfolio'

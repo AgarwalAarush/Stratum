@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import { ResearchActionButton } from '@/components/markets/ResearchActionButton'
-import { requireAllowedMarketUser } from '@/lib/auth/supabase-server'
+import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { fetchLatestEquityResearch } from '@/lib/server/company-research'
 import { fetchStockViewerData } from '@/lib/server/markets-repository'
 

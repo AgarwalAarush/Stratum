@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { MarketsFeedPage } from '@/components/markets/MarketsFeedPage'
-import { requireAllowedMarketUser } from '@/lib/auth/supabase-server'
+import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { fetchFinanceReports } from '@/lib/data/finance-reports'
 import { fetchPersistedFmpMarketItems } from '@/lib/data/fmp-intelligence'
 import { mergeMarketNews } from '@/lib/markets/news'

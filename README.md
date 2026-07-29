@@ -80,8 +80,10 @@ npm run dev
 |---|---|---|
 | `UPSTASH_REDIS_REST_URL` | Yes | Redis cache tier |
 | `UPSTASH_REDIS_REST_TOKEN` | Yes | Redis auth |
-| `SUPABASE_URL` | Yes* | Overview persistence |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes* | Supabase auth |
+| `SUPABASE_URL` | Yes* | Overview and Markets persistence |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes* | Server-only persistence access |
+| `MARKETS_ACCESS_PASSWORD_HASH` | Yes* | PBKDF2 hash for the private Markets workspace |
+| `MARKETS_SESSION_SECRET` | Yes* | Signs the private, HttpOnly Markets session |
 | `QSTASH_CURRENT_SIGNING_KEY` | Yes* | QStash cron verification |
 | `QSTASH_NEXT_SIGNING_KEY` | Yes* | QStash cron key rotation |
 | `ANTHROPIC_API_KEY` | No | AI overviews & morning brief (falls back to static content) |

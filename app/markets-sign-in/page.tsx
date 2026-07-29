@@ -1,10 +1,16 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { sendMarketsMagicLink } from './actions'
+import { signInMarkets } from './actions'
 
 export const metadata: Metadata = {
   title: 'Sign in — Stratum Markets',
   robots: { index: false, follow: false },
+}
+
+function safeNext(value: string | string[] | undefined): string {
+  return typeof value === 'string' && value.startsWith('/markets') && !value.startsWith('//')
+    ? value
+    : '/markets'
 }
 
 export default async function MarketsSignInPage({
@@ -13,8 +19,8 @@ export default async function MarketsSignInPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const params = await searchParams
-  const sent = params.sent === '1'
   const error = typeof params.error === 'string' ? params.error : null
+  const next = safeNext(params.next)
 
   return (
     <main className="markets-auth-page">
@@ -23,26 +29,28 @@ export default async function MarketsSignInPage({
         <p className="markets-eyebrow">Private workspace</p>
         <h1>Markets sign in</h1>
         <p className="markets-auth-copy">
-          Price data, research, watchlists, and portfolio decisions are restricted to the approved account.
+          Price data, research, watchlists, and portfolio decisions are protected by your private workspace password.
         </p>
-        {sent ? (
-          <div className="markets-auth-notice" role="status">
-            If that address is approved, its sign-in link is on the way.
-          </div>
-        ) : (
-          <form action={sendMarketsMagicLink} className="markets-auth-form">
-            <label htmlFor="markets-email">Email</label>
-            <input id="markets-email" name="email" type="email" autoComplete="email" required autoFocus />
-            <button type="submit">Email me a sign-in link</button>
-          </form>
-        )}
+        <form action={signInMarkets} className="markets-auth-form">
+          <input type="hidden" name="next" value={next} />
+          <label htmlFor="markets-password">Password</label>
+          <input
+            id="markets-password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            autoFocus
+          />
+          <button type="submit">Open Markets</button>
+        </form>
         {error && (
           <p className="markets-auth-error" role="alert">
-            {error === 'not-allowed'
-              ? 'This account is not approved for Markets.'
-              : error === 'configuration'
-                ? 'Markets authentication is not configured yet.'
-                : 'The sign-in link could not be sent. Try again.'}
+            {error === 'configuration'
+              ? 'Markets authentication is not configured yet.'
+              : error === 'rate-limit'
+                ? 'Too many failed attempts. Wait ten minutes and try again.'
+                : 'That password is not correct.'}
           </p>
         )}
         <Link href="/ai-research" className="markets-auth-back">Return to Intelligence</Link>

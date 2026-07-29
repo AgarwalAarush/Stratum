@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { MarketsShell } from '@/components/markets/MarketsShell'
-import { requireAllowedMarketUser } from '@/lib/auth/supabase-server'
+import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { fetchLatestSnapshotMeta } from '@/lib/server/markets-repository'
 
 export const metadata: Metadata = {

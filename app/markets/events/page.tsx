@@ -4,7 +4,7 @@ import { fetchMacroIndicators } from '@/lib/data/finance-macro'
 import { fetchFinanceReports } from '@/lib/data/finance-reports'
 import { fetchPersistedFmpMarketItems } from '@/lib/data/fmp-intelligence'
 import { mergeMarketNews, rankMarketEvents } from '@/lib/markets/news'
-import { requireAllowedMarketUser } from '@/lib/auth/supabase-server'
+import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { fetchPortfolioWorkspace } from '@/lib/server/portfolio'
 
 export default async function MarketsEventsPage({
