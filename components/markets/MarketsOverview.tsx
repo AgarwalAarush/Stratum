@@ -24,6 +24,19 @@ function formatMarketTime(value: string): string {
   }).format(new Date(value))
 }
 
+function formatInstrumentTime(value: string, dataStatus: MarketOverviewResponse['instruments'][number]['dataStatus']): string {
+  const options: Intl.DateTimeFormatOptions = dataStatus === 'end_of_day'
+    ? { timeZone: 'America/New_York', month: 'short', day: 'numeric' }
+    : { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }
+  return new Intl.DateTimeFormat('en-US', options).format(new Date(value))
+}
+
+function dataStatusLabel(value: MarketOverviewResponse['instruments'][number]['dataStatus']): string {
+  if (value === 'real_time') return 'Live'
+  if (value === 'end_of_day') return 'EOD'
+  return 'Delayed'
+}
+
 export function MarketsOverview({ overview }: MarketsOverviewProps) {
   const [selectedEvidenceId, setSelectedEvidenceId] = useState(overview.evidence[0]?.id ?? '')
 
@@ -42,13 +55,25 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
 
       <section className="market-instrument-tape" aria-label="Market instruments">
         {overview.instruments.map((instrument) => (
-          <div key={instrument.id} className="market-instrument">
-            <span className="market-instrument-label">{instrument.label}</span>
-            <span>{instrument.value}</span>
-            <span className={instrument.direction === 'up' ? 'market-positive' : 'market-negative'}>
-              {instrument.change}
+          <a
+            key={instrument.id}
+            className="market-instrument"
+            href={instrument.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            title={`${instrument.instrumentType.replaceAll('_', ' ')} · Retrieved ${formatMarketTime(instrument.retrievedAt)}`}
+          >
+            <span className="market-instrument-primary">
+              <span className="market-instrument-label">{instrument.label}</span>
+              <span>{instrument.value}</span>
+              <span className={instrument.direction === 'up' ? 'market-positive' : instrument.direction === 'down' ? 'market-negative' : ''}>
+                {instrument.change}
+              </span>
             </span>
-          </div>
+            <span className="market-instrument-provenance">
+              {instrument.source.toUpperCase()} · {dataStatusLabel(instrument.dataStatus)} · {formatInstrumentTime(instrument.feedTimestamp, instrument.dataStatus)}
+            </span>
+          </a>
         ))}
       </section>
 

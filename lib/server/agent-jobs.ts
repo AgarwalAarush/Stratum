@@ -3,6 +3,7 @@ import { generateMonthlyOverview, generateWeeklyOverview } from '../data/overvie
 import { saveMorningBrief } from '../data/overview-persistence.ts'
 import { syncFmpMarketIntelligence } from '../data/fmp-intelligence.ts'
 import { getAlpacaClient } from './alpaca.ts'
+import { materializeCrossAssetSnapshot } from './cross-asset.ts'
 import { materializeMarketMemo } from './market-memo.ts'
 import { resolveMarketUniverse } from './market-universe.ts'
 import {
@@ -16,6 +17,7 @@ import { getSupabaseClient } from './supabase.ts'
 export const AGENT_JOB_TYPES = [
   'sync-market-assets',
   'refresh-market-screener',
+  'refresh-cross-asset',
   'refresh-fmp-intelligence',
   'generate-market-memo',
   'generate-morning-brief',
@@ -24,7 +26,7 @@ export const AGENT_JOB_TYPES = [
 ] as const
 
 export type AgentJobType = typeof AGENT_JOB_TYPES[number]
-export type AgentJobProvider = 'alpaca' | 'fmp' | 'codex'
+export type AgentJobProvider = 'alpaca' | 'fmp' | 'codex' | 'market-data'
 
 interface AgentJobRecord {
   id: string
@@ -60,6 +62,12 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 5) * 5, 0, 0)
     return `${jobType}:${bucket.toISOString()}`
   }
+  if (jobType === 'refresh-cross-asset') {
+    if (payload.mode === 'daily') return `${jobType}:daily:${now.toISOString().slice(0, 10)}`
+    const bucket = new Date(now)
+    bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 5) * 5, 0, 0)
+    return `${jobType}:${bucket.toISOString()}`
+  }
   if (jobType === 'refresh-fmp-intelligence') {
     const bucket = new Date(now)
     bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
@@ -71,6 +79,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
 export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence') return 'fmp'
+  if (jobType === 'refresh-cross-asset') return 'market-data'
   return 'codex'
 }
 
@@ -153,6 +162,15 @@ async function executeJob(job: AgentJobRecord): Promise<unknown> {
 
   if (job.job_type === 'refresh-fmp-intelligence') {
     return syncFmpMarketIntelligence()
+  }
+
+  if (job.job_type === 'refresh-cross-asset') {
+    const snapshot = await materializeCrossAssetSnapshot()
+    return {
+      snapshotId: snapshot.id,
+      observationCount: snapshot.observations.length,
+      dataAsOf: snapshot.dataAsOf,
+    }
   }
 
   if (job.job_type === 'generate-market-memo') {

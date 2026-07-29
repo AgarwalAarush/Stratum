@@ -22,6 +22,10 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
     'refresh-market-screener:2026-07-15T14:30:00.000Z',
   )
   assert.equal(
+    buildAgentJobDedupeKey('refresh-cross-asset', new Date('2026-07-15T14:33:42Z')),
+    'refresh-cross-asset:2026-07-15T14:30:00.000Z',
+  )
+  assert.equal(
     buildAgentJobDedupeKey('generate-market-memo', new Date(), { snapshotId: 'snapshot-123' }),
     'generate-market-memo:snapshot-123',
   )
@@ -35,6 +39,7 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('sync-market-assets'), 'alpaca')
   assert.equal(agentJobProvider('refresh-market-screener'), 'alpaca')
   assert.equal(agentJobProvider('refresh-fmp-intelligence'), 'fmp')
+  assert.equal(agentJobProvider('refresh-cross-asset'), 'market-data')
   assert.equal(agentJobProvider('generate-market-memo'), 'codex')
 })
 

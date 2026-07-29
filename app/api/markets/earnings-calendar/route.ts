@@ -11,6 +11,11 @@ function emptySection(): SectionData {
   return { items: [], fetchedAt: new Date().toISOString() }
 }
 
+function privateResponse(response: Response): Response {
+  response.headers.set('Cache-Control', 'private, no-store')
+  return response
+}
+
 export async function GET() {
   try {
     const result = await cachedFetchWithFallback<SectionData>({
@@ -31,8 +36,8 @@ export async function GET() {
     })
 
     persistIfFresh('markets', 'earnings-calendar', result)
-    return sectionJsonResponse(result.data ?? emptySection(), 'fast', result.source)
+    return privateResponse(sectionJsonResponse(result.data ?? emptySection(), 'fast', result.source))
   } catch {
-    return sectionJsonResponse(emptySection(), 'fast', 'none')
+    return privateResponse(sectionJsonResponse(emptySection(), 'fast', 'none'))
   }
 }

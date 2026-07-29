@@ -15,6 +15,25 @@ export interface AgentScheduleOptions {
   includeCodex?: boolean
 }
 
+function newYorkParts(now: Date): { weekday: string; hour: number; minute: number } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now)
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? ''
+  return { weekday: part('weekday'), hour: Number(part('hour')), minute: Number(part('minute')) }
+}
+
+export function isUsMarketRefreshWindow(now: Date): boolean {
+  const { weekday, hour, minute } = newYorkParts(now)
+  if (weekday === 'Sat' || weekday === 'Sun') return false
+  const minutes = hour * 60 + minute
+  return minutes >= 9 * 60 + 30 && minutes <= 16 * 60 + 5
+}
+
 function scheduledJob(
   jobType: AgentJobType,
   now: Date,
@@ -35,7 +54,14 @@ export function buildDueAgentJobs(
     scheduledJob('sync-market-assets', now),
     scheduledJob('refresh-market-screener', now),
   ]
-  if (options.includeFmp !== false) jobs.push(scheduledJob('refresh-fmp-intelligence', now))
+  if (options.includeFmp !== false) {
+    jobs.push(scheduledJob('refresh-fmp-intelligence', now))
+    if (isUsMarketRefreshWindow(now)) {
+      jobs.push(scheduledJob('refresh-cross-asset', now, { mode: 'market-hours' }))
+    } else if (now.getUTCHours() >= 21) {
+      jobs.push(scheduledJob('refresh-cross-asset', now, { mode: 'daily' }))
+    }
+  }
   const utcHour = now.getUTCHours()
 
   if (options.includeCodex !== false) {

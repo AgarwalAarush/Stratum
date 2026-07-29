@@ -15,6 +15,13 @@ test('worker always schedules Alpaca and FMP ingestion', () => {
   ])
 })
 
+test('cross-asset refresh runs every five minutes during the US session and once after close', () => {
+  assert.equal(jobTypes('2026-07-28T14:33:00Z').filter((job) => job === 'refresh-cross-asset').length, 1)
+  assert.equal(jobTypes('2026-07-28T18:58:00Z').includes('refresh-cross-asset'), true)
+  assert.equal(jobTypes('2026-07-28T08:00:00Z').includes('refresh-cross-asset'), false)
+  assert.equal(jobTypes('2026-07-28T21:00:00Z').includes('refresh-cross-asset'), true)
+})
+
 test('worker does not enqueue FMP work before its credential is configured', () => {
   assert.deepEqual(
     buildDueAgentJobs(new Date('2026-07-28T08:00:00Z'), { includeFmp: false }).map((job) => job.jobType),
@@ -25,7 +32,7 @@ test('worker does not enqueue FMP work before its credential is configured', () 
 test('worker does not enqueue scheduled Codex work when synthesis is disabled', () => {
   assert.deepEqual(
     buildDueAgentJobs(new Date('2026-07-27T14:00:00Z'), { includeCodex: false }).map((job) => job.jobType),
-    ['sync-market-assets', 'refresh-market-screener', 'refresh-fmp-intelligence'],
+    ['sync-market-assets', 'refresh-market-screener', 'refresh-fmp-intelligence', 'refresh-cross-asset'],
   )
 })
 

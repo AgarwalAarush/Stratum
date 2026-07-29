@@ -1,4 +1,6 @@
 import type {
+  CrossAssetObservation,
+  CrossAssetSnapshot,
   MarketEvidence,
   MarketFeed,
   MarketInstrument,
@@ -10,6 +12,7 @@ import type {
 } from '../markets/types.ts'
 import { runScreener } from '../markets/screener.ts'
 import { buildDeterministicMarketMemo, type MarketStateInputs } from '../markets/state.ts'
+import { crossAssetMarketInstrument } from './cross-asset.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 const DATABASE_PAGE_SIZE = 1_000
@@ -73,12 +76,21 @@ function marketInstruments(value: unknown): MarketInstrument[] | null {
   const instruments = value.filter((item): item is MarketInstrument => {
     if (!isRecord(item)) return false
     return typeof item.id === 'string'
+      && typeof item.symbol === 'string'
       && typeof item.label === 'string'
       && typeof item.value === 'string'
       && typeof item.change === 'string'
-      && (item.direction === 'up' || item.direction === 'down')
+      && (item.direction === 'up' || item.direction === 'down' || item.direction === 'flat')
+      && typeof item.instrumentType === 'string'
+      && typeof item.source === 'string'
+      && typeof item.sourceLabel === 'string'
+      && typeof item.sourceUrl === 'string'
+      && typeof item.feedTimestamp === 'string'
+      && typeof item.retrievedAt === 'string'
+      && typeof item.dataStatus === 'string'
+      && typeof item.unit === 'string'
   })
-  return instruments.length > 0 ? instruments : null
+  return instruments
 }
 
 function marketStateInputs(value: unknown): MarketStateInputs | null {
@@ -263,6 +275,8 @@ export async function fetchLatestMarketOverview(): Promise<MarketOverviewRespons
     generatedAt,
   )
 
+  const crossAsset = await fetchLatestCrossAssetSnapshot()
+
   return {
     state: {
       regime: state.regime,
@@ -270,7 +284,7 @@ export async function fetchLatestMarketOverview(): Promise<MarketOverviewRespons
       dataAsOf: state.data_as_of,
     },
     memo,
-    instruments: inputs.instruments,
+    instruments: crossAsset?.observations.map(crossAssetMarketInstrument) ?? inputs.instruments,
     evidence: memoRecord
       ? marketEvidence(memoRecord.sources)
       : [{
@@ -283,5 +297,77 @@ export async function fetchLatestMarketOverview(): Promise<MarketOverviewRespons
     dataAsOf: snapshot.data_as_of,
     generatedAt,
     stale: isStale(snapshot.data_as_of),
+  }
+}
+
+interface CrossAssetSnapshotRecord {
+  id: string
+  status: CrossAssetSnapshot['status']
+  data_as_of: string
+  retrieved_at: string
+  published_at: string | null
+}
+
+interface CrossAssetObservationRecord {
+  instrument_id: string
+  symbol: string
+  label: string
+  instrument_type: CrossAssetObservation['instrumentType']
+  value: number | string
+  previous_value: number | string | null
+  change_percent: number | string | null
+  unit: CrossAssetObservation['unit']
+  source: CrossAssetObservation['source']
+  source_label: string
+  source_url: string
+  feed_timestamp: string
+  retrieved_at: string
+  data_status: CrossAssetObservation['dataStatus']
+}
+
+export async function fetchLatestCrossAssetSnapshot(): Promise<CrossAssetSnapshot | null> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+  const { data: snapshotData, error: snapshotError } = await supabase
+    .from('cross_asset_snapshots')
+    .select('id,status,data_as_of,retrieved_at,published_at')
+    .eq('status', 'complete')
+    .eq('is_latest', true)
+    .maybeSingle()
+  if (snapshotError || !snapshotData) return null
+  const snapshot = snapshotData as CrossAssetSnapshotRecord
+  const { data, error } = await supabase
+    .from('cross_asset_observations')
+    .select('instrument_id,symbol,label,instrument_type,value,previous_value,change_percent,unit,source,source_label,source_url,feed_timestamp,retrieved_at,data_status')
+    .eq('snapshot_id', snapshot.id)
+  if (error || !data) return null
+
+  const observations = (data as CrossAssetObservationRecord[]).map((row) => ({
+    id: row.instrument_id,
+    symbol: row.symbol,
+    label: row.label,
+    instrumentType: row.instrument_type,
+    value: Number(row.value),
+    previousValue: row.previous_value === null ? null : Number(row.previous_value),
+    changePercent: row.change_percent === null ? null : Number(row.change_percent),
+    unit: row.unit,
+    source: row.source,
+    sourceLabel: row.source_label,
+    sourceUrl: row.source_url,
+    feedTimestamp: row.feed_timestamp,
+    retrievedAt: row.retrieved_at,
+    dataStatus: row.data_status,
+  })).sort((left, right) => {
+    const order = ['sp500', 'nasdaq-composite', 'russell-2000', 'dow', 'vix', 'us-2y', 'us-10y', 'broad-usd', 'wti', 'gold', 'bitcoin']
+    return order.indexOf(left.id) - order.indexOf(right.id)
+  })
+
+  return {
+    id: snapshot.id,
+    status: snapshot.status,
+    observations,
+    dataAsOf: snapshot.data_as_of,
+    retrievedAt: snapshot.retrieved_at,
+    publishedAt: snapshot.published_at,
   }
 }

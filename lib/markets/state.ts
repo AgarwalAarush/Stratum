@@ -1,14 +1,5 @@
 import type { MarketInstrument, MarketMemo, MarketState, ScreenerRow } from './types.ts'
 
-const INSTRUMENTS = [
-  { symbol: 'SPY', label: 'S&P 500 ETF' },
-  { symbol: 'QQQ', label: 'Nasdaq 100 ETF' },
-  { symbol: 'IWM', label: 'Russell 2000 ETF' },
-  { symbol: 'TLT', label: '20Y Treasuries' },
-  { symbol: 'UUP', label: 'US Dollar ETF' },
-  { symbol: 'USO', label: 'WTI Oil ETF' },
-] as const
-
 export interface MarketStateInputs {
   advancingPercent: number
   aboveFiftyDayPercent: number
@@ -63,21 +54,6 @@ function round(value: number): number {
   return Math.round(value * 100) / 100
 }
 
-function instrumentsFromRows(rows: ScreenerRow[]): MarketInstrument[] {
-  const bySymbol = new Map(rows.map((row) => [row.symbol, row]))
-  return INSTRUMENTS.flatMap(({ symbol, label }) => {
-    const row = bySymbol.get(symbol)
-    if (!row) return []
-    return [{
-      id: symbol.toLowerCase(),
-      label,
-      value: row.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      change: `${row.dailyChange >= 0 ? '+' : ''}${row.dailyChange.toFixed(2)}%`,
-      direction: row.dailyChange >= 0 ? 'up' as const : 'down' as const,
-    }]
-  })
-}
-
 export function calculateMarketState(rows: ScreenerRow[], dataAsOf: string): { state: MarketState; inputs: MarketStateInputs } {
   if (rows.length === 0) throw new Error('Cannot calculate market state without screener rows')
 
@@ -103,7 +79,9 @@ export function calculateMarketState(rows: ScreenerRow[], dataAsOf: string): { s
       averageChange: round(averageChange),
       leaders: ranked.slice(0, 8).map((row) => ({ symbol: row.symbol, change: row.dailyChange, relativeVolume: row.relativeVolume })),
       laggards: ranked.slice(-8).reverse().map((row) => ({ symbol: row.symbol, change: row.dailyChange, relativeVolume: row.relativeVolume })),
-      instruments: instrumentsFromRows(rows),
+      // Cross-asset observations are materialized independently. Equity ETF
+      // proxies must never be presented as the underlying indexes.
+      instruments: [],
     },
   }
 }

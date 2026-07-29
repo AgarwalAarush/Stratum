@@ -32,7 +32,7 @@ test('market state is calculated deterministically from normalized rows', () => 
   assert.equal(result.state.regime, 'Risk-On, broadening participation')
   assert.equal(result.inputs.advancingPercent, 80)
   assert.equal(result.inputs.aboveFiftyDayPercent, 100)
-  assert.deepEqual(result.inputs.instruments.map((instrument) => instrument.id), ['spy', 'qqq', 'iwm'])
+  assert.deepEqual(result.inputs.instruments, [])
 })
 
 test('market overview has a source-backed deterministic memo without Codex', () => {

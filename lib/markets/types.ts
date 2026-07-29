@@ -1,4 +1,12 @@
 export type MarketFeed = 'illustrative' | 'delayed_sip' | 'iex' | 'sip'
+export type MarketDataStatus = 'real_time' | 'delayed' | 'end_of_day'
+export type CrossAssetInstrumentType =
+  | 'equity_index'
+  | 'volatility_index'
+  | 'treasury_yield'
+  | 'currency_index'
+  | 'commodity'
+  | 'crypto'
 
 export interface MarketAsset {
   symbol: string
@@ -46,10 +54,45 @@ export interface ScreenerSnapshotMeta {
 
 export interface MarketInstrument {
   id: string
+  symbol: string
   label: string
   value: string
   change: string
-  direction: 'up' | 'down'
+  direction: 'up' | 'down' | 'flat'
+  instrumentType: CrossAssetInstrumentType
+  source: 'fmp' | 'fred' | 'illustrative'
+  sourceLabel: string
+  sourceUrl: string
+  feedTimestamp: string
+  retrievedAt: string
+  dataStatus: MarketDataStatus
+  unit: 'index_points' | 'percent' | 'usd'
+}
+
+export interface CrossAssetObservation {
+  id: string
+  symbol: string
+  label: string
+  instrumentType: CrossAssetInstrumentType
+  value: number
+  previousValue: number | null
+  changePercent: number | null
+  unit: MarketInstrument['unit']
+  source: 'fmp' | 'fred'
+  sourceLabel: string
+  sourceUrl: string
+  feedTimestamp: string
+  retrievedAt: string
+  dataStatus: MarketDataStatus
+}
+
+export interface CrossAssetSnapshot {
+  id: string
+  status: 'building' | 'complete' | 'failed'
+  observations: CrossAssetObservation[]
+  dataAsOf: string
+  retrievedAt: string
+  publishedAt: string | null
 }
 
 export interface MarketEvidence {
