@@ -6262,7 +6262,7 @@ body:has(.equity-research-note) {
 .equity-research-sections > section {
   border-bottom: 0;
   max-width: 980px;
-  padding: 58px 0;
+  padding: 38px 0;
 }
 
 .equity-research-sections > section > footer {
