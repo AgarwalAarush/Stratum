@@ -187,8 +187,8 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
               </li>
             ))}
           </ul>
-          <Link href="/markets/screener" className="market-open-screener">
-            Open Screener <span aria-hidden="true">→</span>
+          <Link href="/markets/explore?view=stocks" className="market-open-screener">
+            Explore Stocks <span aria-hidden="true">→</span>
           </Link>
         </div>
         <div>

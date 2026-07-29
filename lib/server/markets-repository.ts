@@ -408,6 +408,7 @@ export async function fetchLatestCandidates(limit = 5): Promise<CandidateBrief[]
     .from('candidate_briefs')
     .select('content')
     .eq('trading_date', latest.trading_date)
+    .eq('status', 'new')
     .order('created_at', { ascending: true })
     .limit(limit)
   if (error || !data) return []
@@ -417,7 +418,7 @@ export async function fetchLatestCandidates(limit = 5): Promise<CandidateBrief[]
   })
 }
 
-export async function fetchStockViewerData(symbolInput: string): Promise<StockViewerData | null> {
+export async function fetchStockViewerData(symbolInput: string, ownerId?: string): Promise<StockViewerData | null> {
   const symbol = symbolInput.trim().toUpperCase()
   if (!/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol)) return null
   const supabase = getSupabaseClient()
@@ -436,13 +437,21 @@ export async function fetchStockViewerData(symbolInput: string): Promise<StockVi
     latestLeadership
       ? supabase.from('market_stock_metrics').select('*').eq('snapshot_id', latestLeadership.id).eq('symbol', symbol).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-    supabase.from('candidate_briefs').select('content').eq('symbol', symbol).order('trading_date', { ascending: false }).limit(1).maybeSingle(),
+    supabase.from('candidate_briefs').select('content,status').eq('symbol', symbol).order('trading_date', { ascending: false }).limit(1).maybeSingle(),
   ])
   if (!screener && !asset) return null
   const leadership = leadershipResult.data ? normalizeStockLeadershipRow(leadershipResult.data) : null
   const candidate = candidateResult.data && isRecord(candidateResult.data.content)
-    ? candidateResult.data.content as unknown as CandidateBrief
+    ? { ...candidateResult.data.content, status: candidateResult.data.status } as unknown as CandidateBrief
     : null
+  const [companyPacket, researchNote, decision, position] = ownerId
+    ? await Promise.all([
+        import('./company-research.ts').then((module) => module.fetchLatestCompanyPacket(ownerId, symbol)),
+        import('./company-research.ts').then((module) => module.fetchLatestEquityResearch(ownerId, symbol)),
+        import('./portfolio.ts').then((module) => module.fetchLatestDecision(ownerId, symbol)),
+        import('./portfolio.ts').then((module) => module.fetchManualPosition(ownerId, symbol)),
+      ])
+    : [null, null, null, null]
   return {
     symbol,
     company: screener?.company ?? asset?.name ?? symbol,
@@ -458,6 +467,10 @@ export async function fetchStockViewerData(symbolInput: string): Promise<StockVi
     feed: latestMarket.feed,
     leadership,
     candidate,
+    companyPacket,
+    researchNote,
+    decision,
+    position,
     history: (bars ?? []).map((bar) => ({
       tradingDate: bar.trading_date,
       close: Number(bar.close),

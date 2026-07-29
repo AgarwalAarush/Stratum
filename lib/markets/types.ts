@@ -267,7 +267,152 @@ export interface StockViewerData {
   feed: MarketFeed
   leadership: StockLeadershipMetric | null
   candidate: CandidateBrief | null
+  companyPacket: CompanyPacket | null
+  researchNote: EquityResearchNote | null
+  decision: ThesisDecision | null
+  position: ManualPosition | null
   history: StockPricePoint[]
+}
+
+export interface CompanyPacketSource {
+  id: string
+  label: string
+  url: string
+  source: string
+  asOf: string
+}
+
+export interface CompanyPacket {
+  id: string
+  symbol: string
+  version: number
+  dataAsOf: string
+  generatedAt: string
+  priceHistory: {
+    latestPrice: number
+    return30d: number | null
+    return1y: number | null
+    vs50DayAverage: number | null
+    vs200DayAverage: number | null
+  }
+  company: Record<string, string | number | boolean | null>
+  fundamentals: Array<Record<string, string | number | boolean | null>>
+  ratios: Record<string, number | null>
+  estimates: Array<Record<string, string | number | null>>
+  peers: string[]
+  filings: Array<{ title: string; url: string; publishedAt: string }>
+  events: Array<{ title: string; url: string; publishedAt: string; category: string }>
+  industryContext: {
+    sector: string
+    subIndustry: string
+    groupReturn30d: number | null
+    groupReturn1y: number | null
+  }
+  existingThesis: ThesisDecision | null
+  sources: CompanyPacketSource[]
+}
+
+export type EquityResearchSectionId =
+  | 'executive_summary'
+  | 'variant_view'
+  | 'business_model'
+  | 'industry_structure'
+  | 'competitive_position'
+  | 'management_and_governance'
+  | 'historical_financials'
+  | 'earnings_quality'
+  | 'forward_estimates'
+  | 'valuation'
+  | 'catalysts'
+  | 'risks'
+  | 'scenario_analysis'
+  | 'thesis_monitoring'
+  | 'sources_and_method'
+
+export interface EquityResearchSection {
+  id: EquityResearchSectionId
+  title: string
+  content: string
+  sourceIds: string[]
+}
+
+export interface EquityResearchNote {
+  id: string
+  symbol: string
+  version: number
+  status: 'queued' | 'running' | 'complete' | 'failed'
+  formalRating: 'BUY' | 'HOLD' | 'SELL' | 'NOT_RATED'
+  entryAction: 'buy_now' | 'nibble' | 'wait' | 'add_on_weakness' | 'avoid'
+  keyDebate: string
+  mispricing: string
+  fastestKillSignal: string
+  fairValue: number | null
+  entryZoneLow: number | null
+  entryZoneHigh: number | null
+  confidence: number
+  sections: EquityResearchSection[]
+  sourceIds: string[]
+  provider: string
+  model: string
+  dataAsOf: string
+  generatedAt: string
+  error: string | null
+}
+
+export interface ThesisKillCriterion {
+  id: string
+  description: string
+  metric?: 'price' | 'revenue_growth' | 'estimate_growth'
+  operator?: 'lt' | 'gt'
+  value?: number
+}
+
+export interface ThesisDecision {
+  id: string
+  symbol: string
+  disposition: 'own' | 'watch' | 'avoid'
+  formalRating: 'BUY' | 'HOLD' | 'SELL' | 'NOT_RATED'
+  entryAction: 'buy_now' | 'nibble' | 'wait' | 'add_on_weakness' | 'avoid'
+  fairValue: number | null
+  entryZoneLow: number | null
+  entryZoneHigh: number | null
+  conviction: number | null
+  nextCatalyst: string | null
+  killCriteria: ThesisKillCriterion[]
+  rationale: string
+  createdAt: string
+}
+
+export interface ManualPosition {
+  id: string
+  symbol: string
+  shares: number
+  costBasisPerShare: number
+  openedAt: string | null
+  notes: string
+  updatedAt: string
+}
+
+export interface DecisionInboxItem {
+  id: string
+  type: 'new_candidate' | 'thesis_refresh' | 'entry_zone_arrival' | 'catalyst' | 'kill_criterion_breach'
+  symbol: string
+  title: string
+  summary: string
+  evidence: Array<{ label: string; url: string; asOf: string }>
+  status: 'open' | 'dismissed' | 'resolved'
+  dedupeKey: string
+  occurredAt: string
+  createdAt: string
+}
+
+export interface PortfolioWorkspaceData {
+  watchlists: import('./watchlists.ts').MarketWatchlistState
+  watchlistsPersisted: boolean
+  positions: ManualPosition[]
+  decisions: ThesisDecision[]
+  decisionHistory: ThesisDecision[]
+  inbox: DecisionInboxItem[]
 }
 
 export type ScreenerPreset = 'momentum' | 'unusual-volume' | 'near-highs' | 'gap-movers'

@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import type { StockPricePoint, StockViewerData } from '@/lib/markets/types'
+import { CapitalDecisionRail } from './CapitalDecisionRail'
+import { CandidateActions } from './CandidateActions'
 
 function money(value: number): string {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
@@ -7,6 +9,20 @@ function money(value: number): string {
 
 function percent(value: number | null): string {
   return value === null ? '—' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
+}
+
+function compact(value: unknown, style: 'number' | 'currency' = 'number'): string {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? new Intl.NumberFormat('en-US', {
+      notation: 'compact',
+      maximumFractionDigits: 1,
+      ...(style === 'currency' ? { style: 'currency', currency: 'USD' } : {}),
+    }).format(value)
+    : '—'
+}
+
+function multiple(value: number | null | undefined): string {
+  return value === null || value === undefined ? '—' : `${value.toFixed(1)}×`
 }
 
 function StockHistoryChart({ history, symbol }: { history: StockPricePoint[]; symbol: string }) {
@@ -31,6 +47,10 @@ function StockHistoryChart({ history, symbol }: { history: StockPricePoint[]; sy
 export function StockViewer({ data }: { data: StockViewerData }) {
   const metric = data.leadership
   const candidate = data.candidate
+  const packet = data.companyPacket
+  const latestFinancials = packet?.fundamentals[0]
+  const latestEstimate = packet?.estimates[0]
+  const research = data.researchNote
   return (
     <article className="stock-viewer">
       <header className="stock-viewer-hero" id="overview">
@@ -70,15 +90,29 @@ export function StockViewer({ data }: { data: StockViewerData }) {
           </section>
 
           <section className="stock-viewer-section" id="financials">
-            <p className="markets-eyebrow">Deterministic packet</p>
+            <p className="markets-eyebrow">{packet ? `CompanyPacket v${packet.version} · ${new Date(packet.dataAsOf).toLocaleDateString()}` : 'Deterministic packet'}</p>
             <h2>Financials</h2>
-            <p>Revenue, margins, cash flow, balance-sheet trends, and estimate history are assembled into the versioned CompanyPacket before full research runs.</p>
+            {latestFinancials ? (
+              <div className="stock-viewer-stat-grid">
+                <div><span>Revenue</span><strong>{compact(latestFinancials.revenue, 'currency')}</strong></div>
+                <div><span>Net income</span><strong>{compact(latestFinancials.netIncome, 'currency')}</strong></div>
+                <div><span>EPS</span><strong>{compact(latestFinancials.eps)}</strong></div>
+                <div><span>Reported period</span><strong>{String(latestFinancials.calendarYear ?? latestFinancials.date ?? '—')}</strong></div>
+              </div>
+            ) : <p>Revenue, margins, cash flow, balance-sheet trends, and estimate history are assembled into the versioned CompanyPacket before full research runs.</p>}
           </section>
 
           <section className="stock-viewer-section" id="valuation">
             <p className="markets-eyebrow">Price versus expectations</p>
             <h2>Valuation</h2>
-            <p>{candidate?.valuationSnapshot ?? 'Current and historical valuation context will appear after the CompanyPacket is materialized.'}</p>
+            {packet ? (
+              <div className="stock-viewer-stat-grid">
+                <div><span>P/E</span><strong>{multiple(packet.ratios.peRatio)}</strong></div>
+                <div><span>Price / sales</span><strong>{multiple(packet.ratios.priceToSales)}</strong></div>
+                <div><span>Return on equity</span><strong>{percent(packet.ratios.returnOnEquity === null ? null : packet.ratios.returnOnEquity * 100)}</strong></div>
+                <div><span>Net margin</span><strong>{percent(packet.ratios.netMargin === null ? null : packet.ratios.netMargin * 100)}</strong></div>
+              </div>
+            ) : <p>{candidate?.valuationSnapshot ?? 'Current and historical valuation context will appear after the CompanyPacket is materialized.'}</p>}
           </section>
 
           <section className="stock-viewer-section" id="industry-context">
@@ -90,19 +124,29 @@ export function StockViewer({ data }: { data: StockViewerData }) {
           <section className="stock-viewer-section" id="earnings">
             <p className="markets-eyebrow">Expectations and inflections</p>
             <h2>Earnings</h2>
-            <p>{candidate?.catalyst ?? 'The next earnings event and estimate revisions will be shown from the normalized company packet.'}</p>
+            {latestEstimate ? (
+              <div className="stock-viewer-stat-grid">
+                <div><span>Estimate period</span><strong>{String(latestEstimate.date ?? latestEstimate.calendarYear ?? '—')}</strong></div>
+                <div><span>Estimated revenue</span><strong>{compact(latestEstimate.estimatedRevenueAvg, 'currency')}</strong></div>
+                <div><span>Estimated EPS</span><strong>{compact(latestEstimate.estimatedEpsAvg)}</strong></div>
+                <div><span>Next catalyst</span><strong>{data.decision?.nextCatalyst ?? candidate?.catalyst ?? '—'}</strong></div>
+              </div>
+            ) : <p>{candidate?.catalyst ?? 'The next earnings event and estimate revisions will be shown from the normalized company packet.'}</p>}
           </section>
 
           <section className="stock-viewer-section" id="events">
             <p className="markets-eyebrow">Filings, news, and catalysts</p>
             <h2>Events</h2>
+            {packet?.events.slice(0, 3).map((event) => (
+              <p key={`${event.url}-${event.publishedAt}`}><a href={event.url} target="_blank" rel="noreferrer">{event.title}</a> · {new Date(event.publishedAt).toLocaleDateString()}</p>
+            ))}
             <Link href={`/markets/events?symbol=${data.symbol}`}>Open events relevant to {data.symbol} →</Link>
           </section>
 
           <section className="stock-viewer-section stock-viewer-research-summary" id="research">
             <p className="markets-eyebrow">Equity research</p>
-            <h2>{candidate ? 'Why this name surfaced' : 'No full thesis yet'}</h2>
-            <p>{candidate?.whySurfaced ?? 'Generate a versioned research artifact when this name deserves capital-allocation work.'}</p>
+            <h2>{research?.keyDebate ?? (candidate ? 'Why this name surfaced' : 'No full thesis yet')}</h2>
+            <p>{research?.mispricing ?? candidate?.whySurfaced ?? 'Generate a versioned research artifact when this name deserves capital-allocation work.'}</p>
             {candidate ? (
               <div className="stock-viewer-dimensions">
                 {candidate.dimensions.map((dimension) => (
@@ -114,27 +158,17 @@ export function StockViewer({ data }: { data: StockViewerData }) {
                 ))}
               </div>
             ) : null}
+            {candidate?.status === 'new' ? <CandidateActions candidateId={candidate.id} /> : null}
             <Link href={`/markets/stocks/${data.symbol}/research`}>Read full analysis →</Link>
           </section>
         </div>
 
-        <aside className="stock-decision-rail">
-          <p className="markets-eyebrow">Decision, not execution</p>
-          <h2>Capital allocation</h2>
-          <dl>
-            <div><dt>Disposition</dt><dd>Unclassified</dd></div>
-            <div><dt>Formal rating</dt><dd>Not researched</dd></div>
-            <div><dt>Entry action</dt><dd>Wait</dd></div>
-            <div><dt>Fair value</dt><dd>—</dd></div>
-            <div><dt>Entry zone</dt><dd>—</dd></div>
-            <div><dt>Conviction</dt><dd>—</dd></div>
-            <div><dt>Next catalyst</dt><dd>{candidate?.catalyst ?? '—'}</dd></div>
-            <div><dt>Kill criteria</dt><dd>{candidate?.redFlags[0] ?? 'Define after research'}</dd></div>
-          </dl>
-          <button type="button">Add to watchlist</button>
-          <Link href={`/markets/stocks/${data.symbol}/research`}>Generate / refresh research</Link>
-          <small>Trading and order placement are intentionally out of scope.</small>
-        </aside>
+        <CapitalDecisionRail
+          symbol={data.symbol}
+          initial={data.decision}
+          research={data.researchNote}
+          candidate={data.candidate}
+        />
       </div>
     </article>
   )

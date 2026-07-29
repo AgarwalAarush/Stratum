@@ -1,31 +1,41 @@
+import Link from 'next/link'
 import { MarketsFeedPage } from '@/components/markets/MarketsFeedPage'
+import { requireAllowedMarketUser } from '@/lib/auth/supabase-server'
 import { fetchFinanceReports } from '@/lib/data/finance-reports'
 import { fetchPersistedFmpMarketItems } from '@/lib/data/fmp-intelligence'
 import { mergeMarketNews } from '@/lib/markets/news'
+import { fetchEquityResearchLibrary } from '@/lib/server/company-research'
 
-function normalizeSymbol(value: string | string[] | undefined): string | null {
-  if (typeof value !== 'string') return null
-  const symbol = value.trim().toUpperCase()
-  return /^[A-Z][A-Z0-9.-]{0,5}$/.test(symbol) ? symbol : null
-}
-
-export default async function MarketsResearchPage({ searchParams }: { searchParams: Promise<{ symbol?: string | string[] }> }) {
-  const symbol = normalizeSymbol((await searchParams).symbol)
-  const [reports, filings] = await Promise.all([
+export default async function MarketsResearchPage() {
+  const user = await requireAllowedMarketUser()
+  const [notes, reports, filings] = await Promise.all([
+    fetchEquityResearchLibrary(user.id),
     fetchFinanceReports(30).catch(() => []),
     fetchPersistedFmpMarketItems(['fmp-sec-filings'], 30).catch(() => []),
   ])
   const items = mergeMarketNews([filings, reports], 40)
-
   return (
-    <MarketsFeedPage
-      eyebrow={symbol ? `${symbol} research context` : 'Research library'}
-      title={symbol ? `Research around ${symbol}` : 'Institutional ideas and theses'}
-      description={symbol
-        ? `Current market and thematic research opened from the ${symbol} screener row. Company-specific authored notes will join this evidence feed when a durable research artifact exists.`
-        : 'Current SEC filings from FMP plus institutional reports and thematic work, normalized with source and publication timestamps.'}
-      items={items}
-      emptyMessage="No current research report is inside the verified lookback window."
-    />
+    <div className="markets-research-library">
+      <header className="market-explore-heading">
+        <div><p className="markets-eyebrow">Immutable research versions</p><h1 className="markets-display">Research</h1></div>
+        <span>{notes.length} generated artifacts</span>
+      </header>
+      <section className="research-artifact-grid">
+        {notes.length === 0 ? <p>No full research artifacts yet. Promote a Candidate Scout brief or generate one from a Stock Viewer.</p> : notes.map((note) => (
+          <Link key={note.id} href={`/markets/stocks/${note.symbol}/research`}>
+            <div><strong>{note.symbol}</strong><span>v{note.version}</span></div>
+            <h2>{note.keyDebate || `${note.status} research version`}</h2>
+            <footer><span>{note.formalRating}</span><span>{note.entryAction.replaceAll('_', ' ')}</span><time>{new Date(note.generatedAt).toLocaleDateString()}</time></footer>
+          </Link>
+        ))}
+      </section>
+      <MarketsFeedPage
+        eyebrow="Supporting evidence"
+        title="Filings and institutional context"
+        description="Source material that can be promoted into a versioned CompanyPacket and full research note."
+        items={items}
+        emptyMessage="No current research evidence is inside the verified lookback window."
+      />
+    </div>
   )
 }

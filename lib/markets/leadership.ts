@@ -24,6 +24,26 @@ export interface BuildLeadershipOptions {
   relativeVolumeBySymbol?: ReadonlyMap<string, number>
 }
 
+export function buildStockLeadershipMetrics(
+  companies: LeadershipCompany[],
+  bars: LeadershipPriceBar[],
+  options: Pick<BuildLeadershipOptions, 'relativeVolumeBySymbol'> = {},
+): StockLeadershipMetric[] {
+  if (bars.length === 0) return []
+  const barsBySymbol = new Map<string, LeadershipPriceBar[]>()
+  for (const bar of bars) barsBySymbol.set(bar.symbol, [...(barsBySymbol.get(bar.symbol) ?? []), bar])
+  const latestDate = bars.reduce((latest, bar) => bar.tradingDate > latest ? bar.tradingDate : latest, bars[0]!.tradingDate)
+  return companies.flatMap((company) => {
+    const metric = stockMetric(
+      company,
+      barsBySymbol.get(company.symbol) ?? [],
+      latestDate,
+      options.relativeVolumeBySymbol?.get(company.symbol) ?? null,
+    )
+    return metric ? [metric] : []
+  })
+}
+
 function percent(now: number, then: number | null | undefined): number | null {
   return then !== null && then !== undefined && then !== 0 ? rounded((now / then - 1) * 100) : null
 }
@@ -168,18 +188,8 @@ export function buildMarketLeadershipSnapshot(
   options: BuildLeadershipOptions = {},
 ): MarketLeadershipSnapshot {
   if (companies.length === 0 || bars.length === 0) throw new Error('Leadership requires a universe and price history')
-  const barsBySymbol = new Map<string, LeadershipPriceBar[]>()
-  for (const bar of bars) barsBySymbol.set(bar.symbol, [...(barsBySymbol.get(bar.symbol) ?? []), bar])
   const latestDate = bars.reduce((latest, bar) => bar.tradingDate > latest ? bar.tradingDate : latest, bars[0]!.tradingDate)
-  const stocks = companies.flatMap((company) => {
-    const metric = stockMetric(
-      company,
-      barsBySymbol.get(company.symbol) ?? [],
-      latestDate,
-      options.relativeVolumeBySymbol?.get(company.symbol) ?? null,
-    )
-    return metric ? [metric] : []
-  })
+  const stocks = buildStockLeadershipMetrics(companies, bars, options)
   if (stocks.length === 0) throw new Error('No company has sufficient price history for leadership')
 
   const sectors = aggregateLeadershipGroups(stocks, 'sector')

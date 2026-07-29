@@ -37,7 +37,7 @@ test('SPY workbook parser rejects incomplete source data', () => {
   assert.throws(() => parseSpyHoldingsWorkbook(workbookWithSymbols(['AAPL', 'MSFT'])), /only 2 eligible symbols/)
 })
 
-test('market universe includes S&P 500 and watchlist assets only once', () => {
+test('market universe includes S&P 500 and tracked assets only once', () => {
   const asset = (symbol: string, active = true, tradable = true): MarketAsset => ({
     symbol,
     name: symbol,
@@ -54,6 +54,12 @@ test('market universe includes S&P 500 and watchlist assets only once', () => {
 
 test('market universe always carries the overview benchmark instruments', () => {
   assert.deepEqual(MARKET_BENCHMARK_SYMBOLS, ['SPY', 'QQQ', 'IWM', 'TLT', 'UUP', 'USO'])
+})
+
+test('resolved universe loads both watchlisted and manually owned symbols', () => {
+  const source = readFileSync(join(process.cwd(), 'lib/server/market-universe.ts'), 'utf8')
+  assert.match(source, /from\('market_watchlist_items'\)\.select\('symbol'\)/)
+  assert.match(source, /from\('manual_positions'\)\.select\('symbol'\)/)
 })
 
 test('market universe migrations keep membership private and foreign keys indexed', () => {

@@ -4,6 +4,11 @@ import {
   type CandidateFundamentals,
   type CandidateHistory,
 } from '../markets/candidates.ts'
+import {
+  buildStockLeadershipMetrics,
+  type LeadershipCompany,
+  type LeadershipPriceBar,
+} from '../markets/leadership.ts'
 import type { CandidateBrief, MarketGroupMetric, StockLeadershipMetric } from '../markets/types.ts'
 import { fetchFmpStableJson } from './fmp.ts'
 import { normalizeStockLeadershipRow } from './market-leadership.ts'
@@ -119,6 +124,62 @@ function technicalPrefilter(stocks: StockLeadershipMetric[], count = 36): StockL
     .slice(0, count)
 }
 
+async function loadTrackedStockMetrics(
+  existing: StockLeadershipMetric[],
+  apiKey: string,
+  fetchImpl: typeof fetch,
+  now: Date,
+): Promise<StockLeadershipMetric[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return []
+  const [{ data: listItems }, { data: positions }, { data: marketSnapshot }] = await Promise.all([
+    supabase.from('market_watchlist_items').select('symbol,market_watchlists!inner(owner_id)')
+      .not('market_watchlists.owner_id', 'is', null),
+    supabase.from('manual_positions').select('symbol'),
+    supabase.from('market_snapshots').select('id,feed').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
+  ])
+  if (!marketSnapshot) return []
+  const existingSymbols = new Set(existing.map((stock) => stock.symbol))
+  const symbols = [...new Set([
+    ...(listItems ?? []).map((item) => item.symbol),
+    ...(positions ?? []).map((item) => item.symbol),
+  ])].filter((symbol) => !existingSymbols.has(symbol))
+  if (symbols.length === 0) return []
+
+  const companies: LeadershipCompany[] = await Promise.all(symbols.map(async (symbol) => {
+    const profile = first(await fetchFmpStableJson<unknown>('profile', { symbol }, { apiKey, fetchImpl }))
+    return {
+      symbol,
+      company: String(profile.companyName ?? profile.name ?? symbol),
+      sector: String(profile.sector ?? 'Unknown'),
+      subIndustry: String(profile.industry ?? 'Unknown'),
+    }
+  }))
+  const start = new Date(now)
+  start.setUTCDate(start.getUTCDate() - 430)
+  const bars: LeadershipPriceBar[] = []
+  for (let from = 0; ; from += 1_000) {
+    const { data, error } = await supabase.from('market_bars_daily').select('symbol,trading_date,close')
+      .in('symbol', symbols).eq('feed', marketSnapshot.feed).gte('trading_date', start.toISOString().slice(0, 10))
+      .order('trading_date', { ascending: true }).range(from, from + 999)
+    if (error) throw new Error(`Unable to load tracked-name history: ${error.message}`)
+    const page = data ?? []
+    bars.push(...page.map((bar) => ({
+      symbol: bar.symbol,
+      tradingDate: bar.trading_date,
+      close: Number(bar.close),
+    })))
+    if (page.length < 1_000) break
+  }
+  const { data: screenerRows, error: screenerError } = await supabase.from('screener_rows')
+    .select('symbol,relative_volume').eq('snapshot_id', marketSnapshot.id).in('symbol', symbols)
+  if (screenerError) throw new Error(`Unable to load tracked-name snapshots: ${screenerError.message}`)
+  const relativeVolumeBySymbol = new Map(
+    (screenerRows ?? []).map((row) => [row.symbol, Number(row.relative_volume)]),
+  )
+  return buildStockLeadershipMetrics(companies, bars, { relativeVolumeBySymbol })
+}
+
 export async function materializeCandidateScout(
   options: CandidateScoutMaterializationOptions = {},
 ): Promise<CandidateBrief[]> {
@@ -143,7 +204,14 @@ export async function materializeCandidateScout(
   if (stockError || groupError || historyError) {
     throw new Error(`Unable to load Candidate Scout inputs: ${stockError?.message ?? groupError?.message ?? historyError?.message}`)
   }
-  const stocks = (stockRows ?? []).map((row) => normalizeStockLeadershipRow(row))
+  const leadershipStocks = (stockRows ?? []).map((row) => normalizeStockLeadershipRow(row))
+  const trackedStocks = await loadTrackedStockMetrics(
+    leadershipStocks,
+    apiKey,
+    options.fetchImpl ?? fetch,
+    now,
+  )
+  const stocks = [...leadershipStocks, ...trackedStocks]
   const groups = (groupRows ?? []).map((row) => normalizeGroup(row))
   const prefiltered = technicalPrefilter(stocks)
   const fundamentals = await Promise.all(prefiltered.map((stock) =>
@@ -190,6 +258,27 @@ export async function materializeCandidateScout(
       material_key: signal.materialKey,
     })), { onConflict: 'candidate_id,kind,material_key' })
     if (signalError) throw new Error(`Unable to persist candidate signals for ${brief.symbol}: ${signalError.message}`)
+  }
+  const [{ data: watchlistOwners }, { data: positionOwners }] = await Promise.all([
+    supabase.from('market_watchlists').select('owner_id').not('owner_id', 'is', null),
+    supabase.from('manual_positions').select('owner_id'),
+  ])
+  const owners = new Set([
+    ...(watchlistOwners ?? []).map((row) => row.owner_id),
+    ...(positionOwners ?? []).map((row) => row.owner_id),
+  ].filter((owner): owner is string => typeof owner === 'string'))
+  for (const ownerId of owners) {
+    const { error } = await supabase.from('decision_inbox_items').upsert(briefs.map((brief) => ({
+      owner_id: ownerId,
+      item_type: 'new_candidate',
+      symbol: brief.symbol,
+      title: `${brief.symbol} surfaced in Candidate Scout`,
+      summary: brief.whySurfaced,
+      evidence: brief.evidence,
+      dedupe_key: `candidate:${brief.id}`,
+      occurred_at: brief.generatedAt,
+    })), { onConflict: 'owner_id,dedupe_key', ignoreDuplicates: true })
+    if (error) throw new Error(`Unable to publish candidate inbox items: ${error.message}`)
   }
   return briefs
 }

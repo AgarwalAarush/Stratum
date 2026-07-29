@@ -71,6 +71,7 @@ export function buildDueAgentJobs(
         tradingDate: now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
       }))
     }
+    jobs.push(scheduledJob('scan-research-refreshes', now))
   }
   const utcHour = now.getUTCHours()
 

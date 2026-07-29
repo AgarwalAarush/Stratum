@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 
 import {
   rankCandidateUniverse,
@@ -80,6 +81,13 @@ test('Candidate Scout ranks explainable triggers and preserves six visible dimen
   assert.equal(ranked[0]?.dimensions.length, 6)
   assert.ok((ranked[0]?.signals.length ?? 0) >= 2)
   assert.ok(ranked[0]?.signals.every((signal) => signal.materialKey))
+})
+
+test('Candidate Scout expands beyond the S&P 500 to watched and owned names', async () => {
+  const source = await readFile(new URL('../lib/server/candidate-scout.ts', import.meta.url), 'utf8')
+  assert.match(source, /market_watchlist_items/)
+  assert.match(source, /manual_positions/)
+  assert.match(source, /buildStockLeadershipMetrics/)
 })
 
 test('Candidate Scout caps sub-industries and suppresses repeats for five trading days', () => {

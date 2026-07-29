@@ -12,6 +12,7 @@ test('worker always schedules Alpaca and FMP ingestion', () => {
     'sync-market-assets',
     'refresh-market-screener',
     'refresh-fmp-intelligence',
+    'scan-research-refreshes',
   ])
 })
 
@@ -38,7 +39,7 @@ test('worker does not enqueue FMP work before its credential is configured', () 
 test('worker does not enqueue scheduled Codex work when synthesis is disabled', () => {
   assert.deepEqual(
     buildDueAgentJobs(new Date('2026-07-27T14:00:00Z'), { includeCodex: false }).map((job) => job.jobType),
-    ['sync-market-assets', 'refresh-market-screener', 'refresh-fmp-intelligence', 'refresh-cross-asset'],
+    ['sync-market-assets', 'refresh-market-screener', 'refresh-fmp-intelligence', 'refresh-cross-asset', 'scan-research-refreshes'],
   )
 })
 
@@ -47,6 +48,7 @@ test('worker schedules daily intelligence only after its UTC release time', () =
     'sync-market-assets',
     'refresh-market-screener',
     'refresh-fmp-intelligence',
+    'scan-research-refreshes',
   ])
   assert.ok(jobTypes('2026-07-28T12:00:00Z').includes('generate-morning-brief'))
 })

@@ -6,6 +6,8 @@ import { getAlpacaClient } from './alpaca.ts'
 import { materializeCrossAssetSnapshot } from './cross-asset.ts'
 import { materializeCandidateScout } from './candidate-scout.ts'
 import { materializeMarketLeadership } from './market-leadership.ts'
+import { generateFullEquityResearch } from './company-research.ts'
+import { scanResearchRefreshes } from './research-monitoring.ts'
 import { materializeMarketMemo } from './market-memo.ts'
 import { resolveMarketUniverse } from './market-universe.ts'
 import {
@@ -22,6 +24,9 @@ export const AGENT_JOB_TYPES = [
   'refresh-cross-asset',
   'materialize-market-leadership',
   'run-candidate-scout',
+  'generate-company-research',
+  'event-refresh-company-research',
+  'scan-research-refreshes',
   'refresh-fmp-intelligence',
   'generate-market-memo',
   'generate-morning-brief',
@@ -77,8 +82,18 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
     return `${jobType}:${bucket.toISOString()}`
   }
+  if (jobType === 'scan-research-refreshes') {
+    const bucket = new Date(now)
+    bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
+    return `${jobType}:${bucket.toISOString()}`
+  }
   if ((jobType === 'materialize-market-leadership' || jobType === 'run-candidate-scout') && typeof payload.tradingDate === 'string') {
     return `${jobType}:${payload.tradingDate}`
+  }
+  if ((jobType === 'generate-company-research' || jobType === 'event-refresh-company-research')
+    && typeof payload.ownerId === 'string' && typeof payload.symbol === 'string') {
+    const event = typeof payload.eventId === 'string' ? `:${payload.eventId}` : ''
+    return `${jobType}:${payload.ownerId}:${payload.symbol}:${now.toISOString().slice(0, 10)}${event}`
   }
   return `${jobType}:${now.toISOString().slice(0, 10)}`
 }
@@ -86,7 +101,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
 export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'run-candidate-scout') return 'fmp'
-  if (jobType === 'refresh-cross-asset' || jobType === 'materialize-market-leadership') return 'market-data'
+  if (jobType === 'refresh-cross-asset' || jobType === 'materialize-market-leadership' || jobType === 'scan-research-refreshes') return 'market-data'
   return 'codex'
 }
 
@@ -202,6 +217,18 @@ async function executeJob(job: AgentJobRecord): Promise<unknown> {
       symbols: briefs.map((brief) => brief.symbol),
       tradingDate: briefs[0]?.tradingDate ?? null,
     }
+  }
+
+  if (job.job_type === 'generate-company-research' || job.job_type === 'event-refresh-company-research') {
+    const ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : ''
+    const symbol = typeof job.payload.symbol === 'string' ? job.payload.symbol.toUpperCase() : ''
+    if (!ownerId || !symbol) throw new Error('Research jobs require ownerId and symbol')
+    const note = await generateFullEquityResearch(symbol, ownerId, String(job.payload.reason ?? 'manual'))
+    return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf }
+  }
+
+  if (job.job_type === 'scan-research-refreshes') {
+    return scanResearchRefreshes()
   }
 
   if (job.job_type === 'generate-market-memo') {

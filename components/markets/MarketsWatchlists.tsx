@@ -23,6 +23,8 @@ import type { ScreenerResponse, ScreenerRow } from '@/lib/markets/types'
 
 interface MarketsWatchlistsProps {
   universe: ScreenerResponse
+  initialState?: MarketWatchlistState
+  migrateLocalOnMount?: boolean
 }
 
 function formatPrice(value: number): string {
@@ -60,12 +62,12 @@ function nextListId(): string {
     : `list-${Date.now()}`
 }
 
-export function MarketsWatchlists({ universe }: MarketsWatchlistsProps) {
+export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount = false }: MarketsWatchlistsProps) {
   const fallbackState = useMemo(
     () => createDefaultWatchlistState(universe.rows.map((row) => row.symbol)),
     [universe.rows],
   )
-  const [state, setState] = useState<MarketWatchlistState>(fallbackState)
+  const [state, setState] = useState<MarketWatchlistState>(initialState ?? fallbackState)
   const [hydrated, setHydrated] = useState(false)
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -75,21 +77,59 @@ export function MarketsWatchlists({ universe }: MarketsWatchlistsProps) {
   const [renameValue, setRenameValue] = useState('')
   const [deleteArmed, setDeleteArmed] = useState(false)
   const [notice, setNotice] = useState('')
+  const [persistence, setPersistence] = useState<'loading' | 'server' | 'local'>('loading')
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(WATCHLIST_STORAGE_KEY)
-      if (saved) setState(parseWatchlistState(JSON.parse(saved), fallbackState))
-    } catch {
-      setNotice('Saved lists could not be read. A fresh local list is ready instead.')
-    } finally {
-      setHydrated(true)
+    let active = true
+    const migrate = async () => {
+      let nextState = initialState ?? fallbackState
+      try {
+        const saved = localStorage.getItem(WATCHLIST_STORAGE_KEY)
+        if (migrateLocalOnMount && saved) nextState = parseWatchlistState(JSON.parse(saved), nextState)
+      } catch {
+        setNotice('Saved lists could not be read. A fresh list is ready instead.')
+      }
+      try {
+        const response = await fetch('/api/markets/portfolio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'replace-watchlists', state: nextState }),
+        })
+        const payload = await response.json()
+        if (!response.ok) throw new Error()
+        if (active) {
+          setState(payload.watchlists)
+          setPersistence('server')
+        }
+      } catch {
+        if (active) {
+          setState(nextState)
+          setPersistence('local')
+        }
+      } finally {
+        if (active) setHydrated(true)
+      }
     }
-  }, [fallbackState])
+    void migrate()
+    return () => { active = false }
+  }, [fallbackState, initialState, migrateLocalOnMount])
 
   useEffect(() => {
     if (!hydrated) return
     localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(state))
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch('/api/markets/portfolio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'replace-watchlists', state }),
+        })
+        setPersistence(response.ok ? 'server' : 'local')
+      } catch {
+        setPersistence('local')
+      }
+    }, 250)
+    return () => window.clearTimeout(timeout)
   }, [hydrated, state])
 
   const activeList = state.lists.find((list) => list.id === state.activeListId) ?? state.lists[0]!
@@ -179,7 +219,7 @@ export function MarketsWatchlists({ universe }: MarketsWatchlistsProps) {
     <section className="market-watchlists" aria-labelledby="market-watchlists-title">
       <header className="market-screener-heading market-watchlists-heading">
         <h1 id="market-watchlists-title" className="markets-display">Watchlists</h1>
-        <p>{feedLabel(universe.feed)} data · As of {formatMarketTime(universe.dataAsOf)}{universe.stale ? ' · Stale' : ''} · Saved on this device</p>
+        <p>{feedLabel(universe.feed)} data · As of {formatMarketTime(universe.dataAsOf)}{universe.stale ? ' · Stale' : ''} · {persistence === 'server' ? 'Saved privately' : 'Local fallback'}</p>
       </header>
 
       <div className="market-watchlist-toolbar">
@@ -283,7 +323,9 @@ export function MarketsWatchlists({ universe }: MarketsWatchlistsProps) {
         </div>
       </div>
 
-      <p className="market-watchlist-notice" aria-live="polite">{notice || (hydrated ? 'Changes save automatically in this browser.' : 'Loading saved lists…')}</p>
+      <p className="market-watchlist-notice" aria-live="polite">
+        {notice || (hydrated ? (persistence === 'server' ? 'Changes save to your private workspace.' : 'Changes are using the local fallback.') : 'Loading saved lists…')}
+      </p>
 
       <div className="market-watchlist-metrics" aria-label={`${activeList.name} summary`}>
         <div><span>Names</span><strong>{activeList.symbols.length}</strong></div>
@@ -338,7 +380,7 @@ export function MarketsWatchlists({ universe }: MarketsWatchlistsProps) {
 
       <footer className="market-screen-footer market-watchlist-footer">
         <span>{activeList.symbols.length} symbols</span>
-        <span>Browser-persisted · no sign-in required</span>
+        <span>{persistence === 'server' ? 'Private server-backed' : persistence === 'loading' ? 'Migrating saved lists…' : 'Local fallback'}</span>
         <span>{universe.rows.length} equities searchable</span>
         <span>{feedLabel(universe.feed)} market snapshot</span>
       </footer>

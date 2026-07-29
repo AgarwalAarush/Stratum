@@ -33,6 +33,18 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
     buildAgentJobDedupeKey('refresh-fmp-intelligence', new Date('2026-07-15T14:33:42Z')),
     'refresh-fmp-intelligence:2026-07-15T14:30:00.000Z',
   )
+  assert.equal(
+    buildAgentJobDedupeKey('scan-research-refreshes', new Date('2026-07-15T14:33:42Z')),
+    'scan-research-refreshes:2026-07-15T14:30:00.000Z',
+  )
+  assert.equal(
+    buildAgentJobDedupeKey('event-refresh-company-research', new Date('2026-07-15T14:33:42Z'), {
+      ownerId: 'owner-1',
+      symbol: 'AAPL',
+      eventId: 'filing-1',
+    }),
+    'event-refresh-company-research:owner-1:AAPL:2026-07-15:filing-1',
+  )
 })
 
 test('agent jobs retain their actual data provider', () => {
@@ -43,6 +55,9 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('materialize-market-leadership'), 'market-data')
   assert.equal(agentJobProvider('run-candidate-scout'), 'fmp')
   assert.equal(agentJobProvider('generate-market-memo'), 'codex')
+  assert.equal(agentJobProvider('generate-company-research'), 'codex')
+  assert.equal(agentJobProvider('event-refresh-company-research'), 'codex')
+  assert.equal(agentJobProvider('scan-research-refreshes'), 'market-data')
 })
 
 test('agent jobs recognize a database missing the dedupe index', () => {

@@ -128,16 +128,23 @@ export async function resolveMarketUniverse(
     }
   }
 
-  const { data: watchlistRows, error: watchlistError } = await supabase
-    .from('market_watchlist_items')
-    .select('symbol')
-  if (watchlistError) throw new Error(`Unable to load watchlist symbols: ${watchlistError.message}`)
+  const [
+    { data: watchlistRows, error: watchlistError },
+    { data: positionRows, error: positionError },
+  ] = await Promise.all([
+    supabase.from('market_watchlist_items').select('symbol'),
+    supabase.from('manual_positions').select('symbol'),
+  ])
+  if (watchlistError || positionError) {
+    throw new Error(`Unable to load tracked symbols: ${watchlistError?.message ?? positionError?.message}`)
+  }
 
   const universe = selectMarketUniverseAssets(
     assets,
     sp500Symbols,
     [
       ...(watchlistRows ?? []).map((row) => row.symbol),
+      ...(positionRows ?? []).map((row) => row.symbol),
       ...MARKET_BENCHMARK_SYMBOLS,
     ],
   )

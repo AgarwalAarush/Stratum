@@ -27,12 +27,14 @@ test('ticker surfaces converge on the canonical Stock Viewer route', () => {
   const screener = source('components/markets/MarketsScreener.tsx')
   const watchlists = source('components/markets/MarketsWatchlists.tsx')
   const viewer = source('components/markets/StockViewer.tsx')
+  const decisionRail = source('components/markets/CapitalDecisionRail.tsx')
   assert.match(screener, /href=\{`\/markets\/stocks\/\$\{row\.symbol\}`\}/)
   assert.match(watchlists, /href=\{`\/markets\/stocks\/\$\{row\.symbol\}`\}/)
-  assert.match(viewer, /Decision, not execution/)
-  assert.match(viewer, /Formal rating/)
-  assert.match(viewer, /Entry action/)
-  assert.match(viewer, /Kill criteria/)
+  assert.match(decisionRail, /Decision, not execution/)
+  assert.match(decisionRail, /Formal rating/)
+  assert.match(decisionRail, /Entry action/)
+  assert.match(decisionRail, /Kill criteria/)
+  assert.match(viewer, /Read full analysis/)
 })
 
 test('Stock Viewer supports intercepted desktop routing and a canonical deep link', () => {

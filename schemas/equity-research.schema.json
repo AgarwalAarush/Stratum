@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formalRating",
+    "entryAction",
+    "keyDebate",
+    "mispricing",
+    "fastestKillSignal",
+    "fairValue",
+    "entryZoneLow",
+    "entryZoneHigh",
+    "confidence",
+    "sections",
+    "sourceIds"
+  ],
+  "properties": {
+    "formalRating": { "enum": ["BUY", "HOLD", "SELL", "NOT_RATED"] },
+    "entryAction": { "enum": ["buy_now", "nibble", "wait", "add_on_weakness", "avoid"] },
+    "keyDebate": { "type": "string", "minLength": 1 },
+    "mispricing": { "type": "string", "minLength": 1 },
+    "fastestKillSignal": { "type": "string", "minLength": 1 },
+    "fairValue": { "type": ["number", "null"] },
+    "entryZoneLow": { "type": ["number", "null"] },
+    "entryZoneHigh": { "type": ["number", "null"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 100 },
+    "sections": {
+      "type": "array",
+      "minItems": 15,
+      "maxItems": 15,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "content", "sourceIds"],
+        "properties": {
+          "id": {
+            "enum": [
+              "executive_summary",
+              "variant_view",
+              "business_model",
+              "industry_structure",
+              "competitive_position",
+              "management_and_governance",
+              "historical_financials",
+              "earnings_quality",
+              "forward_estimates",
+              "valuation",
+              "catalysts",
+              "risks",
+              "scenario_analysis",
+              "thesis_monitoring",
+              "sources_and_method"
+            ]
+          },
+          "title": { "type": "string", "minLength": 1 },
+          "content": { "type": "string", "minLength": 1 },
+          "sourceIds": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "sourceIds": { "type": "array", "items": { "type": "string" } }
+  }
+}
