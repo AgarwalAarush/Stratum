@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 
 import { buildDeterministicMarketMemo, calculateMarketState } from '../lib/markets/state.ts'
 import { buildCodexExecArgs, buildCodexExecEnv } from '../lib/server/codex-exec.ts'
-import { generateMarketMemo } from '../lib/server/market-memo.ts'
+import { generateMarketMemo, shouldRunMarketSynthesis } from '../lib/server/market-memo.ts'
 import type { ScreenerRow } from '../lib/markets/types.ts'
 
 function row(symbol: string, dailyChange: number, price = 110, fiftyDayAverage = 100): ScreenerRow {
@@ -45,6 +45,12 @@ test('market overview has a source-backed deterministic memo without Codex', () 
   assert.match(memo.changes[0]?.body ?? '', /tracked universe/)
   assert.match(memo.changes[2]?.body ?? '', /QQQ \+2.00%/)
   assert.equal(memo.generatedAt, '2026-07-15T20:01:00Z')
+})
+
+test('market synthesis can be disabled while deterministic state stays live', () => {
+  assert.equal(shouldRunMarketSynthesis({ CODEX_SYNTHESIS_ENABLED: 'false' }), false)
+  assert.equal(shouldRunMarketSynthesis({ CODEX_SYNTHESIS_ENABLED: 'true' }), true)
+  assert.equal(shouldRunMarketSynthesis({}), true)
 })
 
 test('Codex runner arguments enforce ephemeral read-only schema output', () => {

@@ -12,6 +12,7 @@ export interface ScheduledAgentJob {
 
 export interface AgentScheduleOptions {
   includeFmp?: boolean
+  includeCodex?: boolean
 }
 
 function scheduledJob(
@@ -37,10 +38,12 @@ export function buildDueAgentJobs(
   if (options.includeFmp !== false) jobs.push(scheduledJob('refresh-fmp-intelligence', now))
   const utcHour = now.getUTCHours()
 
-  if (utcHour >= 12) jobs.push(scheduledJob('generate-morning-brief', now))
-  if (now.getUTCDay() === 1 && utcHour >= 13) jobs.push(scheduledJob('generate-weekly-overview', now))
-  if ([1, 15].includes(now.getUTCDate()) && utcHour >= 14) {
-    jobs.push(scheduledJob('generate-monthly-overview', now))
+  if (options.includeCodex !== false) {
+    if (utcHour >= 12) jobs.push(scheduledJob('generate-morning-brief', now))
+    if (now.getUTCDay() === 1 && utcHour >= 13) jobs.push(scheduledJob('generate-weekly-overview', now))
+    if ([1, 15].includes(now.getUTCDate()) && utcHour >= 14) {
+      jobs.push(scheduledJob('generate-monthly-overview', now))
+    }
   }
 
   return jobs

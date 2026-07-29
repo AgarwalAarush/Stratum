@@ -7,6 +7,10 @@ const ROW_PAGE_SIZE = 1_000
 
 type MarketMemoContent = Omit<MarketMemo, 'generatedAt'>
 
+export function shouldRunMarketSynthesis(environment: NodeJS.ProcessEnv = process.env): boolean {
+  return environment.CODEX_SYNTHESIS_ENABLED !== 'false'
+}
+
 function validateMarketMemo(value: unknown): MarketMemoContent {
   if (typeof value !== 'object' || value === null) throw new Error('Market memo is invalid')
   const memo = value as Record<string, unknown>
@@ -109,6 +113,10 @@ export async function materializeMarketMemo(snapshotId: string): Promise<{ marke
     .select('id')
     .single()
   if (stateError || !stateRecord) throw new Error(`Unable to persist market state: ${stateError?.message ?? 'unknown error'}`)
+
+  if (!shouldRunMarketSynthesis()) {
+    return { marketStateId: stateRecord.id, generatedAt: stateGeneratedAt }
+  }
 
   const generated = await generateMarketMemo(rows, snapshot.data_as_of)
   const evidence = [{

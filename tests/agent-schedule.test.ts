@@ -22,6 +22,13 @@ test('worker does not enqueue FMP work before its credential is configured', () 
   )
 })
 
+test('worker does not enqueue scheduled Codex work when synthesis is disabled', () => {
+  assert.deepEqual(
+    buildDueAgentJobs(new Date('2026-07-27T14:00:00Z'), { includeCodex: false }).map((job) => job.jobType),
+    ['sync-market-assets', 'refresh-market-screener', 'refresh-fmp-intelligence'],
+  )
+})
+
 test('worker schedules daily intelligence only after its UTC release time', () => {
   assert.deepEqual(jobTypes('2026-07-28T11:59:59Z'), [
     'sync-market-assets',

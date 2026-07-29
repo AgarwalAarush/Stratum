@@ -7,6 +7,7 @@ const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 5_000)
 const SCHEDULER_INTERVAL_MS = Number(process.env.WORKER_SCHEDULER_INTERVAL_MS ?? 60_000)
 const schedulerEnabled = process.env.WORKER_SCHEDULER_ENABLED !== 'false'
 const fmpEnabled = Boolean(process.env.FMP_API_KEY)
+const codexEnabled = process.env.CODEX_SYNTHESIS_ENABLED !== 'false'
 const workerId = process.env.WORKER_ID ?? `${hostname()}:${process.pid}`
 const runOnce = process.argv.includes('--once')
 const lastScheduledKeys = new Map<AgentJobType, string>()
@@ -26,11 +27,23 @@ async function main() {
       reason: 'FMP_API_KEY is not configured',
     }))
   }
+  if (schedulerEnabled && !codexEnabled) {
+    console.warn(JSON.stringify({
+      level: 'warn',
+      workerId,
+      event: 'provider_disabled',
+      provider: 'codex',
+      reason: 'CODEX_SYNTHESIS_ENABLED is false',
+    }))
+  }
 
   do {
     try {
       if (schedulerEnabled && Date.now() >= nextScheduleAt) {
-        const scheduled = await enqueueDueAgentJobs(new Date(), lastScheduledKeys, { includeFmp: fmpEnabled })
+        const scheduled = await enqueueDueAgentJobs(new Date(), lastScheduledKeys, {
+          includeFmp: fmpEnabled,
+          includeCodex: codexEnabled,
+        })
         nextScheduleAt = Date.now() + SCHEDULER_INTERVAL_MS
         for (const job of scheduled) {
           console.info(JSON.stringify({
