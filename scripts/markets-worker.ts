@@ -6,6 +6,7 @@ import type { AgentJobType } from '../lib/server/agent-jobs.ts'
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 5_000)
 const SCHEDULER_INTERVAL_MS = Number(process.env.WORKER_SCHEDULER_INTERVAL_MS ?? 60_000)
 const schedulerEnabled = process.env.WORKER_SCHEDULER_ENABLED !== 'false'
+const fmpEnabled = Boolean(process.env.FMP_API_KEY)
 const workerId = process.env.WORKER_ID ?? `${hostname()}:${process.pid}`
 const runOnce = process.argv.includes('--once')
 const lastScheduledKeys = new Map<AgentJobType, string>()
@@ -16,10 +17,20 @@ process.on('SIGINT', () => { stopping = true })
 process.on('SIGTERM', () => { stopping = true })
 
 async function main() {
+  if (schedulerEnabled && !fmpEnabled) {
+    console.warn(JSON.stringify({
+      level: 'warn',
+      workerId,
+      event: 'provider_disabled',
+      provider: 'fmp',
+      reason: 'FMP_API_KEY is not configured',
+    }))
+  }
+
   do {
     try {
       if (schedulerEnabled && Date.now() >= nextScheduleAt) {
-        const scheduled = await enqueueDueAgentJobs(new Date(), lastScheduledKeys)
+        const scheduled = await enqueueDueAgentJobs(new Date(), lastScheduledKeys, { includeFmp: fmpEnabled })
         nextScheduleAt = Date.now() + SCHEDULER_INTERVAL_MS
         for (const job of scheduled) {
           console.info(JSON.stringify({

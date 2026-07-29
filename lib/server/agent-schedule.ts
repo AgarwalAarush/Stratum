@@ -10,6 +10,10 @@ export interface ScheduledAgentJob {
   dedupeKey: string
 }
 
+export interface AgentScheduleOptions {
+  includeFmp?: boolean
+}
+
 function scheduledJob(
   jobType: AgentJobType,
   now: Date,
@@ -22,12 +26,15 @@ function scheduledJob(
   }
 }
 
-export function buildDueAgentJobs(now = new Date()): ScheduledAgentJob[] {
+export function buildDueAgentJobs(
+  now = new Date(),
+  options: AgentScheduleOptions = {},
+): ScheduledAgentJob[] {
   const jobs = [
     scheduledJob('sync-market-assets', now),
     scheduledJob('refresh-market-screener', now),
-    scheduledJob('refresh-fmp-intelligence', now),
   ]
+  if (options.includeFmp !== false) jobs.push(scheduledJob('refresh-fmp-intelligence', now))
   const utcHour = now.getUTCHours()
 
   if (utcHour >= 12) jobs.push(scheduledJob('generate-morning-brief', now))
@@ -42,10 +49,11 @@ export function buildDueAgentJobs(now = new Date()): ScheduledAgentJob[] {
 export async function enqueueDueAgentJobs(
   now = new Date(),
   lastScheduledKeys = new Map<AgentJobType, string>(),
+  options: AgentScheduleOptions = {},
 ): Promise<Array<ScheduledAgentJob & { id: string; deduplicated: boolean }>> {
   const enqueued = []
 
-  for (const job of buildDueAgentJobs(now)) {
+  for (const job of buildDueAgentJobs(now, options)) {
     if (lastScheduledKeys.get(job.jobType) === job.dedupeKey) continue
     const result = await enqueueAgentJob(job.jobType, job.payload, job.dedupeKey)
     lastScheduledKeys.set(job.jobType, job.dedupeKey)

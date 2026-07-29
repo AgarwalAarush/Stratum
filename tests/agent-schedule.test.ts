@@ -15,6 +15,13 @@ test('worker always schedules Alpaca and FMP ingestion', () => {
   ])
 })
 
+test('worker does not enqueue FMP work before its credential is configured', () => {
+  assert.deepEqual(
+    buildDueAgentJobs(new Date('2026-07-28T08:00:00Z'), { includeFmp: false }).map((job) => job.jobType),
+    ['sync-market-assets', 'refresh-market-screener'],
+  )
+})
+
 test('worker schedules daily intelligence only after its UTC release time', () => {
   assert.deepEqual(jobTypes('2026-07-28T11:59:59Z'), [
     'sync-market-assets',
