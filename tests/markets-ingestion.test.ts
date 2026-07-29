@@ -4,6 +4,7 @@ import {
   appendMarketDailyBars,
   mergeMarketDailyBars,
   newestTimestamp,
+  symbolsNeedingHistoryBackfill,
 } from '../lib/server/markets-ingestion.ts'
 import type { MarketDailyBar } from '../lib/markets/types.ts'
 
@@ -56,4 +57,16 @@ test('history accumulation handles a full-universe backfill without a spread ove
   appendMarketDailyBars(target, source)
 
   assert.equal(target.length, source.length)
+})
+
+test('history backfill suppresses young symbols already attempted today', () => {
+  const cache = new Map<string, MarketDailyBar[]>([
+    ['COMPLETE', Array.from({ length: 252 }, (_, index) => bar(`2026-01-${index}`, 100))],
+    ['YOUNG', Array.from({ length: 40 }, (_, index) => bar(`2026-02-${index}`, 100))],
+  ])
+
+  assert.deepEqual(
+    symbolsNeedingHistoryBackfill(['COMPLETE', 'YOUNG', 'MISSING'], cache, new Set(['YOUNG'])),
+    ['MISSING'],
+  )
 })

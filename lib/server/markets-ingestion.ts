@@ -29,7 +29,9 @@ interface DailyBarRow {
 
 let historyCacheFeed: Exclude<MarketFeed, 'illustrative'> | null = null
 let historyIncrementalDate: string | null = null
+let historyBackfillDate: string | null = null
 const historyCache = new Map<string, MarketDailyBar[]>()
+const historyBackfilledSymbols = new Set<string>()
 
 function batches<T>(items: T[], size = DATABASE_BATCH_SIZE): T[][] {
   const result: T[][] = []
@@ -58,6 +60,15 @@ export function appendMarketDailyBars(
   source: MarketDailyBar[],
 ): void {
   for (const bar of source) target.push(bar)
+}
+
+export function symbolsNeedingHistoryBackfill(
+  symbols: string[],
+  cache: ReadonlyMap<string, MarketDailyBar[]>,
+  attemptedSymbols: ReadonlySet<string>,
+): string[] {
+  return symbols.filter((symbol) =>
+    !attemptedSymbols.has(symbol) && (cache.get(symbol)?.length ?? 0) < REQUIRED_HISTORY_BARS)
 }
 
 function normalizeDailyBarRow(row: DailyBarRow): MarketDailyBar {
@@ -136,6 +147,8 @@ async function loadScreenerHistory(
     historyCache.clear()
     historyCacheFeed = feed
     historyIncrementalDate = null
+    historyBackfillDate = null
+    historyBackfilledSymbols.clear()
   }
 
   const start = new Date(now)
@@ -152,15 +165,23 @@ async function loadScreenerHistory(
     }
   }
 
-  const backfillSymbols = symbols.filter((symbol) =>
-    (historyCache.get(symbol)?.length ?? 0) < REQUIRED_HISTORY_BARS)
   const today = isoDate(now)
+  if (historyBackfillDate !== today) {
+    historyBackfillDate = today
+    historyBackfilledSymbols.clear()
+  }
+  const backfillSymbols = symbolsNeedingHistoryBackfill(
+    symbols,
+    historyCache,
+    historyBackfilledSymbols,
+  )
   const fetched: MarketDailyBar[] = []
   let resultFeed = feed
 
   if (backfillSymbols.length > 0) {
     const backfill = await client.fetchDailyBars(backfillSymbols, isoDate(start), today, feed)
     appendMarketDailyBars(fetched, backfill.data)
+    for (const symbol of backfillSymbols) historyBackfilledSymbols.add(symbol)
     resultFeed = backfill.feed
   }
 
@@ -177,6 +198,8 @@ async function loadScreenerHistory(
     historyCache.clear()
     historyCacheFeed = resultFeed
     historyIncrementalDate = null
+    historyBackfillDate = null
+    historyBackfilledSymbols.clear()
     const fetchedBySymbol = new Map<string, MarketDailyBar[]>()
     for (const bar of fetched) {
       fetchedBySymbol.set(bar.symbol, [...(fetchedBySymbol.get(bar.symbol) ?? []), bar])
