@@ -17,6 +17,8 @@ export function PortfolioWorkspace({
   const [view, setView] = useState<PortfolioView>('watchlists')
   const [positions, setPositions] = useState(initialData.positions)
   const [inbox, setInbox] = useState(initialData.inbox)
+  const [reviews, setReviews] = useState(initialData.reviews)
+  const [reviewingDecisionId, setReviewingDecisionId] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
 
   const savePosition = async (event: FormEvent<HTMLFormElement>) => {
@@ -53,8 +55,36 @@ export function PortfolioWorkspace({
     if (response.ok) setInbox((current) => current.filter((item) => item.id !== id))
   }
 
+  const saveReview = async (event: FormEvent<HTMLFormElement>, decisionId: string, symbol: string) => {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const response = await fetch('/api/markets/portfolio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'save-review',
+        decisionId,
+        symbol,
+        outcome: form.get('outcome'),
+        expectationAssessment: form.get('expectationAssessment'),
+        lessons: form.get('lessons'),
+        postmortem: form.get('postmortem'),
+      }),
+    })
+    const payload = await response.json()
+    if (!response.ok) {
+      setNotice(payload.error ?? 'Review could not be saved')
+      return
+    }
+    setReviews((current) => [payload.review, ...current.filter((item) => item.decisionId !== decisionId)])
+    setReviewingDecisionId(null)
+    setNotice(`${symbol} decision review saved.`)
+  }
+
   const decisions = initialData.decisions
   const ideas = decisions.filter((decision) => decision.disposition !== 'own')
+  const priceBySymbol = new Map(universe.rows.map((row) => [row.symbol, row.price]))
+  const reviewByDecision = new Map(reviews.map((review) => [review.decisionId, review]))
   return (
     <section className="portfolio-workspace">
       <header className="market-explore-heading">
@@ -126,8 +156,42 @@ export function PortfolioWorkspace({
       {view === 'history' ? (
         <div className="portfolio-history-list">
           {initialData.decisionHistory.length === 0 ? <p>No decision versions yet.</p> : initialData.decisionHistory.map((decision) => (
-            <article key={decision.id}><time>{new Date(decision.createdAt).toLocaleDateString()}</time><strong>{decision.symbol}</strong><span>{decision.formalRating} · {decision.entryAction.replaceAll('_', ' ')}</span><p>{decision.rationale}</p></article>
+            <article key={decision.id}>
+              <header>
+                <div><strong>{decision.symbol}</strong><span>Thesis v{decision.version}</span></div>
+                <time>{new Date(decision.createdAt).toLocaleDateString()}</time>
+              </header>
+              <div className="portfolio-history-comparison">
+                <div><span>Original expectation</span><p>{decision.rationale || 'No rationale recorded.'}</p></div>
+                <div>
+                  <span>Observed outcome</span>
+                  <p>
+                    {decision.priceAtDecision === null || priceBySymbol.get(decision.symbol) === undefined
+                      ? 'A comparable market snapshot is not available.'
+                      : `${decision.priceAtDecision.toFixed(2)} at decision → ${priceBySymbol.get(decision.symbol)!.toFixed(2)} now (${(((priceBySymbol.get(decision.symbol)! / decision.priceAtDecision) - 1) * 100).toFixed(1)}%).`}
+                  </p>
+                </div>
+                <div><span>Decision</span><p>{decision.formalRating} · {decision.entryAction.replaceAll('_', ' ')} · fair value {decision.fairValue ?? '—'}</p></div>
+              </div>
+              {reviewByDecision.get(decision.id) ? (
+                <div className="portfolio-review-summary">
+                  <span>{reviewByDecision.get(decision.id)!.outcome.replaceAll('_', ' ')}</span>
+                  <p>{reviewByDecision.get(decision.id)!.expectationAssessment}</p>
+                  <small>{reviewByDecision.get(decision.id)!.lessons}</small>
+                </div>
+              ) : null}
+              {reviewingDecisionId === decision.id ? (
+                <form className="decision-review-form" onSubmit={(event) => saveReview(event, decision.id, decision.symbol)}>
+                  <label>Outcome<select name="outcome" required><option value="working">Working</option><option value="not_working">Not working</option><option value="invalidated">Invalidated</option><option value="closed">Closed</option></select></label>
+                  <label>Expectation vs outcome<textarea name="expectationAssessment" required /></label>
+                  <label>Lessons<textarea name="lessons" required /></label>
+                  <label>Postmortem<textarea name="postmortem" /></label>
+                  <div><button type="submit">Save review</button><button type="button" onClick={() => setReviewingDecisionId(null)}>Cancel</button></div>
+                </form>
+              ) : <button type="button" onClick={() => setReviewingDecisionId(decision.id)}>Review outcome</button>}
+            </article>
           ))}
+          {notice ? <p className="portfolio-review-notice">{notice}</p> : null}
         </div>
       ) : null}
     </section>

@@ -13,6 +13,7 @@ import { isMaterialResearchEvent } from '../lib/server/research-monitoring.ts'
 const decision: ThesisDecision = {
   id: 'decision-1',
   symbol: 'AAPL',
+  version: 1,
   disposition: 'watch',
   formalRating: 'HOLD',
   entryAction: 'wait',
@@ -25,6 +26,7 @@ const decision: ThesisDecision = {
     { id: 'price-floor', description: 'Price falls below 170.', metric: 'price', operator: 'lt', value: 170 },
   ],
   rationale: 'Wait for a better risk/reward.',
+  priceAtDecision: 200,
   createdAt: '2026-07-28T20:00:00.000Z',
 }
 

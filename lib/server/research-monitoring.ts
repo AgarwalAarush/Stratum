@@ -101,6 +101,7 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
       const decision: ThesisDecision = {
         id: row.id as string,
         symbol: row.symbol as string,
+        version: Number(row.version ?? 1),
         disposition: row.disposition as ThesisDecision['disposition'],
         formalRating: row.formal_rating as ThesisDecision['formalRating'],
         entryAction: row.entry_action as ThesisDecision['entryAction'],
@@ -111,6 +112,7 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
         nextCatalyst: row.next_catalyst as string | null,
         killCriteria: Array.isArray(row.kill_criteria) ? row.kill_criteria : [],
         rationale: String(row.rationale ?? ''),
+        priceAtDecision: row.price_at_decision === null ? null : Number(row.price_at_decision),
         createdAt: row.created_at as string,
       }
       for (const alert of evaluateDecisionAlerts(decision, Number(screener.price), now.toISOString())) {

@@ -4852,23 +4852,116 @@ body:has(.markets-shell) {
 }
 
 .portfolio-history-list article {
-  align-items: start;
   border-top: 1px solid var(--market-border);
-  display: grid;
-  gap: 20px;
-  grid-template-columns: 100px 80px 180px 1fr;
-  padding: 15px 0;
+  padding: 22px 0;
+}
+
+.portfolio-history-list article > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.portfolio-history-list article > header div {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+}
+
+.portfolio-history-list article > header strong {
+  font-size: 18px;
 }
 
 .portfolio-history-list time,
-.portfolio-history-list span {
+.portfolio-history-list span,
+.portfolio-history-list small {
   color: var(--market-text-muted);
   font-size: 10px;
 }
 
-.portfolio-history-list p {
+.portfolio-history-comparison {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: 1.5fr 1fr 1fr;
+  margin-top: 18px;
+}
+
+.portfolio-history-comparison > div {
+  border: 1px solid var(--market-border);
+  min-height: 92px;
+  padding: 14px;
+}
+
+.portfolio-history-comparison p,
+.portfolio-review-summary p {
   color: var(--market-text-dim);
   font-size: 11px;
+  line-height: 1.55;
+  margin-top: 8px;
+}
+
+.portfolio-history-list article > button,
+.decision-review-form button {
+  border: 1px solid var(--market-border-strong);
+  font-size: 10px;
+  margin-top: 14px;
+  min-height: 36px;
+  padding: 0 14px;
+}
+
+.portfolio-review-summary {
+  border-left: 2px solid var(--market-accent);
+  margin-top: 15px;
+  padding: 4px 0 4px 14px;
+}
+
+.portfolio-review-summary > span {
+  color: var(--market-text);
+  text-transform: uppercase;
+}
+
+.portfolio-review-summary small {
+  display: block;
+  margin-top: 5px;
+}
+
+.decision-review-form {
+  border: 1px solid var(--market-border);
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  max-width: 760px;
+  padding: 16px;
+}
+
+.decision-review-form label {
+  color: var(--market-text-muted);
+  display: grid;
+  font-size: 10px;
+  gap: 6px;
+}
+
+.decision-review-form select,
+.decision-review-form textarea {
+  border: 1px solid var(--market-border);
+  min-height: 36px;
+  padding: 8px;
+}
+
+.decision-review-form textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.decision-review-form > div {
+  display: flex;
+  gap: 8px;
+}
+
+.portfolio-review-notice {
+  color: var(--market-text-muted);
+  font-size: 10px;
+  padding-top: 12px;
 }
 
 @media (max-width: 767px) {
@@ -4987,7 +5080,10 @@ body:has(.markets-shell) {
   }
 
   .portfolio-history-list article {
-    gap: 7px;
+    padding: 18px 0;
+  }
+
+  .portfolio-history-comparison {
     grid-template-columns: 1fr;
   }
 }

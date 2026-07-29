@@ -370,6 +370,7 @@ export interface ThesisKillCriterion {
 export interface ThesisDecision {
   id: string
   symbol: string
+  version: number
   disposition: 'own' | 'watch' | 'avoid'
   formalRating: 'BUY' | 'HOLD' | 'SELL' | 'NOT_RATED'
   entryAction: 'buy_now' | 'nibble' | 'wait' | 'add_on_weakness' | 'avoid'
@@ -380,7 +381,19 @@ export interface ThesisDecision {
   nextCatalyst: string | null
   killCriteria: ThesisKillCriterion[]
   rationale: string
+  priceAtDecision: number | null
   createdAt: string
+}
+
+export interface DecisionReview {
+  id: string
+  decisionId: string
+  symbol: string
+  outcome: 'working' | 'not_working' | 'invalidated' | 'closed'
+  expectationAssessment: string
+  lessons: string
+  postmortem: string
+  reviewedAt: string
 }
 
 export interface ManualPosition {
@@ -412,6 +425,7 @@ export interface PortfolioWorkspaceData {
   positions: ManualPosition[]
   decisions: ThesisDecision[]
   decisionHistory: ThesisDecision[]
+  reviews: DecisionReview[]
   inbox: DecisionInboxItem[]
 }
 

@@ -4,6 +4,7 @@ import {
   type MarketWatchlistState,
 } from '../markets/watchlists.ts'
 import type {
+  DecisionReview,
   DecisionInboxItem,
   ManualPosition,
   PortfolioWorkspaceData,
@@ -24,6 +25,7 @@ function normalizeDecision(row: Record<string, unknown>): ThesisDecision {
   return {
     id: String(row.id),
     symbol: String(row.symbol),
+    version: Number(row.version ?? 1),
     disposition: row.disposition as ThesisDecision['disposition'],
     formalRating: row.formal_rating as ThesisDecision['formalRating'],
     entryAction: row.entry_action as ThesisDecision['entryAction'],
@@ -34,7 +36,21 @@ function normalizeDecision(row: Record<string, unknown>): ThesisDecision {
     nextCatalyst: row.next_catalyst === null ? null : String(row.next_catalyst),
     killCriteria: Array.isArray(row.kill_criteria) ? row.kill_criteria as ThesisKillCriterion[] : [],
     rationale: String(row.rationale ?? ''),
+    priceAtDecision: numberOrNull(row.price_at_decision),
     createdAt: String(row.created_at),
+  }
+}
+
+function normalizeReview(row: Record<string, unknown>): DecisionReview {
+  return {
+    id: String(row.id),
+    decisionId: String(row.decision_id),
+    symbol: String(row.symbol),
+    outcome: row.outcome as DecisionReview['outcome'],
+    expectationAssessment: String(row.expectation_assessment ?? ''),
+    lessons: String(row.lessons ?? ''),
+    postmortem: String(row.postmortem ?? ''),
+    reviewedAt: String(row.reviewed_at),
   }
 }
 
@@ -78,13 +94,21 @@ export async function fetchPortfolioWorkspace(
       positions: [],
       decisions: [],
       decisionHistory: [],
+      reviews: [],
       inbox: [],
     }
   }
-  const [{ data: listRows }, { data: positionRows }, { data: decisionRows }, { data: inboxRows }] = await Promise.all([
+  const [
+    { data: listRows },
+    { data: positionRows },
+    { data: decisionRows },
+    { data: reviewRows },
+    { data: inboxRows },
+  ] = await Promise.all([
     supabase.from('market_watchlists').select('id,client_id,name,market_watchlist_items(symbol)').eq('owner_id', ownerId).order('created_at'),
     supabase.from('manual_positions').select('*').eq('owner_id', ownerId).order('updated_at', { ascending: false }),
     supabase.from('thesis_decisions').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
+    supabase.from('decision_reviews').select('*').eq('owner_id', ownerId).order('reviewed_at', { ascending: false }),
     supabase.from('decision_inbox_items').select('*').eq('owner_id', ownerId).eq('status', 'open').order('occurred_at', { ascending: false }),
   ])
   const lists = (listRows ?? []).map((row) => ({
@@ -106,6 +130,7 @@ export async function fetchPortfolioWorkspace(
     positions: (positionRows ?? []).map((row) => normalizePosition(row)),
     decisions: [...latestDecisionBySymbol.values()],
     decisionHistory,
+    reviews: (reviewRows ?? []).map((row) => normalizeReview(row)),
     inbox: (inboxRows ?? []).map((row) => normalizeInbox(row)),
   }
 }
@@ -162,14 +187,24 @@ export async function upsertManualPosition(
 
 export async function saveThesisDecision(
   ownerId: string,
-  input: Omit<ThesisDecision, 'id' | 'createdAt'>,
+  input: Omit<ThesisDecision, 'id' | 'version' | 'priceAtDecision' | 'createdAt'>,
 ): Promise<ThesisDecision> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required')
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const [{ data: prior }, { data: snapshot }] = await Promise.all([
+    supabase.from('thesis_decisions').select('version').eq('owner_id', ownerId).eq('symbol', input.symbol.toUpperCase())
+      .order('version', { ascending: false }).limit(1).maybeSingle(),
+    supabase.from('market_snapshots').select('id').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
+  ])
+  const { data: current } = snapshot
+    ? await supabase.from('screener_rows').select('price').eq('snapshot_id', snapshot.id)
+      .eq('symbol', input.symbol.toUpperCase()).maybeSingle()
+    : { data: null }
   const { data, error } = await supabase.from('thesis_decisions').insert({
     owner_id: ownerId,
     symbol: input.symbol.toUpperCase(),
+    version: Number(prior?.version ?? 0) + 1,
     disposition: input.disposition,
     formal_rating: input.formalRating,
     entry_action: input.entryAction,
@@ -180,9 +215,34 @@ export async function saveThesisDecision(
     next_catalyst: input.nextCatalyst,
     kill_criteria: input.killCriteria,
     rationale: input.rationale,
+    price_at_decision: current ? Number(current.price) : null,
   }).select('*').single()
   if (error || !data) throw new Error(`Unable to save thesis decision: ${error?.message ?? 'unknown error'}`)
   return normalizeDecision(data)
+}
+
+export async function saveDecisionReview(
+  ownerId: string,
+  input: Omit<DecisionReview, 'id' | 'symbol' | 'reviewedAt'>,
+): Promise<DecisionReview> {
+  if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required')
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data: decision } = await supabase.from('thesis_decisions').select('symbol')
+    .eq('id', input.decisionId).eq('owner_id', ownerId).maybeSingle()
+  if (!decision) throw new Error('The decision version does not belong to this workspace')
+  const { data, error } = await supabase.from('decision_reviews').upsert({
+    owner_id: ownerId,
+    decision_id: input.decisionId,
+    symbol: decision.symbol,
+    outcome: input.outcome,
+    expectation_assessment: input.expectationAssessment,
+    lessons: input.lessons,
+    postmortem: input.postmortem,
+    reviewed_at: new Date().toISOString(),
+  }, { onConflict: 'owner_id,decision_id' }).select('*').single()
+  if (error || !data) throw new Error(`Unable to save decision review: ${error?.message ?? 'unknown error'}`)
+  return normalizeReview(data)
 }
 
 export async function updateInboxStatus(

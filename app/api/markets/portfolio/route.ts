@@ -3,6 +3,7 @@ import { getAllowedMarketUser } from '@/lib/auth/supabase-server'
 import {
   replaceUserWatchlists,
   saveThesisDecision,
+  saveDecisionReview,
   updateInboxStatus,
   upsertManualPosition,
   addSymbolToPrimaryWatchlist,
@@ -101,6 +102,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ decision: {
           id: `local-decision-${Date.now()}`,
           symbol,
+          version: 1,
           disposition,
           formalRating,
           entryAction,
@@ -111,6 +113,7 @@ export async function POST(request: Request) {
           nextCatalyst: text(body.nextCatalyst) || null,
           killCriteria,
           rationale: text(body.rationale, 4_000),
+          priceAtDecision: null,
           createdAt: new Date().toISOString(),
         } })
       }
@@ -127,6 +130,29 @@ export async function POST(request: Request) {
         killCriteria,
         rationale: text(body.rationale, 4_000),
       }) })
+    }
+    if (body.action === 'save-review') {
+      const outcome = body.outcome as 'working' | 'not_working' | 'invalidated' | 'closed'
+      const decisionId = text(body.decisionId, 80)
+      if (!decisionId || !['working', 'not_working', 'invalidated', 'closed'].includes(outcome)) {
+        throw new Error('A valid decision and outcome are required')
+      }
+      const reviewInput = {
+        decisionId,
+        outcome,
+        expectationAssessment: text(body.expectationAssessment, 4_000),
+        lessons: text(body.lessons, 4_000),
+        postmortem: text(body.postmortem, 8_000),
+      }
+      if (localDevelopment) {
+        return NextResponse.json({ review: {
+          id: `local-review-${decisionId}`,
+          symbol: text(body.symbol, 12).toUpperCase(),
+          ...reviewInput,
+          reviewedAt: new Date().toISOString(),
+        } })
+      }
+      return NextResponse.json({ review: await saveDecisionReview(user.id, reviewInput) })
     }
     if (body.action === 'update-inbox') {
       const status = body.status as 'open' | 'dismissed' | 'resolved'
