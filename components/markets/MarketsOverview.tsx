@@ -24,6 +24,17 @@ function formatMarketTime(value: string): string {
   }).format(new Date(value))
 }
 
+function formatEvidenceTime(value: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(new Date(value))
+}
+
 function formatInstrumentTime(value: string, dataStatus: MarketOverviewResponse['instruments'][number]['dataStatus']): string {
   const options: Intl.DateTimeFormatOptions = dataStatus === 'end_of_day'
     ? { timeZone: 'America/New_York', month: 'short', day: 'numeric' }
@@ -106,7 +117,7 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
                   onClick={() => setSelectedEvidenceId(evidence.id)}
                 >
                   <span>{evidence.source}</span>
-                  <span>{evidence.publishedAt}</span>
+                  <span title={evidence.publishedAt}>{formatEvidenceTime(evidence.publishedAt)}</span>
                   <ArrowSquareOut size={17} aria-hidden="true" />
                 </a>
               )
