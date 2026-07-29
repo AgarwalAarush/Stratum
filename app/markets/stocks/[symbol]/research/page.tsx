@@ -201,43 +201,45 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
               <p>Full analysis</p>
               {research.sections.map((section, index) => <a key={section.id} href={`#${section.id}`}><span>{String(index + 1).padStart(2, '0')}</span>{section.title}</a>)}
             </nav>
-            <div className="equity-research-sections">
-              {research.sections.map((section, index) => {
-                const sectionSources = packet?.sources.filter((source) => section.sourceIds.includes(source.id)) ?? []
-                return (
-                  <section key={section.id} id={section.id}>
-                    <p className="markets-eyebrow">Section {String(index + 1).padStart(2, '0')} of 15</p>
-                    <h2>{section.title}</h2>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
-                    {sectionSources.length > 0 ? (
-                      <footer>
-                        <span>Evidence</span>
-                        {sectionSources.map((source) => (
-                          <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.label} ↗</a>
-                        ))}
-                      </footer>
-                    ) : <small>No section-specific source was attached; treat unsupported claims as analyst view.</small>}
-                  </section>
-                )
-              })}
+            <div className="equity-research-analysis-content">
+              <div className="equity-research-sections">
+                {research.sections.map((section, index) => {
+                  const sectionSources = packet?.sources.filter((source) => section.sourceIds.includes(source.id)) ?? []
+                  return (
+                    <section key={section.id} id={section.id}>
+                      <p className="markets-eyebrow">Section {String(index + 1).padStart(2, '0')} of 15</p>
+                      <h2>{section.title}</h2>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
+                      {sectionSources.length > 0 ? (
+                        <footer>
+                          <span>Evidence</span>
+                          {sectionSources.map((source) => (
+                            <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.label} ↗</a>
+                          ))}
+                        </footer>
+                      ) : <small>No section-specific source was attached; treat unsupported claims as analyst view.</small>}
+                    </section>
+                  )
+                })}
+              </div>
+
+              <section className="equity-research-sources" aria-labelledby="research-sources-title">
+                <header><p className="markets-eyebrow">Evidence ledger</p><h2 id="research-sources-title">Sources used in version {research.version}</h2></header>
+                {sources.length > 0 ? sources.map((source) => (
+                  <a key={source.id} href={source.url} target="_blank" rel="noreferrer">
+                    <span>{source.source}</span>
+                    <strong>{source.label}</strong>
+                    <time dateTime={source.asOf}>{formatMarketDate(source.asOf)}</time>
+                  </a>
+                )) : <p>No source ledger was attached to this legacy report version. Refresh the report to regenerate against the expanded packet.</p>}
+              </section>
+
+              <footer className="equity-research-footer">
+                <span>Version {research.version} · {research.provider}/{research.model} · Generated {formatMarketDate(research.generatedAt)}</span>
+                <ResearchActionButton symbol={symbol} hasResearch />
+              </footer>
             </div>
           </div>
-
-          <section className="equity-research-sources" aria-labelledby="research-sources-title">
-            <header><p className="markets-eyebrow">Evidence ledger</p><h2 id="research-sources-title">Sources used in version {research.version}</h2></header>
-            {sources.length > 0 ? sources.map((source) => (
-              <a key={source.id} href={source.url} target="_blank" rel="noreferrer">
-                <span>{source.source}</span>
-                <strong>{source.label}</strong>
-                <time dateTime={source.asOf}>{formatMarketDate(source.asOf)}</time>
-              </a>
-            )) : <p>No source ledger was attached to this legacy report version. Refresh the report to regenerate against the expanded packet.</p>}
-          </section>
-
-          <footer className="equity-research-footer">
-            <span>Version {research.version} · {research.provider}/{research.model} · Generated {formatMarketDate(research.generatedAt)}</span>
-            <ResearchActionButton symbol={symbol} hasResearch />
-          </footer>
         </>
       )}
     </article>

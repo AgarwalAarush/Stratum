@@ -6199,6 +6199,14 @@ body:has(.markets-shell) {
 }
 
 /* Keep research layout overrides after the legacy Markets rules. */
+.markets-main:has(.equity-research-note),
+.markets-shell:has(.equity-research-note),
+html:has(.equity-research-note),
+body:has(.equity-research-note) {
+  /* `hidden` makes these ancestors unintended scroll containers and breaks the sticky rail. */
+  overflow-x: clip;
+}
+
 .equity-research-note {
   margin: 0 auto;
   max-width: 1600px;
@@ -6229,12 +6237,22 @@ body:has(.markets-shell) {
 }
 
 .equity-research-body {
+  align-items: start;
   grid-template-columns: 250px minmax(0, 1fr);
 }
 
 .equity-research-body > nav {
+  align-self: start;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
   padding: 42px 28px 42px 0;
-  top: 104px;
+  position: sticky;
+  scrollbar-width: thin;
+  top: 20px;
+}
+
+.equity-research-analysis-content {
+  min-width: 0;
 }
 
 .equity-research-sections {
@@ -6242,12 +6260,23 @@ body:has(.markets-shell) {
 }
 
 .equity-research-sections > section {
+  border-bottom: 0;
   max-width: 980px;
   padding: 58px 0;
 }
 
+.equity-research-sections > section > footer {
+  border-top: 0;
+  margin-top: 22px;
+  padding-top: 0;
+}
+
+.equity-research-sources {
+  padding-left: 52px;
+}
+
 .equity-research-footer {
-  margin-left: 302px;
+  margin-left: 52px;
 }
 
 @media (max-width: 1000px) {
@@ -6274,6 +6303,10 @@ body:has(.markets-shell) {
   }
 
   .equity-research-sections {
+    padding-left: 0;
+  }
+
+  .equity-research-sources {
     padding-left: 0;
   }
 
