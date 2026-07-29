@@ -104,7 +104,6 @@ function ScenarioComparison({ sections }: { sections: EquityResearchSection[] })
           <p className="markets-eyebrow">Scenario framework</p>
           <h2 id="scenarios-title">What has to happen for the stock to work</h2>
         </div>
-        <p>Read across the three cases before deciding whether today’s price offers enough reward for the risk.</p>
       </header>
       <div className="research-scenario-grid">
         {sections.map((section) => (
