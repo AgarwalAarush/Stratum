@@ -28,10 +28,10 @@ interface DailyBarRow {
 }
 
 let historyCacheFeed: Exclude<MarketFeed, 'illustrative'> | null = null
-let historyIncrementalDate: string | null = null
 let historyBackfillDate: string | null = null
 const historyCache = new Map<string, MarketDailyBar[]>()
 const historyBackfilledSymbols = new Set<string>()
+const historyRefreshDateByFeed = new Map<Exclude<MarketFeed, 'illustrative'>, string>()
 
 function batches<T>(items: T[], size = DATABASE_BATCH_SIZE): T[][] {
   const result: T[][] = []
@@ -146,7 +146,6 @@ async function loadScreenerHistory(
   if (historyCacheFeed !== feed) {
     historyCache.clear()
     historyCacheFeed = feed
-    historyIncrementalDate = null
     historyBackfillDate = null
     historyBackfilledSymbols.clear()
   }
@@ -170,11 +169,10 @@ async function loadScreenerHistory(
     historyBackfillDate = today
     historyBackfilledSymbols.clear()
   }
-  const backfillSymbols = symbolsNeedingHistoryBackfill(
-    symbols,
-    historyCache,
-    historyBackfilledSymbols,
-  )
+  const historyRefreshDue = historyRefreshDateByFeed.get(feed) !== today
+  const backfillSymbols = historyRefreshDue
+    ? symbolsNeedingHistoryBackfill(symbols, historyCache, historyBackfilledSymbols)
+    : []
   const fetched: MarketDailyBar[] = []
   let resultFeed = feed
 
@@ -185,7 +183,7 @@ async function loadScreenerHistory(
     resultFeed = backfill.feed
   }
 
-  if (resultFeed === feed && historyIncrementalDate !== today && backfillSymbols.length < symbols.length) {
+  if (resultFeed === feed && historyRefreshDue && backfillSymbols.length < symbols.length) {
     const incrementalStart = new Date(now)
     incrementalStart.setUTCDate(incrementalStart.getUTCDate() - INCREMENTAL_LOOKBACK_DAYS)
     const incremental = await client.fetchDailyBars(symbols, isoDate(incrementalStart), today, feed)
@@ -197,7 +195,6 @@ async function loadScreenerHistory(
   if (resultFeed !== feed) {
     historyCache.clear()
     historyCacheFeed = resultFeed
-    historyIncrementalDate = null
     historyBackfillDate = null
     historyBackfilledSymbols.clear()
     const fetchedBySymbol = new Map<string, MarketDailyBar[]>()
@@ -215,7 +212,7 @@ async function loadScreenerHistory(
     for (const [symbol, updates] of fetchedBySymbol) {
       historyCache.set(symbol, mergeMarketDailyBars(historyCache.get(symbol) ?? [], updates))
     }
-    historyIncrementalDate = today
+    historyRefreshDateByFeed.set(feed, today)
   }
 
   return {
