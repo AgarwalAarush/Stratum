@@ -1,4 +1,6 @@
-const EVIDENCE_LABEL = /(^|\n)(\s*(?:[-*]\s+)?)(?:\*\*)?(FACT|VIEW|CONSENSUS|ESTIMATE|EST\.?)(?:\*\*)?\s*:\s*(?:\*\*)?\s*/gim
+const CLAIM_TYPE = 'FACT(?:/VIEW)?|VIEW|CONSENSUS|ESTIMATE|EST\\.?'
+const WHOLE_BOLD_CLAIM = new RegExp(`(^|\\n)(\\s*(?:[-*]\\s+)?)\\*\\*(${CLAIM_TYPE}):\\s*([^*\\n]+)\\*\\*`, 'gim')
+const EVIDENCE_LABEL = new RegExp(`(^|\\n)(\\s*(?:[-*]\\s+)?)(?:\\*\\*)?(${CLAIM_TYPE})(?:\\*\\*)?\\s*:\\s*(?:\\*\\*)?\\s*`, 'gim')
 
 /**
  * Earlier report versions were written as an analyst workpaper, with visible
@@ -7,5 +9,7 @@ const EVIDENCE_LABEL = /(^|\n)(\s*(?:[-*]\s+)?)(?:\*\*)?(FACT|VIEW|CONSENSUS|EST
  * Evidence mode for auditability.
  */
 export function researchMemoMarkdown(content: string): string {
-  return content.replace(EVIDENCE_LABEL, '$1$2')
+  return content
+    .replace(WHOLE_BOLD_CLAIM, '$1$2$4')
+    .replace(EVIDENCE_LABEL, '$1$2')
 }
