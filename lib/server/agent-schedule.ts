@@ -27,6 +27,11 @@ function newYorkParts(now: Date): { weekday: string; hour: number; minute: numbe
   return { weekday: part('weekday'), hour: Number(part('hour')), minute: Number(part('minute')) }
 }
 
+function isWeekdayAfterMarketClose(now: Date): boolean {
+  const { weekday, hour } = newYorkParts(now)
+  return weekday !== 'Sat' && weekday !== 'Sun' && hour >= 16
+}
+
 export function isUsMarketRefreshWindow(now: Date): boolean {
   const { weekday, hour, minute } = newYorkParts(now)
   if (weekday === 'Sat' || weekday === 'Sun') return false
@@ -60,6 +65,11 @@ export function buildDueAgentJobs(
       jobs.push(scheduledJob('refresh-cross-asset', now, { mode: 'market-hours' }))
     } else if (now.getUTCHours() >= 21) {
       jobs.push(scheduledJob('refresh-cross-asset', now, { mode: 'daily' }))
+    }
+    if (isWeekdayAfterMarketClose(now)) {
+      jobs.push(scheduledJob('materialize-market-leadership', now, {
+        tradingDate: now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
+      }))
     }
   }
   const utcHour = now.getUTCHours()

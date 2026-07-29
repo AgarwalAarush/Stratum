@@ -22,6 +22,12 @@ test('cross-asset refresh runs every five minutes during the US session and once
   assert.equal(jobTypes('2026-07-28T21:00:00Z').includes('refresh-cross-asset'), true)
 })
 
+test('market leadership runs once after the US close and queues Candidate Scout after materialization', () => {
+  assert.equal(jobTypes('2026-07-28T19:59:00Z').includes('materialize-market-leadership'), false)
+  assert.equal(jobTypes('2026-07-28T20:00:00Z').includes('materialize-market-leadership'), true)
+  assert.equal(jobTypes('2026-08-01T21:00:00Z').includes('materialize-market-leadership'), false)
+})
+
 test('worker does not enqueue FMP work before its credential is configured', () => {
   assert.deepEqual(
     buildDueAgentJobs(new Date('2026-07-28T08:00:00Z'), { includeFmp: false }).map((job) => job.jobType),

@@ -6,6 +6,10 @@ import type {
   MarketInstrument,
   MarketMemo,
   MarketOverviewResponse,
+  MarketLeadershipSnapshot,
+  MarketGroupMetric,
+  MarketDivergenceSignal,
+  CandidateBrief,
   ScreenerQuery,
   ScreenerResponse,
   ScreenerRow,
@@ -13,6 +17,7 @@ import type {
 import { runScreener } from '../markets/screener.ts'
 import { buildDeterministicMarketMemo, type MarketStateInputs } from '../markets/state.ts'
 import { crossAssetMarketInstrument } from './cross-asset.ts'
+import { normalizeStockLeadershipRow } from './market-leadership.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 const DATABASE_PAGE_SIZE = 1_000
@@ -275,7 +280,11 @@ export async function fetchLatestMarketOverview(): Promise<MarketOverviewRespons
     generatedAt,
   )
 
-  const crossAsset = await fetchLatestCrossAssetSnapshot()
+  const [crossAsset, leadership, candidates] = await Promise.all([
+    fetchLatestCrossAssetSnapshot(),
+    fetchLatestMarketLeadership(),
+    fetchLatestCandidates(),
+  ])
 
   return {
     state: {
@@ -297,7 +306,114 @@ export async function fetchLatestMarketOverview(): Promise<MarketOverviewRespons
     dataAsOf: snapshot.data_as_of,
     generatedAt,
     stale: isStale(snapshot.data_as_of),
+    leadership: leadership ?? undefined,
+    candidates,
   }
+}
+
+interface LeadershipSnapshotRecord {
+  id: string
+  trading_date: string
+  data_as_of: string
+  generated_at: string
+  universe_count: number
+  usable_count: number
+  fresh_count: number
+  advancing_percent: number | string
+  above_50_day_percent: number | string
+}
+
+function normalizeGroupMetric(row: Record<string, unknown>): MarketGroupMetric {
+  const nullable = (value: unknown) => value === null || value === undefined ? null : Number(value)
+  return {
+    groupType: row.group_type as MarketGroupMetric['groupType'],
+    label: String(row.label),
+    sector: row.group_type === 'sector' ? null : String(row.sector),
+    constituentCount: Number(row.constituent_count),
+    return30d: nullable(row.return_30d),
+    return50d: nullable(row.return_50d),
+    return200d: nullable(row.return_200d),
+    return1y: nullable(row.return_1y),
+    vs50DayAverage: nullable(row.vs_50_day_average),
+    vs200DayAverage: nullable(row.vs_200_day_average),
+  }
+}
+
+function normalizeDivergence(row: Record<string, unknown>): MarketDivergenceSignal {
+  return {
+    id: String(row.signal_id),
+    scope: row.scope as MarketDivergenceSignal['scope'],
+    symbol: row.symbol === null ? null : String(row.symbol),
+    groupLabel: String(row.group_label),
+    nearTermReturn: Number(row.near_term_return),
+    longTermReturn: Number(row.long_term_return),
+    spread: Number(row.spread),
+    summary: String(row.summary),
+  }
+}
+
+export async function fetchLatestMarketLeadership(): Promise<MarketLeadershipSnapshot | null> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+  const { data: snapshotData, error: snapshotError } = await supabase
+    .from('market_leadership_snapshots')
+    .select('id,trading_date,data_as_of,generated_at,universe_count,usable_count,fresh_count,advancing_percent,above_50_day_percent')
+    .eq('status', 'complete')
+    .eq('is_latest', true)
+    .maybeSingle()
+  if (snapshotError || !snapshotData) return null
+  const snapshot = snapshotData as LeadershipSnapshotRecord
+  const [{ data: stockRows, error: stockError }, { data: groupRows, error: groupError }, { data: divergenceRows, error: divergenceError }] = await Promise.all([
+    supabase.from('market_stock_metrics').select('*').eq('snapshot_id', snapshot.id),
+    supabase.from('market_group_metrics').select('*').eq('snapshot_id', snapshot.id),
+    supabase.from('market_divergence_signals').select('*').eq('snapshot_id', snapshot.id),
+  ])
+  if (stockError || groupError || divergenceError) return null
+  const stocks = (stockRows ?? []).map((row) => normalizeStockLeadershipRow(row))
+  const groups = (groupRows ?? []).map((row) => normalizeGroupMetric(row))
+  const by30Day = [...stocks].sort((left, right) => (right.return30d ?? -Infinity) - (left.return30d ?? -Infinity))
+  return {
+    id: snapshot.id,
+    tradingDate: snapshot.trading_date,
+    dataAsOf: snapshot.data_as_of,
+    generatedAt: snapshot.generated_at,
+    universeCount: snapshot.universe_count,
+    usableCount: snapshot.usable_count,
+    freshCount: snapshot.fresh_count,
+    advancingPercent: Number(snapshot.advancing_percent),
+    above50DayPercent: Number(snapshot.above_50_day_percent),
+    sectors: groups.filter((group) => group.groupType === 'sector')
+      .sort((left, right) => (right.return1y ?? -Infinity) - (left.return1y ?? -Infinity)),
+    subIndustries: groups.filter((group) => group.groupType === 'sub_industry')
+      .sort((left, right) => (right.return1y ?? -Infinity) - (left.return1y ?? -Infinity)),
+    stocks,
+    leaders: by30Day.slice(0, 10),
+    laggards: by30Day.slice(-10).reverse(),
+    divergences: (divergenceRows ?? []).map((row) => normalizeDivergence(row)),
+  }
+}
+
+export async function fetchLatestCandidates(limit = 5): Promise<CandidateBrief[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return []
+  const { data: latest } = await supabase
+    .from('candidate_briefs')
+    .select('trading_date')
+    .order('trading_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (!latest) return []
+  const { data, error } = await supabase
+    .from('candidate_briefs')
+    .select('content')
+    .eq('trading_date', latest.trading_date)
+    .order('created_at', { ascending: true })
+    .limit(limit)
+  if (error || !data) return []
+  return data.flatMap((row) => {
+    if (!isRecord(row.content) || typeof row.content.symbol !== 'string') return []
+    return [row.content as unknown as CandidateBrief]
+  })
 }
 
 interface CrossAssetSnapshotRecord {

@@ -116,6 +116,66 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
         </div>
       </section>
 
+      {overview.leadership ? (
+        <section className="market-structure-panel" aria-labelledby="market-structure-title">
+          <div className="market-section-heading">
+            <div>
+              <p className="markets-eyebrow">Hermes market structure</p>
+              <h2 id="market-structure-title">Today&apos;s Market Structure</h2>
+            </div>
+            <Link href="/markets/explore?view=sub-industries">Explore all groups →</Link>
+          </div>
+          <div className="market-breadth-strip">
+            <div><strong>{overview.leadership.advancingPercent.toFixed(0)}%</strong><span>advancing</span></div>
+            <div><strong>{overview.leadership.above50DayPercent.toFixed(0)}%</strong><span>above 50-day</span></div>
+            <div><strong>{overview.leadership.usableCount}/{overview.leadership.universeCount}</strong><span>usable series</span></div>
+          </div>
+          <div className="market-structure-columns">
+            <div>
+              <h3>Leading sub-industries</h3>
+              {overview.leadership.subIndustries.slice(0, 5).map((group) => (
+                <Link key={`${group.sector}-${group.label}`} href={`/markets/explore?view=sub-industries&group=${encodeURIComponent(group.label)}`}>
+                  <span>{group.label}</span>
+                  <span className={(group.return1y ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>
+                    {group.return1y === null ? '—' : `${group.return1y >= 0 ? '+' : ''}${group.return1y.toFixed(1)}%`}
+                  </span>
+                </Link>
+              ))}
+            </div>
+            <div>
+              <h3>What is diverging</h3>
+              {overview.leadership.divergences.slice(0, 5).map((signal) => (
+                <p key={signal.id}>{signal.summary}</p>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {overview.candidates && overview.candidates.length > 0 ? (
+        <section className="market-candidate-panel" aria-labelledby="candidate-scout-title">
+          <div className="market-section-heading">
+            <div>
+              <p className="markets-eyebrow">Candidate Scout</p>
+              <h2 id="candidate-scout-title">Names requiring attention</h2>
+            </div>
+            <span>{overview.candidates.length} post-close briefs</span>
+          </div>
+          <div className="market-candidate-grid">
+            {overview.candidates.map((candidate) => (
+              <Link key={candidate.id} href={`/markets/stocks/${candidate.symbol}`} className="market-candidate-card">
+                <div>
+                  <strong>{candidate.symbol}</strong>
+                  <span>{candidate.company}</span>
+                </div>
+                <p>{candidate.whySurfaced}</p>
+                <span>{candidate.subIndustry} · Review candidate →</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="market-implication-grid">
         <div>
           <h2>Sector implications</h2>

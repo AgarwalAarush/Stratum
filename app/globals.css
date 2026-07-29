@@ -489,6 +489,139 @@
   min-height: 52px;
 }
 
+.market-structure-panel,
+.market-candidate-panel {
+  border-top: 1px solid var(--market-border);
+  padding: 42px 0;
+}
+
+.market-section-heading {
+  align-items: flex-end;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
+.market-section-heading h2 {
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  margin-top: 6px;
+}
+
+.market-section-heading > a,
+.market-section-heading > span {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.market-section-heading > a:hover {
+  color: var(--market-accent);
+}
+
+.market-breadth-strip {
+  border-bottom: 1px solid var(--market-border);
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.market-breadth-strip div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 22px 0;
+}
+
+.market-breadth-strip strong {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 25px;
+  font-weight: 400;
+}
+
+.market-breadth-strip span,
+.market-candidate-card > span {
+  color: var(--market-text-muted);
+  font-size: 11px;
+}
+
+.market-structure-columns {
+  display: grid;
+  gap: 48px;
+  grid-template-columns: 1fr 1fr;
+  padding-top: 28px;
+}
+
+.market-structure-columns h3 {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 13px;
+  text-transform: uppercase;
+}
+
+.market-structure-columns a {
+  align-items: center;
+  border-top: 1px solid var(--market-border);
+  display: flex;
+  font-size: 13px;
+  justify-content: space-between;
+  padding: 11px 0;
+}
+
+.market-structure-columns p {
+  border-top: 1px solid var(--market-border);
+  color: var(--market-text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 11px 0;
+}
+
+.market-candidate-grid {
+  background: var(--market-border);
+  border: 1px solid var(--market-border);
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.market-candidate-card {
+  background: var(--market-bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 196px;
+  padding: 18px;
+}
+
+.market-candidate-card:hover {
+  background: var(--market-surface);
+}
+
+.market-candidate-card div {
+  display: flex;
+  flex-direction: column;
+}
+
+.market-candidate-card strong {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 19px;
+  font-weight: 500;
+}
+
+.market-candidate-card div span {
+  color: var(--market-text-muted);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-candidate-card p {
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 24px 0 auto;
+}
+
 @media (max-width: 1100px) {
   .market-overview-evidence-grid {
     grid-template-columns: 1fr;
@@ -582,6 +715,41 @@
     gap: 8px;
     justify-content: center;
     min-height: 76px;
+  }
+
+  .market-structure-panel,
+  .market-candidate-panel {
+    padding: 30px 0;
+  }
+
+  .market-section-heading {
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .market-section-heading h2 {
+    font-size: 23px;
+  }
+
+  .market-breadth-strip div {
+    padding: 16px 8px 16px 0;
+  }
+
+  .market-breadth-strip strong {
+    font-size: 18px;
+  }
+
+  .market-structure-columns {
+    gap: 26px;
+    grid-template-columns: 1fr;
+  }
+
+  .market-candidate-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .market-candidate-card {
+    min-height: 150px;
   }
 }
 

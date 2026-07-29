@@ -40,6 +40,8 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('refresh-market-screener'), 'alpaca')
   assert.equal(agentJobProvider('refresh-fmp-intelligence'), 'fmp')
   assert.equal(agentJobProvider('refresh-cross-asset'), 'market-data')
+  assert.equal(agentJobProvider('materialize-market-leadership'), 'market-data')
+  assert.equal(agentJobProvider('run-candidate-scout'), 'fmp')
   assert.equal(agentJobProvider('generate-market-memo'), 'codex')
 })
 

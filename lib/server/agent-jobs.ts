@@ -4,6 +4,8 @@ import { saveMorningBrief } from '../data/overview-persistence.ts'
 import { syncFmpMarketIntelligence } from '../data/fmp-intelligence.ts'
 import { getAlpacaClient } from './alpaca.ts'
 import { materializeCrossAssetSnapshot } from './cross-asset.ts'
+import { materializeCandidateScout } from './candidate-scout.ts'
+import { materializeMarketLeadership } from './market-leadership.ts'
 import { materializeMarketMemo } from './market-memo.ts'
 import { resolveMarketUniverse } from './market-universe.ts'
 import {
@@ -18,6 +20,8 @@ export const AGENT_JOB_TYPES = [
   'sync-market-assets',
   'refresh-market-screener',
   'refresh-cross-asset',
+  'materialize-market-leadership',
+  'run-candidate-scout',
   'refresh-fmp-intelligence',
   'generate-market-memo',
   'generate-morning-brief',
@@ -73,13 +77,16 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
     return `${jobType}:${bucket.toISOString()}`
   }
+  if ((jobType === 'materialize-market-leadership' || jobType === 'run-candidate-scout') && typeof payload.tradingDate === 'string') {
+    return `${jobType}:${payload.tradingDate}`
+  }
   return `${jobType}:${now.toISOString().slice(0, 10)}`
 }
 
 export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
-  if (jobType === 'refresh-fmp-intelligence') return 'fmp'
-  if (jobType === 'refresh-cross-asset') return 'market-data'
+  if (jobType === 'refresh-fmp-intelligence' || jobType === 'run-candidate-scout') return 'fmp'
+  if (jobType === 'refresh-cross-asset' || jobType === 'materialize-market-leadership') return 'market-data'
   return 'codex'
 }
 
@@ -170,6 +177,30 @@ async function executeJob(job: AgentJobRecord): Promise<unknown> {
       snapshotId: snapshot.id,
       observationCount: snapshot.observations.length,
       dataAsOf: snapshot.dataAsOf,
+    }
+  }
+
+  if (job.job_type === 'materialize-market-leadership') {
+    const leadership = await materializeMarketLeadership()
+    await enqueueAgentJob(
+      'run-candidate-scout',
+      { leadershipSnapshotId: leadership.id, tradingDate: leadership.tradingDate },
+      `run-candidate-scout:${leadership.tradingDate}`,
+    )
+    return {
+      snapshotId: leadership.id,
+      tradingDate: leadership.tradingDate,
+      usableCount: leadership.usableCount,
+      groupCount: leadership.subIndustries.length,
+    }
+  }
+
+  if (job.job_type === 'run-candidate-scout') {
+    const briefs = await materializeCandidateScout()
+    return {
+      candidateCount: briefs.length,
+      symbols: briefs.map((brief) => brief.symbol),
+      tradingDate: briefs[0]?.tradingDate ?? null,
     }
   }
 
