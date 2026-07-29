@@ -2,18 +2,21 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
+import { marketMemoSlot } from '../lib/markets/market-clock.ts'
 
 function jobTypes(at: string) {
   return buildDueAgentJobs(new Date(at)).map((job) => job.jobType)
 }
 
-test('worker always schedules Alpaca and FMP ingestion', () => {
+test('worker suppresses five-minute screener work outside the US session', () => {
   assert.deepEqual(jobTypes('2026-07-28T08:00:00Z'), [
     'sync-market-assets',
-    'refresh-market-screener',
+    'prune-market-data',
     'refresh-fmp-intelligence',
     'scan-research-refreshes',
   ])
+  assert.equal(jobTypes('2026-08-01T15:00:00Z').includes('refresh-market-screener'), false)
+  assert.equal(jobTypes('2026-07-28T14:30:00Z').includes('refresh-market-screener'), true)
 })
 
 test('cross-asset refresh runs every five minutes during the US session and once after close', () => {
@@ -25,32 +28,57 @@ test('cross-asset refresh runs every five minutes during the US session and once
 
 test('market leadership runs once after the US close and queues Candidate Scout after materialization', () => {
   assert.equal(jobTypes('2026-07-28T19:59:00Z').includes('materialize-market-leadership'), false)
-  assert.equal(jobTypes('2026-07-28T20:00:00Z').includes('materialize-market-leadership'), true)
+  assert.equal(jobTypes('2026-07-28T20:06:00Z').includes('materialize-market-leadership'), true)
   assert.equal(jobTypes('2026-08-01T21:00:00Z').includes('materialize-market-leadership'), false)
 })
 
 test('worker does not enqueue FMP work before its credential is configured', () => {
   assert.deepEqual(
     buildDueAgentJobs(new Date('2026-07-28T08:00:00Z'), { includeFmp: false }).map((job) => job.jobType),
-    ['sync-market-assets', 'refresh-market-screener'],
+    ['sync-market-assets', 'prune-market-data'],
   )
 })
 
 test('worker does not enqueue scheduled Codex work when synthesis is disabled', () => {
   assert.deepEqual(
     buildDueAgentJobs(new Date('2026-07-27T14:00:00Z'), { includeCodex: false }).map((job) => job.jobType),
-    ['sync-market-assets', 'refresh-market-screener', 'refresh-fmp-intelligence', 'refresh-cross-asset', 'scan-research-refreshes'],
+    ['sync-market-assets', 'refresh-market-screener', 'prune-market-data', 'refresh-fmp-intelligence', 'refresh-cross-asset', 'scan-research-refreshes'],
   )
 })
 
 test('worker schedules daily intelligence only after its UTC release time', () => {
   assert.deepEqual(jobTypes('2026-07-28T11:59:59Z'), [
     'sync-market-assets',
-    'refresh-market-screener',
+    'prune-market-data',
     'refresh-fmp-intelligence',
     'scan-research-refreshes',
   ])
   assert.ok(jobTypes('2026-07-28T12:00:00Z').includes('generate-morning-brief'))
+})
+
+test('FMP intelligence uses a slower cadence outside extended market hours', () => {
+  const overnight = buildDueAgentJobs(new Date('2026-07-28T08:31:00Z'))
+    .find((job) => job.jobType === 'refresh-fmp-intelligence')
+  const session = buildDueAgentJobs(new Date('2026-07-28T15:31:00Z'))
+    .find((job) => job.jobType === 'refresh-fmp-intelligence')
+  assert.equal(overnight?.payload.cadenceMinutes, 120)
+  assert.equal(session?.payload.cadenceMinutes, 15)
+})
+
+test('market synthesis has only open, midday, and close slots', () => {
+  assert.deepEqual(marketMemoSlot(new Date('2026-07-28T14:03:00Z')), {
+    date: '2026-07-28',
+    slot: 'open',
+  })
+  assert.deepEqual(marketMemoSlot(new Date('2026-07-28T17:04:00Z')), {
+    date: '2026-07-28',
+    slot: 'midday',
+  })
+  assert.deepEqual(marketMemoSlot(new Date('2026-07-28T19:58:00Z')), {
+    date: '2026-07-28',
+    slot: 'close',
+  })
+  assert.equal(marketMemoSlot(new Date('2026-07-28T16:00:00Z')), null)
 })
 
 test('worker schedules weekly and semimonthly intelligence on due dates', () => {

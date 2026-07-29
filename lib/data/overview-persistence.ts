@@ -210,7 +210,7 @@ export async function persistFeedItems(
   }
 
   try {
-    const rows = items.map((item) => {
+    const normalizedRows = items.map((item) => {
       const { type, title, url, ...rest } = item as unknown as Record<string, unknown>
       const publishedAt =
         (rest.publishedAt as string | undefined) ??
@@ -232,6 +232,10 @@ export async function persistFeedItems(
         metadata: rest,
       }
     })
+    const rows = [...new Map(normalizedRows.map((row) => [
+      `${row.item_type}:${row.url}`,
+      row,
+    ])).values()]
 
     const { error } = await supabase
       .from('feed_items')

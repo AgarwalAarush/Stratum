@@ -6,6 +6,7 @@ import {
   normalizeFmpNewsRows,
   normalizeFmpSecFilingRows,
 } from '../lib/data/fmp-intelligence.ts'
+import { readFile } from 'node:fs/promises'
 
 test('FMP news and press releases normalize without retaining provider credentials', () => {
   const items = normalizeFmpNewsRows([
@@ -83,4 +84,10 @@ test('FMP intelligence fetch tolerates plan-gated sources and reports diagnostic
   assert.match(batch.sections.find((section) => section.section === 'fmp-press-releases')?.error ?? '', /402/)
   assert.ok(requestedUrls.every((url) => url.startsWith('https://financialmodelingprep.com/stable/')))
   assert.ok(requestedUrls.every((url) => url.includes('apikey=secret-test-key')))
+})
+
+test('feed persistence deduplicates an upsert batch by its database conflict key', async () => {
+  const source = await readFile(new URL('../lib/data/overview-persistence.ts', import.meta.url), 'utf8')
+  assert.match(source, /new Map\(normalizedRows\.map/)
+  assert.match(source, /row\.item_type.*row\.url/s)
 })

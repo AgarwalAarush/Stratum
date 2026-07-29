@@ -6,6 +6,30 @@ import { getSupabaseClient } from './supabase.ts'
 const DATABASE_BATCH_SIZE = 500
 const DATABASE_PAGE_SIZE = 1_000
 const MARKET_LOOKBACK_DAYS = 380
+const INCREMENTAL_LOOKBACK_DAYS = 8
+const HISTORY_QUERY_SYMBOL_BATCH_SIZE = 40
+const HISTORY_CACHE_BARS_PER_SYMBOL = 300
+const REQUIRED_HISTORY_BARS = 252
+
+type SupabaseServiceClient = NonNullable<ReturnType<typeof getSupabaseClient>>
+
+interface DailyBarRow {
+  symbol: string
+  trading_date: string
+  open: number | string
+  high: number | string
+  low: number | string
+  close: number | string
+  volume: number | string
+  trade_count: number | string | null
+  vwap: number | string | null
+  feed: Exclude<MarketFeed, 'illustrative'>
+  source_as_of: string
+}
+
+let historyCacheFeed: Exclude<MarketFeed, 'illustrative'> | null = null
+let historyIncrementalDate: string | null = null
+const historyCache = new Map<string, MarketDailyBar[]>()
 
 function batches<T>(items: T[], size = DATABASE_BATCH_SIZE): T[][] {
   const result: T[][] = []
@@ -15,6 +39,160 @@ function batches<T>(items: T[], size = DATABASE_BATCH_SIZE): T[][] {
 
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10)
+}
+
+export function mergeMarketDailyBars(
+  current: MarketDailyBar[],
+  updates: MarketDailyBar[],
+  maximumBars = HISTORY_CACHE_BARS_PER_SYMBOL,
+): MarketDailyBar[] {
+  const byDate = new Map(current.map((bar) => [bar.tradingDate, bar]))
+  for (const bar of updates) byDate.set(bar.tradingDate, bar)
+  return [...byDate.values()]
+    .sort((left, right) => right.tradingDate.localeCompare(left.tradingDate))
+    .slice(0, maximumBars)
+}
+
+function normalizeDailyBarRow(row: DailyBarRow): MarketDailyBar {
+  return {
+    symbol: row.symbol,
+    tradingDate: row.trading_date,
+    open: Number(row.open),
+    high: Number(row.high),
+    low: Number(row.low),
+    close: Number(row.close),
+    volume: Number(row.volume),
+    tradeCount: row.trade_count === null ? null : Number(row.trade_count),
+    vwap: row.vwap === null ? null : Number(row.vwap),
+    feed: row.feed,
+    asOf: row.source_as_of,
+  }
+}
+
+async function loadPersistedDailyBars(
+  supabase: SupabaseServiceClient,
+  symbols: string[],
+  feed: Exclude<MarketFeed, 'illustrative'>,
+  start: string,
+): Promise<MarketDailyBar[]> {
+  const result: MarketDailyBar[] = []
+  for (const symbolBatch of batches(symbols, HISTORY_QUERY_SYMBOL_BATCH_SIZE)) {
+    for (let from = 0; ; from += DATABASE_PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from('market_bars_daily')
+        .select('symbol,trading_date,open,high,low,close,volume,trade_count,vwap,feed,source_as_of')
+        .in('symbol', symbolBatch)
+        .eq('feed', feed)
+        .gte('trading_date', start)
+        .order('symbol', { ascending: true })
+        .order('trading_date', { ascending: false })
+        .range(from, from + DATABASE_PAGE_SIZE - 1)
+      if (error) throw new Error(`Unable to load persisted daily market bars: ${error.message}`)
+      const page = (data ?? []) as DailyBarRow[]
+      result.push(...page.map(normalizeDailyBarRow))
+      if (page.length < DATABASE_PAGE_SIZE) break
+    }
+  }
+  return result
+}
+
+async function persistDailyBars(
+  supabase: SupabaseServiceClient,
+  bars: MarketDailyBar[],
+): Promise<void> {
+  for (const batch of batches(bars)) {
+    const { error } = await supabase.from('market_bars_daily').upsert(batch.map((bar) => ({
+      symbol: bar.symbol,
+      trading_date: bar.tradingDate,
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+      volume: bar.volume,
+      trade_count: bar.tradeCount,
+      vwap: bar.vwap,
+      feed: bar.feed,
+      source_as_of: bar.asOf,
+    })), { onConflict: 'symbol,trading_date,feed' })
+    if (error) throw new Error(`Unable to persist daily market bars: ${error.message}`)
+  }
+}
+
+async function loadScreenerHistory(
+  client: AlpacaClient,
+  supabase: SupabaseServiceClient,
+  symbols: string[],
+  feed: Exclude<MarketFeed, 'illustrative'>,
+  now: Date,
+): Promise<{ bars: MarketDailyBar[]; feed: Exclude<MarketFeed, 'illustrative'>; fetchedBarCount: number }> {
+  if (historyCacheFeed !== feed) {
+    historyCache.clear()
+    historyCacheFeed = feed
+    historyIncrementalDate = null
+  }
+
+  const start = new Date(now)
+  start.setUTCDate(start.getUTCDate() - MARKET_LOOKBACK_DAYS)
+  const missingFromCache = symbols.filter((symbol) => !historyCache.has(symbol))
+  if (missingFromCache.length > 0) {
+    const persisted = await loadPersistedDailyBars(supabase, missingFromCache, feed, isoDate(start))
+    const persistedBySymbol = new Map<string, MarketDailyBar[]>()
+    for (const bar of persisted) {
+      persistedBySymbol.set(bar.symbol, [...(persistedBySymbol.get(bar.symbol) ?? []), bar])
+    }
+    for (const symbol of missingFromCache) {
+      historyCache.set(symbol, mergeMarketDailyBars([], persistedBySymbol.get(symbol) ?? []))
+    }
+  }
+
+  const backfillSymbols = symbols.filter((symbol) =>
+    (historyCache.get(symbol)?.length ?? 0) < REQUIRED_HISTORY_BARS)
+  const today = isoDate(now)
+  const fetched: MarketDailyBar[] = []
+  let resultFeed = feed
+
+  if (backfillSymbols.length > 0) {
+    const backfill = await client.fetchDailyBars(backfillSymbols, isoDate(start), today, feed)
+    fetched.push(...backfill.data)
+    resultFeed = backfill.feed
+  }
+
+  if (resultFeed === feed && historyIncrementalDate !== today && backfillSymbols.length < symbols.length) {
+    const incrementalStart = new Date(now)
+    incrementalStart.setUTCDate(incrementalStart.getUTCDate() - INCREMENTAL_LOOKBACK_DAYS)
+    const incremental = await client.fetchDailyBars(symbols, isoDate(incrementalStart), today, feed)
+    fetched.push(...incremental.data)
+    resultFeed = incremental.feed
+  }
+
+  if (fetched.length > 0) await persistDailyBars(supabase, fetched)
+  if (resultFeed !== feed) {
+    historyCache.clear()
+    historyCacheFeed = resultFeed
+    historyIncrementalDate = null
+    const fetchedBySymbol = new Map<string, MarketDailyBar[]>()
+    for (const bar of fetched) {
+      fetchedBySymbol.set(bar.symbol, [...(fetchedBySymbol.get(bar.symbol) ?? []), bar])
+    }
+    for (const symbol of symbols) {
+      historyCache.set(symbol, mergeMarketDailyBars([], fetchedBySymbol.get(symbol) ?? []))
+    }
+  } else {
+    const fetchedBySymbol = new Map<string, MarketDailyBar[]>()
+    for (const bar of fetched) {
+      fetchedBySymbol.set(bar.symbol, [...(fetchedBySymbol.get(bar.symbol) ?? []), bar])
+    }
+    for (const [symbol, updates] of fetchedBySymbol) {
+      historyCache.set(symbol, mergeMarketDailyBars(historyCache.get(symbol) ?? [], updates))
+    }
+    historyIncrementalDate = today
+  }
+
+  return {
+    bars: symbols.flatMap((symbol) => historyCache.get(symbol) ?? []),
+    feed: resultFeed,
+    fetchedBarCount: fetched.length,
+  }
 }
 
 export function newestTimestamp(rows: Array<{ asOf: string }>, fallback: string): string {
@@ -97,6 +275,7 @@ export interface MaterializeMarketsResult {
   feed: Exclude<MarketFeed, 'illustrative'>
   rowCount: number
   dataAsOf: string
+  fetchedBarCount: number
 }
 
 export async function materializeAlpacaScreener(options: MaterializeMarketsOptions = {}): Promise<MaterializeMarketsResult> {
@@ -114,31 +293,13 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
   const symbols = assets.map((asset) => asset.symbol)
   let snapshotsResult = await client.fetchSnapshots(symbols)
   let feed = snapshotsResult.feed
-  const start = new Date(now)
-  start.setUTCDate(start.getUTCDate() - MARKET_LOOKBACK_DAYS)
-  const barsResult = await client.fetchDailyBars(symbols, isoDate(start), isoDate(now), feed)
-  if (barsResult.feed !== feed) {
-    snapshotsResult = await client.fetchSnapshots(symbols, barsResult.feed)
+  let historyResult = await loadScreenerHistory(client, supabase, symbols, feed, now)
+  if (historyResult.feed !== feed) {
+    snapshotsResult = await client.fetchSnapshots(symbols, historyResult.feed)
     feed = snapshotsResult.feed
+    historyResult = await loadScreenerHistory(client, supabase, symbols, feed, now)
   }
-  if (barsResult.feed !== feed) throw new Error(`Alpaca returned inconsistent feeds: ${feed} and ${barsResult.feed}`)
-
-  for (const batch of batches(barsResult.data)) {
-    const { error } = await supabase.from('market_bars_daily').upsert(batch.map((bar) => ({
-      symbol: bar.symbol,
-      trading_date: bar.tradingDate,
-      open: bar.open,
-      high: bar.high,
-      low: bar.low,
-      close: bar.close,
-      volume: bar.volume,
-      trade_count: bar.tradeCount,
-      vwap: bar.vwap,
-      feed: bar.feed,
-      source_as_of: bar.asOf,
-    })), { onConflict: 'symbol,trading_date,feed' })
-    if (error) throw new Error(`Unable to persist daily market bars: ${error.message}`)
-  }
+  if (historyResult.feed !== feed) throw new Error(`Alpaca returned inconsistent feeds: ${feed} and ${historyResult.feed}`)
 
   const dataAsOf = newestTimestamp(snapshotsResult.data, now.toISOString())
   const { data: snapshotRecord, error: snapshotError } = await supabase
@@ -151,7 +312,7 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
   try {
     const assetsBySymbol = new Map<string, MarketAsset>(assets.map((asset) => [asset.symbol, asset]))
     const barsBySymbol = new Map<string, MarketDailyBar[]>()
-    for (const bar of barsResult.data) barsBySymbol.set(bar.symbol, [...(barsBySymbol.get(bar.symbol) ?? []), bar])
+    for (const bar of historyResult.bars) barsBySymbol.set(bar.symbol, [...(barsBySymbol.get(bar.symbol) ?? []), bar])
 
     const rows: ScreenerRow[] = snapshotsResult.data.flatMap((snapshot) => {
       const asset = assetsBySymbol.get(snapshot.symbol)
@@ -184,7 +345,13 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
     const { error: publishError } = await supabase.rpc('publish_screener_snapshot', { p_snapshot_id: snapshotRecord.id })
     if (publishError) throw new Error(`Unable to publish market snapshot: ${publishError.message}`)
 
-    return { snapshotId: snapshotRecord.id, feed, rowCount: rows.length, dataAsOf }
+    return {
+      snapshotId: snapshotRecord.id,
+      feed,
+      rowCount: rows.length,
+      dataAsOf,
+      fetchedBarCount: historyResult.fetchedBarCount,
+    }
   } catch (error) {
     await supabase.from('market_snapshots').update({
       status: 'failed',

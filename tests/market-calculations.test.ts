@@ -61,6 +61,14 @@ test('market calculations reject mismatched symbols and incomplete history', () 
   assert.equal(calculateScreenerRow(asset, snapshot, buildBars(49)), null)
 })
 
+test('market calculations exclude the partial current-day bar from historical averages', () => {
+  const bars = buildBars(252)
+  bars[0] = { ...bars[0]!, volume: 100_000_000, close: 500 }
+  const row = calculateScreenerRow(asset, snapshot, bars)
+  assert.equal(row?.relativeVolume, 2)
+  assert.ok((row?.fiftyDayAverage ?? 0) < 150)
+})
+
 test('markets migration defines atomic publication, job claiming, and service-only access', () => {
   const sql = readFileSync(join(process.cwd(), 'supabase/migrations/202607150001_markets_core.sql'), 'utf8')
 

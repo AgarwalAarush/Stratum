@@ -19,6 +19,20 @@ function round(value: number, precision = 2): number {
   return Math.round(value * factor) / factor
 }
 
+function newYorkTradingDate(timestamp: string): string | null {
+  const date = new Date(timestamp)
+  if (!Number.isFinite(date.getTime())) return null
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? ''
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
 export function calculateScreenerRow(
   asset: MarketAsset,
   snapshot: MarketSnapshot,
@@ -26,8 +40,11 @@ export function calculateScreenerRow(
 ): ScreenerRow | null {
   if (asset.symbol !== snapshot.symbol || bars.length < MINIMUM_DAILY_BARS) return null
 
+  const currentTradingDate = newYorkTradingDate(snapshot.asOf)
   const sorted = [...bars]
-    .filter((bar) => bar.symbol === asset.symbol)
+    .filter((bar) => bar.symbol === asset.symbol && (
+      !currentTradingDate || bar.tradingDate < currentTradingDate
+    ))
     .sort((left, right) => right.tradingDate.localeCompare(left.tradingDate))
 
   if (sorted.length < MINIMUM_DAILY_BARS) return null

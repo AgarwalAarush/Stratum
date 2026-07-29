@@ -63,6 +63,9 @@ const FRED_SERIES: Array<InstrumentDefinition & { seriesId: string }> = [
   },
 ]
 
+const DAILY_SERIES_CACHE_MS = 6 * 60 * 60 * 1_000
+let dailySeriesCache: { fetchedAt: number; observations: CrossAssetObservation[] } | null = null
+
 export const CROSS_ASSET_INSTRUMENT_IDS = [
   'sp500',
   'nasdaq-composite',
@@ -243,9 +246,15 @@ export async function fetchCrossAssetObservations(
   const fmpApiKey = options.fmpApiKey ?? process.env.FMP_API_KEY
   if (!fmpApiKey) throw new Error('FMP_API_KEY is not configured')
   const fetchImpl = options.fetchImpl ?? fetch
-  const retrievedAt = (options.now ?? new Date()).toISOString()
+  const now = options.now ?? new Date()
+  const retrievedAt = now.toISOString()
+  const reusableDailySeries = options.fetchImpl === undefined
+    && dailySeriesCache
+    && now.getTime() - dailySeriesCache.fetchedAt < DAILY_SERIES_CACHE_MS
+    ? dailySeriesCache.observations
+    : null
 
-  const [quoteGroups, treasuryRows, fredRows] = await Promise.all([
+  const [quoteGroups, dailyRows] = await Promise.all([
     Promise.all(FMP_QUOTES.map(async (definition) => {
       const rows = await fetchFmpStableJson<FmpQuote[]>(
         'quote-short',
@@ -256,24 +265,31 @@ export async function fetchCrossAssetObservations(
       if (!quote) throw new Error(`FMP returned no quote for ${definition.symbol}`)
       return normalizeFmpQuote(definition, quote, retrievedAt)
     })),
-    fetchFmpStableJson<FmpTreasuryRate[]>(
-      'treasury-rates',
-      {},
-      { apiKey: fmpApiKey, fetchImpl },
-    ).then((rows) => normalizeTreasuryRates(rows, retrievedAt)),
-    Promise.all(FRED_SERIES.map(async (definition) => {
-      const url = new URL('https://fred.stlouisfed.org/graph/fredgraph.csv')
-      url.searchParams.set('id', definition.seriesId)
-      const response = await fetchImpl(url, {
-        signal: AbortSignal.timeout(12_000),
-        headers: { 'User-Agent': 'Stratum/0.3 (+market-intelligence-worker)' },
-      })
-      if (!response.ok) throw new Error(`FRED request failed (${response.status}) for ${definition.seriesId}`)
-      return normalizeFredObservation(definition, parseFredCsv(await response.text()), retrievedAt)
-    })),
+    reusableDailySeries
+      ? Promise.resolve(reusableDailySeries)
+      : Promise.all([
+          fetchFmpStableJson<FmpTreasuryRate[]>(
+            'treasury-rates',
+            {},
+            { apiKey: fmpApiKey, fetchImpl },
+          ).then((rows) => normalizeTreasuryRates(rows, retrievedAt)),
+          Promise.all(FRED_SERIES.map(async (definition) => {
+            const url = new URL('https://fred.stlouisfed.org/graph/fredgraph.csv')
+            url.searchParams.set('id', definition.seriesId)
+            const response = await fetchImpl(url, {
+              signal: AbortSignal.timeout(12_000),
+              headers: { 'User-Agent': 'Stratum/0.3 (+market-intelligence-worker)' },
+            })
+            if (!response.ok) throw new Error(`FRED request failed (${response.status}) for ${definition.seriesId}`)
+            return normalizeFredObservation(definition, parseFredCsv(await response.text()), retrievedAt)
+          })),
+        ]).then(([treasury, fred]) => [...treasury, ...fred]),
   ])
+  if (!reusableDailySeries && options.fetchImpl === undefined) {
+    dailySeriesCache = { fetchedAt: now.getTime(), observations: dailyRows }
+  }
 
-  const observations = [...quoteGroups, ...treasuryRows, ...fredRows]
+  const observations = [...quoteGroups, ...dailyRows]
     .sort((left, right) => CROSS_ASSET_INSTRUMENT_IDS.indexOf(left.id as typeof CROSS_ASSET_INSTRUMENT_IDS[number])
       - CROSS_ASSET_INSTRUMENT_IDS.indexOf(right.id as typeof CROSS_ASSET_INSTRUMENT_IDS[number]))
   const received = new Set(observations.map((observation) => observation.id))

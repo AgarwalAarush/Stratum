@@ -3,6 +3,11 @@ import {
   enqueueAgentJob,
   type AgentJobType,
 } from './agent-jobs.ts'
+import {
+  fmpIntelligenceCadenceMinutes,
+  isUsMarketRefreshWindow,
+  isWeekdayAfterMarketClose,
+} from '../markets/market-clock.ts'
 
 export interface ScheduledAgentJob {
   jobType: AgentJobType
@@ -13,30 +18,6 @@ export interface ScheduledAgentJob {
 export interface AgentScheduleOptions {
   includeFmp?: boolean
   includeCodex?: boolean
-}
-
-function newYorkParts(now: Date): { weekday: string; hour: number; minute: number } {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(now)
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? ''
-  return { weekday: part('weekday'), hour: Number(part('hour')), minute: Number(part('minute')) }
-}
-
-function isWeekdayAfterMarketClose(now: Date): boolean {
-  const { weekday, hour } = newYorkParts(now)
-  return weekday !== 'Sat' && weekday !== 'Sun' && hour >= 16
-}
-
-export function isUsMarketRefreshWindow(now: Date): boolean {
-  const { weekday, hour, minute } = newYorkParts(now)
-  if (weekday === 'Sat' || weekday === 'Sun') return false
-  const minutes = hour * 60 + minute
-  return minutes >= 9 * 60 + 30 && minutes <= 16 * 60 + 5
 }
 
 function scheduledJob(
@@ -55,12 +36,16 @@ export function buildDueAgentJobs(
   now = new Date(),
   options: AgentScheduleOptions = {},
 ): ScheduledAgentJob[] {
-  const jobs = [
-    scheduledJob('sync-market-assets', now),
-    scheduledJob('refresh-market-screener', now),
-  ]
+  const jobs = [scheduledJob('sync-market-assets', now)]
+  if (isUsMarketRefreshWindow(now)) {
+    jobs.push(scheduledJob('refresh-market-screener', now, { mode: 'market-hours' }))
+  } else if (isWeekdayAfterMarketClose(now)) {
+    jobs.push(scheduledJob('refresh-market-screener', now, { mode: 'daily' }))
+  }
+  jobs.push(scheduledJob('prune-market-data', now))
   if (options.includeFmp !== false) {
-    jobs.push(scheduledJob('refresh-fmp-intelligence', now))
+    const intelligenceCadence = fmpIntelligenceCadenceMinutes(now)
+    jobs.push(scheduledJob('refresh-fmp-intelligence', now, { cadenceMinutes: intelligenceCadence }))
     if (isUsMarketRefreshWindow(now)) {
       jobs.push(scheduledJob('refresh-cross-asset', now, { mode: 'market-hours' }))
     } else if (now.getUTCHours() >= 21) {
@@ -71,7 +56,7 @@ export function buildDueAgentJobs(
         tradingDate: now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
       }))
     }
-    jobs.push(scheduledJob('scan-research-refreshes', now))
+    jobs.push(scheduledJob('scan-research-refreshes', now, { cadenceMinutes: intelligenceCadence }))
   }
   const utcHour = now.getUTCHours()
 

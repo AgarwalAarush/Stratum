@@ -295,12 +295,21 @@ async function loadLatestMarketOverview(): Promise<MarketOverviewResponse | null
   if (stateError || !stateData) return null
   const state = stateData as StateRecord
 
-  const { data: memoData, error: memoError } = await supabase
+  const { data: currentMemoData, error: currentMemoError } = await supabase
     .from('market_memos')
     .select('content,sources,generated_at')
     .eq('market_state_id', state.id)
     .maybeSingle()
-  const memoRecord = !memoError && memoData ? memoData as MemoRecord : null
+  let memoRecord = !currentMemoError && currentMemoData ? currentMemoData as MemoRecord : null
+  if (!memoRecord) {
+    const { data: latestMemoData, error: latestMemoError } = await supabase
+      .from('market_memos')
+      .select('content,sources,generated_at')
+      .order('generated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    memoRecord = !latestMemoError && latestMemoData ? latestMemoData as MemoRecord : null
+  }
   const generatedAt = memoRecord?.generated_at ?? state.generated_at
   const storedMemo = memoRecord ? marketMemo(memoRecord.content, memoRecord.generated_at) : null
   const inputs = marketStateInputs(state.inputs)

@@ -2,6 +2,7 @@ import { generateMorningBrief } from '../data/morning-brief.ts'
 import { generateMonthlyOverview, generateWeeklyOverview } from '../data/overview-generators.ts'
 import { saveMorningBrief } from '../data/overview-persistence.ts'
 import { syncFmpMarketIntelligence } from '../data/fmp-intelligence.ts'
+import { marketMemoSlot } from '../markets/market-clock.ts'
 import { getAlpacaClient } from './alpaca.ts'
 import { materializeCrossAssetSnapshot } from './cross-asset.ts'
 import { materializeCandidateScout } from './candidate-scout.ts'
@@ -9,7 +10,9 @@ import { materializeMarketLeadership } from './market-leadership.ts'
 import { generateFullEquityResearch } from './company-research.ts'
 import { scanResearchRefreshes } from './research-monitoring.ts'
 import { materializeMarketMemo } from './market-memo.ts'
+import { pruneMarketData } from './market-retention.ts'
 import { resolveMarketUniverse } from './market-universe.ts'
+import { getFmpUsageSnapshot, type FmpUsageSnapshot } from './fmp.ts'
 import {
   fetchPersistedMarketAssets,
   materializeAlpacaScreener,
@@ -21,6 +24,7 @@ import { getSupabaseClient } from './supabase.ts'
 export const AGENT_JOB_TYPES = [
   'sync-market-assets',
   'refresh-market-screener',
+  'prune-market-data',
   'refresh-cross-asset',
   'materialize-market-leadership',
   'run-candidate-scout',
@@ -45,6 +49,24 @@ interface AgentJobRecord {
   max_attempts: number
 }
 
+function fmpUsageDelta(before: FmpUsageSnapshot, after: FmpUsageSnapshot) {
+  return {
+    requests: after.totalRequests - before.totalRequests,
+    responseBytes: after.responseBytes - before.responseBytes,
+    throttledRequests: after.throttledRequests - before.throttledRequests,
+    requestsInTrailingMinute: after.windowRequests,
+  }
+}
+
+function outputWithUsage(output: unknown, before: FmpUsageSnapshot, after: FmpUsageSnapshot): unknown {
+  const delta = fmpUsageDelta(before, after)
+  if (delta.requests === 0) return output
+  if (output && typeof output === 'object' && !Array.isArray(output)) {
+    return { ...output as Record<string, unknown>, providerUsage: { fmp: delta } }
+  }
+  return { result: output, providerUsage: { fmp: delta } }
+}
+
 export function normalizeClaimedAgentJob(data: unknown): AgentJobRecord | null {
   const job = Array.isArray(data) ? data[0] : data
   if (!job || typeof job !== 'object') return null
@@ -67,6 +89,7 @@ export function parseAgentJobType(value: unknown): AgentJobType {
 export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), payload: Record<string, unknown> = {}): string {
   if (jobType === 'generate-market-memo' && typeof payload.snapshotId === 'string') return `${jobType}:${payload.snapshotId}`
   if (jobType === 'refresh-market-screener') {
+    if (payload.mode === 'daily') return `${jobType}:daily:${now.toISOString().slice(0, 10)}`
     const bucket = new Date(now)
     bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 5) * 5, 0, 0)
     return `${jobType}:${bucket.toISOString()}`
@@ -78,13 +101,21 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     return `${jobType}:${bucket.toISOString()}`
   }
   if (jobType === 'refresh-fmp-intelligence') {
+    const cadence = typeof payload.cadenceMinutes === 'number'
+      ? Math.max(15, Math.min(240, Math.round(payload.cadenceMinutes)))
+      : 15
     const bucket = new Date(now)
-    bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
+    const bucketMs = cadence * 60_000
+    bucket.setTime(Math.floor(bucket.getTime() / bucketMs) * bucketMs)
     return `${jobType}:${bucket.toISOString()}`
   }
   if (jobType === 'scan-research-refreshes') {
+    const cadence = typeof payload.cadenceMinutes === 'number'
+      ? Math.max(15, Math.min(240, Math.round(payload.cadenceMinutes)))
+      : 15
     const bucket = new Date(now)
-    bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
+    const bucketMs = cadence * 60_000
+    bucket.setTime(Math.floor(bucket.getTime() / bucketMs) * bucketMs)
     return `${jobType}:${bucket.toISOString()}`
   }
   if ((jobType === 'materialize-market-leadership' || jobType === 'run-candidate-scout') && typeof payload.tradingDate === 'string') {
@@ -101,7 +132,12 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
 export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'run-candidate-scout') return 'fmp'
-  if (jobType === 'refresh-cross-asset' || jobType === 'materialize-market-leadership' || jobType === 'scan-research-refreshes') return 'market-data'
+  if (
+    jobType === 'refresh-cross-asset'
+    || jobType === 'materialize-market-leadership'
+    || jobType === 'scan-research-refreshes'
+    || jobType === 'prune-market-data'
+  ) return 'market-data'
   return 'codex'
 }
 
@@ -224,6 +260,10 @@ async function executeJob(
     return { count: assets.length, screenerUniverseCount: universe.length }
   }
 
+  if (job.job_type === 'prune-market-data') {
+    return pruneMarketData()
+  }
+
   if (job.job_type === 'refresh-market-screener') {
     const client = getAlpacaClient()
     if (!client) throw new Error('Alpaca credentials are not configured')
@@ -239,7 +279,14 @@ async function executeJob(
     if (assets.length === 0) assets = await syncAlpacaAssets(client)
     assets = await resolveMarketUniverse(assets)
     const snapshot = await materializeAlpacaScreener({ client, assets })
-    await enqueueAgentJob('generate-market-memo', { snapshotId: snapshot.snapshotId })
+    const slot = marketMemoSlot(new Date())
+    await enqueueAgentJob('generate-market-memo', {
+      snapshotId: snapshot.snapshotId,
+      synthesize: Boolean(slot),
+      ...(slot ? { slot: slot.slot } : {}),
+    }, slot
+      ? `generate-market-memo:${slot.date}:${slot.slot}`
+      : `generate-market-state:${snapshot.snapshotId}`)
     return snapshot
   }
 
@@ -302,7 +349,7 @@ async function executeJob(
       ? job.payload.snapshotId
       : (await fetchLatestSnapshotMeta())?.id
     if (!snapshotId) throw new Error('No completed market snapshot is available')
-    return materializeMarketMemo(snapshotId)
+    return materializeMarketMemo(snapshotId, { synthesize: job.payload.synthesize !== false })
   }
 
   if (job.job_type === 'generate-morning-brief') {
@@ -332,7 +379,9 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
   if (!job) return false
 
   const startedAt = Date.now()
-  const provider = agentJobProvider(job.job_type)
+  const provider = job.job_type === 'generate-market-memo' && job.payload.synthesize === false
+    ? 'market-data'
+    : agentJobProvider(job.job_type)
   const model = provider === 'codex' ? (process.env.CODEX_SYNTHESIS_MODEL ?? 'gpt-5.6-terra') : null
   const { data: run, error: runError } = await supabase
     .from('agent_runs')
@@ -349,9 +398,14 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
       },
     }).eq('id', run.id).eq('status', 'running')
   }
+  const fmpUsageBefore = getFmpUsageSnapshot()
 
   try {
-    const output = await executeJob(job, reportProgress)
+    const output = outputWithUsage(
+      await executeJob(job, reportProgress),
+      fmpUsageBefore,
+      getFmpUsageSnapshot(),
+    )
     await Promise.all([
       supabase.from('agent_runs').update({
         status: 'succeeded', output, finished_at: new Date().toISOString(), duration_ms: Date.now() - startedAt,

@@ -59,7 +59,10 @@ Instruments: ${JSON.stringify(inputs.instruments)}`
   }
 }
 
-export async function materializeMarketMemo(snapshotId: string): Promise<{ marketStateId: string; generatedAt: string }> {
+export async function materializeMarketMemo(
+  snapshotId: string,
+  options: { synthesize?: boolean } = {},
+): Promise<{ marketStateId: string; generatedAt: string; synthesized: boolean }> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
 
@@ -114,8 +117,8 @@ export async function materializeMarketMemo(snapshotId: string): Promise<{ marke
     .single()
   if (stateError || !stateRecord) throw new Error(`Unable to persist market state: ${stateError?.message ?? 'unknown error'}`)
 
-  if (!shouldRunMarketSynthesis()) {
-    return { marketStateId: stateRecord.id, generatedAt: stateGeneratedAt }
+  if (options.synthesize === false || !shouldRunMarketSynthesis()) {
+    return { marketStateId: stateRecord.id, generatedAt: stateGeneratedAt, synthesized: false }
   }
 
   const generated = await generateMarketMemo(rows, snapshot.data_as_of)
@@ -135,5 +138,5 @@ export async function materializeMarketMemo(snapshotId: string): Promise<{ marke
   }, { onConflict: 'market_state_id' })
   if (memoError) throw new Error(`Unable to persist market memo: ${memoError.message}`)
 
-  return { marketStateId: stateRecord.id, generatedAt: generated.memo.generatedAt }
+  return { marketStateId: stateRecord.id, generatedAt: generated.memo.generatedAt, synthesized: true }
 }

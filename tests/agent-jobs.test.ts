@@ -50,6 +50,7 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
 test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('sync-market-assets'), 'alpaca')
   assert.equal(agentJobProvider('refresh-market-screener'), 'alpaca')
+  assert.equal(agentJobProvider('prune-market-data'), 'market-data')
   assert.equal(agentJobProvider('refresh-fmp-intelligence'), 'fmp')
   assert.equal(agentJobProvider('refresh-cross-asset'), 'market-data')
   assert.equal(agentJobProvider('materialize-market-leadership'), 'market-data')
@@ -58,6 +59,21 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('generate-company-research'), 'codex')
   assert.equal(agentJobProvider('event-refresh-company-research'), 'codex')
   assert.equal(agentJobProvider('scan-research-refreshes'), 'market-data')
+})
+
+test('provider work respects slow off-hours dedupe buckets', () => {
+  assert.equal(
+    buildAgentJobDedupeKey('refresh-fmp-intelligence', new Date('2026-07-29T08:31:00Z'), {
+      cadenceMinutes: 120,
+    }),
+    'refresh-fmp-intelligence:2026-07-29T08:00:00.000Z',
+  )
+  assert.equal(
+    buildAgentJobDedupeKey('refresh-market-screener', new Date('2026-07-29T21:31:00Z'), {
+      mode: 'daily',
+    }),
+    'refresh-market-screener:daily:2026-07-29',
+  )
 })
 
 test('agent jobs recognize a database missing the dedupe index', () => {
