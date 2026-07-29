@@ -75,6 +75,19 @@ test('closed markets refresh stale publications once instead of preserving old d
   assert.equal(shouldRefreshClosedMarket({ published_at: '2026-07-28T21:00:00Z' }, now), false)
 })
 
+test('worker startup recovers stale claimed jobs after a hard stop', async () => {
+  const [agentJobsSource, workerSource] = await Promise.all([
+    readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../scripts/markets-worker.ts', import.meta.url), 'utf8'),
+  ])
+  assert.match(agentJobsSource, /export async function recoverStaleAgentJobs/)
+  assert.match(agentJobsSource, /45 \* 60 \* 1_000/)
+  assert.match(agentJobsSource, /status: 'queued'/)
+  assert.match(agentJobsSource, /Recovered after the worker stopped/)
+  assert.match(workerSource, /await recoverStaleAgentJobs\(\)/)
+  assert.match(workerSource, /stale_jobs_recovered/)
+})
+
 test('empty PostgREST RPC results normalize to no claimed job', () => {
   assert.equal(normalizeClaimedAgentJob([]), null)
   assert.equal(

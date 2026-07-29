@@ -118,6 +118,64 @@ export function shouldRefreshClosedMarket(
   return !Number.isFinite(publishedAt) || now.getTime() - publishedAt >= 6 * 60 * 60 * 1_000
 }
 
+interface StaleAgentJob {
+  id: string
+  attempts: number
+  max_attempts: number
+}
+
+export async function recoverStaleAgentJobs(
+  now = new Date(),
+  staleAfterMs = 45 * 60 * 1_000,
+): Promise<number> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const staleBefore = new Date(now.getTime() - staleAfterMs).toISOString()
+  const { data, error } = await supabase
+    .from('agent_jobs')
+    .select('id,attempts,max_attempts')
+    .eq('status', 'running')
+    .lt('claimed_at', staleBefore)
+  if (error) throw new Error(`Unable to inspect stale agent jobs: ${error.message}`)
+  const jobs = (data ?? []) as StaleAgentJob[]
+  if (jobs.length === 0) return 0
+
+  const retryableIds = jobs.filter((job) => job.attempts < job.max_attempts).map((job) => job.id)
+  const exhaustedIds = jobs.filter((job) => job.attempts >= job.max_attempts).map((job) => job.id)
+  const recoveredAt = now.toISOString()
+  const recoveryError = 'Recovered after the worker stopped while this job was running.'
+  const updates = [
+    supabase.from('agent_runs').update({
+      status: 'failed',
+      error: recoveryError,
+      finished_at: recoveredAt,
+    }).in('job_id', jobs.map((job) => job.id)).eq('status', 'running'),
+  ]
+  if (retryableIds.length > 0) {
+    updates.push(supabase.from('agent_jobs').update({
+      status: 'queued',
+      claimed_by: null,
+      claimed_at: null,
+      run_after: recoveredAt,
+      last_error: recoveryError,
+      updated_at: recoveredAt,
+    }).in('id', retryableIds).eq('status', 'running'))
+  }
+  if (exhaustedIds.length > 0) {
+    updates.push(supabase.from('agent_jobs').update({
+      status: 'failed',
+      claimed_by: null,
+      claimed_at: null,
+      last_error: recoveryError,
+      updated_at: recoveredAt,
+    }).in('id', exhaustedIds).eq('status', 'running'))
+  }
+  const results = await Promise.all(updates)
+  const updateError = results.find((result) => result.error)?.error
+  if (updateError) throw new Error(`Unable to recover stale agent jobs: ${updateError.message}`)
+  return jobs.length
+}
+
 export async function enqueueAgentJob(
   jobType: AgentJobType,
   payload: Record<string, unknown> = {},

@@ -1,5 +1,5 @@
 import { hostname } from 'node:os'
-import { processOneAgentJob } from '../lib/server/agent-jobs.ts'
+import { processOneAgentJob, recoverStaleAgentJobs } from '../lib/server/agent-jobs.ts'
 import { enqueueDueAgentJobs } from '../lib/server/agent-schedule.ts'
 import type { AgentJobType } from '../lib/server/agent-jobs.ts'
 
@@ -34,6 +34,15 @@ async function main() {
       event: 'provider_disabled',
       provider: 'codex',
       reason: 'CODEX_SYNTHESIS_ENABLED is false',
+    }))
+  }
+  const recoveredJobs = await recoverStaleAgentJobs()
+  if (recoveredJobs > 0) {
+    console.info(JSON.stringify({
+      level: 'info',
+      workerId,
+      event: 'stale_jobs_recovered',
+      count: recoveredJobs,
     }))
   }
 
