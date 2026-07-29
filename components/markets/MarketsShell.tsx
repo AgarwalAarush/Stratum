@@ -94,7 +94,15 @@ export function MarketsShell({ children, dataAsOf }: { children: React.ReactNode
             <ArrowClockwise size={17} weight="regular" className={refreshing ? 'markets-refreshing' : ''} />
           </button>
           <span className="markets-status-dot" aria-hidden="true" />
-          <span className="markets-status-copy">Updated {formatMarketTime(dataAsOf)}</span>
+          <Link
+            href="/markets/system"
+            prefetch={false}
+            className="markets-status-copy"
+            onMouseEnter={() => prefetchRoute('/markets/system')}
+            onFocus={() => prefetchRoute('/markets/system')}
+          >
+            Updated {formatMarketTime(dataAsOf)}
+          </Link>
           <button
             type="button"
             className="markets-mobile-menu-button"
