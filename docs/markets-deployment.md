@@ -80,7 +80,7 @@ The worker scheduler is enabled by default and checks once per minute. It create
 | Mondays after 13:00 UTC | `generate-weekly-overview` | `/api/cron/weekly-overview` |
 | 1st and 15th after 14:00 UTC | `generate-monthly-overview` | `/api/cron/monthly-overview` |
 
-The screener job refreshes only when Alpaca reports the market open. A market snapshot is published only after all rows are written; its follow-up memo is a separate job tied to the immutable snapshot ID.
+The screener job refreshes every five minutes while Alpaca reports the market open. While closed, it refreshes once when the latest stored publication is at least six hours old so a restarted worker cannot preserve a multi-day stale snapshot. A market snapshot is published only after all rows are written; its follow-up memo is a separate job tied to the immutable snapshot ID.
 
 Set `WORKER_SCHEDULER_ENABLED=false` only when an external scheduler is intentionally the sole source of jobs. QStash requests must remain signed POSTs.
 
