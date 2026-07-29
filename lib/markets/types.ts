@@ -359,6 +359,17 @@ export interface EquityResearchNote {
   error: string | null
 }
 
+export interface ResearchJobStatus {
+  id: string
+  symbol: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  progress: number
+  phase: string
+  error: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ThesisKillCriterion {
   id: string
   description: string

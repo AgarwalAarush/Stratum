@@ -156,7 +156,10 @@ export async function enqueueAgentJob(
   return { id: inserted.id, deduplicated: false }
 }
 
-async function executeJob(job: AgentJobRecord): Promise<unknown> {
+async function executeJob(
+  job: AgentJobRecord,
+  reportProgress: (progress: number, phase: string) => Promise<void> = async () => {},
+): Promise<unknown> {
   if (job.job_type === 'sync-market-assets') {
     const assets = await syncAlpacaAssets()
     const universe = await resolveMarketUniverse(assets, { forceRefresh: true })
@@ -223,7 +226,12 @@ async function executeJob(job: AgentJobRecord): Promise<unknown> {
     const ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : ''
     const symbol = typeof job.payload.symbol === 'string' ? job.payload.symbol.toUpperCase() : ''
     if (!ownerId || !symbol) throw new Error('Research jobs require ownerId and symbol')
-    const note = await generateFullEquityResearch(symbol, ownerId, String(job.payload.reason ?? 'manual'))
+    const note = await generateFullEquityResearch(
+      symbol,
+      ownerId,
+      String(job.payload.reason ?? 'manual'),
+      reportProgress,
+    )
     return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf }
   }
 
@@ -274,9 +282,18 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
     .select('id')
     .single()
   if (runError || !run) throw new Error(`Unable to create agent run: ${runError?.message ?? 'unknown error'}`)
+  const reportProgress = async (progress: number, phase: string) => {
+    await supabase.from('agent_runs').update({
+      output: {
+        progress: Math.max(0, Math.min(100, Math.round(progress))),
+        phase,
+        updatedAt: new Date().toISOString(),
+      },
+    }).eq('id', run.id).eq('status', 'running')
+  }
 
   try {
-    const output = await executeJob(job)
+    const output = await executeJob(job, reportProgress)
     await Promise.all([
       supabase.from('agent_runs').update({
         status: 'succeeded', output, finished_at: new Date().toISOString(), duration_ms: Date.now() - startedAt,

@@ -1,15 +1,18 @@
 import { MarketsFeedPage } from '@/components/markets/MarketsFeedPage'
 import { MarketsIntentLink } from '@/components/markets/MarketsIntentLink'
+import { ResearchQueue } from '@/components/markets/ResearchQueue'
 import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { fetchFinanceReports } from '@/lib/data/finance-reports'
 import { fetchPersistedFmpMarketItems } from '@/lib/data/fmp-intelligence'
 import { mergeMarketNews } from '@/lib/markets/news'
 import { fetchEquityResearchLibrary } from '@/lib/server/company-research'
+import { fetchResearchJobs } from '@/lib/server/research-jobs'
 
 export default async function MarketsResearchPage() {
   const userPromise = requireAllowedMarketUser()
-  const [notes, reports, filings] = await Promise.all([
+  const [notes, jobs, reports, filings] = await Promise.all([
     userPromise.then((user) => fetchEquityResearchLibrary(user.id)),
+    userPromise.then((user) => fetchResearchJobs(user.id)),
     fetchFinanceReports(30).catch(() => []),
     fetchPersistedFmpMarketItems(['fmp-sec-filings'], 30).catch(() => []),
   ])
@@ -20,6 +23,7 @@ export default async function MarketsResearchPage() {
         <div><p className="markets-eyebrow">Immutable research versions</p><h1 className="markets-display">Research</h1></div>
         <span>{notes.length} generated artifacts</span>
       </header>
+      <ResearchQueue initialJobs={jobs} />
       <section className="research-artifact-grid">
         {notes.length === 0 ? <p>No full research artifacts yet. Promote a Candidate Scout brief or generate one from a Stock Viewer.</p> : notes.map((note) => (
           <MarketsIntentLink key={note.id} href={`/markets/stocks/${note.symbol}/research`}>

@@ -1,6 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import type { ResearchJobStatus } from '@/lib/markets/types'
+import { ResearchProgressRing } from './ResearchProgressRing'
 
 export function ResearchActionButton({
   symbol,
@@ -9,7 +13,48 @@ export function ResearchActionButton({
   symbol: string
   hasResearch: boolean
 }) {
-  const [status, setStatus] = useState<'idle' | 'submitting' | 'queued' | 'error'>('idle')
+  const router = useRouter()
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'error'>('idle')
+  const [job, setJob] = useState<ResearchJobStatus | null>(null)
+  const activeJobId = job && (job.status === 'queued' || job.status === 'running') ? job.id : null
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      const response = await fetch(`/api/markets/research?symbol=${encodeURIComponent(symbol)}`, { cache: 'no-store' })
+      if (!response.ok) return
+      const payload = await response.json() as { jobs?: ResearchJobStatus[] }
+      const latest = payload.jobs?.[0] ?? null
+      if (!cancelled && latest && (
+        latest.status === 'queued'
+        || latest.status === 'running'
+        || (!hasResearch && latest.status === 'succeeded')
+      )) setJob(latest)
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [hasResearch, symbol])
+
+  useEffect(() => {
+    if (!activeJobId) return
+    let cancelled = false
+    const poll = async () => {
+      const response = await fetch(`/api/markets/research?id=${encodeURIComponent(activeJobId)}`, { cache: 'no-store' })
+      if (!response.ok) return
+      const payload = await response.json() as { jobs?: ResearchJobStatus[] }
+      const next = payload.jobs?.[0]
+      if (!next || cancelled) return
+      setJob(next)
+      if (next.status === 'succeeded') router.refresh()
+    }
+    const interval = window.setInterval(() => void poll(), 2_500)
+    void poll()
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [activeJobId, router])
+
   const submit = async () => {
     setStatus('submitting')
     try {
@@ -19,22 +64,44 @@ export function ResearchActionButton({
         body: JSON.stringify({ symbol, refresh: hasResearch }),
       })
       if (!response.ok) throw new Error('Unable to queue research')
-      setStatus('queued')
+      const payload = await response.json() as { id: string }
+      setJob({
+        id: payload.id,
+        symbol,
+        status: 'queued',
+        progress: 8,
+        phase: 'Waiting for research worker',
+        error: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      setStatus('idle')
     } catch {
       setStatus('error')
     }
   }
+
+  if (job) {
+    return (
+      <div className="research-action">
+        <ResearchProgressRing job={job} />
+        {job.status === 'succeeded'
+          ? <Link href={`/markets/stocks/${symbol}/research`}>Open full research →</Link>
+          : job.status === 'failed'
+            ? <button type="button" onClick={() => setJob(null)}>Try again</button>
+            : <Link href="/markets/research">View research queue →</Link>}
+      </div>
+    )
+  }
+
   return (
     <div className="research-action">
-      <button type="button" onClick={submit} disabled={status === 'submitting' || status === 'queued'}>
+      <button type="button" onClick={submit} disabled={status === 'submitting'}>
         {status === 'submitting'
           ? 'Queueing…'
-          : status === 'queued'
-            ? 'Research queued'
-            : hasResearch ? 'Refresh research' : 'Generate research'}
+          : hasResearch ? 'Refresh research' : 'Generate research'}
       </button>
       <span aria-live="polite">
-        {status === 'queued' ? 'The macserver worker will build and version this report in the background.' : ''}
         {status === 'error' ? 'The job could not be queued.' : ''}
       </span>
     </div>

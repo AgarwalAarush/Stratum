@@ -109,7 +109,6 @@ export function CapitalDecisionRail({
       <button type="button" className="capital-watchlist-button" onClick={addToWatchlist}>Add to watchlist</button>
       <ResearchActionButton symbol={symbol} hasResearch={Boolean(research)} />
       {notice ? <small>{notice}</small> : null}
-      <small>Trading and order placement are intentionally out of scope.</small>
     </aside>
   )
 }

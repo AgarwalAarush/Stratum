@@ -246,11 +246,14 @@ export async function generateFullEquityResearch(
   symbol: string,
   ownerId: string,
   reason = 'manual',
+  onProgress?: (progress: number, phase: string) => Promise<void>,
 ): Promise<EquityResearchNote> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required for research ownership')
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
+  await onProgress?.(15, 'Collecting company evidence')
   const packet = await materializeCompanyPacket(symbol, ownerId)
+  await onProgress?.(45, 'Company packet assembled')
   const version = await nextVersion('equity_research_notes', ownerId, symbol)
   const { data: noteRecord, error: createError } = await supabase.from('equity_research_notes').insert({
     symbol,
@@ -262,12 +265,14 @@ export async function generateFullEquityResearch(
   }).select('id').single()
   if (createError || !noteRecord) throw new Error(`Unable to create research version: ${createError?.message ?? 'unknown error'}`)
   try {
+    await onProgress?.(55, 'Synthesizing 15-section analysis')
     const result = await runCodexJson({
       prompt: researchPrompt(packet),
       schemaPath: 'schemas/equity-research.schema.json',
       validate: validateEquityResearch,
       timeoutMs: 20 * 60 * 1_000,
     })
+    await onProgress?.(90, 'Validating and publishing research')
     const generatedAt = new Date().toISOString()
     const content = { ...result.data, reason }
     const { error } = await supabase.from('equity_research_notes').update({
@@ -295,6 +300,7 @@ export async function generateFullEquityResearch(
       )
       if (sourceError) throw new Error(`Unable to persist research sources: ${sourceError.message}`)
     }
+    await onProgress?.(100, 'Research complete')
     return {
       id: noteRecord.id,
       symbol,
