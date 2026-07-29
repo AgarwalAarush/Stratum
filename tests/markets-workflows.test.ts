@@ -48,7 +48,8 @@ test('ticker surfaces converge on the canonical Stock Viewer route', () => {
   assert.match(decisionRail, /Kill criteria/)
   assert.equal(decisionRail.includes('Trading and order placement are intentionally out of scope.'), false)
   assert.equal(source('components/markets/ResearchActionButton.tsx').includes('macserver worker'), false)
-  assert.match(viewer, /Read full analysis/)
+  assert.match(viewer, /Full equity research/)
+  assert.equal(viewer.includes('stock-viewer-research-summary'), false)
 })
 
 test('Stock Viewer supports intercepted desktop routing and a canonical deep link', () => {

@@ -12,21 +12,21 @@ import { fetchLatestMarketLeadership } from './markets-repository.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 const RESEARCH_SECTION_IDS: EquityResearchSectionId[] = [
-  'executive_summary',
-  'variant_view',
-  'business_model',
-  'industry_structure',
-  'competitive_position',
-  'management_and_governance',
-  'historical_financials',
-  'earnings_quality',
-  'forward_estimates',
+  'snapshot',
+  'business_model_and_moat',
+  'financial_profile',
+  'market_and_competition',
+  'growth_drivers',
+  'management_and_capital_allocation',
   'valuation',
   'catalysts',
-  'risks',
-  'scenario_analysis',
-  'thesis_monitoring',
-  'sources_and_method',
+  'bull_case',
+  'base_case',
+  'bear_case',
+  'risk_factors',
+  'sentiment_and_positioning',
+  'verdict',
+  'kill_criteria',
 ]
 
 function record(value: unknown): Record<string, unknown> {
@@ -52,6 +52,47 @@ function number(value: unknown): number | null {
 
 function validOwnerId(ownerId: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ownerId)
+}
+
+interface SecSubmissionRecent {
+  accessionNumber?: string[]
+  filingDate?: string[]
+  reportDate?: string[]
+  form?: string[]
+  primaryDocument?: string[]
+}
+
+async function fetchRecentSecFilings(
+  cikValue: unknown,
+): Promise<Array<{ title: string; url: string; publishedAt: string }>> {
+  const cik = String(cikValue ?? '').replace(/\D/g, '')
+  if (!cik) return []
+  const response = await fetch(`https://data.sec.gov/submissions/CIK${cik.padStart(10, '0')}.json`, {
+    signal: AbortSignal.timeout(12_000),
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': process.env.SEC_API_USER_AGENT?.trim() || 'Stratum/0.3 (aarushagarwal.dev)',
+    },
+  })
+  if (!response.ok) throw new Error(`SEC submissions request failed (${response.status})`)
+  const payload = await response.json() as { filings?: { recent?: SecSubmissionRecent } }
+  const recent = payload.filings?.recent
+  if (!recent) return []
+  const filings: Array<{ title: string; url: string; publishedAt: string }> = []
+  for (let index = 0; index < (recent.form?.length ?? 0); index += 1) {
+    const form = recent.form?.[index]
+    const accession = recent.accessionNumber?.[index]
+    const document = recent.primaryDocument?.[index]
+    const filedAt = recent.filingDate?.[index]
+    if (!form || !accession || !document || !filedAt || !['10-K', '10-Q', '8-K'].includes(form)) continue
+    filings.push({
+      title: `${form} filed ${filedAt}${recent.reportDate?.[index] ? ` · period ${recent.reportDate[index]}` : ''}`,
+      url: `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession.replaceAll('-', '')}/${document}`,
+      publishedAt: new Date(`${filedAt}T16:00:00Z`).toISOString(),
+    })
+    if (filings.length >= 12) break
+  }
+  return filings
 }
 
 async function nextVersion(table: 'company_packets' | 'equity_research_notes', ownerId: string, symbol: string): Promise<number> {
@@ -82,9 +123,9 @@ export async function materializeCompanyPacket(
     fetchFmpStableJson<T>(endpoint, { symbol, ...parameters }, { apiKey })
   const [profileResult, incomeResult, balanceResult, cashResult, ratiosResult, estimatesResult, peersResult, thesis] = await Promise.all([
     request<unknown>('profile'),
-    request<unknown>('income-statement', { period: 'annual', limit: 5 }),
-    request<unknown>('balance-sheet-statement', { period: 'annual', limit: 5 }),
-    request<unknown>('cash-flow-statement', { period: 'annual', limit: 5 }),
+    request<unknown>('income-statement', { period: 'annual', limit: 6 }),
+    request<unknown>('balance-sheet-statement', { period: 'annual', limit: 6 }),
+    request<unknown>('cash-flow-statement', { period: 'annual', limit: 6 }),
     request<unknown>('ratios-ttm'),
     request<unknown>('analyst-estimates', { period: 'annual', limit: 5 }),
     request<unknown>('stock-peers'),
@@ -92,6 +133,20 @@ export async function materializeCompanyPacket(
   ])
   const profile = serializableRecord(records(profileResult)[0] ?? record(profileResult))
   const ratiosRaw = records(ratiosResult)[0] ?? record(ratiosResult)
+  const [incomeQuarterlyResult, cashQuarterlyResult, keyMetricsResult, gradesResult, secFilings] = await Promise.all([
+    request<unknown>('income-statement', { period: 'quarter', limit: 8 }).catch(() => []),
+    request<unknown>('cash-flow-statement', { period: 'quarter', limit: 8 }).catch(() => []),
+    request<unknown>('key-metrics-ttm').catch(() => []),
+    request<unknown>('grades-consensus').catch(() => []),
+    fetchRecentSecFilings(profile.cik).catch(() => []),
+  ])
+  const incomeAnnual = records(incomeResult).map(serializableRecord)
+  const balanceAnnual = records(balanceResult).map(serializableRecord)
+  const cashFlowAnnual = records(cashResult).map(serializableRecord)
+  const incomeQuarterly = records(incomeQuarterlyResult).map(serializableRecord)
+  const cashFlowQuarterly = records(cashQuarterlyResult).map(serializableRecord)
+  const keyMetrics = serializableRecord(records(keyMetricsResult)[0] ?? record(keyMetricsResult))
+  const gradesConsensus = serializableRecord(records(gradesResult)[0] ?? record(gradesResult))
   const filingsAndEvents = await supabase.from('feed_items').select('title,url,published_at,metadata,section')
     .eq('scope', 'markets').contains('metadata', { topic: `company:${symbol}` })
     .order('published_at', { ascending: false }).limit(50)
@@ -106,6 +161,13 @@ export async function materializeCompanyPacket(
     { id: 'fmp-profile', label: 'FMP company profile', url: `https://financialmodelingprep.com/stable/profile?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
     { id: 'fmp-financials', label: 'FMP financial statements', url: `https://financialmodelingprep.com/stable/income-statement?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
     { id: 'fmp-estimates', label: 'FMP analyst estimates', url: `https://financialmodelingprep.com/stable/analyst-estimates?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
+    ...secFilings.map((filing, index) => ({
+      id: `sec-filing-${index + 1}`,
+      label: filing.title,
+      url: filing.url,
+      source: 'SEC EDGAR',
+      asOf: filing.publishedAt,
+    })),
     ...items.slice(0, 20).map((item, index) => ({
       id: `event-${index + 1}`,
       label: item.title,
@@ -125,7 +187,7 @@ export async function materializeCompanyPacket(
     id: '',
     symbol,
     version,
-    dataAsOf: [stock.asOf, ...items.map((item) => item.publishedAt)].sort().at(-1) ?? stock.asOf,
+    dataAsOf: [stock.asOf, ...items.map((item) => item.publishedAt), ...secFilings.map((item) => item.publishedAt)].sort().at(-1) ?? stock.asOf,
     generatedAt,
     priceHistory: {
       latestPrice: stock.price,
@@ -135,23 +197,33 @@ export async function materializeCompanyPacket(
       vs200DayAverage: stock.vs200DayAverage,
     },
     company: profile,
-    fundamentals: [
-      ...records(incomeResult).map(serializableRecord),
-      ...records(balanceResult).map(serializableRecord),
-      ...records(cashResult).map(serializableRecord),
-    ],
+    fundamentals: [...incomeAnnual, ...balanceAnnual, ...cashFlowAnnual],
+    financialStatements: {
+      incomeAnnual,
+      incomeQuarterly,
+      balanceAnnual,
+      cashFlowAnnual,
+      cashFlowQuarterly,
+    },
     ratios: {
       peRatio: number(ratiosRaw.priceToEarningsRatioTTM ?? ratiosRaw.peRatioTTM),
       priceToSales: number(ratiosRaw.priceToSalesRatioTTM),
+      enterpriseValueToEbitda: number(ratiosRaw.enterpriseValueMultipleTTM),
+      freeCashFlowYield: number(ratiosRaw.freeCashFlowYieldTTM),
+      priceToFreeCashFlow: number(ratiosRaw.priceToFreeCashFlowsRatioTTM),
       returnOnEquity: number(ratiosRaw.returnOnEquityTTM),
       netMargin: number(ratiosRaw.netProfitMarginTTM),
       debtToEquity: number(ratiosRaw.debtToEquityRatioTTM),
     },
+    sentiment: { gradesConsensus, keyMetrics },
     estimates: records(estimatesResult).map((item) =>
       Object.fromEntries(Object.entries(serializableRecord(item)).flatMap(([key, value]) =>
         typeof value === 'string' || typeof value === 'number' || value === null ? [[key, value]] : []))),
     peers,
-    filings: items.filter((item) => item.category.toLowerCase().includes('sec')),
+    filings: [
+      ...secFilings,
+      ...items.filter((item) => item.category.toLowerCase().includes('sec')),
+    ].slice(0, 20),
     events: items,
     industryContext: {
       sector: stock.sector,
@@ -207,8 +279,14 @@ export function validateEquityResearch(value: unknown): ResearchGeneration {
     if (typeof output[key] !== 'string' || !output[key]) throw new Error(`Missing ${key}`)
     return output[key] as string
   }
-  const confidence = Number(output.confidence)
+  const rawConfidence = Number(output.confidence)
+  const confidence = rawConfidence > 0 && rawConfidence <= 1 ? rawConfidence * 100 : rawConfidence
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 100) throw new Error('Invalid confidence')
+  const wordCount = sections.reduce((total, section) =>
+    total + String(section.content ?? '').trim().split(/\s+/).filter(Boolean).length, 0)
+  if (wordCount < 1_600 || wordCount > 3_000) {
+    throw new Error(`Equity research must contain 1,600-3,000 words of analysis; received ${wordCount}`)
+  }
   return {
     formalRating,
     entryAction,
@@ -231,11 +309,23 @@ export function validateEquityResearch(value: unknown): ResearchGeneration {
 
 function researchPrompt(packet: CompanyPacket): string {
   return [
-    'Create an institutional-quality equity research note for a 1-2 year ownership decision.',
+    'Act as a senior equity research analyst. Create an institutional-quality GARP equity research note for a 12-month fair-value decision and 1-2 year ownership lens.',
     'Use only facts and source IDs present in the CompanyPacket. Never invent a current price, estimate, event, source, or citation.',
+    'Take a position, defend it with structured evidence, and state exactly what would prove it wrong. Commit or omit; do not use empty hedging language.',
     'Keep formal BUY/HOLD/SELL separate from the practical entry action.',
-    'The executive summary must clearly state Key Debate, Mispricing, Fastest Kill Signal, and Entry Decision.',
-    'Return exactly the 15 schema sections. Use concise Markdown in each section and cite supporting source IDs.',
+    'The executive fields must state the Key Debate, quantified Mispricing, Fastest Kill Signal, and today’s practical Entry Decision.',
+    'Return confidence as a whole-number percentage from 0 to 100, not as a decimal fraction.',
+    'Return exactly the 15 schema sections in schema order: Snapshot; Business Model & Moat; Financial Profile; Market & Competition; Growth Drivers; Management & Capital Allocation; Valuation; Catalysts; Bull Case; Base Case; Bear Case; Risk Factors; Sentiment & Positioning; Verdict; Kill Criteria.',
+    'Write 1,800-2,500 total words across those sections. Lead every section with its conclusion and bold the single most important number or claim.',
+    'Use Markdown bullets and numbered lists for dense information. Do not compress three or more claims into one paragraph.',
+    'Label claims inline as **FACT**, **VIEW**, **CONSENSUS**, or **ESTIMATE**. Cite supporting CompanyPacket source IDs in each section.',
+    'Financial Profile must analyze the available 6-8 quarter history and call out growth, margin, cash-flow, balance-sheet, and share-count inflections.',
+    'Business Model & Moat must cover revenue mechanics, customer value, geographic/FX exposure, concentration, switching costs, and a none/narrow/wide moat judgment.',
+    'Valuation must reconcile growth assumptions with the current multiple and perform a reverse-DCF-style implied-expectations analysis. If inputs are inadequate, explicitly say which calculation cannot be completed.',
+    'Bull, Base, and Bear must each state assumptions, fair value, implied return, and the evidence that makes the scenario plausible.',
+    'Verdict must cover ownership fit, current setup, behavior near highs and on weakness, entry action, better trigger, sizing, liquidity, and horizon.',
+    'Kill Criteria must contain 3-5 specific numeric thresholds or observable events—not vibes.',
+    'When evidence is unavailable (TAM, 13F, short interest, options, geographic mix, unit economics, etc.), say “Not available in the current packet” and explain what source would be required.',
     'If evidence is inadequate, say so explicitly and use NOT_RATED or wait rather than filling gaps.',
     '',
     JSON.stringify(packet),

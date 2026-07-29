@@ -32,7 +32,6 @@ export function StockViewer({ data }: { data: StockViewerData }) {
   const packet = data.companyPacket
   const latestFinancials = packet?.fundamentals[0]
   const latestEstimate = packet?.estimates[0]
-  const research = data.researchNote
   return (
     <article className="stock-viewer">
       <header className="stock-viewer-hero" id="overview">
@@ -44,6 +43,12 @@ export function StockViewer({ data }: { data: StockViewerData }) {
             <span>{money(data.price)}</span>
             <span className={(data.dailyChange ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{percent(data.dailyChange)}</span>
           </div>
+          <MarketsIntentLink
+            className="stock-viewer-research-button"
+            href={`/markets/stocks/${data.symbol}/research`}
+          >
+            Full equity research
+          </MarketsIntentLink>
         </div>
         <div className="stock-viewer-provenance">
           <span>{data.feed === 'delayed_sip' ? 'Delayed SIP' : data.feed.toUpperCase()}</span>
@@ -52,7 +57,7 @@ export function StockViewer({ data }: { data: StockViewerData }) {
       </header>
 
       <nav className="stock-viewer-outline" aria-label={`${data.symbol} page sections`}>
-        {['Overview', 'Financials', 'Valuation', 'Industry Context', 'Earnings', 'Events', 'Research'].map((section) => (
+        {['Overview', 'Financials', 'Valuation', 'Industry Context', 'Earnings', 'Events'].map((section) => (
           <a key={section} href={`#${section.toLowerCase().replaceAll(' ', '-')}`}>{section}</a>
         ))}
       </nav>
@@ -101,6 +106,18 @@ export function StockViewer({ data }: { data: StockViewerData }) {
             <p className="markets-eyebrow">{data.subIndustry}</p>
             <h2>Industry Context</h2>
             <p>{candidate?.industryContext ?? `${data.symbol} is compared against equal-weight ${data.subIndustry} leadership, breadth, and constituent performance.`}</p>
+            {candidate ? (
+              <div className="stock-viewer-dimensions">
+                {candidate.dimensions.map((dimension) => (
+                  <div key={dimension.name}>
+                    <span>{dimension.label}</span>
+                    <strong data-assessment={dimension.assessment}>{dimension.assessment}</strong>
+                    <p>{dimension.evidence}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {candidate?.status === 'new' ? <CandidateActions candidateId={candidate.id} /> : null}
           </section>
 
           <section className="stock-viewer-section" id="earnings">
@@ -123,25 +140,6 @@ export function StockViewer({ data }: { data: StockViewerData }) {
               <p key={`${event.url}-${event.publishedAt}`}><a href={event.url} target="_blank" rel="noreferrer">{event.title}</a> · {new Date(event.publishedAt).toLocaleDateString()}</p>
             ))}
             <MarketsIntentLink href={`/markets/events?symbol=${data.symbol}`}>Open events relevant to {data.symbol} →</MarketsIntentLink>
-          </section>
-
-          <section className="stock-viewer-section stock-viewer-research-summary" id="research">
-            <p className="markets-eyebrow">Equity research</p>
-            <h2>{research?.keyDebate ?? (candidate ? 'Why this name surfaced' : 'No full thesis yet')}</h2>
-            <p>{research?.mispricing ?? candidate?.whySurfaced ?? 'Generate a versioned research artifact when this name deserves capital-allocation work.'}</p>
-            {candidate ? (
-              <div className="stock-viewer-dimensions">
-                {candidate.dimensions.map((dimension) => (
-                  <div key={dimension.name}>
-                    <span>{dimension.label}</span>
-                    <strong data-assessment={dimension.assessment}>{dimension.assessment}</strong>
-                    <p>{dimension.evidence}</p>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {candidate?.status === 'new' ? <CandidateActions candidateId={candidate.id} /> : null}
-            <MarketsIntentLink href={`/markets/stocks/${data.symbol}/research`}>Read full analysis →</MarketsIntentLink>
           </section>
         </div>
 

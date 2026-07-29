@@ -5,21 +5,21 @@ import { readFile } from 'node:fs/promises'
 import { validateEquityResearch } from '../lib/server/company-research.ts'
 
 const sectionIds = [
-  'executive_summary',
-  'variant_view',
-  'business_model',
-  'industry_structure',
-  'competitive_position',
-  'management_and_governance',
-  'historical_financials',
-  'earnings_quality',
-  'forward_estimates',
+  'snapshot',
+  'business_model_and_moat',
+  'financial_profile',
+  'market_and_competition',
+  'growth_drivers',
+  'management_and_capital_allocation',
   'valuation',
   'catalysts',
-  'risks',
-  'scenario_analysis',
-  'thesis_monitoring',
-  'sources_and_method',
+  'bull_case',
+  'base_case',
+  'bear_case',
+  'risk_factors',
+  'sentiment_and_positioning',
+  'verdict',
+  'kill_criteria',
 ]
 
 function validResearch() {
@@ -36,7 +36,7 @@ function validResearch() {
     sections: sectionIds.map((id) => ({
       id,
       title: id.replaceAll('_', ' '),
-      content: 'Source-grounded analysis.',
+      content: Array.from({ length: 18 }, () => 'Source-grounded analysis remains explicit and decision-relevant.').join(' '),
       sourceIds: ['source-1'],
     })),
     sourceIds: ['source-1'],
@@ -56,6 +56,22 @@ test('equity research validator requires the fixed 15-section contract', () => {
   const duplicate = validResearch()
   duplicate.sections[14] = { ...duplicate.sections[0] }
   assert.throws(() => validateEquityResearch(duplicate), /15 required sections/)
+
+  const thin = validResearch()
+  thin.sections = thin.sections.map((section) => ({ ...section, content: 'Too thin.' }))
+  assert.throws(() => validateEquityResearch(thin), /1,600-3,000 words/)
+})
+
+test('research packet includes quarterly evidence, SEC filings, and skill-aligned generation rules', async () => {
+  const source = await readFile(new URL('../lib/server/company-research.ts', import.meta.url), 'utf8')
+  const schema = await readFile(new URL('../schemas/equity-research.schema.json', import.meta.url), 'utf8')
+  assert.match(source, /period: 'quarter', limit: 8/)
+  assert.match(source, /data\.sec\.gov\/submissions/)
+  assert.match(source, /1,800-2,500 total words/)
+  assert.match(source, /Business Model & Moat/)
+  assert.match(source, /Kill Criteria must contain 3-5 specific numeric thresholds/)
+  assert.match(schema, /"business_model_and_moat"/)
+  assert.match(schema, /"sentiment_and_positioning"/)
 })
 
 test('research persistence migration creates immutable owned versions and sources', async () => {

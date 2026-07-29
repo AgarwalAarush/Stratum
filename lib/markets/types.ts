@@ -297,7 +297,18 @@ export interface CompanyPacket {
   }
   company: Record<string, string | number | boolean | null>
   fundamentals: Array<Record<string, string | number | boolean | null>>
+  financialStatements?: {
+    incomeAnnual: Array<Record<string, string | number | boolean | null>>
+    incomeQuarterly: Array<Record<string, string | number | boolean | null>>
+    balanceAnnual: Array<Record<string, string | number | boolean | null>>
+    cashFlowAnnual: Array<Record<string, string | number | boolean | null>>
+    cashFlowQuarterly: Array<Record<string, string | number | boolean | null>>
+  }
   ratios: Record<string, number | null>
+  sentiment?: {
+    gradesConsensus: Record<string, string | number | boolean | null>
+    keyMetrics: Record<string, string | number | boolean | null>
+  }
   estimates: Array<Record<string, string | number | null>>
   peers: string[]
   filings: Array<{ title: string; url: string; publishedAt: string }>
@@ -313,21 +324,21 @@ export interface CompanyPacket {
 }
 
 export type EquityResearchSectionId =
-  | 'executive_summary'
-  | 'variant_view'
-  | 'business_model'
-  | 'industry_structure'
-  | 'competitive_position'
-  | 'management_and_governance'
-  | 'historical_financials'
-  | 'earnings_quality'
-  | 'forward_estimates'
+  | 'snapshot'
+  | 'business_model_and_moat'
+  | 'financial_profile'
+  | 'market_and_competition'
+  | 'growth_drivers'
+  | 'management_and_capital_allocation'
   | 'valuation'
   | 'catalysts'
-  | 'risks'
-  | 'scenario_analysis'
-  | 'thesis_monitoring'
-  | 'sources_and_method'
+  | 'bull_case'
+  | 'base_case'
+  | 'bear_case'
+  | 'risk_factors'
+  | 'sentiment_and_positioning'
+  | 'verdict'
+  | 'kill_criteria'
 
 export interface EquityResearchSection {
   id: EquityResearchSectionId

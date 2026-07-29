@@ -13,7 +13,7 @@ export interface MarketsUser {
 }
 
 export const getAllowedMarketUser = cache(async (): Promise<MarketsUser | null> => {
-  if (marketsAuthBypassEnabled()) return { id: 'local-development-user' }
+  if (marketsAuthBypassEnabled()) return { id: MARKETS_OWNER_ID }
   const cookieStore = await cookies()
   const valid = await verifyMarketsSessionToken(cookieStore.get(MARKETS_SESSION_COOKIE)?.value)
   return valid ? { id: MARKETS_OWNER_ID } : null
