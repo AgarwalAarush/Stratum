@@ -8,6 +8,7 @@ import {
   isMissingDedupeConstraint,
   normalizeClaimedAgentJob,
   parseAgentJobType,
+  shouldRefreshClosedMarket,
 } from '../lib/server/agent-jobs.ts'
 
 test('agent job parser rejects unknown work', () => {
@@ -43,6 +44,13 @@ test('agent jobs recognize a database missing the dedupe index', () => {
     true,
   )
   assert.equal(isMissingDedupeConstraint('permission denied'), false)
+})
+
+test('closed markets refresh stale publications once instead of preserving old data', () => {
+  const now = new Date('2026-07-29T02:00:00Z')
+  assert.equal(shouldRefreshClosedMarket(null, now), true)
+  assert.equal(shouldRefreshClosedMarket({ published_at: '2026-07-28T19:59:59Z' }, now), true)
+  assert.equal(shouldRefreshClosedMarket({ published_at: '2026-07-28T21:00:00Z' }, now), false)
 })
 
 test('empty PostgREST RPC results normalize to no claimed job', () => {

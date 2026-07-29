@@ -78,6 +78,15 @@ export function isMissingDedupeConstraint(message: string): boolean {
   return message.includes('no unique or exclusion constraint matching the ON CONFLICT specification')
 }
 
+export function shouldRefreshClosedMarket(
+  snapshot: { published_at: string | null } | null,
+  now = new Date(),
+): boolean {
+  if (!snapshot?.published_at) return true
+  const publishedAt = Date.parse(snapshot.published_at)
+  return !Number.isFinite(publishedAt) || now.getTime() - publishedAt >= 6 * 60 * 60 * 1_000
+}
+
 export async function enqueueAgentJob(
   jobType: AgentJobType,
   payload: Record<string, unknown> = {},
@@ -127,7 +136,12 @@ async function executeJob(job: AgentJobRecord): Promise<unknown> {
     const client = getAlpacaClient()
     if (!client) throw new Error('Alpaca credentials are not configured')
     const clock = await client.fetchClock()
-    if (!clock.isOpen) return { skipped: 'market_closed', nextOpen: clock.nextOpen }
+    if (!clock.isOpen) {
+      const latest = await fetchLatestSnapshotMeta()
+      if (!shouldRefreshClosedMarket(latest)) {
+        return { skipped: 'market_closed_recent_snapshot', nextOpen: clock.nextOpen }
+      }
+    }
 
     let assets = await fetchPersistedMarketAssets()
     if (assets.length === 0) assets = await syncAlpacaAssets(client)

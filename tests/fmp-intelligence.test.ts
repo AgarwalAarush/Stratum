@@ -52,13 +52,14 @@ test('FMP intelligence fetch tolerates plan-gated sources and reports diagnostic
     requestedUrls.push(url)
 
     if (url.includes('/news/stock-latest')) {
-      return Response.json([{
+      const item = {
         symbol: 'NVDA',
         publishedDate: '2026-07-28T18:00:00Z',
         publisher: 'Example News',
         title: 'NVIDIA update',
         url: 'https://example.com/nvda',
-      }])
+      }
+      return Response.json([item, item])
     }
     if (url.includes('/news/press-releases-latest')) {
       return new Response('Payment Required', { status: 402 })

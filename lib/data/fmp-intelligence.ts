@@ -40,6 +40,10 @@ interface FmpSourceDefinition {
   normalize: (payload: unknown) => NewsItem[]
 }
 
+function dedupeNewsItems(items: NewsItem[]): NewsItem[] {
+  return [...new Map(items.map((item) => [`${item.type}:${item.url}`, item])).values()]
+}
+
 export interface FmpIntelligenceSectionResult {
   section: FmpMarketSection
   itemCount: number
@@ -162,7 +166,7 @@ export async function fetchFmpMarketIntelligence(options: FmpIntelligenceOptions
 
   const settled = await Promise.allSettled(definitions.map(async (definition) => {
     const payload = await fetchFmpStableJson<unknown>(definition.endpoint, definition.parameters, requestOptions)
-    return definition.normalize(payload)
+    return dedupeNewsItems(definition.normalize(payload))
   }))
 
   const sections = settled.map<FmpIntelligenceSectionResult>((result, index) => {
