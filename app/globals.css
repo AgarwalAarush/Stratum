@@ -979,6 +979,7 @@
   display: flex;
   gap: 22px;
   justify-content: flex-end;
+  min-height: 40px;
 }
 
 .market-action-link {
