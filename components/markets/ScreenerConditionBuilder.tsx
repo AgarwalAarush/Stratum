@@ -89,6 +89,72 @@ function returnPeriodFor(field: ScreenerReturnField) {
   return SCREENER_RETURN_PERIODS.find((period) => period.field === field)!
 }
 
+function ReturnPeriodPicker({
+  value,
+  onChange,
+}: {
+  value: ScreenerReturnField
+  onChange: (value: ScreenerReturnField) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement>(null)
+  const selected = returnPeriodFor(value)
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: PointerEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  return (
+    <div ref={pickerRef} className="market-return-period-picker">
+      <button
+        type="button"
+        className="market-return-period-trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>{selected.label}</span>
+        <CaretDown size={14} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="market-return-period-menu" role="menu" aria-label="Price change period">
+          {SCREENER_RETURN_PERIODS.map((period) => {
+            const active = period.field === value
+            return (
+              <button
+                key={period.field}
+                type="button"
+                role="menuitemradio"
+                aria-checked={active}
+                className={active ? 'market-return-period-option-active' : ''}
+                onClick={() => {
+                  onChange(period.field)
+                  setOpen(false)
+                }}
+              >
+                <Check size={15} aria-hidden="true" />
+                <span>{period.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function numberLabel(field: ScreenerFilterField, value: number, unit?: string): string {
   const magnitude = directionalField(field) ? value : Math.abs(value)
   if (field === 'volume') {
@@ -158,12 +224,10 @@ function ConditionForm({ draft, onChange }: ConditionFormProps) {
       {isScreenerReturnField(draft.field) && (
         <label className="market-condition-control">
           <span>Period</span>
-          <select
+          <ReturnPeriodPicker
             value={draft.field}
-            onChange={(event) => onChange({ ...draft, field: event.target.value as ScreenerReturnField })}
-          >
-            {SCREENER_RETURN_PERIODS.map((period) => <option key={period.field} value={period.field}>{period.label}</option>)}
-          </select>
+            onChange={(field) => onChange({ ...draft, field })}
+          />
         </label>
       )}
 

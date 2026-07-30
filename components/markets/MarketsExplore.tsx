@@ -28,7 +28,7 @@ function GroupTable({
     <div className="market-explore-groups">
       <div className="market-group-table-wrap">
         <table className="market-group-table">
-          <thead><tr><th>Group</th><th>n</th><th>30d</th><th>50d</th><th>200d</th><th>1yr</th><th>vs50</th><th>vs200</th></tr></thead>
+          <thead><tr><th>Group</th><th>n</th><th>1d</th><th>30d</th><th>50d</th><th>200d</th><th>1yr</th><th>vs50</th><th>vs200</th></tr></thead>
           <tbody>
             {groups.map((item) => (
               <tr
@@ -47,6 +47,7 @@ function GroupTable({
               >
                 <td>{item.label}</td>
                 <td>{item.constituentCount}</td>
+                <td className={(item.dayReturn ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{percent(item.dayReturn)}</td>
                 <td className={(item.return30d ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{percent(item.return30d)}</td>
                 <td>{percent(item.return50d)}</td>
                 <td>{percent(item.return200d)}</td>
@@ -63,6 +64,7 @@ function GroupTable({
           <p className="markets-eyebrow">{group.groupType === 'sector' ? 'Sector' : group.sector}</p>
           <h2>{group.label}</h2>
           <div className="market-group-stats">
+            <div><strong>{percent(group.dayReturn)}</strong><span>today</span></div>
             <div><strong>{percent(group.return30d)}</strong><span>30 days</span></div>
             <div><strong>{percent(group.return1y)}</strong><span>1 year</span></div>
             <div><strong>{percent(group.vs200DayAverage)}</strong><span>vs 200d</span></div>
