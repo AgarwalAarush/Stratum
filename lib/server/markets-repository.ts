@@ -11,12 +11,17 @@ import type {
   MarketDivergenceSignal,
   CandidateBrief,
   CandidateWeeklySummary,
+  StockLeadershipMetric,
   StockViewerData,
   ScreenerQuery,
   ScreenerResponse,
   ScreenerRow,
 } from '../markets/types.ts'
-import { rankDailySubIndustries } from '../markets/leadership.ts'
+import {
+  aggregateLeadershipGroups,
+  applyCurrentDayReturns,
+  rankDailySubIndustries,
+} from '../markets/leadership.ts'
 import { runScreener } from '../markets/screener.ts'
 import { buildDeterministicMarketMemo, type MarketStateInputs } from '../markets/state.ts'
 import { crossAssetMarketInstrument } from './cross-asset.ts'
@@ -416,6 +421,40 @@ function normalizeGroupMetric(row: Record<string, unknown>): MarketGroupMetric {
   }
 }
 
+function currentDayReturnMap(rows: Array<Record<string, unknown>>): Map<string, number> {
+  return new Map(rows.flatMap((row) => {
+    const value = Number(row.daily_change)
+    return typeof row.symbol === 'string' && Number.isFinite(value) ? [[row.symbol, value] as const] : []
+  }))
+}
+
+function groupMetricKey(group: Pick<MarketGroupMetric, 'groupType' | 'sector' | 'label'>): string {
+  return `${group.groupType}\u0000${group.sector ?? ''}\u0000${group.label}`
+}
+
+function attachCurrentGroupReturns(
+  groups: MarketGroupMetric[],
+  stocks: StockLeadershipMetric[],
+): MarketGroupMetric[] {
+  const currentGroups = new Map([
+    ...aggregateLeadershipGroups(stocks, 'sector'),
+    ...aggregateLeadershipGroups(stocks, 'sub_industry'),
+  ].map((group) => [groupMetricKey(group), group.dayReturn]))
+  return groups.map((group) => ({
+    ...group,
+    dayReturn: currentGroups.get(groupMetricKey(group)) ?? group.dayReturn,
+  }))
+}
+
+function currentAdvancingPercent(
+  stocks: Array<Pick<StockLeadershipMetric, 'dayReturn'>>,
+  fallback: number,
+): number {
+  const available = stocks.filter((stock) => stock.dayReturn !== null && Number.isFinite(stock.dayReturn))
+  if (available.length === 0) return fallback
+  return Math.round((available.filter((stock) => stock.dayReturn! > 0).length / available.length) * 10_000) / 100
+}
+
 function normalizeDivergence(row: Record<string, unknown>): MarketDivergenceSignal {
   return {
     id: String(row.signal_id),
@@ -440,14 +479,23 @@ async function loadLatestMarketLeadership(): Promise<MarketLeadershipSnapshot | 
     .maybeSingle()
   if (snapshotError || !snapshotData) return null
   const snapshot = snapshotData as LeadershipSnapshotRecord
-  const [{ data: stockRows, error: stockError }, { data: groupRows, error: groupError }, { data: divergenceRows, error: divergenceError }] = await Promise.all([
+  const [
+    { data: stockRows, error: stockError },
+    { data: groupRows, error: groupError },
+    { data: divergenceRows, error: divergenceError },
+    { data: screenerDailyRows, error: screenerDailyError },
+  ] = await Promise.all([
     supabase.from('market_stock_metrics').select('*').eq('snapshot_id', snapshot.id),
     supabase.from('market_group_metrics').select('*').eq('snapshot_id', snapshot.id),
     supabase.from('market_divergence_signals').select('*').eq('snapshot_id', snapshot.id),
+    supabase.from('screener_rows').select('symbol,daily_change').eq('snapshot_id', snapshot.id),
   ])
-  if (stockError || groupError || divergenceError) return null
-  const stocks = (stockRows ?? []).map((row) => normalizeStockLeadershipRow(row))
-  const groups = (groupRows ?? []).map((row) => normalizeGroupMetric(row))
+  if (stockError || groupError || divergenceError || screenerDailyError) return null
+  const stocks = applyCurrentDayReturns(
+    (stockRows ?? []).map((row) => normalizeStockLeadershipRow(row)),
+    currentDayReturnMap((screenerDailyRows ?? []) as Array<Record<string, unknown>>),
+  )
+  const groups = attachCurrentGroupReturns((groupRows ?? []).map((row) => normalizeGroupMetric(row)), stocks)
   const by30Day = [...stocks].sort((left, right) => (right.return30d ?? -Infinity) - (left.return30d ?? -Infinity))
   return {
     id: snapshot.id,
@@ -457,7 +505,7 @@ async function loadLatestMarketLeadership(): Promise<MarketLeadershipSnapshot | 
     universeCount: snapshot.universe_count,
     usableCount: snapshot.usable_count,
     freshCount: snapshot.fresh_count,
-    advancingPercent: Number(snapshot.advancing_percent),
+    advancingPercent: currentAdvancingPercent(stocks, Number(snapshot.advancing_percent)),
     above50DayPercent: Number(snapshot.above_50_day_percent),
     sectors: groups.filter((group) => group.groupType === 'sector')
       .sort((left, right) => (right.return1y ?? -Infinity) - (left.return1y ?? -Infinity)),
@@ -496,16 +544,21 @@ async function loadLatestMarketLeadershipSummary(): Promise<MarketLeadershipSnap
   const [
     { data: stockDailyRows, error: stockDailyError },
     { data: divergenceRows, error: divergenceError },
+    { data: screenerDailyRows, error: screenerDailyError },
   ] = await Promise.all([
-    supabase.from('market_stock_metrics').select('sector,sub_industry,day_return').eq('snapshot_id', snapshot.id),
+    supabase.from('market_stock_metrics').select('symbol,sector,sub_industry,day_return').eq('snapshot_id', snapshot.id),
     supabase.from('market_divergence_signals').select('*').eq('snapshot_id', snapshot.id),
+    supabase.from('screener_rows').select('symbol,daily_change').eq('snapshot_id', snapshot.id),
   ])
-  if (stockDailyError || divergenceError) return null
-  const dailySubIndustries = rankDailySubIndustries((stockDailyRows ?? []).map((row) => ({
+  if (stockDailyError || divergenceError || screenerDailyError) return null
+  const currentDayReturns = currentDayReturnMap((screenerDailyRows ?? []) as Array<Record<string, unknown>>)
+  const dailyStocks = (stockDailyRows ?? []).map((row) => ({
     sector: String(row.sector),
     subIndustry: String(row.sub_industry),
-    dayReturn: row.day_return === null || row.day_return === undefined ? null : Number(row.day_return),
-  })))
+    dayReturn: currentDayReturns.get(String(row.symbol))
+      ?? (row.day_return === null || row.day_return === undefined ? null : Number(row.day_return)),
+  }))
+  const dailySubIndustries = rankDailySubIndustries(dailyStocks)
   return {
     id: snapshot.id,
     tradingDate: snapshot.trading_date,
@@ -514,7 +567,7 @@ async function loadLatestMarketLeadershipSummary(): Promise<MarketLeadershipSnap
     universeCount: snapshot.universe_count,
     usableCount: snapshot.usable_count,
     freshCount: snapshot.fresh_count,
-    advancingPercent: Number(snapshot.advancing_percent),
+    advancingPercent: currentAdvancingPercent(dailyStocks, Number(snapshot.advancing_percent)),
     above50DayPercent: Number(snapshot.above_50_day_percent),
     sectors: [],
     subIndustries: dailySubIndustries.map((group) => ({
