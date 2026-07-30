@@ -36,8 +36,8 @@ export default async function MarketsSystemPage() {
             <article>
               <span>Worker</span>
               <strong data-state={status.worker.state}>{status.worker.state}</strong>
-              <p>{status.worker.workerId ?? 'No worker recorded'}</p>
-              <time>{formatTime(status.worker.lastRunAt)}</time>
+              <p>{status.worker.workerId ?? 'No worker recorded'} · durable heartbeat</p>
+              <time>Seen {formatTime(status.worker.lastSeenAt)}</time>
             </article>
             <article>
               <span>Jobs · 24 hours</span>

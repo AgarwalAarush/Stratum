@@ -18,12 +18,18 @@ interface AgentRunStatusRow {
   worker_id: string
 }
 
+interface WorkerHeartbeatRow {
+  worker_id: string
+  last_seen_at: string
+}
+
 export interface MarketSystemStatus {
   generatedAt: string
   worker: {
     state: 'healthy' | 'quiet' | 'degraded'
     workerId: string | null
     lastRunAt: string | null
+    lastSeenAt: string | null
     expectedWithinMinutes: number
   }
   jobs: {
@@ -81,6 +87,19 @@ async function loadAgentRuns(since: string): Promise<AgentRunStatusRow[]> {
   return rows
 }
 
+async function loadLatestWorkerHeartbeat(): Promise<WorkerHeartbeatRow | null> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+  const { data, error } = await supabase
+    .from('worker_heartbeats')
+    .select('worker_id,last_seen_at')
+    .order('last_seen_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error || !data) return null
+  return data as WorkerHeartbeatRow
+}
+
 const systemStatusCache = new AsyncTtlCache<MarketSystemStatus>({ maxEntries: 1 })
 
 export async function fetchMarketSystemStatus(now = new Date()): Promise<MarketSystemStatus | null> {
@@ -88,12 +107,16 @@ export async function fetchMarketSystemStatus(now = new Date()): Promise<MarketS
   return systemStatusCache.get('latest', STATUS_CACHE_MS, async () => {
     const trailingStart = new Date(now.getTime() - 30 * 86_400_000).toISOString()
     const last24Hours = new Date(now.getTime() - 86_400_000).getTime()
-    const runs = await loadAgentRuns(trailingStart)
+    const [runs, heartbeat] = await Promise.all([
+      loadAgentRuns(trailingStart),
+      loadLatestWorkerHeartbeat(),
+    ])
     const recentRuns = runs.filter((run) => Date.parse(run.started_at) >= last24Hours)
     const latest = runs[0] ?? null
-    const expectedWithinMinutes = isUsMarketRefreshWindow(now) ? 15 : 150
-    const latestAgeMinutes = latest
-      ? (now.getTime() - Date.parse(latest.finished_at ?? latest.started_at)) / 60_000
+    const expectedWithinMinutes = heartbeat ? 3 : isUsMarketRefreshWindow(now) ? 15 : 150
+    const latestActivityAt = heartbeat?.last_seen_at ?? latest?.finished_at ?? latest?.started_at ?? null
+    const latestAgeMinutes = latestActivityAt
+      ? (now.getTime() - Date.parse(latestActivityAt)) / 60_000
       : Infinity
     const recentFailures = recentRuns
       .filter((run) => run.status === 'failed' && run.error)
@@ -109,13 +132,16 @@ export async function fetchMarketSystemStatus(now = new Date()): Promise<MarketS
     return {
       generatedAt: now.toISOString(),
       worker: {
-        state: latest?.status === 'failed'
+        state: heartbeat && latestAgeMinutes <= expectedWithinMinutes
+          ? 'healthy'
+          : latest?.status === 'failed'
           ? 'degraded'
           : latestAgeMinutes <= expectedWithinMinutes
             ? 'healthy'
             : 'quiet',
-        workerId: latest?.worker_id ?? null,
+        workerId: heartbeat?.worker_id ?? latest?.worker_id ?? null,
         lastRunAt: latest?.finished_at ?? latest?.started_at ?? null,
+        lastSeenAt: heartbeat?.last_seen_at ?? latest?.finished_at ?? latest?.started_at ?? null,
         expectedWithinMinutes,
       },
       jobs: {

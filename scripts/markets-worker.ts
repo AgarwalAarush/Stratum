@@ -1,10 +1,12 @@
 import { hostname } from 'node:os'
 import { processOneAgentJob, recoverStaleAgentJobs } from '../lib/server/agent-jobs.ts'
 import { enqueueDueAgentJobs } from '../lib/server/agent-schedule.ts'
+import { recordWorkerHeartbeat } from '../lib/server/worker-heartbeat.ts'
 import type { AgentJobType } from '../lib/server/agent-jobs.ts'
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 5_000)
 const SCHEDULER_INTERVAL_MS = Number(process.env.WORKER_SCHEDULER_INTERVAL_MS ?? 60_000)
+const HEARTBEAT_INTERVAL_MS = Number(process.env.WORKER_HEARTBEAT_INTERVAL_MS ?? 60_000)
 const schedulerEnabled = process.env.WORKER_SCHEDULER_ENABLED !== 'false'
 const fmpEnabled = Boolean(process.env.FMP_API_KEY)
 const codexEnabled = process.env.CODEX_SYNTHESIS_ENABLED !== 'false'
@@ -13,9 +15,25 @@ const runOnce = process.argv.includes('--once')
 const lastScheduledKeys = new Map<AgentJobType, string>()
 let stopping = false
 let nextScheduleAt = 0
+let nextHeartbeatAt = 0
 
 process.on('SIGINT', () => { stopping = true })
 process.on('SIGTERM', () => { stopping = true })
+
+async function heartbeat(): Promise<void> {
+  if (Date.now() < nextHeartbeatAt) return
+  nextHeartbeatAt = Date.now() + HEARTBEAT_INTERVAL_MS
+  try {
+    await recordWorkerHeartbeat({ workerId, schedulerEnabled, fmpEnabled, codexEnabled })
+  } catch (error) {
+    console.warn(JSON.stringify({
+      level: 'warn',
+      workerId,
+      event: 'heartbeat_failed',
+      error: error instanceof Error ? error.message : String(error),
+    }))
+  }
+}
 
 async function main() {
   if (schedulerEnabled && !fmpEnabled) {
@@ -48,6 +66,7 @@ async function main() {
 
   do {
     try {
+      await heartbeat()
       if (schedulerEnabled && Date.now() >= nextScheduleAt) {
         const scheduled = await enqueueDueAgentJobs(new Date(), lastScheduledKeys, {
           includeFmp: fmpEnabled,
