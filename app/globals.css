@@ -2805,6 +2805,30 @@
   min-height: 63px;
 }
 
+.market-screen-load-more {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.market-screen-load-more button {
+  border: 1px solid var(--market-border-strong);
+  color: var(--market-text-dim);
+  min-height: 30px;
+  padding: 0 12px;
+}
+
+.market-screen-load-more button:hover:not(:disabled) {
+  border-color: var(--market-text-muted);
+  color: var(--market-text);
+}
+
+.market-screen-load-more button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
 .market-pagination {
   align-items: center;
   display: flex;

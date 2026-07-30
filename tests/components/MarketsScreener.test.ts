@@ -18,6 +18,10 @@ test('screener delegates filter editing to the condition builder', () => {
   assert.match(screenerSource, /market-screen-table-wrap scrollbar-none/)
   assert.equal(screenerSource.includes('Run screen'), false)
   assert.match(screenerSource, /void execute\(\{ filters: nextFilters, page: 1 \}\)/)
+  assert.match(screenerSource, /RESULTS_PAGE_SIZE = 50/)
+  assert.match(screenerSource, /new IntersectionObserver/)
+  assert.match(screenerSource, /Keep scrolling to load more/)
+  assert.equal(screenerSource.includes('Screener pages'), false)
   assert.equal(screenerSource.includes('ADDITIONAL_FILTERS'), false)
 })
 

@@ -7,7 +7,7 @@ test('default screener applies deterministic conditions and relative-volume sort
   const response = runIllustrativeScreener(DEFAULT_SCREENER_QUERY)
 
   assert.equal(response.feed, 'illustrative')
-  assert.equal(response.pageSize, 10)
+  assert.equal(response.pageSize, 50)
   assert.ok(response.total > 10)
   assert.ok(response.rows.every((row) => row.price > 10 && row.dailyChange > 0 && row.relativeVolume > 0.8 && row.price > row.fiftyDayAverage))
   assert.ok(response.rows[0]!.relativeVolume >= response.rows[1]!.relativeVolume)

@@ -46,7 +46,7 @@ export const DEFAULT_SCREENER_QUERY: ScreenerQuery = {
   sort: 'relativeVolume',
   direction: 'desc',
   page: 1,
-  pageSize: 10,
+  pageSize: 50,
 }
 
 export function nextScreenerSort(

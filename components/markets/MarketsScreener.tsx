@@ -1,8 +1,8 @@
 'use client'
 
-import { CaretDown, CaretLeft, CaretRight, CaretUp, Funnel } from '@phosphor-icons/react'
+import { CaretDown, CaretUp, Funnel } from '@phosphor-icons/react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { MarketSparkline } from './MarketSparkline'
 import { ScreenerConditionBuilder } from './ScreenerConditionBuilder'
 import {
@@ -24,6 +24,8 @@ import type {
 interface MarketsScreenerProps {
   initialResponse: ScreenerResponse
 }
+
+const RESULTS_PAGE_SIZE = 50
 
 interface SortableHeaderProps {
   direction: 'asc' | 'desc'
@@ -120,27 +122,32 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   const [sort, setSort] = useState<ScreenerSortField>(DEFAULT_SCREENER_QUERY.sort)
   const [direction, setDirection] = useState<'asc' | 'desc'>(DEFAULT_SCREENER_QUERY.direction)
   const [response, setResponse] = useState(initialResponse)
+  const [visibleRows, setVisibleRows] = useState(initialResponse.rows)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const requestRef = useRef<AbortController | null>(null)
+  const loadingRef = useRef(false)
+  const loadMoreRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => () => requestRef.current?.abort(), [])
 
-  const execute = async (nextQuery?: Partial<ScreenerQuery>) => {
+  const execute = useCallback(async (nextQuery?: Partial<ScreenerQuery>, append = false) => {
+    if (append && loadingRef.current) return
     const query: ScreenerQuery = {
       preset: nextQuery?.preset ?? preset,
       filters: nextQuery?.filters ?? filters,
       sort: nextQuery?.sort ?? sort,
       direction: nextQuery?.direction ?? direction,
       page: nextQuery?.page ?? 1,
-      pageSize: 10,
+      pageSize: RESULTS_PAGE_SIZE,
     }
 
-    requestRef.current?.abort()
+    if (!append) requestRef.current?.abort()
     const controller = new AbortController()
     requestRef.current = controller
+    loadingRef.current = true
     setLoading(true)
     setError('')
     try {
@@ -153,17 +160,22 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
       const payload = await result.json()
       if (!result.ok) throw new Error(payload?.error?.message ?? 'The screen could not be run')
       if (requestRef.current !== controller) return
-      setResponse(payload as ScreenerResponse)
+      const nextResponse = payload as ScreenerResponse
+      setResponse(nextResponse)
+      setVisibleRows((current) => append
+        ? [...current, ...nextResponse.rows.filter((row) => !current.some((existing) => existing.symbol === row.symbol))]
+        : nextResponse.rows)
     } catch (caught) {
       if (caught instanceof Error && caught.name === 'AbortError') return
       setError(caught instanceof Error ? caught.message : 'The screen could not be run')
     } finally {
       if (requestRef.current === controller) {
         requestRef.current = null
+        loadingRef.current = false
         setLoading(false)
       }
     }
-  }
+  }, [direction, filters, preset, sort])
 
   const choosePreset = (nextPreset: ScreenerPreset) => {
     const next = PRESET_QUERIES[nextPreset]
@@ -203,10 +215,23 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
     void execute({ sort: next.sort, direction: next.direction, page: 1 })
   }
 
-  const totalPages = Math.max(1, Math.ceil(response.total / response.pageSize))
-  const visiblePages = Array.from({ length: Math.min(totalPages, 4) }, (_, index) => index + 1)
-  const startRow = response.total === 0 ? 0 : (response.page - 1) * response.pageSize + 1
-  const endRow = Math.min(response.page * response.pageSize, response.total)
+  const hasMore = visibleRows.length < response.total
+  const endRow = Math.min(visibleRows.length, response.total)
+  const loadMore = useCallback(() => {
+    if (!hasMore) return
+    void execute({ page: response.page + 1 }, true)
+  }, [execute, hasMore, response.page])
+
+  useEffect(() => {
+    const sentinel = loadMoreRef.current
+    if (!sentinel || !hasMore) return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadMore()
+    }, { rootMargin: '640px 0px' })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [hasMore, loadMore])
+
   const openStock = (symbol: string) => router.push(`/markets/stocks/${symbol}`, { scroll: false })
   const preloadStock = (symbol: string) => router.prefetch(`/markets/stocks/${symbol}`)
   const selectedReturnField = (filters.find((filter) => isScreenerReturnField(filter.field))?.field ?? 'dailyChange') as ScreenerReturnField
@@ -279,9 +304,9 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
             </tr>
           </thead>
           <tbody>
-            {response.rows.length === 0 ? (
+            {visibleRows.length === 0 ? (
               <tr><td colSpan={12} className="market-screen-empty">No equities match these conditions. Remove a filter or choose another preset.</td></tr>
-            ) : response.rows.map((row) => {
+            ) : visibleRows.map((row) => {
               return (
                 <tr
                   key={row.symbol}
@@ -323,16 +348,15 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
       </div>
 
       <footer className="market-screen-footer">
-        <div className="market-pagination-summary">{startRow}–{endRow} of {response.total}</div>
-        <nav className="market-pagination" aria-label="Screener pages">
-          <button type="button" aria-label="Previous page" disabled={response.page <= 1} onClick={() => void execute({ page: response.page - 1 })}><CaretLeft size={14} /></button>
-          {visiblePages.map((page) => (
-            <button key={page} type="button" className={page === response.page ? 'market-page-active' : ''} aria-current={page === response.page ? 'page' : undefined} onClick={() => void execute({ page })}>{page}</button>
-          ))}
-          {totalPages > 4 && <span>…</span>}
-          {totalPages > 4 && <button type="button" onClick={() => void execute({ page: totalPages })}>{totalPages}</button>}
-          <button type="button" aria-label="Next page" disabled={response.page >= totalPages} onClick={() => void execute({ page: response.page + 1 })}><CaretRight size={14} /></button>
-        </nav>
+        <div className="market-pagination-summary">{response.total === 0 ? '0' : `1–${endRow}`} of {response.total}</div>
+        <div ref={loadMoreRef} className="market-screen-load-more" aria-live="polite">
+          {hasMore ? (
+            <>
+              <span>{loading ? 'Loading more…' : 'Keep scrolling to load more'}</span>
+              <button type="button" onClick={loadMore} disabled={loading}>Load more</button>
+            </>
+          ) : <span>{response.total > 0 ? 'All matching equities loaded' : ''}</span>}
+        </div>
         <span>US equities · {response.feed} feed{response.stale ? ' · stale' : ''}</span>
         <span>Snapshot calculated from normalized market data</span>
       </footer>
