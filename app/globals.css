@@ -5882,6 +5882,79 @@ body:has(.markets-shell) {
   min-height: 24px;
 }
 
+.stock-price-chart-period-picker {
+  position: relative;
+}
+
+.stock-price-chart-period-trigger {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--market-text-muted);
+  display: flex;
+  font: inherit;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0;
+  text-align: left;
+}
+
+.stock-price-chart-period-trigger:hover,
+.stock-price-chart-period-trigger[aria-expanded="true"] {
+  color: var(--market-text);
+}
+
+.stock-price-chart-period-trigger:focus-visible,
+.stock-price-chart-period-menu button:focus-visible {
+  outline: 2px solid var(--market-accent);
+  outline-offset: 3px;
+}
+
+.stock-price-chart-period-menu {
+  background: var(--market-surface);
+  border: 1px solid var(--market-border);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--market-text) 14%, transparent);
+  left: 0;
+  min-width: 142px;
+  padding: 5px;
+  position: absolute;
+  top: calc(100% + 4px);
+  z-index: 5;
+}
+
+.stock-price-chart-period-menu button {
+  align-items: center;
+  color: var(--market-text);
+  display: grid;
+  font-family: var(--font-ibm-plex-sans), ui-sans-serif, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  gap: 7px;
+  grid-template-columns: 14px minmax(0, 1fr);
+  min-height: 31px;
+  padding: 0 8px;
+  text-align: left;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.stock-price-chart-period-menu button svg {
+  opacity: 0;
+}
+
+.stock-price-chart-period-menu button:hover,
+.stock-price-chart-period-menu .stock-price-chart-period-option-active {
+  background: var(--market-surface-soft);
+}
+
+.stock-price-chart-period-menu .stock-price-chart-period-option-active {
+  color: var(--market-accent);
+}
+
+.stock-price-chart-period-menu .stock-price-chart-period-option-active svg {
+  opacity: 1;
+}
+
 .stock-price-chart-heading strong {
   color: var(--market-text);
   font-weight: 400;
