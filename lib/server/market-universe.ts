@@ -14,6 +14,7 @@ export const SPY_HOLDINGS_URL = 'https://www.ssga.com/library-content/products/f
 export const MIN_SP500_ASSETS = 450
 export const MARKET_BENCHMARK_SYMBOLS = ['SPY', 'QQQ', 'IWM', 'TLT', 'UUP', 'USO'] as const
 const UNIVERSE_CACHE_MS = 20 * 60 * 60 * 1_000
+const DATABASE_PAGE_SIZE = 1_000
 const SOURCE_NAME = 'state-street-spy-holdings'
 const EXPANDED_SOURCE_NAME = 'alpaca-liquidity-and-stratum-themes'
 
@@ -103,13 +104,20 @@ async function loadPersistedUniverse(
   supabase: SupabaseServiceClient,
   universe: string,
 ): Promise<PersistedUniverseRow[]> {
-  const { data, error } = await supabase
-    .from('market_universe_members')
-    .select('symbol,refreshed_at')
-    .eq('universe', universe)
-    .eq('active', true)
-  if (error) throw new Error(`Unable to load the ${universe} market universe: ${error.message}`)
-  return (data ?? []) as PersistedUniverseRow[]
+  const rows: PersistedUniverseRow[] = []
+  for (let from = 0; ; from += DATABASE_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('market_universe_members')
+      .select('symbol,refreshed_at')
+      .eq('universe', universe)
+      .eq('active', true)
+      .range(from, from + DATABASE_PAGE_SIZE - 1)
+    if (error) throw new Error(`Unable to load the ${universe} market universe: ${error.message}`)
+    const page = (data ?? []) as PersistedUniverseRow[]
+    rows.push(...page)
+    if (page.length < DATABASE_PAGE_SIZE) break
+  }
+  return rows
 }
 
 async function resolveSp500Symbols(

@@ -107,6 +107,8 @@ test('resolved universe loads both watchlisted and manually owned symbols', () =
   const source = readFileSync(join(process.cwd(), 'lib/server/market-universe.ts'), 'utf8')
   assert.match(source, /from\('market_watchlist_items'\)\.select\('symbol'\)/)
   assert.match(source, /from\('manual_positions'\)\.select\('symbol'\)/)
+  assert.match(source, /investment_theses/)
+  assert.match(source, /\.range\(from, from \+ DATABASE_PAGE_SIZE - 1\)/)
 })
 
 test('market universe migrations keep membership private and foreign keys indexed', () => {
