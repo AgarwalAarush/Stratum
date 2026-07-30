@@ -308,10 +308,11 @@ export interface ThesisContent {
   headline: string
   summary: string
   coreBelief: string
+  keyDebate: string
   whatChanged: string
   catalysts: string[]
   invalidation: string[]
-  nextQuestion: string
+  fastestKillSignal: string
   confidence: number
 }
 
@@ -483,6 +484,7 @@ export interface EquityResearchNote {
   status: 'queued' | 'running' | 'complete' | 'failed'
   formalRating: 'BUY' | 'HOLD' | 'SELL' | 'NOT_RATED'
   entryAction: 'buy_now' | 'nibble' | 'wait' | 'add_on_weakness' | 'avoid'
+  investmentThesis: string
   keyDebate: string
   mispricing: string
   fastestKillSignal: string

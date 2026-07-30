@@ -1,5 +1,4 @@
 import type {
-  CandidateBrief,
   CompanyPacket,
   EquityResearchNote,
   InvestmentThesis,
@@ -14,7 +13,7 @@ import type {
   ThesisWorkspaceData,
 } from '../markets/types.ts'
 import {
-  industryThesisContent,
+  normalizeThesisContent,
   stockThesisContent,
   thesisEntityKey,
   thesisSources,
@@ -33,10 +32,6 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
 
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
-}
-
 function sources(value: unknown): ThesisSource[] {
   return Array.isArray(value) ? value.flatMap((item) => {
     const source = record(item)
@@ -44,20 +39,6 @@ function sources(value: unknown): ThesisSource[] {
       ? [{ label: source.label, url: source.url, asOf: source.asOf }]
       : []
   }) : []
-}
-
-function content(value: unknown): ThesisContent {
-  const item = record(value)
-  return {
-    headline: String(item.headline ?? ''),
-    summary: String(item.summary ?? ''),
-    coreBelief: String(item.coreBelief ?? ''),
-    whatChanged: String(item.whatChanged ?? ''),
-    catalysts: stringArray(item.catalysts),
-    invalidation: stringArray(item.invalidation),
-    nextQuestion: String(item.nextQuestion ?? ''),
-    confidence: Math.max(0, Math.min(100, Number(item.confidence ?? 0))),
-  }
 }
 
 function normalize(row: Record<string, unknown>): InvestmentThesis {
@@ -71,7 +52,7 @@ function normalize(row: Record<string, unknown>): InvestmentThesis {
     version: Number(row.version),
     status: row.status as ThesisStatus,
     trigger: String(row.trigger),
-    content: content(row.content),
+    content: normalizeThesisContent(row.content),
     sources: sources(row.source_refs),
     dataAsOf: String(row.data_as_of),
     generatedAt: String(row.generated_at),
@@ -81,6 +62,8 @@ function normalize(row: Record<string, unknown>): InvestmentThesis {
 }
 
 function monitor(row: Record<string, unknown>): ThesisMonitor {
+  const stringArray = (value: unknown) =>
+    Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
   return {
     id: String(row.id),
     thesisId: String(row.thesis_id),
@@ -161,32 +144,6 @@ export async function proposeStockThesis(
   })
 }
 
-export async function proposeIndustryTheses(ownerId: string, briefs: CandidateBrief[]): Promise<number> {
-  const groups = new Map<string, CandidateBrief[]>()
-  for (const brief of briefs) {
-    if (brief.subIndustry === 'Unknown' || brief.subIndustry === 'Classification pending') continue
-    const key = `${brief.sector}\u0000${brief.subIndustry}`
-    groups.set(key, [...(groups.get(key) ?? []), brief])
-  }
-  let created = 0
-  for (const group of groups.values()) {
-    const first = group[0]!
-    if (group.length < 2 && first.primaryLane !== 'leadership') continue
-    const proposal = await saveProposal({
-      ownerId,
-      entityType: 'sub_industry',
-      sector: first.sector,
-      subIndustry: first.subIndustry,
-      trigger: 'candidate-scout',
-      content: industryThesisContent(group)!,
-      sources: group.flatMap((brief) => brief.evidence).slice(0, 8),
-      dataAsOf: first.generatedAt,
-    })
-    if (proposal) created += 1
-  }
-  return created
-}
-
 export async function fetchThesisWorkspace(ownerId: string): Promise<ThesisWorkspaceData> {
   const supabase = getSupabaseClient()
   if (!supabase || !validOwnerId(ownerId)) return { proposals: [], accepted: [], monitors: [] }
@@ -204,7 +161,7 @@ export async function fetchThesisWorkspace(ownerId: string): Promise<ThesisWorks
     throw new Error(`Unable to load thesis monitors: ${monitorResult.error.message}`)
   }
   const rows = (data ?? []).map((row) => normalize(row))
-  const proposals = rows.filter((item) => item.status === 'proposed')
+  const proposals = rows.filter((item) => item.status === 'proposed' && item.trigger !== 'candidate-scout')
   const accepted = [] as InvestmentThesis[]
   const seen = new Set<string>()
   for (const thesis of rows) {

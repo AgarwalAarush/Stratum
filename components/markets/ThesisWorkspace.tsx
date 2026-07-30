@@ -133,10 +133,16 @@ export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceD
                   <div><span>{thesis.entityType === 'stock' ? 'Stock thesis' : 'Industry thesis'}</span><h3>{title(thesis)}</h3><small>{label(thesis)} · proposed v{thesis.version}</small></div>
                   <time dateTime={thesis.generatedAt}>{new Date(thesis.generatedAt).toLocaleDateString()}</time>
                 </header>
-                <div className="thesis-proposal-copy"><strong>{thesis.content.headline}</strong><p>{thesis.content.summary}</p></div>
+                <div className="thesis-proposal-copy">
+                  <span>Thesis</span>
+                  <strong>{thesis.content.headline}</strong>
+                  <small>Why it may be mispriced</small>
+                  <p>{thesis.content.summary}</p>
+                </div>
                 <dl>
                   <div><dt>What changed</dt><dd>{thesis.content.whatChanged}</dd></div>
-                  <div><dt>Next question</dt><dd>{thesis.content.nextQuestion}</dd></div>
+                  <div><dt>Key debate</dt><dd>{thesis.content.keyDebate}</dd></div>
+                  <div><dt>Fastest disconfirming evidence</dt><dd>{thesis.content.fastestKillSignal}</dd></div>
                 </dl>
                 <footer>
                   <span>{thesis.sources.length} linked source{thesis.sources.length === 1 ? '' : 's'} · {thesis.trigger.replaceAll('-', ' ')}</span>
@@ -156,6 +162,7 @@ export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceD
               const monitor = monitorByEntity.get(thesis.entityKey)
               return <article key={thesis.id} className="thesis-library-item">
                 <header><div><span>{thesis.entityType === 'stock' ? 'Stock' : 'Industry'}</span><h3>{title(thesis)}</h3></div><small>v{thesis.version}</small></header>
+                <strong className="thesis-library-statement">{thesis.content.headline}</strong>
                 <p>{thesis.content.summary}</p>
                 {monitor ? (
                     <div className="thesis-monitor-strip" data-status={monitor.status}>

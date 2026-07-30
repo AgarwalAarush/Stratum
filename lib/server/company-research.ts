@@ -285,6 +285,7 @@ export async function materializeCompanyPacket(
 interface ResearchGeneration {
   formalRating: EquityResearchNote['formalRating']
   entryAction: EquityResearchNote['entryAction']
+  investmentThesis: string
   keyDebate: string
   mispricing: string
   fastestKillSignal: string
@@ -319,9 +320,17 @@ export function validateEquityResearch(value: unknown): ResearchGeneration {
   if (wordCount < 1_600 || wordCount > 3_000) {
     throw new Error(`Equity research must contain 1,600-3,000 words of analysis; received ${wordCount}`)
   }
+  const investmentThesis = string('investmentThesis')
+  if (investmentThesis.includes('?')) {
+    throw new Error('Investment thesis must be an affirmative statement, not a question')
+  }
+  if (/^(?:BUY|HOLD|SELL|NOT_RATED)\b/.test(investmentThesis.trim())) {
+    throw new Error('Investment thesis must state the belief rather than repeat the rating')
+  }
   return {
     formalRating,
     entryAction,
+    investmentThesis,
     keyDebate: string('keyDebate'),
     mispricing: string('mispricing'),
     fastestKillSignal: string('fastestKillSignal'),
@@ -345,7 +354,9 @@ function researchPrompt(packet: CompanyPacket): string {
     'Use only facts and source IDs present in the CompanyPacket. Never invent a current price, estimate, event, source, or citation.',
     'Take a position, defend it with structured evidence, and state exactly what would prove it wrong. Commit or omit; do not use empty hedging language.',
     'Keep formal BUY/HOLD/SELL separate from the practical entry action.',
-    'The executive fields must state the Key Debate, quantified Mispricing, Fastest Kill Signal, and today’s practical Entry Decision.',
+    'The investmentThesis field must be a concise affirmative, falsifiable ownership belief—not a question. In one or two sentences, state what the company can become or sustain, why the market is wrong now, and the 1-2 year mechanism that can close the gap. Do not merely restate the rating, fair value, or key debate.',
+    'Keep the Key Debate as the question the research must answer; it supports the thesis but is never the thesis itself.',
+    'The other executive fields must state quantified Mispricing, Fastest Kill Signal, and today’s practical Entry Decision.',
     'Return confidence as a whole-number percentage from 0 to 100, not as a decimal fraction.',
     'Return exactly the 15 schema sections in schema order: Snapshot; Business Model & Moat; Financial Profile; Market & Competition; Growth Drivers; Management & Capital Allocation; Valuation; Catalysts; Bull Case; Base Case; Bear Case; Risk Factors; Sentiment & Positioning; Verdict; Kill Criteria.',
     'Write 1,800-2,500 total words across those sections. Lead every section with its conclusion and bold the single most important number or claim.',
@@ -455,6 +466,7 @@ function normalizeResearch(row: Record<string, unknown>): EquityResearchNote {
     status: row.status as EquityResearchNote['status'],
     formalRating: row.formal_rating as EquityResearchNote['formalRating'],
     entryAction: row.entry_action as EquityResearchNote['entryAction'],
+    investmentThesis: String(content.investmentThesis ?? content.mispricing ?? ''),
     keyDebate: String(content.keyDebate ?? ''),
     mispricing: String(content.mispricing ?? ''),
     fastestKillSignal: String(content.fastestKillSignal ?? ''),

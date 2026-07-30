@@ -1,4 +1,84 @@
-import type { CandidateBrief, CompanyPacket, EquityResearchNote, ThesisContent, ThesisEntityType } from './types.ts'
+import type { CompanyPacket, EquityResearchNote, ThesisContent, ThesisEntityType } from './types.ts'
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function cleanResearchLine(value: string): string {
+  return value
+    .replace(/^\s*[-*]\s+/, '')
+    .replace(/^\*{0,2}(?:FACT|CONSENSUS|VIEW|ESTIMATE):\s*/i, '')
+    .replace(/\*\*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function evidenceItems(values: string[]): string[] {
+  const bullets = values.filter((value) => /^\s*[-*]\s+/.test(value))
+  return (bullets.length > 0 ? bullets : values).map(cleanResearchLine).filter(Boolean).slice(0, 4)
+}
+
+function sectionItems(value: string | undefined): string[] {
+  return evidenceItems(value?.split('\n').filter(Boolean) ?? [])
+}
+
+function cleanStatement(value: string): string {
+  const firstParagraph = value.split(/\n\s*\n/, 1)[0] ?? value
+  const cleaned = firstParagraph
+    .replace(/\*\*(?:FACT|CONSENSUS|VIEW|ESTIMATE):\*\*/gi, '')
+    .replace(/^\*{0,2}(?:FACT|CONSENSUS|VIEW|ESTIMATE):\s*/i, '')
+    .replace(/^[#>*\s-]+/, '')
+    .replace(/\*\*/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^(?:BUY|HOLD|SELL|NOT_RATED)\s*[;—-]\s*(?:(?:buy|wait|nibble|add|avoid)\b[^.!]*[.!]\s*)?/i, '')
+    .replace(/\s+(?:The|Our) practical action is\b.*$/i, '')
+    .trim()
+  return cleaned.slice(0, 520).trim()
+}
+
+function isQuestionLike(value: string): boolean {
+  return value.trim().endsWith('?')
+    || /^(?:whether|can|could|will|would|does|do|is|are|should|how|what|when|why)\b/i.test(value.trim())
+}
+
+function isResearchPlaceholder(value: string): boolean {
+  return /(?:candidate activity|leadership) requires research/i.test(value)
+}
+
+export function normalizeThesisContent(value: unknown): ThesisContent {
+  const item = record(value)
+  const rawHeadline = String(item.headline ?? '')
+  const rawCoreBelief = String(item.coreBelief ?? '')
+  const summary = String(item.summary ?? item.mispricing ?? '')
+  const legacyQuestion = isQuestionLike(rawHeadline) ? rawHeadline : ''
+  const legacyPlaceholder = isResearchPlaceholder(rawHeadline)
+  const coreBelief = !isQuestionLike(rawCoreBelief) && !isResearchPlaceholder(rawCoreBelief)
+    ? rawCoreBelief
+    : ''
+  const statement = String(item.investmentThesis ?? item.statement ?? (
+    legacyQuestion || legacyPlaceholder ? coreBelief || summary : rawHeadline || coreBelief || summary
+  ))
+  const invalidation = evidenceItems(stringArray(item.invalidation))
+  const legacyNext = String(item.nextQuestion ?? '')
+  const legacyNextIsDebate = isQuestionLike(legacyNext)
+  return {
+    headline: cleanStatement(statement),
+    summary,
+    coreBelief: cleanStatement(coreBelief || statement),
+    keyDebate: String(item.keyDebate || legacyQuestion || (legacyNextIsDebate ? legacyNext : '')),
+    whatChanged: String(item.whatChanged ?? ''),
+    catalysts: evidenceItems(stringArray(item.catalysts)),
+    invalidation,
+    fastestKillSignal: String(item.fastestKillSignal || (
+      legacyNextIsDebate ? invalidation[0] : legacyNext
+    ) || invalidation[0] || ''),
+    confidence: Math.max(0, Math.min(100, Number(item.confidence ?? 0))),
+  }
+}
 
 export function thesisEntityKey(entityType: ThesisEntityType, input: { symbol?: string; sector?: string; subIndustry?: string }): string {
   if (entityType === 'stock') return `stock:${input.symbol?.trim().toUpperCase() ?? ''}`
@@ -6,34 +86,19 @@ export function thesisEntityKey(entityType: ThesisEntityType, input: { symbol?: 
 }
 
 export function stockThesisContent(research: EquityResearchNote): ThesisContent {
+  const investmentThesis = cleanStatement(research.investmentThesis)
+  const catalysts = sectionItems(research.sections.find((section) => section.id === 'catalysts')?.content)
+  const invalidation = sectionItems(research.sections.find((section) => section.id === 'kill_criteria')?.content)
   return {
-    headline: research.keyDebate,
+    headline: investmentThesis,
     summary: research.mispricing,
-    coreBelief: research.sections.find((section) => section.id === 'snapshot')?.content ?? research.keyDebate,
+    coreBelief: investmentThesis,
+    keyDebate: research.keyDebate,
     whatChanged: `Research v${research.version} established the current evidence set and entry decision.`,
-    catalysts: research.sections.find((section) => section.id === 'catalysts')?.content.split('\n').filter(Boolean).slice(0, 4) ?? [],
-    invalidation: research.sections.find((section) => section.id === 'kill_criteria')?.content.split('\n').filter(Boolean).slice(0, 4) ?? [research.fastestKillSignal],
-    nextQuestion: research.fastestKillSignal,
-    confidence: research.confidence,
-  }
-}
-
-export function industryThesisContent(briefs: CandidateBrief[]): ThesisContent | null {
-  const first = briefs[0]
-  if (!first) return null
-  const laneLabels = [...new Set(briefs.map((brief) => brief.primaryLane.replaceAll('_', ' ')))]
-  const changed = [...new Set(briefs.flatMap((brief) => brief.whatChanged))].slice(0, 4)
-  const catalysts = [...new Set(briefs.map((brief) => brief.catalyst))].slice(0, 4)
-  const invalidation = [...new Set(briefs.flatMap((brief) => brief.redFlags))].slice(0, 4)
-  return {
-    headline: `${first.subIndustry}: candidate activity requires research`,
-    summary: `${first.subIndustry} produced ${briefs.length} candidate${briefs.length === 1 ? '' : 's'} across ${laneLabels.join(', ')} discovery.`,
-    coreBelief: first.industryContext,
-    whatChanged: changed.join(' '),
     catalysts,
-    invalidation,
-    nextQuestion: first.nextResearchQuestion,
-    confidence: Math.min(85, 45 + briefs.length * 10),
+    invalidation: invalidation.length > 0 ? invalidation : [research.fastestKillSignal],
+    fastestKillSignal: research.fastestKillSignal,
+    confidence: research.confidence,
   }
 }
 

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
-import { industryThesisContent, stockThesisContent, thesisEntityKey } from '../lib/markets/theses.ts'
+import { normalizeThesisContent, stockThesisContent, thesisEntityKey } from '../lib/markets/theses.ts'
 import { evaluateIndustryThesisSignals } from '../lib/markets/thesis-monitoring.ts'
-import type { CandidateBrief, EquityResearchNote } from '../lib/markets/types.ts'
+import type { EquityResearchNote } from '../lib/markets/types.ts'
 
 const research = {
   id: 'note-1', symbol: 'ACME', version: 2, status: 'complete', formalRating: 'BUY', entryAction: 'wait',
+  investmentThesis: 'ACME can compound earnings as product-led growth and improving mix drive durable operating leverage.',
   keyDebate: 'Margins can expand without sacrificing growth.', mispricing: 'The market prices a durable slowdown.',
   fastestKillSignal: 'Bookings decline for two quarters.', fairValue: 120, entryZoneLow: 90, entryZoneHigh: 98,
   confidence: 72, provider: 'openai', model: 'test', dataAsOf: '2026-07-30T00:00:00.000Z', generatedAt: '2026-07-30T00:00:00.000Z', error: null,
@@ -18,17 +19,6 @@ const research = {
   ],
 } as unknown as EquityResearchNote
 
-const candidate = {
-  id: 'candidate-1', symbol: 'ACME', company: 'Acme', sector: 'Technology', subIndustry: 'Application Software',
-  tradingDate: '2026-07-30', primaryLane: 'leadership', lanes: ['leadership'],
-  tracking: { acceptedThesis: false, watched: false, owned: false },
-  selloff: { day: 2, fiveDay: 5, thirtyDay: 12 }, entryContext: 'Establish ownership quality first.',
-  whySurfaced: 'ACME moved into leadership.', whatChanged: ['ACME moved into leadership.'],
-  industryContext: 'Application Software returned +6.0% over 30 days.', decisiveNumbers: [], valuationSnapshot: '', dimensions: [], signals: [],
-  evidence: [{ label: 'Market data', url: 'https://example.com', asOf: '2026-07-30T00:00:00.000Z' }],
-  redFlags: ['Valuation is elevated.'], catalyst: 'Earnings expected soon.', nextResearchQuestion: 'Is growth durable?', status: 'new', generatedAt: '2026-07-30T00:00:00.000Z',
-} as CandidateBrief
-
 test('thesis keys keep stock and GICS sub-industry records distinct', () => {
   assert.equal(thesisEntityKey('stock', { symbol: 'acme' }), 'stock:ACME')
   assert.equal(thesisEntityKey('sub_industry', { sector: 'Technology', subIndustry: 'Application Software' }), 'sub-industry:Technology:Application Software')
@@ -36,17 +26,58 @@ test('thesis keys keep stock and GICS sub-industry records distinct', () => {
 
 test('a stock thesis derives concise decision context from structured research', () => {
   const thesis = stockThesisContent(research)
-  assert.equal(thesis.headline, research.keyDebate)
+  assert.equal(thesis.headline, research.investmentThesis)
+  assert.equal(thesis.keyDebate, research.keyDebate)
+  assert.equal(thesis.fastestKillSignal, research.fastestKillSignal)
   assert.equal(thesis.confidence, 72)
   assert.deepEqual(thesis.catalysts, ['Earnings', 'Estimate revision'])
   assert.deepEqual(thesis.invalidation, ['Bookings decline', 'Margins contract'])
 })
 
-test('an industry thesis preserves candidate evidence and the next research question', () => {
-  const thesis = industryThesisContent([candidate])
-  assert.equal(thesis?.headline, 'Application Software: candidate activity requires research')
-  assert.equal(thesis?.nextQuestion, 'Is growth durable?')
-  assert.deepEqual(thesis?.invalidation, ['Valuation is elevated.'])
+test('legacy question-led thesis records render an affirmative belief and preserve the debate separately', () => {
+  const thesis = normalizeThesisContent({
+    headline: 'Can margins expand fast enough?',
+    summary: 'The market prices a durable slowdown.',
+    coreBelief: '**VIEW:** Reported execution is improving as product mix shifts toward recurring revenue. A second sentence is supporting detail.',
+    nextQuestion: 'Bookings decline for two quarters.',
+    invalidation: ['Bookings decline for two quarters.'],
+    confidence: 72,
+  })
+  assert.equal(thesis.headline, 'Reported execution is improving as product mix shifts toward recurring revenue. A second sentence is supporting detail.')
+  assert.equal(thesis.keyDebate, 'Can margins expand fast enough?')
+  assert.equal(thesis.fastestKillSignal, 'Bookings decline for two quarters.')
+})
+
+test('legacy industry placeholders keep the research question separate from the observable belief', () => {
+  const thesis = normalizeThesisContent({
+    headline: 'Semiconductors: candidate activity requires research',
+    summary: 'Semiconductors produced two candidates across dislocation discovery.',
+    coreBelief: 'Semiconductor equipment selloffs are surfacing attractive entry setups.',
+    nextQuestion: 'Did the selloff change the ownership case?',
+    invalidation: ['Revenue estimates fall materially.'],
+  })
+  assert.equal(thesis.headline, 'Semiconductor equipment selloffs are surfacing attractive entry setups.')
+  assert.equal(thesis.keyDebate, 'Did the selloff change the ownership case?')
+  assert.equal(thesis.fastestKillSignal, 'Revenue estimates fall materially.')
+})
+
+test('legacy whether-led stock records fall back to a declarative mispricing statement', () => {
+  const thesis = normalizeThesisContent({
+    headline: 'Whether Apple can grow quickly enough to justify its valuation.',
+    summary: 'The current price already discounts an aggressive earnings recovery.',
+    coreBelief: 'Whether Apple can grow quickly enough to justify its valuation.',
+  })
+  assert.equal(thesis.headline, 'The current price already discounts an aggressive earnings recovery.')
+  assert.equal(thesis.keyDebate, 'Whether Apple can grow quickly enough to justify its valuation.')
+})
+
+test('legacy research snapshots strip rating and entry-action language from the belief', () => {
+  const thesis = normalizeThesisContent({
+    headline: 'Can the earnings recovery justify the valuation?',
+    summary: 'The market expects a fast recovery.',
+    coreBelief: '**VIEW: HOLD; wait rather than initiate at today’s price.** Amazon is a business worth owning as AWS and advertising expand the profit mix. The practical action is wait until the valuation offers more upside.',
+  })
+  assert.equal(thesis.headline, 'Amazon is a business worth owning as AWS and advertising expand the profit mix.')
 })
 
 test('thesis migration preserves owner-scoped immutable versions and review states', async () => {
@@ -57,11 +88,12 @@ test('thesis migration preserves owner-scoped immutable versions and review stat
   assert.match(migration, /unique \(owner_id, entity_key, version\)/)
 })
 
-test('Candidate Scout proposes industry theses for every Markets user', async () => {
+test('Candidate Scout keeps screening leads out of the thesis library', async () => {
   const candidateScout = await readFile(new URL('../lib/server/candidate-scout.ts', import.meta.url), 'utf8')
   assert.match(candidateScout, /supabase\.from\('market_users'\)\.select\('id'\)/)
   assert.match(candidateScout, /\(marketUsers \?\? \[\]\)\.map\(\(row\) => row\.id\)/)
-  assert.match(candidateScout, /await proposeIndustryTheses\(ownerId, briefs\)/)
+  assert.doesNotMatch(candidateScout, /proposeIndustryTheses/)
+  assert.match(candidateScout, /item_type: 'new_candidate'/)
 })
 
 test('accepted theses atomically become monitored durable objects', async () => {

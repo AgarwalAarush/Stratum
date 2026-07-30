@@ -13,7 +13,6 @@ import type {
 import { fetchFmpStableJson } from './fmp.ts'
 import { normalizeStockLeadershipRow } from './market-leadership.ts'
 import { getSupabaseClient } from './supabase.ts'
-import { proposeIndustryTheses } from './theses.ts'
 
 interface CandidateScoutMaterializationOptions {
   now?: Date
@@ -413,7 +412,6 @@ export async function materializeCandidateScout(
       occurred_at: brief.generatedAt,
     })), { onConflict: 'owner_id,dedupe_key', ignoreDuplicates: true })
     if (error) throw new Error(`Unable to publish candidate inbox items: ${error.message}`)
-    await proposeIndustryTheses(ownerId, briefs)
   }
   return briefs
 }

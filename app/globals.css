@@ -1311,9 +1311,26 @@
   max-width: 900px;
 }
 
+.thesis-proposal-copy > span,
+.thesis-proposal-copy > small {
+  color: var(--market-text-muted);
+  display: block;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.thesis-proposal-copy > small {
+  margin-top: 16px;
+}
+
 .thesis-proposal-copy strong,
 .stock-viewer-thesis-copy strong {
+  display: block;
   font-size: 15px;
+  line-height: 1.5;
+  margin-top: 6px;
 }
 
 .thesis-proposal-copy p,
@@ -1326,7 +1343,7 @@
 
 .thesis-proposal dl {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
   background: var(--market-border);
   margin: 0 0 20px;
@@ -1403,6 +1420,12 @@
   font-size: 13px;
   line-height: 1.55;
   margin: 18px 0;
+}
+
+.thesis-library-statement {
+  font-size: 14px;
+  line-height: 1.5;
+  margin-top: 18px;
 }
 
 .thesis-monitor-strip {

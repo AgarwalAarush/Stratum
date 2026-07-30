@@ -5,6 +5,7 @@
   "required": [
     "formalRating",
     "entryAction",
+    "investmentThesis",
     "keyDebate",
     "mispricing",
     "fastestKillSignal",
@@ -18,6 +19,7 @@
   "properties": {
     "formalRating": { "enum": ["BUY", "HOLD", "SELL", "NOT_RATED"] },
     "entryAction": { "enum": ["buy_now", "nibble", "wait", "add_on_weakness", "avoid"] },
+    "investmentThesis": { "type": "string", "minLength": 1 },
     "keyDebate": { "type": "string", "minLength": 1 },
     "mispricing": { "type": "string", "minLength": 1 },
     "fastestKillSignal": { "type": "string", "minLength": 1 },

@@ -26,6 +26,7 @@ function validResearch() {
   return {
     formalRating: 'HOLD',
     entryAction: 'wait',
+    investmentThesis: 'The company can compound earnings as improving product mix drives durable operating leverage that consensus does not price.',
     keyDebate: 'Can margins remain durable?',
     mispricing: 'Consensus assumes no operating leverage.',
     fastestKillSignal: 'Gross margin falls below the stated threshold.',
@@ -48,6 +49,7 @@ test('equity research validator requires the fixed 15-section contract', () => {
   assert.equal(result.sections.length, 15)
   assert.equal(result.formalRating, 'HOLD')
   assert.equal(result.entryAction, 'wait')
+  assert.match(result.investmentThesis, /compound earnings/)
 
   const missing = validResearch()
   missing.sections.pop()
@@ -60,6 +62,14 @@ test('equity research validator requires the fixed 15-section contract', () => {
   const thin = validResearch()
   thin.sections = thin.sections.map((section) => ({ ...section, content: 'Too thin.' }))
   assert.throws(() => validateEquityResearch(thin), /1,600-3,000 words/)
+
+  const question = validResearch()
+  question.investmentThesis = 'Can margins expand?'
+  assert.throws(() => validateEquityResearch(question), /affirmative statement/)
+
+  const rating = validResearch()
+  rating.investmentThesis = 'HOLD; wait for a better price.'
+  assert.throws(() => validateEquityResearch(rating), /state the belief/)
 })
 
 test('research packet includes quarterly evidence, SEC filings, and skill-aligned generation rules', async () => {
@@ -72,6 +82,7 @@ test('research packet includes quarterly evidence, SEC filings, and skill-aligne
   assert.match(source, /data\.sec\.gov\/submissions/)
   assert.match(source, /1,800-2,500 total words/)
   assert.match(source, /Write an investor memo, not an audit workpaper/)
+  assert.match(source, /affirmative, falsifiable ownership belief/)
   assert.match(source, /prefix each distinct claim paragraph with \*\*FACT:\*\*/)
   assert.match(source, /Business Model & Moat/)
   assert.match(source, /Do not confuse product revenue categories with reportable operating segments/)
