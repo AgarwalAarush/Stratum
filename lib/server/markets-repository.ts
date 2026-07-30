@@ -10,6 +10,7 @@ import type {
   MarketGroupMetric,
   MarketDivergenceSignal,
   CandidateBrief,
+  CandidateWeeklySummary,
   StockViewerData,
   ScreenerQuery,
   ScreenerResponse,
@@ -31,6 +32,7 @@ const SNAPSHOT_META_SHARED_CACHE_SECONDS = 10
 const MARKET_OVERVIEW_CACHE_MS = 30_000
 const MARKET_LEADERSHIP_CACHE_MS = 60_000
 const CANDIDATE_CACHE_MS = 5_000
+const CANDIDATE_WEEKLY_SUMMARY_CACHE_MS = 60_000
 const CROSS_ASSET_CACHE_MS = 30_000
 const STOCK_VIEWER_SHARED_CACHE_MS = 20_000
 const MAX_CACHED_SNAPSHOTS = 2
@@ -51,6 +53,7 @@ const marketOverviewCache = new AsyncTtlCache<MarketOverviewResponse>({ maxEntri
 const marketLeadershipCache = new AsyncTtlCache<MarketLeadershipSnapshot>({ maxEntries: 1 })
 const marketLeadershipSummaryCache = new AsyncTtlCache<MarketLeadershipSnapshot>({ maxEntries: 1 })
 const candidateCache = new AsyncTtlCache<CandidateBrief[]>({ maxEntries: 4 })
+const candidateWeeklySummaryCache = new AsyncTtlCache<CandidateWeeklySummary>({ maxEntries: 1 })
 const crossAssetCache = new AsyncTtlCache<CrossAssetSnapshot>({ maxEntries: 1 })
 const stockViewerSharedCache = new AsyncTtlCache<StockViewerData>({ maxEntries: 64 })
 
@@ -309,6 +312,7 @@ async function loadLatestMarketOverview(): Promise<MarketOverviewResponse | null
     fetchLatestCrossAssetSnapshot(),
     fetchLatestMarketLeadershipSummary(),
     fetchLatestCandidates(),
+    fetchLatestCandidateWeeklySummary(),
   ])
   const { data: stateData, error: stateError } = await supabase
     .from('market_states')
@@ -343,7 +347,7 @@ async function loadLatestMarketOverview(): Promise<MarketOverviewResponse | null
     generatedAt,
   )
 
-  const [crossAsset, leadership, candidates] = await contextPromise
+  const [crossAsset, leadership, candidates, candidateWeeklySummary] = await contextPromise
 
   return {
     state: {
@@ -367,6 +371,7 @@ async function loadLatestMarketOverview(): Promise<MarketOverviewResponse | null
     stale: isStale(snapshot.data_as_of),
     leadership: leadership ?? undefined,
     candidates,
+    candidateWeeklySummary: candidateWeeklySummary ?? undefined,
   }
 }
 
@@ -571,6 +576,33 @@ async function loadLatestCandidates(limit: number): Promise<CandidateBrief[]> {
 export async function fetchLatestCandidates(limit = 5): Promise<CandidateBrief[]> {
   return candidateCache.get(String(limit), CANDIDATE_CACHE_MS, () => loadLatestCandidates(limit))
     .then((candidates) => candidates ?? [])
+}
+
+async function loadLatestCandidateWeeklySummary(): Promise<CandidateWeeklySummary | null> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+  const { data, error } = await supabase
+    .from('candidate_weekly_summaries')
+    .select('content')
+    .order('week_ending', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error || !data || !isRecord(data.content)) return null
+  const summary = data.content
+  if (typeof summary.weekEnding !== 'string' || !Array.isArray(summary.highlights)) return null
+  return summary as unknown as CandidateWeeklySummary
+}
+
+export async function fetchLatestCandidateWeeklySummary(): Promise<CandidateWeeklySummary | null> {
+  return candidateWeeklySummaryCache.get(
+    'latest',
+    CANDIDATE_WEEKLY_SUMMARY_CACHE_MS,
+    () => fetchSharedArtifact(
+      'stratum:markets:candidate-weekly-summary:v1',
+      CANDIDATE_WEEKLY_SUMMARY_CACHE_MS / 1_000,
+      loadLatestCandidateWeeklySummary,
+    ),
+  )
 }
 
 async function loadSharedStockViewerData(symbol: string): Promise<StockViewerData | null> {

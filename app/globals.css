@@ -1222,6 +1222,44 @@
   margin: 24px 0 auto;
 }
 
+.market-candidate-weekly-summary {
+  border: 1px solid var(--market-border);
+  border-top: 0;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1.9fr;
+}
+
+.market-candidate-weekly-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px 18px;
+}
+
+.market-candidate-weekly-summary > div + div {
+  border-left: 1px solid var(--market-border);
+}
+
+.market-candidate-weekly-summary p,
+.market-candidate-weekly-summary span {
+  color: var(--market-text-muted);
+  font-size: 10px;
+  margin: 0;
+}
+
+.market-candidate-weekly-summary p {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.market-candidate-weekly-summary strong {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 @media (max-width: 1100px) {
   .market-overview-evidence-grid {
     grid-template-columns: 1fr;
@@ -1350,6 +1388,15 @@
 
   .market-candidate-card {
     min-height: 150px;
+  }
+
+  .market-candidate-weekly-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .market-candidate-weekly-summary > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--market-border);
   }
 }
 

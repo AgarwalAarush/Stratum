@@ -184,6 +184,25 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
               </MarketsIntentLink>
             ))}
           </div>
+          {overview.candidateWeeklySummary ? (
+            <aside className="market-candidate-weekly-summary" aria-label="Candidate Scout weekly summary">
+              <div>
+                <p className="markets-eyebrow">This week</p>
+                <strong>{overview.candidateWeeklySummary.candidateCount} briefs · {overview.candidateWeeklySummary.uniqueSymbolCount} names</strong>
+                <span>Week ended {new Date(`${overview.candidateWeeklySummary.weekEnding}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+              </div>
+              <div>
+                <p>Decision flow</p>
+                <strong>{overview.candidateWeeklySummary.statusCounts.promoted} promoted · {overview.candidateWeeklySummary.statusCounts.watchlisted} watched</strong>
+              </div>
+              <div>
+                <p>Recurring groups</p>
+                <strong>{overview.candidateWeeklySummary.leadingSubIndustries.length === 0
+                  ? 'No recurring groups'
+                  : overview.candidateWeeklySummary.leadingSubIndustries.map((group) => `${group.label} (${group.candidateCount})`).join(' · ')}</strong>
+              </div>
+            </aside>
+          ) : null}
         </section>
       ) : null}
 

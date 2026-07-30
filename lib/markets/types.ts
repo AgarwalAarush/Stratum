@@ -135,6 +135,7 @@ export interface MarketOverviewResponse {
   stale: boolean
   leadership?: MarketLeadershipSnapshot
   candidates?: CandidateBrief[]
+  candidateWeeklySummary?: CandidateWeeklySummary
 }
 
 export interface StockLeadershipMetric {
@@ -245,6 +246,27 @@ export interface CandidateBrief {
   nextResearchQuestion: string
   status: 'new' | 'dismissed' | 'snoozed' | 'watchlisted' | 'promoted'
   generatedAt: string
+}
+
+export interface CandidateWeeklySummary {
+  weekEnding: string
+  periodStart: string
+  generatedAt: string
+  candidateCount: number
+  uniqueSymbolCount: number
+  statusCounts: Record<CandidateBrief['status'], number>
+  leadingSubIndustries: Array<{
+    label: string
+    sector: string
+    candidateCount: number
+  }>
+  highlights: Array<{
+    symbol: string
+    company: string
+    subIndustry: string
+    whySurfaced: string
+    status: CandidateBrief['status']
+  }>
 }
 
 export interface StockPricePoint {

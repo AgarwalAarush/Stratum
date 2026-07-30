@@ -45,6 +45,12 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
     }),
     'event-refresh-company-research:owner-1:AAPL:2026-07-15:filing-1',
   )
+  assert.equal(
+    buildAgentJobDedupeKey('summarize-candidate-scout', new Date('2026-07-31T21:00:00Z'), {
+      weekEnding: '2026-07-31',
+    }),
+    'summarize-candidate-scout:2026-07-31',
+  )
 })
 
 test('agent jobs retain their actual data provider', () => {
@@ -55,6 +61,7 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('refresh-cross-asset'), 'market-data')
   assert.equal(agentJobProvider('materialize-market-leadership'), 'market-data')
   assert.equal(agentJobProvider('run-candidate-scout'), 'fmp')
+  assert.equal(agentJobProvider('summarize-candidate-scout'), 'market-data')
   assert.equal(agentJobProvider('generate-market-memo'), 'codex')
   assert.equal(agentJobProvider('generate-company-research'), 'codex')
   assert.equal(agentJobProvider('event-refresh-company-research'), 'codex')

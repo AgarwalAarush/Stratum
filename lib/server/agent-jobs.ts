@@ -6,6 +6,7 @@ import { marketMemoSlot } from '../markets/market-clock.ts'
 import { getAlpacaClient } from './alpaca.ts'
 import { materializeCrossAssetSnapshot } from './cross-asset.ts'
 import { materializeCandidateScout } from './candidate-scout.ts'
+import { materializeCandidateWeeklySummary } from './candidate-weekly-summary.ts'
 import { materializeMarketLeadership } from './market-leadership.ts'
 import { generateFullEquityResearch } from './company-research.ts'
 import { scanResearchRefreshes } from './research-monitoring.ts'
@@ -28,6 +29,7 @@ export const AGENT_JOB_TYPES = [
   'refresh-cross-asset',
   'materialize-market-leadership',
   'run-candidate-scout',
+  'summarize-candidate-scout',
   'generate-company-research',
   'event-refresh-company-research',
   'scan-research-refreshes',
@@ -121,6 +123,9 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
   if ((jobType === 'materialize-market-leadership' || jobType === 'run-candidate-scout') && typeof payload.tradingDate === 'string') {
     return `${jobType}:${payload.tradingDate}`
   }
+  if (jobType === 'summarize-candidate-scout' && typeof payload.weekEnding === 'string') {
+    return `${jobType}:${payload.weekEnding}`
+  }
   if ((jobType === 'generate-company-research' || jobType === 'event-refresh-company-research')
     && typeof payload.ownerId === 'string' && typeof payload.symbol === 'string') {
     const event = typeof payload.eventId === 'string' ? `:${payload.eventId}` : ''
@@ -136,6 +141,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
     jobType === 'refresh-cross-asset'
     || jobType === 'materialize-market-leadership'
     || jobType === 'scan-research-refreshes'
+    || jobType === 'summarize-candidate-scout'
     || jobType === 'prune-market-data'
   ) return 'market-data'
   return 'codex'
@@ -320,11 +326,25 @@ async function executeJob(
 
   if (job.job_type === 'run-candidate-scout') {
     const briefs = await materializeCandidateScout()
+    const tradingDate = briefs[0]?.tradingDate
+    if (tradingDate && new Date(`${tradingDate}T12:00:00.000Z`).getUTCDay() === 5) {
+      await enqueueAgentJob(
+        'summarize-candidate-scout',
+        { weekEnding: tradingDate },
+        `summarize-candidate-scout:${tradingDate}`,
+      )
+    }
     return {
       candidateCount: briefs.length,
       symbols: briefs.map((brief) => brief.symbol),
-      tradingDate: briefs[0]?.tradingDate ?? null,
+      tradingDate: tradingDate ?? null,
     }
+  }
+
+  if (job.job_type === 'summarize-candidate-scout') {
+    const weekEnding = typeof job.payload.weekEnding === 'string' ? job.payload.weekEnding : ''
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekEnding)) throw new Error('Candidate weekly summary requires a week-ending date')
+    return materializeCandidateWeeklySummary({ weekEnding })
   }
 
   if (job.job_type === 'generate-company-research' || job.job_type === 'event-refresh-company-research') {
