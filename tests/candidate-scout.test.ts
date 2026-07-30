@@ -157,6 +157,11 @@ test('Candidate Scout expands beyond the S&P 500 to watched and owned names', as
   assert.match(source, /multiLanePrefilter/)
 })
 
+test('Candidate Scout overview prefers the newest same-day materialization', async () => {
+  const source = await readFile(new URL('../lib/server/markets-repository.ts', import.meta.url), 'utf8')
+  assert.match(source, /\.order\('generated_at', \{ ascending: false \}\)/)
+})
+
 test('Candidate Scout caps sub-industries and suppresses repeats for five trading days', () => {
   const stocks = [
     stock('AAA', 'Software', 20),

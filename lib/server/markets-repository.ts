@@ -619,7 +619,7 @@ async function loadLatestCandidates(limit: number): Promise<CandidateBrief[]> {
     .select('content')
     .eq('trading_date', latest.trading_date)
     .eq('status', 'new')
-    .order('created_at', { ascending: true })
+    .order('generated_at', { ascending: false })
     .limit(limit)
   if (error || !data) return []
   return data.flatMap((row) => {
