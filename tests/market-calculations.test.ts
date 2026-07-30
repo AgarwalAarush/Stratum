@@ -92,3 +92,12 @@ test('markets migration defines atomic publication, job claiming, and service-on
   assert.match(sql, /for update skip locked/)
   assert.match(sql, /grant execute on function public\.claim_agent_job\(text\) to service_role/)
 })
+
+test('return materialization fallback preserves feed provenance and only fills missing periods', () => {
+  const sql = readFileSync(join(process.cwd(), 'supabase/migrations/202607290002_materialize_screener_returns.sql'), 'utf8')
+
+  assert.match(sql, /market_bars_daily \(symbol, feed, trading_date desc\)/)
+  assert.match(sql, /and feed = snapshot_feed/)
+  assert.match(sql, /if new\.return_30d is null then/)
+  assert.match(sql, /before insert or update/)
+})
