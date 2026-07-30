@@ -107,4 +107,5 @@ test('screener repository reads every materialized return period', () => {
 
   assert.match(source, /return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y/)
   assert.match(source, /stratum:markets:screener-rows:\$\{snapshotId\}/)
+  assert.match(source, /stratum:markets:latest-snapshot-meta/)
 })

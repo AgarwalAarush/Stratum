@@ -27,6 +27,7 @@ import { getSupabaseClient } from './supabase.ts'
 const DATABASE_PAGE_SIZE = 1_000
 const STALE_AFTER_MS = 20 * 60 * 1_000
 const SNAPSHOT_META_CACHE_MS = 10_000
+const SNAPSHOT_META_SHARED_CACHE_SECONDS = 10
 const MARKET_OVERVIEW_CACHE_MS = 30_000
 const MARKET_LEADERSHIP_CACHE_MS = 60_000
 const CANDIDATE_CACHE_MS = 5_000
@@ -226,15 +227,19 @@ function normalizeScreenerRow(row: ScreenerRowRecord): ScreenerRow {
 export async function fetchLatestSnapshotMeta(): Promise<SnapshotRecord | null> {
   const supabase = getSupabaseClient()
   if (!supabase) return null
-  return snapshotMetaCache.get('latest', SNAPSHOT_META_CACHE_MS, async () => {
-    const { data, error } = await supabase
-      .from('market_snapshots')
-      .select('id,feed,data_as_of,published_at')
-      .eq('status', 'complete')
-      .eq('is_latest', true)
-      .maybeSingle()
-    return error || !data ? null : data as SnapshotRecord
-  })
+  return fetchSharedArtifact(
+    'stratum:markets:latest-snapshot-meta',
+    SNAPSHOT_META_SHARED_CACHE_SECONDS,
+    () => snapshotMetaCache.get('latest', SNAPSHOT_META_CACHE_MS, async () => {
+      const { data, error } = await supabase
+        .from('market_snapshots')
+        .select('id,feed,data_as_of,published_at')
+        .eq('status', 'complete')
+        .eq('is_latest', true)
+        .maybeSingle()
+      return error || !data ? null : data as SnapshotRecord
+    }),
+  )
 }
 
 export async function getCachedSnapshotRows(
