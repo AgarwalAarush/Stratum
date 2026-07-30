@@ -18,6 +18,8 @@ test('private system status exposes measured provider usage and enforced headroo
   assert.match(status, /FMP_TRAILING_BANDWIDTH_BYTES = 20/)
   assert.match(status, /providerUsage/)
   assert.match(status, /loadLatestWorkerHeartbeat/)
+  assert.match(status, /loadAgentJobs/)
+  assert.match(status, /job\.status === 'failed'/)
   assert.match(status, /lastSeenAt/)
   assert.match(worker, /recordWorkerHeartbeat/)
   assert.match(worker, /HEARTBEAT_INTERVAL_MS/)

@@ -18,6 +18,14 @@ interface AgentRunStatusRow {
   worker_id: string
 }
 
+interface AgentJobStatusRow {
+  id: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed'
+  last_error: string | null
+  created_at: string
+  updated_at: string
+}
+
 interface WorkerHeartbeatRow {
   worker_id: string
   last_seen_at: string
@@ -87,6 +95,19 @@ async function loadAgentRuns(since: string): Promise<AgentRunStatusRow[]> {
   return rows
 }
 
+async function loadAgentJobs(since: string): Promise<AgentJobStatusRow[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('agent_jobs')
+    .select('id,status,last_error,created_at,updated_at')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(RUN_PAGE_SIZE)
+  if (error) throw new Error(`Unable to load job status: ${error.message}`)
+  return (data ?? []) as AgentJobStatusRow[]
+}
+
 async function loadLatestWorkerHeartbeat(): Promise<WorkerHeartbeatRow | null> {
   const supabase = getSupabaseClient()
   if (!supabase) return null
@@ -107,21 +128,21 @@ export async function fetchMarketSystemStatus(now = new Date()): Promise<MarketS
   return systemStatusCache.get('latest', STATUS_CACHE_MS, async () => {
     const trailingStart = new Date(now.getTime() - 30 * 86_400_000).toISOString()
     const last24Hours = new Date(now.getTime() - 86_400_000).getTime()
-    const [runs, heartbeat] = await Promise.all([
+    const [runs, jobs, heartbeat] = await Promise.all([
       loadAgentRuns(trailingStart),
+      loadAgentJobs(new Date(now.getTime() - 86_400_000).toISOString()),
       loadLatestWorkerHeartbeat(),
     ])
-    const recentRuns = runs.filter((run) => Date.parse(run.started_at) >= last24Hours)
     const latest = runs[0] ?? null
     const expectedWithinMinutes = heartbeat ? 3 : isUsMarketRefreshWindow(now) ? 15 : 150
     const latestActivityAt = heartbeat?.last_seen_at ?? latest?.finished_at ?? latest?.started_at ?? null
     const latestAgeMinutes = latestActivityAt
       ? (now.getTime() - Date.parse(latestActivityAt)) / 60_000
       : Infinity
-    const recentFailures = recentRuns
-      .filter((run) => run.status === 'failed' && run.error)
+    const recentFailures = jobs
+      .filter((job) => job.status === 'failed' && job.last_error)
       .slice(0, 5)
-      .map((run) => ({ at: run.finished_at ?? run.started_at, error: run.error! }))
+      .map((job) => ({ at: job.updated_at, error: job.last_error! }))
     const usageRows = runs.map((run) => ({
       startedAt: Date.parse(run.started_at),
       ...fmpUsage(run),
@@ -145,10 +166,10 @@ export async function fetchMarketSystemStatus(now = new Date()): Promise<MarketS
         expectedWithinMinutes,
       },
       jobs: {
-        last24Hours: recentRuns.length,
-        running: recentRuns.filter((run) => run.status === 'running').length,
-        succeeded: recentRuns.filter((run) => run.status === 'succeeded').length,
-        failed: recentRuns.filter((run) => run.status === 'failed').length,
+        last24Hours: jobs.length,
+        running: jobs.filter((job) => job.status === 'running' || job.status === 'queued').length,
+        succeeded: jobs.filter((job) => job.status === 'succeeded').length,
+        failed: jobs.filter((job) => job.status === 'failed').length,
         recentFailures,
       },
       fmp: {
