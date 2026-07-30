@@ -147,7 +147,9 @@ export function PortfolioWorkspace({
           {inbox.length === 0 ? <p>Nothing requires a decision right now.</p> : inbox.map((item) => (
             <article key={item.id}>
               <div><span>{item.type.replaceAll('_', ' ')}</span><time>{new Date(item.occurredAt).toLocaleString()}</time></div>
-              <h2><MarketsIntentLink href={`/markets/stocks/${item.symbol}`}>{item.title}</MarketsIntentLink></h2>
+              <h2>{item.symbol
+                ? <MarketsIntentLink href={`/markets/stocks/${item.symbol}`}>{item.title}</MarketsIntentLink>
+                : <MarketsIntentLink href="/markets/theses">{item.title}</MarketsIntentLink>}</h2>
               <p>{item.summary}</p>
               <footer><button type="button" onClick={() => closeInbox(item.id, 'resolved')}>Resolve</button><button type="button" onClick={() => closeInbox(item.id, 'dismissed')}>Dismiss</button></footer>
             </article>

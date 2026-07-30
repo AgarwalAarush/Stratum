@@ -307,9 +307,28 @@ export interface InvestmentThesis {
   researchNoteId: string | null
 }
 
+export type ThesisMonitorStatus = 'active' | 'paused'
+export type ThesisMonitorOutcome = 'pending' | 'no_change' | 'attention' | 'refresh_queued' | 'failed'
+export type ThesisMonitorCoverage = 'price' | 'material_events' | 'research' | 'leadership' | 'candidate_scout'
+
+export interface ThesisMonitor {
+  id: string
+  thesisId: string
+  entityKey: string
+  status: ThesisMonitorStatus
+  coverage: ThesisMonitorCoverage[]
+  lastCheckedAt: string | null
+  lastEvidenceAt: string | null
+  lastOutcome: ThesisMonitorOutcome
+  failureCount: number
+  lastError: string | null
+  updatedAt: string
+}
+
 export interface ThesisWorkspaceData {
   proposals: InvestmentThesis[]
   accepted: InvestmentThesis[]
+  monitors: ThesisMonitor[]
 }
 
 export interface StockPricePoint {
@@ -515,10 +534,14 @@ export interface ManualPosition {
 export interface DecisionInboxItem {
   id: string
   type: 'new_candidate' | 'thesis_refresh' | 'entry_zone_arrival' | 'catalyst' | 'kill_criterion_breach'
-  symbol: string
+  symbol: string | null
   title: string
   summary: string
   evidence: Array<{ label: string; url: string; asOf: string }>
+  investmentThesisId: string | null
+  thesisMonitorId: string | null
+  entityKey: string | null
+  severity: 'information' | 'attention' | 'urgent'
   status: 'open' | 'dismissed' | 'resolved'
   dedupeKey: string
   occurredAt: string

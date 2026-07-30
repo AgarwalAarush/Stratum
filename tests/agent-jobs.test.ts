@@ -38,6 +38,12 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
     'scan-research-refreshes:2026-07-15T14:30:00.000Z',
   )
   assert.equal(
+    buildAgentJobDedupeKey('monitor-investment-theses', new Date('2026-07-15T14:33:42Z'), {
+      cadenceMinutes: 5,
+    }),
+    'monitor-investment-theses:2026-07-15T14:30:00.000Z',
+  )
+  assert.equal(
     buildAgentJobDedupeKey('event-refresh-company-research', new Date('2026-07-15T14:33:42Z'), {
       ownerId: 'owner-1',
       symbol: 'AAPL',
@@ -66,6 +72,7 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('generate-company-research'), 'codex')
   assert.equal(agentJobProvider('event-refresh-company-research'), 'codex')
   assert.equal(agentJobProvider('scan-research-refreshes'), 'market-data')
+  assert.equal(agentJobProvider('monitor-investment-theses'), 'market-data')
 })
 
 test('provider work respects slow off-hours dedupe buckets', () => {

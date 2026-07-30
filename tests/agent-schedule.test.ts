@@ -13,7 +13,7 @@ test('worker suppresses five-minute screener work outside the US session', () =>
     'sync-market-assets',
     'prune-market-data',
     'refresh-fmp-intelligence',
-    'scan-research-refreshes',
+    'monitor-investment-theses',
   ])
   assert.equal(jobTypes('2026-08-01T15:00:00Z').includes('refresh-market-screener'), false)
   assert.equal(jobTypes('2026-07-28T14:30:00Z').includes('refresh-market-screener'), true)
@@ -35,14 +35,14 @@ test('market leadership runs once after the US close and queues Candidate Scout 
 test('worker does not enqueue FMP work before its credential is configured', () => {
   assert.deepEqual(
     buildDueAgentJobs(new Date('2026-07-28T08:00:00Z'), { includeFmp: false }).map((job) => job.jobType),
-    ['sync-market-assets', 'prune-market-data'],
+    ['sync-market-assets', 'prune-market-data', 'monitor-investment-theses'],
   )
 })
 
 test('worker does not enqueue scheduled Codex work when synthesis is disabled', () => {
   assert.deepEqual(
     buildDueAgentJobs(new Date('2026-07-27T14:00:00Z'), { includeCodex: false }).map((job) => job.jobType),
-    ['sync-market-assets', 'refresh-market-screener', 'prune-market-data', 'refresh-fmp-intelligence', 'refresh-cross-asset', 'scan-research-refreshes'],
+    ['sync-market-assets', 'refresh-market-screener', 'prune-market-data', 'refresh-fmp-intelligence', 'refresh-cross-asset', 'monitor-investment-theses'],
   )
 })
 
@@ -51,7 +51,7 @@ test('worker schedules daily intelligence only after its UTC release time', () =
     'sync-market-assets',
     'prune-market-data',
     'refresh-fmp-intelligence',
-    'scan-research-refreshes',
+    'monitor-investment-theses',
   ])
   assert.ok(jobTypes('2026-07-28T12:00:00Z').includes('generate-morning-brief'))
 })
@@ -63,6 +63,15 @@ test('FMP intelligence uses a slower cadence outside extended market hours', () 
     .find((job) => job.jobType === 'refresh-fmp-intelligence')
   assert.equal(overnight?.payload.cadenceMinutes, 120)
   assert.equal(session?.payload.cadenceMinutes, 15)
+})
+
+test('thesis monitoring follows prices every five minutes and slows down off-hours', () => {
+  const session = buildDueAgentJobs(new Date('2026-07-28T15:31:00Z'))
+    .find((job) => job.jobType === 'monitor-investment-theses')
+  const overnight = buildDueAgentJobs(new Date('2026-07-28T08:31:00Z'))
+    .find((job) => job.jobType === 'monitor-investment-theses')
+  assert.equal(session?.payload.cadenceMinutes, 5)
+  assert.equal(overnight?.payload.cadenceMinutes, 120)
 })
 
 test('market synthesis has only open, midday, and close slots', () => {

@@ -37,6 +37,8 @@ export function buildDueAgentJobs(
   options: AgentScheduleOptions = {},
 ): ScheduledAgentJob[] {
   const jobs = [scheduledJob('sync-market-assets', now)]
+  const intelligenceCadence = fmpIntelligenceCadenceMinutes(now)
+  const monitorCadence = isUsMarketRefreshWindow(now) ? 5 : intelligenceCadence
   if (isUsMarketRefreshWindow(now)) {
     jobs.push(scheduledJob('refresh-market-screener', now, { mode: 'market-hours' }))
   } else if (isWeekdayAfterMarketClose(now)) {
@@ -44,7 +46,6 @@ export function buildDueAgentJobs(
   }
   jobs.push(scheduledJob('prune-market-data', now))
   if (options.includeFmp !== false) {
-    const intelligenceCadence = fmpIntelligenceCadenceMinutes(now)
     jobs.push(scheduledJob('refresh-fmp-intelligence', now, { cadenceMinutes: intelligenceCadence }))
     if (isUsMarketRefreshWindow(now)) {
       jobs.push(scheduledJob('refresh-cross-asset', now, { mode: 'market-hours' }))
@@ -56,8 +57,8 @@ export function buildDueAgentJobs(
         tradingDate: now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
       }))
     }
-    jobs.push(scheduledJob('scan-research-refreshes', now, { cadenceMinutes: intelligenceCadence }))
   }
+  jobs.push(scheduledJob('monitor-investment-theses', now, { cadenceMinutes: monitorCadence }))
   const utcHour = now.getUTCHours()
 
   if (options.includeCodex !== false) {

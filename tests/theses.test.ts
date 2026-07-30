@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 import { industryThesisContent, stockThesisContent, thesisEntityKey } from '../lib/markets/theses.ts'
+import { evaluateIndustryThesisSignals } from '../lib/markets/thesis-monitoring.ts'
 import type { CandidateBrief, EquityResearchNote } from '../lib/markets/types.ts'
 
 const research = {
@@ -58,4 +59,40 @@ test('Candidate Scout proposes industry theses for every Markets user', async ()
   assert.match(candidateScout, /supabase\.from\('market_users'\)\.select\('id'\)/)
   assert.match(candidateScout, /\(marketUsers \?\? \[\]\)\.map\(\(row\) => row\.id\)/)
   assert.match(candidateScout, /await proposeIndustryTheses\(ownerId, briefs\)/)
+})
+
+test('accepted theses atomically become monitored durable objects', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/202607300005_thesis_monitoring.sql', import.meta.url), 'utf8')
+  assert.match(migration, /create table if not exists public\.thesis_monitors/)
+  assert.match(migration, /create table if not exists public\.thesis_monitor_runs/)
+  assert.match(migration, /create or replace function public\.review_investment_thesis/)
+  assert.match(migration, /on conflict \(owner_id, entity_key\) do update/)
+  assert.match(migration, /alter column symbol drop not null/)
+})
+
+test('industry monitors ignore noise and flag material leadership deterioration', () => {
+  const previous = {
+    snapshotId: 'snapshot-1',
+    dataAsOf: '2026-07-29T20:00:00.000Z',
+    return30d: 12,
+    return1y: 25,
+    vs50DayAverage: 3,
+    rank30d: 4,
+  }
+  assert.deepEqual(evaluateIndustryThesisSignals(previous, {
+    ...previous,
+    snapshotId: 'snapshot-2',
+    return30d: 9,
+    rank30d: 7,
+  }), [])
+  assert.deepEqual(
+    evaluateIndustryThesisSignals(previous, {
+      ...previous,
+      snapshotId: 'snapshot-3',
+      return30d: 4,
+      vs50DayAverage: -2,
+      rank30d: 18,
+    }).map((signal) => signal.reasonCode),
+    ['leadership_break', 'momentum_reversal', 'rank_deterioration'],
+  )
 })

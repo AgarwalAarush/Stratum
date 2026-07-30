@@ -10,6 +10,7 @@ import { materializeCandidateWeeklySummary } from './candidate-weekly-summary.ts
 import { materializeMarketLeadership } from './market-leadership.ts'
 import { generateFullEquityResearch } from './company-research.ts'
 import { scanResearchRefreshes } from './research-monitoring.ts'
+import { monitorInvestmentTheses } from './thesis-monitoring.ts'
 import { materializeMarketMemo } from './market-memo.ts'
 import { pruneMarketData } from './market-retention.ts'
 import { resolveMarketUniverse } from './market-universe.ts'
@@ -33,6 +34,7 @@ export const AGENT_JOB_TYPES = [
   'generate-company-research',
   'event-refresh-company-research',
   'scan-research-refreshes',
+  'monitor-investment-theses',
   'refresh-fmp-intelligence',
   'generate-market-memo',
   'generate-morning-brief',
@@ -120,6 +122,15 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     bucket.setTime(Math.floor(bucket.getTime() / bucketMs) * bucketMs)
     return `${jobType}:${bucket.toISOString()}`
   }
+  if (jobType === 'monitor-investment-theses') {
+    const cadence = typeof payload.cadenceMinutes === 'number'
+      ? Math.max(5, Math.min(240, Math.round(payload.cadenceMinutes)))
+      : 15
+    const bucket = new Date(now)
+    const bucketMs = cadence * 60_000
+    bucket.setTime(Math.floor(bucket.getTime() / bucketMs) * bucketMs)
+    return `${jobType}:${bucket.toISOString()}`
+  }
   if ((jobType === 'materialize-market-leadership' || jobType === 'run-candidate-scout') && typeof payload.tradingDate === 'string') {
     return `${jobType}:${payload.tradingDate}`
   }
@@ -141,6 +152,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
     jobType === 'refresh-cross-asset'
     || jobType === 'materialize-market-leadership'
     || jobType === 'scan-research-refreshes'
+    || jobType === 'monitor-investment-theses'
     || jobType === 'summarize-candidate-scout'
     || jobType === 'prune-market-data'
   ) return 'market-data'
@@ -363,6 +375,10 @@ async function executeJob(
 
   if (job.job_type === 'scan-research-refreshes') {
     return scanResearchRefreshes()
+  }
+
+  if (job.job_type === 'monitor-investment-theses') {
+    return monitorInvestmentTheses()
   }
 
   if (job.job_type === 'generate-market-memo') {

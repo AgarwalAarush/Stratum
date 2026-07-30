@@ -5,6 +5,10 @@ import type {
   InvestmentThesis,
   ThesisContent,
   ThesisEntityType,
+  ThesisMonitor,
+  ThesisMonitorCoverage,
+  ThesisMonitorOutcome,
+  ThesisMonitorStatus,
   ThesisSource,
   ThesisStatus,
   ThesisWorkspaceData,
@@ -73,6 +77,22 @@ function normalize(row: Record<string, unknown>): InvestmentThesis {
     generatedAt: String(row.generated_at),
     reviewedAt: row.reviewed_at === null ? null : String(row.reviewed_at ?? ''),
     researchNoteId: row.research_note_id === null ? null : String(row.research_note_id ?? ''),
+  }
+}
+
+function monitor(row: Record<string, unknown>): ThesisMonitor {
+  return {
+    id: String(row.id),
+    thesisId: String(row.thesis_id),
+    entityKey: String(row.entity_key),
+    status: row.status as ThesisMonitorStatus,
+    coverage: stringArray(row.coverage) as ThesisMonitorCoverage[],
+    lastCheckedAt: row.last_checked_at === null ? null : String(row.last_checked_at ?? ''),
+    lastEvidenceAt: row.last_evidence_at === null ? null : String(row.last_evidence_at ?? ''),
+    lastOutcome: row.last_outcome as ThesisMonitorOutcome,
+    failureCount: Number(row.failure_count ?? 0),
+    lastError: row.last_error === null ? null : String(row.last_error ?? ''),
+    updatedAt: String(row.updated_at),
   }
 }
 
@@ -167,12 +187,19 @@ export async function proposeIndustryTheses(ownerId: string, briefs: CandidateBr
 
 export async function fetchThesisWorkspace(ownerId: string): Promise<ThesisWorkspaceData> {
   const supabase = getSupabaseClient()
-  if (!supabase || !validOwnerId(ownerId)) return { proposals: [], accepted: [] }
-  const { data, error } = await supabase.from('investment_theses').select('*').eq('owner_id', ownerId)
-    .order('generated_at', { ascending: false }).limit(160)
+  if (!supabase || !validOwnerId(ownerId)) return { proposals: [], accepted: [], monitors: [] }
+  const [{ data, error }, monitorResult] = await Promise.all([
+    supabase.from('investment_theses').select('*').eq('owner_id', ownerId)
+      .order('generated_at', { ascending: false }).limit(160),
+    supabase.from('thesis_monitors').select('*').eq('owner_id', ownerId)
+      .order('updated_at', { ascending: false }),
+  ])
   if (error) {
-    if (thesisStorageUnavailable(error.message)) return { proposals: [], accepted: [] }
+    if (thesisStorageUnavailable(error.message)) return { proposals: [], accepted: [], monitors: [] }
     throw new Error(`Unable to load thesis workspace: ${error.message}`)
+  }
+  if (monitorResult.error && !/thesis_monitors|schema cache/i.test(monitorResult.error.message)) {
+    throw new Error(`Unable to load thesis monitors: ${monitorResult.error.message}`)
   }
   const rows = (data ?? []).map((row) => normalize(row))
   const proposals = rows.filter((item) => item.status === 'proposed')
@@ -183,7 +210,11 @@ export async function fetchThesisWorkspace(ownerId: string): Promise<ThesisWorks
     seen.add(thesis.entityKey)
     accepted.push(thesis)
   }
-  return { proposals, accepted }
+  return {
+    proposals,
+    accepted,
+    monitors: (monitorResult.data ?? []).map((row) => monitor(row)),
+  }
 }
 
 export async function fetchLatestStockThesis(ownerId: string, symbol: string): Promise<InvestmentThesis | null> {
@@ -200,19 +231,30 @@ export async function reviewThesis(ownerId: string, thesisId: string, decision: 
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required')
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const { data: proposal, error: proposalError } = await supabase.from('investment_theses').select('*')
-    .eq('id', thesisId).eq('owner_id', ownerId).eq('status', 'proposed').maybeSingle()
-  if (proposalError || !proposal) throw new Error('Thesis proposal not found')
-  const reviewedAt = new Date().toISOString()
-  if (decision === 'accept') {
-    const { error } = await supabase.from('investment_theses').update({ status: 'superseded', reviewed_at: reviewedAt })
-      .eq('owner_id', ownerId).eq('entity_key', proposal.entity_key).eq('status', 'accepted')
-    if (error) throw new Error(`Unable to supersede current thesis: ${error.message}`)
-  }
-  const { data, error } = await supabase.from('investment_theses').update({
-    status: decision === 'accept' ? 'accepted' : 'rejected',
-    reviewed_at: reviewedAt,
-  }).eq('id', thesisId).eq('owner_id', ownerId).eq('status', 'proposed').select('*').single()
+  const { data, error } = await supabase.rpc('review_investment_thesis', {
+    p_owner_id: ownerId,
+    p_thesis_id: thesisId,
+    p_decision: decision,
+  })
   if (error || !data) throw new Error(`Unable to review thesis: ${error?.message ?? 'unknown error'}`)
-  return normalize(data)
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row) throw new Error('Unable to review thesis: no updated thesis returned')
+  return normalize(row)
+}
+
+export async function updateThesisMonitorStatus(
+  ownerId: string,
+  monitorId: string,
+  status: ThesisMonitorStatus,
+): Promise<ThesisMonitor> {
+  if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required')
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data, error } = await supabase.from('thesis_monitors').update({
+    status,
+    updated_at: new Date().toISOString(),
+    last_error: null,
+  }).eq('id', monitorId).eq('owner_id', ownerId).select('*').single()
+  if (error || !data) throw new Error(`Unable to update thesis monitor: ${error?.message ?? 'unknown error'}`)
+  return monitor(data)
 }

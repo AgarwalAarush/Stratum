@@ -21,8 +21,14 @@ export function evaluateDecisionAlerts(
   decision: ThesisDecision,
   currentPrice: number,
   occurredAt: string,
-): Array<Omit<DecisionInboxItem, 'id' | 'createdAt' | 'status'>> {
-  const alerts: Array<Omit<DecisionInboxItem, 'id' | 'createdAt' | 'status'>> = []
+): Array<Omit<
+  DecisionInboxItem,
+  'id' | 'createdAt' | 'status' | 'investmentThesisId' | 'thesisMonitorId' | 'entityKey' | 'severity'
+>> {
+  const alerts: Array<Omit<
+    DecisionInboxItem,
+    'id' | 'createdAt' | 'status' | 'investmentThesisId' | 'thesisMonitorId' | 'entityKey' | 'severity'
+  >> = []
   if (
     decision.entryZoneLow !== null
     && decision.entryZoneHigh !== null
