@@ -33,6 +33,7 @@ const CANDIDATE_CACHE_MS = 5_000
 const CROSS_ASSET_CACHE_MS = 30_000
 const STOCK_VIEWER_SHARED_CACHE_MS = 20_000
 const MAX_CACHED_SNAPSHOTS = 2
+const SCREENER_ROWS_SHARED_CACHE_SECONDS = 60
 
 const snapshotRowsCache = new Map<string, ScreenerRow[]>()
 const snapshotRowsInflight = new Map<string, Promise<ScreenerRow[] | null>>()
@@ -245,7 +246,11 @@ export async function getCachedSnapshotRows(
   const pending = snapshotRowsInflight.get(snapshotId)
   if (pending) return pending
 
-  const load = loader().then((rows) => {
+  const load = fetchSharedArtifact(
+    `stratum:markets:screener-rows:${snapshotId}`,
+    SCREENER_ROWS_SHARED_CACHE_SECONDS,
+    loader,
+  ).then((rows) => {
     if (rows) {
       snapshotRowsCache.set(snapshotId, rows)
       while (snapshotRowsCache.size > MAX_CACHED_SNAPSHOTS) {
@@ -270,7 +275,7 @@ export async function fetchLatestScreener(query: ScreenerQuery): Promise<Screene
     for (let from = 0; ; from += DATABASE_PAGE_SIZE) {
       const { data, error } = await supabase
         .from('screener_rows')
-        .select('symbol,company,price,daily_change,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,tradable,data_as_of')
+        .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,tradable,data_as_of')
         .eq('snapshot_id', snapshot.id)
         .range(from, from + DATABASE_PAGE_SIZE - 1)
       if (error) return null

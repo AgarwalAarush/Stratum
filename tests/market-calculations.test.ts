@@ -101,3 +101,10 @@ test('return materialization fallback preserves feed provenance and only fills m
   assert.match(sql, /if new\.return_30d is null then/)
   assert.match(sql, /before insert or update/)
 })
+
+test('screener repository reads every materialized return period', () => {
+  const source = readFileSync(join(process.cwd(), 'lib/server/markets-repository.ts'), 'utf8')
+
+  assert.match(source, /return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y/)
+  assert.match(source, /stratum:markets:screener-rows:\$\{snapshotId\}/)
+})
