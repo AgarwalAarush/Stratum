@@ -269,6 +269,49 @@ export interface CandidateWeeklySummary {
   }>
 }
 
+export type ThesisEntityType = 'stock' | 'sub_industry'
+export type ThesisStatus = 'proposed' | 'accepted' | 'rejected' | 'superseded'
+
+export interface ThesisSource {
+  label: string
+  url: string
+  asOf: string
+}
+
+export interface ThesisContent {
+  headline: string
+  summary: string
+  coreBelief: string
+  whatChanged: string
+  catalysts: string[]
+  invalidation: string[]
+  nextQuestion: string
+  confidence: number
+}
+
+export interface InvestmentThesis {
+  id: string
+  entityType: ThesisEntityType
+  entityKey: string
+  symbol: string | null
+  sector: string | null
+  subIndustry: string | null
+  version: number
+  status: ThesisStatus
+  trigger: string
+  content: ThesisContent
+  sources: ThesisSource[]
+  dataAsOf: string
+  generatedAt: string
+  reviewedAt: string | null
+  researchNoteId: string | null
+}
+
+export interface ThesisWorkspaceData {
+  proposals: InvestmentThesis[]
+  accepted: InvestmentThesis[]
+}
+
 export interface StockPricePoint {
   tradingDate: string
   close: number
@@ -294,6 +337,7 @@ export interface StockViewerData {
   researchNote: EquityResearchNote | null
   decision: ThesisDecision | null
   position: ManualPosition | null
+  thesis: InvestmentThesis | null
   history: StockPricePoint[]
 }
 

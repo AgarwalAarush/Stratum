@@ -168,7 +168,7 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
           <div className="market-section-heading">
             <div>
               <p className="markets-eyebrow">Candidate Scout</p>
-              <h2 id="candidate-scout-title">Names requiring attention</h2>
+              <h2 id="candidate-scout-title">Candidates to investigate</h2>
             </div>
             <span>{overview.candidates.length} post-close briefs</span>
           </div>
@@ -180,7 +180,7 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
                   <span>{candidate.company}</span>
                 </div>
                 <p>{candidate.whySurfaced}</p>
-                <span>{candidate.subIndustry} · Review candidate →</span>
+                <span>{candidate.subIndustry} · Open dossier →</span>
               </MarketsIntentLink>
             ))}
           </div>

@@ -29,6 +29,7 @@ function multiple(value: number | null | undefined): string {
 export function StockViewer({ data }: { data: StockViewerData }) {
   const metric = data.leadership
   const candidate = data.candidate
+  const thesis = data.thesis
   const packet = data.companyPacket
   const latestFinancials = packet?.fundamentals[0]
   const latestEstimate = packet?.estimates[0]
@@ -74,6 +75,25 @@ export function StockViewer({ data }: { data: StockViewerData }) {
               <div><span>Relative volume</span><strong>{data.relativeVolume === null ? '—' : `${data.relativeVolume.toFixed(1)}×`}</strong></div>
               <div><span>52-week position</span><strong>{data.fiftyTwoWeekPosition === null ? '—' : `${data.fiftyTwoWeekPosition.toFixed(0)}%`}</strong></div>
             </div>
+          </section>
+
+          <section className="stock-viewer-section stock-viewer-thesis" aria-labelledby="stock-thesis-title">
+            <div className="stock-viewer-section-heading">
+              <div>
+                <p className="markets-eyebrow">Versioned investment view</p>
+                <h2 id="stock-thesis-title">Current thesis</h2>
+              </div>
+              <MarketsIntentLink href="/markets/theses">Open thesis library →</MarketsIntentLink>
+            </div>
+            {thesis ? (
+              <div className="stock-viewer-thesis-copy">
+                <strong>{thesis.content.headline}</strong>
+                <p>{thesis.content.summary}</p>
+                <small>Accepted v{thesis.version} · {new Date(thesis.reviewedAt ?? thesis.generatedAt).toLocaleDateString()}</small>
+              </div>
+            ) : (
+              <p>No accepted thesis yet. Complete or refresh research to create a reviewable proposal; the screen will never silently change your current view.</p>
+            )}
           </section>
 
           <div className="stock-viewer-insight-grid">

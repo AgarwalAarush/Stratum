@@ -11,6 +11,7 @@ import { fetchLatestDecision } from './portfolio.ts'
 import { runCodexJson } from './codex-exec.ts'
 import { fetchLatestMarketLeadership } from './markets-repository.ts'
 import { getSupabaseClient } from './supabase.ts'
+import { proposeStockThesis } from './theses.ts'
 
 const RESEARCH_SECTION_IDS: EquityResearchSectionId[] = [
   'snapshot',
@@ -424,7 +425,7 @@ export async function generateFullEquityResearch(
       if (sourceError) throw new Error(`Unable to persist research sources: ${sourceError.message}`)
     }
     await onProgress?.(100, 'Research complete')
-    return {
+    const note: EquityResearchNote = {
       id: noteRecord.id,
       symbol,
       version,
@@ -436,6 +437,8 @@ export async function generateFullEquityResearch(
       generatedAt,
       error: null,
     }
+    await proposeStockThesis(ownerId, packet, note, reason).catch(() => undefined)
+    return note
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     await supabase.from('equity_research_notes').update({ status: 'failed', error: message }).eq('id', noteRecord.id)
