@@ -127,3 +127,10 @@ test('job migration adds durable deduplication', async () => {
   const sql = await readFile(new URL('../supabase/migrations/202607150002_agent_job_deduplication.sql', import.meta.url), 'utf8')
   assert.match(sql, /unique index if not exists agent_jobs_dedupe_key/i)
 })
+
+test('Friday Scout summaries still run when no new candidates qualify', async () => {
+  const source = await readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8')
+  assert.match(source, /briefs\[0\]\?\.tradingDate\s*\?\?\s*\(typeof job\.payload\.tradingDate === 'string'/)
+  assert.match(source, /getUTCDay\(\) === 5/)
+  assert.match(source, /'summarize-candidate-scout'/)
+})

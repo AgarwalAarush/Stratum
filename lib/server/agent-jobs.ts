@@ -327,6 +327,7 @@ async function executeJob(
   if (job.job_type === 'run-candidate-scout') {
     const briefs = await materializeCandidateScout()
     const tradingDate = briefs[0]?.tradingDate
+      ?? (typeof job.payload.tradingDate === 'string' ? job.payload.tradingDate : null)
     if (tradingDate && new Date(`${tradingDate}T12:00:00.000Z`).getUTCDay() === 5) {
       await enqueueAgentJob(
         'summarize-candidate-scout',
