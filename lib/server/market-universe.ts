@@ -1,5 +1,13 @@
 import { strFromU8, unzipSync } from 'fflate'
+import {
+  EXPANDED_UNIVERSE_NAME,
+  MARKET_THEME_SYMBOLS,
+  MIN_EXPANDED_UNIVERSE_ASSETS,
+  isExpandedUniverseListing,
+  selectExpandedUniverseAssets,
+} from '../markets/investable-universe.ts'
 import type { MarketAsset } from '../markets/types.ts'
+import type { AlpacaClient } from './alpaca.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 export const SPY_HOLDINGS_URL = 'https://www.ssga.com/library-content/products/fund-data/etfs/us/holdings-daily-us-en-spy.xlsx'
@@ -7,6 +15,7 @@ export const MIN_SP500_ASSETS = 450
 export const MARKET_BENCHMARK_SYMBOLS = ['SPY', 'QQQ', 'IWM', 'TLT', 'UUP', 'USO'] as const
 const UNIVERSE_CACHE_MS = 20 * 60 * 60 * 1_000
 const SOURCE_NAME = 'state-street-spy-holdings'
+const EXPANDED_SOURCE_NAME = 'alpaca-liquidity-and-stratum-themes'
 
 function decodeXml(value: string): string {
   return value
@@ -77,6 +86,8 @@ interface PersistedUniverseRow {
   refreshed_at: string
 }
 
+type SupabaseServiceClient = NonNullable<ReturnType<typeof getSupabaseClient>>
+
 async function fetchOfficialSp500Symbols(fetchImpl: typeof fetch): Promise<{ symbols: string[]; sourceAsOf: string }> {
   const response = await fetchImpl(SPY_HOLDINGS_URL, {
     headers: { 'User-Agent': 'Stratum Markets/1.0 (private market-data worker)' },
@@ -88,22 +99,26 @@ async function fetchOfficialSp500Symbols(fetchImpl: typeof fetch): Promise<{ sym
   return { symbols, sourceAsOf: modified ? new Date(modified).toISOString() : new Date().toISOString() }
 }
 
-export async function resolveMarketUniverse(
-  assets: MarketAsset[],
-  options: ResolveMarketUniverseOptions = {},
-): Promise<MarketAsset[]> {
-  const supabase = getSupabaseClient()
-  if (!supabase) throw new Error('Supabase service credentials are not configured')
-
-  const now = options.now ?? new Date()
-  const { data: persistedRows, error: persistedError } = await supabase
+async function loadPersistedUniverse(
+  supabase: SupabaseServiceClient,
+  universe: string,
+): Promise<PersistedUniverseRow[]> {
+  const { data, error } = await supabase
     .from('market_universe_members')
     .select('symbol,refreshed_at')
-    .eq('universe', 'sp500')
+    .eq('universe', universe)
     .eq('active', true)
-  if (persistedError) throw new Error(`Unable to load the market universe: ${persistedError.message}`)
+  if (error) throw new Error(`Unable to load the ${universe} market universe: ${error.message}`)
+  return (data ?? []) as PersistedUniverseRow[]
+}
 
-  const persisted = (persistedRows ?? []) as PersistedUniverseRow[]
+async function resolveSp500Symbols(
+  assets: MarketAsset[],
+  supabase: SupabaseServiceClient,
+  options: ResolveMarketUniverseOptions,
+): Promise<string[]> {
+  const now = options.now ?? new Date()
+  const persisted = await loadPersistedUniverse(supabase, 'sp500')
   const newestRefresh = persisted.reduce((latest, row) => row.refreshed_at > latest ? row.refreshed_at : latest, '')
   const cacheFresh = newestRefresh !== '' && now.getTime() - new Date(newestRefresh).getTime() < UNIVERSE_CACHE_MS
   let sp500Symbols = persisted.map((row) => row.symbol)
@@ -127,27 +142,104 @@ export async function resolveMarketUniverse(
       if (sp500Symbols.length < MIN_SP500_ASSETS) throw error
     }
   }
+  return sp500Symbols
+}
 
+async function loadTrackedSymbols(supabase: SupabaseServiceClient): Promise<string[]> {
   const [
     { data: watchlistRows, error: watchlistError },
     { data: positionRows, error: positionError },
+    { data: thesisRows, error: thesisError },
   ] = await Promise.all([
     supabase.from('market_watchlist_items').select('symbol'),
     supabase.from('manual_positions').select('symbol'),
+    supabase.from('investment_theses').select('symbol')
+      .eq('entity_type', 'stock').eq('status', 'accepted').not('symbol', 'is', null),
   ])
-  if (watchlistError || positionError) {
-    throw new Error(`Unable to load tracked symbols: ${watchlistError?.message ?? positionError?.message}`)
+  if (watchlistError || positionError || thesisError) {
+    throw new Error(`Unable to load tracked symbols: ${watchlistError?.message ?? positionError?.message ?? thesisError?.message}`)
   }
+  return [...new Set([
+    ...(watchlistRows ?? []).map((row) => row.symbol),
+    ...(positionRows ?? []).map((row) => row.symbol),
+    ...(thesisRows ?? []).flatMap((row) => typeof row.symbol === 'string' ? [row.symbol] : []),
+  ])]
+}
+
+export async function resolveMarketUniverse(
+  assets: MarketAsset[],
+  options: ResolveMarketUniverseOptions = {},
+): Promise<MarketAsset[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const [sp500Symbols, expandedRows, trackedSymbols] = await Promise.all([
+    resolveSp500Symbols(assets, supabase, options),
+    loadPersistedUniverse(supabase, EXPANDED_UNIVERSE_NAME),
+    loadTrackedSymbols(supabase),
+  ])
+  const expandedSymbols = expandedRows.map((row) => row.symbol)
+  const baseSymbols = expandedSymbols.length >= MIN_EXPANDED_UNIVERSE_ASSETS
+    ? expandedSymbols
+    : sp500Symbols
 
   const universe = selectMarketUniverseAssets(
     assets,
-    sp500Symbols,
+    baseSymbols,
     [
-      ...(watchlistRows ?? []).map((row) => row.symbol),
-      ...(positionRows ?? []).map((row) => row.symbol),
+      ...trackedSymbols,
+      ...MARKET_THEME_SYMBOLS,
       ...MARKET_BENCHMARK_SYMBOLS,
     ],
   )
   if (universe.length < MIN_SP500_ASSETS) throw new Error(`Resolved market universe contains only ${universe.length} assets`)
   return universe
+}
+
+export interface RefreshExpandedUniverseResult {
+  assets: MarketAsset[]
+  eligibleListingCount: number
+  selectedCount: number
+  feed: string
+}
+
+export async function refreshExpandedMarketUniverse(
+  assets: MarketAsset[],
+  client: AlpacaClient,
+  options: ResolveMarketUniverseOptions = {},
+): Promise<RefreshExpandedUniverseResult> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const [sp500Symbols, trackedSymbols] = await Promise.all([
+    resolveSp500Symbols(assets, supabase, options),
+    loadTrackedSymbols(supabase),
+  ])
+  const eligibleListings = assets.filter(isExpandedUniverseListing)
+  const snapshots = await client.fetchSnapshots(eligibleListings.map((asset) => asset.symbol))
+  const selected = selectExpandedUniverseAssets(
+    assets,
+    snapshots.data,
+    [
+      ...sp500Symbols,
+      ...trackedSymbols,
+      ...MARKET_THEME_SYMBOLS,
+      ...MARKET_BENCHMARK_SYMBOLS,
+    ],
+  )
+  if (selected.length < MIN_EXPANDED_UNIVERSE_ASSETS) {
+    throw new Error(`Expanded investable universe contains only ${selected.length} assets`)
+  }
+  const sourceAsOf = options.now?.toISOString() ?? new Date().toISOString()
+  const { error } = await supabase.rpc('replace_market_universe', {
+    p_universe: EXPANDED_UNIVERSE_NAME,
+    p_symbols: selected.map((asset) => asset.symbol),
+    p_source: EXPANDED_SOURCE_NAME,
+    p_source_as_of: sourceAsOf,
+  })
+  if (error) throw new Error(`Unable to persist the expanded market universe: ${error.message}`)
+  return {
+    assets: selected,
+    eligibleListingCount: eligibleListings.length,
+    selectedCount: selected.length,
+    feed: snapshots.feed,
+  }
 }

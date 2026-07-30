@@ -279,6 +279,7 @@ export function normalizeStockLeadershipRow(row: Record<string, unknown>): Stock
     subIndustry: String(row.sub_industry),
     price: Number(row.price),
     dayReturn: numberOrNull(row.day_return),
+    return5d: numberOrNull(row.return_5d),
     return30d: numberOrNull(row.return_30d),
     return50d: numberOrNull(row.return_50d),
     return200d: numberOrNull(row.return_200d),

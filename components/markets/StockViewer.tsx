@@ -124,8 +124,18 @@ export function StockViewer({ data }: { data: StockViewerData }) {
             </section>
 
             <section className="stock-viewer-section stock-viewer-section-compact" id="industry-context">
-              <p className="markets-eyebrow">{data.subIndustry}</p>
+              <p className="markets-eyebrow">{candidate?.primaryLane
+                ? candidate.primaryLane.replaceAll('_', ' ')
+                : data.subIndustry}</p>
               <h2>Industry Context</h2>
+              {candidate?.entryContext ? <p><strong>Entry question:</strong> {candidate.entryContext}</p> : null}
+              {candidate?.selloff ? (
+                <div className="stock-viewer-stat-grid">
+                  <div><span>One day</span><strong>{percent(candidate.selloff.day)}</strong></div>
+                  <div><span>One week</span><strong>{percent(candidate.selloff.fiveDay)}</strong></div>
+                  <div><span>One month</span><strong>{percent(candidate.selloff.thirtyDay)}</strong></div>
+                </div>
+              ) : null}
               <p>{candidate?.industryContext ?? `${data.symbol} is compared against equal-weight ${data.subIndustry} leadership, breadth, and constituent performance.`}</p>
               {candidate ? (
                 <div className="stock-viewer-dimensions">

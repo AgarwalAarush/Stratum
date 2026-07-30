@@ -20,7 +20,10 @@ const research = {
 
 const candidate = {
   id: 'candidate-1', symbol: 'ACME', company: 'Acme', sector: 'Technology', subIndustry: 'Application Software',
-  tradingDate: '2026-07-30', whySurfaced: 'ACME moved into leadership.', whatChanged: ['ACME moved into leadership.'],
+  tradingDate: '2026-07-30', primaryLane: 'leadership', lanes: ['leadership'],
+  tracking: { acceptedThesis: false, watched: false, owned: false },
+  selloff: { day: 2, fiveDay: 5, thirtyDay: 12 }, entryContext: 'Establish ownership quality first.',
+  whySurfaced: 'ACME moved into leadership.', whatChanged: ['ACME moved into leadership.'],
   industryContext: 'Application Software returned +6.0% over 30 days.', decisiveNumbers: [], valuationSnapshot: '', dimensions: [], signals: [],
   evidence: [{ label: 'Market data', url: 'https://example.com', asOf: '2026-07-30T00:00:00.000Z' }],
   redFlags: ['Valuation is elevated.'], catalyst: 'Earnings expected soon.', nextResearchQuestion: 'Is growth durable?', status: 'new', generatedAt: '2026-07-30T00:00:00.000Z',
@@ -41,7 +44,7 @@ test('a stock thesis derives concise decision context from structured research',
 
 test('an industry thesis preserves candidate evidence and the next research question', () => {
   const thesis = industryThesisContent([candidate])
-  assert.equal(thesis?.headline, 'Application Software: leadership requires research')
+  assert.equal(thesis?.headline, 'Application Software: candidate activity requires research')
   assert.equal(thesis?.nextQuestion, 'Is growth durable?')
   assert.deepEqual(thesis?.invalidation, ['Valuation is elevated.'])
 })

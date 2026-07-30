@@ -9,6 +9,19 @@ interface MarketsOverviewProps {
   overview: MarketOverviewResponse
 }
 
+const CANDIDATE_LANE_LABEL = {
+  thesis_led: 'Tracked-thesis selloff',
+  dislocation: 'Possible overreaction',
+  fundamental_inflection: 'Fundamental inflection',
+  leadership: 'New leadership',
+} as const
+
+function candidateMove(value: number | null | undefined, period: string): string | null {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `${period} ${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
+    : null
+}
+
 function feedLabel(feed: MarketOverviewResponse['feed']): string {
   if (feed === 'illustrative') return 'Illustrative'
   if (feed === 'delayed_sip') return 'Delayed SIP'
@@ -175,6 +188,14 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
           <div className="market-candidate-grid">
             {overview.candidates.map((candidate) => (
               <MarketsIntentLink key={candidate.id} href={`/markets/stocks/${candidate.symbol}`} className="market-candidate-card">
+                <div className="market-candidate-card-kicker">
+                  <span>{CANDIDATE_LANE_LABEL[candidate.primaryLane ?? 'leadership']}</span>
+                  <span>{[
+                    candidateMove(candidate.selloff?.day, '1D'),
+                    candidateMove(candidate.selloff?.fiveDay, '1W'),
+                    candidateMove(candidate.selloff?.thirtyDay, '1M'),
+                  ].filter(Boolean).join(' · ')}</span>
+                </div>
                 <div>
                   <strong>{candidate.symbol}</strong>
                   <span>{candidate.company}</span>

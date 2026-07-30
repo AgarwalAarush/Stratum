@@ -412,6 +412,7 @@ function normalizeGroupMetric(row: Record<string, unknown>): MarketGroupMetric {
     sector: row.group_type === 'sector' ? null : String(row.sector),
     constituentCount: Number(row.constituent_count),
     dayReturn: nullable(row.day_return),
+    return5d: nullable(row.return_5d),
     return30d: nullable(row.return_30d),
     return50d: nullable(row.return_50d),
     return200d: nullable(row.return_200d),
@@ -576,6 +577,7 @@ async function loadLatestMarketLeadershipSummary(): Promise<MarketLeadershipSnap
       sector: group.sector,
       constituentCount: group.constituentCount,
       dayReturn: group.dayReturn,
+      return5d: null,
       return30d: null,
       return50d: null,
       return200d: null,
@@ -626,7 +628,7 @@ async function loadLatestCandidates(limit: number): Promise<CandidateBrief[]> {
   })
 }
 
-export async function fetchLatestCandidates(limit = 5): Promise<CandidateBrief[]> {
+export async function fetchLatestCandidates(limit = 8): Promise<CandidateBrief[]> {
   return candidateCache.get(String(limit), CANDIDATE_CACHE_MS, () => loadLatestCandidates(limit))
     .then((candidates) => candidates ?? [])
 }

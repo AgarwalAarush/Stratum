@@ -4,12 +4,12 @@ import {
   type CandidateFundamentals,
   type CandidateHistory,
 } from '../markets/candidates.ts'
-import {
-  buildStockLeadershipMetrics,
-  type LeadershipCompany,
-  type LeadershipPriceBar,
-} from '../markets/leadership.ts'
-import type { CandidateBrief, MarketGroupMetric, StockLeadershipMetric } from '../markets/types.ts'
+import type {
+  CandidateBrief,
+  CandidateTrackingContext,
+  MarketGroupMetric,
+  StockLeadershipMetric,
+} from '../markets/types.ts'
 import { fetchFmpStableJson } from './fmp.ts'
 import { normalizeStockLeadershipRow } from './market-leadership.ts'
 import { getSupabaseClient } from './supabase.ts'
@@ -82,6 +82,9 @@ async function fetchCandidateFundamentals(
 
   return {
     symbol,
+    company: String(profile.companyName ?? profile.name ?? symbol),
+    sector: String(profile.sector ?? 'Unknown'),
+    subIndustry: String(profile.industry ?? 'Unknown'),
     marketCap: number(profile.mktCap ?? profile.marketCap),
     peRatio: number(ratios.priceToEarningsRatioTTM ?? ratios.peRatioTTM ?? metrics.peRatioTTM),
     priceToSales: number(ratios.priceToSalesRatioTTM ?? metrics.priceToSalesRatioTTM),
@@ -105,6 +108,7 @@ function normalizeGroup(row: Record<string, unknown>): MarketGroupMetric {
     sector: row.group_type === 'sector' ? null : String(row.sector),
     constituentCount: Number(row.constituent_count),
     dayReturn: nullable(row.day_return),
+    return5d: nullable(row.return_5d),
     return30d: nullable(row.return_30d),
     return50d: nullable(row.return_50d),
     return200d: nullable(row.return_200d),
@@ -114,72 +118,179 @@ function normalizeGroup(row: Record<string, unknown>): MarketGroupMetric {
   }
 }
 
-function technicalPrefilter(stocks: StockLeadershipMetric[], count = 36): StockLeadershipMetric[] {
-  const score = (stock: StockLeadershipMetric) =>
+function leadershipScore(stock: StockLeadershipMetric): number {
+  return (
     (stock.return30d ?? -100) * 0.4
     + (stock.vs50DayAverage ?? -100) * 0.3
     + Math.min(stock.relativeVolume ?? 0, 3) * 6
     + (stock.return1y ?? -100) * 0.05
-  return stocks
-    .filter((stock) => stock.observationCount >= 200 && (stock.return30d ?? -Infinity) > -5)
-    .sort((left, right) => score(right) - score(left))
-    .slice(0, count)
+  )
 }
 
-async function loadTrackedStockMetrics(
-  existing: StockLeadershipMetric[],
-  apiKey: string,
-  fetchImpl: typeof fetch,
-  now: Date,
-): Promise<StockLeadershipMetric[]> {
+function selloffScore(stock: StockLeadershipMetric, tracked: boolean): number {
+  const dayThreshold = tracked ? 1.5 : 3
+  const fiveDayThreshold = tracked ? 4 : 7
+  const monthThreshold = tracked ? 8 : 12
+  return Math.max(
+    Math.abs(Math.min(stock.dayReturn ?? 0, 0)) / dayThreshold,
+    Math.abs(Math.min(stock.return5d ?? 0, 0)) / fiveDayThreshold,
+    Math.abs(Math.min(stock.return30d ?? 0, 0)) / monthThreshold,
+  )
+}
+
+export function multiLanePrefilter(
+  stocks: StockLeadershipMetric[],
+  trackingBySymbol: ReadonlyMap<string, CandidateTrackingContext>,
+  count = 48,
+): StockLeadershipMetric[] {
+  const selected: StockLeadershipMetric[] = []
+  const selectedSymbols = new Set<string>()
+  const add = (stock: StockLeadershipMetric) => {
+    if (selected.length >= count || selectedSymbols.has(stock.symbol)) return
+    selected.push(stock)
+    selectedSymbols.add(stock.symbol)
+  }
+  const tracked = stocks
+    .filter((stock) => {
+      const context = trackingBySymbol.get(stock.symbol)
+      return Boolean(context?.acceptedThesis || context?.watched || context?.owned)
+        && selloffScore(stock, true) >= 1
+    })
+    .sort((left, right) => selloffScore(right, true) - selloffScore(left, true))
+  const dislocations = stocks
+    .filter((stock) => stock.observationCount >= 5 && selloffScore(stock, false) >= 1)
+    .sort((left, right) =>
+      selloffScore(right, false) - selloffScore(left, false)
+      || (right.relativeVolume ?? 0) - (left.relativeVolume ?? 0))
+  const leaders = stocks
+    .filter((stock) => stock.observationCount >= 200)
+    .sort((left, right) => leadershipScore(right) - leadershipScore(left))
+
+  tracked.slice(0, 16).forEach(add)
+  dislocations.slice(0, 28).forEach(add)
+  leaders.slice(0, 24).forEach(add)
+  for (const stock of [...dislocations, ...leaders]) add(stock)
+  return selected
+}
+
+interface ScreenerCandidateRow {
+  symbol: string
+  company: string
+  price: number | string
+  daily_change: number | string | null
+  return_5d: number | string | null
+  return_30d: number | string | null
+  return_180d: number | string | null
+  return_1y: number | string | null
+  relative_volume: number | string | null
+  fifty_day_average: number | string | null
+  data_as_of: string
+}
+
+function historyCount(row: ScreenerCandidateRow): number {
+  if (row.return_1y !== null) return 252
+  if (row.return_180d !== null) return 180
+  if (row.return_30d !== null) return 30
+  if (row.return_5d !== null) return 5
+  return 2
+}
+
+function screenerMetric(row: ScreenerCandidateRow): StockLeadershipMetric {
+  const price = Number(row.price)
+  const fiftyDayAverage = row.fifty_day_average === null ? null : Number(row.fifty_day_average)
+  return {
+    symbol: row.symbol,
+    company: row.company,
+    sector: 'Unknown',
+    subIndustry: 'Unknown',
+    price,
+    dayReturn: row.daily_change === null ? null : Number(row.daily_change),
+    return5d: row.return_5d === null ? null : Number(row.return_5d),
+    return30d: row.return_30d === null ? null : Number(row.return_30d),
+    return50d: null,
+    return200d: row.return_180d === null ? null : Number(row.return_180d),
+    return1y: row.return_1y === null ? null : Number(row.return_1y),
+    vs50DayAverage: fiftyDayAverage && fiftyDayAverage !== 0
+      ? (price / fiftyDayAverage - 1) * 100
+      : null,
+    vs200DayAverage: null,
+    relativeVolume: row.relative_volume === null ? null : Number(row.relative_volume),
+    observationCount: historyCount(row),
+    asOf: row.data_as_of,
+  }
+}
+
+async function loadExpandedScreenerMetrics(snapshotId: string): Promise<StockLeadershipMetric[]> {
   const supabase = getSupabaseClient()
   if (!supabase) return []
-  const [{ data: listItems }, { data: positions }, { data: marketSnapshot }] = await Promise.all([
-    supabase.from('market_watchlist_items').select('symbol,market_watchlists!inner(owner_id)')
-      .not('market_watchlists.owner_id', 'is', null),
-    supabase.from('manual_positions').select('symbol'),
-    supabase.from('market_snapshots').select('id,feed').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
-  ])
-  if (!marketSnapshot) return []
-  const existingSymbols = new Set(existing.map((stock) => stock.symbol))
-  const symbols = [...new Set([
-    ...(listItems ?? []).map((item) => item.symbol),
-    ...(positions ?? []).map((item) => item.symbol),
-  ])].filter((symbol) => !existingSymbols.has(symbol))
-  if (symbols.length === 0) return []
-
-  const companies: LeadershipCompany[] = await Promise.all(symbols.map(async (symbol) => {
-    const profile = first(await fetchFmpStableJson<unknown>('profile', { symbol }, { apiKey, fetchImpl }))
-    return {
-      symbol,
-      company: String(profile.companyName ?? profile.name ?? symbol),
-      sector: String(profile.sector ?? 'Unknown'),
-      subIndustry: String(profile.industry ?? 'Unknown'),
-    }
-  }))
-  const start = new Date(now)
-  start.setUTCDate(start.getUTCDate() - 430)
-  const bars: LeadershipPriceBar[] = []
+  const rows: ScreenerCandidateRow[] = []
   for (let from = 0; ; from += 1_000) {
-    const { data, error } = await supabase.from('market_bars_daily').select('symbol,trading_date,close')
-      .in('symbol', symbols).eq('feed', marketSnapshot.feed).gte('trading_date', start.toISOString().slice(0, 10))
-      .order('trading_date', { ascending: true }).range(from, from + 999)
-    if (error) throw new Error(`Unable to load tracked-name history: ${error.message}`)
-    const page = data ?? []
-    bars.push(...page.map((bar) => ({
-      symbol: bar.symbol,
-      tradingDate: bar.trading_date,
-      close: Number(bar.close),
-    })))
+    const { data, error } = await supabase.from('screener_rows')
+      .select('symbol,company,price,daily_change,return_5d,return_30d,return_180d,return_1y,relative_volume,fifty_day_average,data_as_of')
+      .eq('snapshot_id', snapshotId)
+      .range(from, from + 999)
+    if (error) throw new Error(`Unable to load expanded candidate metrics: ${error.message}`)
+    const page = (data ?? []) as ScreenerCandidateRow[]
+    rows.push(...page)
     if (page.length < 1_000) break
   }
-  const { data: screenerRows, error: screenerError } = await supabase.from('screener_rows')
-    .select('symbol,relative_volume').eq('snapshot_id', marketSnapshot.id).in('symbol', symbols)
-  if (screenerError) throw new Error(`Unable to load tracked-name snapshots: ${screenerError.message}`)
-  const relativeVolumeBySymbol = new Map(
-    (screenerRows ?? []).map((row) => [row.symbol, Number(row.relative_volume)]),
-  )
-  return buildStockLeadershipMetrics(companies, bars, { relativeVolumeBySymbol })
+  return rows.map(screenerMetric)
+}
+
+function mergeScreenerMetrics(
+  leadershipStocks: StockLeadershipMetric[],
+  screenerStocks: StockLeadershipMetric[],
+): StockLeadershipMetric[] {
+  const merged = new Map(leadershipStocks.map((stock) => [stock.symbol, stock]))
+  for (const screener of screenerStocks) {
+    const leadership = merged.get(screener.symbol)
+    if (!leadership) {
+      merged.set(screener.symbol, screener)
+      continue
+    }
+    merged.set(screener.symbol, {
+      ...leadership,
+      price: screener.price,
+      dayReturn: screener.dayReturn,
+      return5d: screener.return5d,
+      return30d: screener.return30d,
+      return200d: screener.return200d,
+      return1y: screener.return1y,
+      vs50DayAverage: screener.vs50DayAverage,
+      relativeVolume: screener.relativeVolume,
+      observationCount: Math.max(leadership.observationCount, screener.observationCount),
+      asOf: screener.asOf,
+    })
+  }
+  return [...merged.values()]
+}
+
+async function loadCandidateTracking(): Promise<Map<string, CandidateTrackingContext>> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return new Map()
+  const [{ data: watchlists, error: watchlistError }, { data: positions, error: positionError }, { data: theses, error: thesisError }] = await Promise.all([
+    supabase.from('market_watchlist_items').select('symbol'),
+    supabase.from('manual_positions').select('symbol'),
+    supabase.from('investment_theses').select('symbol')
+      .eq('entity_type', 'stock').eq('status', 'accepted').not('symbol', 'is', null),
+  ])
+  if (watchlistError || positionError || thesisError) {
+    throw new Error(`Unable to load candidate tracking context: ${watchlistError?.message ?? positionError?.message ?? thesisError?.message}`)
+  }
+  const result = new Map<string, CandidateTrackingContext>()
+  const update = (symbol: string, patch: Partial<CandidateTrackingContext>) => {
+    result.set(symbol, {
+      acceptedThesis: false,
+      watched: false,
+      owned: false,
+      ...result.get(symbol),
+      ...patch,
+    })
+  }
+  for (const row of watchlists ?? []) update(row.symbol, { watched: true })
+  for (const row of positions ?? []) update(row.symbol, { owned: true })
+  for (const row of theses ?? []) if (typeof row.symbol === 'string') update(row.symbol, { acceptedThesis: true })
+  return result
 }
 
 export async function materializeCandidateScout(
@@ -191,13 +302,25 @@ export async function materializeCandidateScout(
   if (!apiKey) throw new Error('FMP_API_KEY is not configured')
   const now = options.now ?? new Date()
 
-  const { data: snapshot, error: snapshotError } = await supabase
-    .from('market_leadership_snapshots')
-    .select('id,trading_date')
-    .eq('status', 'complete')
-    .eq('is_latest', true)
-    .maybeSingle()
+  const [
+    { data: snapshot, error: snapshotError },
+    { data: marketSnapshot, error: marketSnapshotError },
+    trackingBySymbol,
+  ] = await Promise.all([
+    supabase.from('market_leadership_snapshots')
+      .select('id,trading_date')
+      .eq('status', 'complete')
+      .eq('is_latest', true)
+      .maybeSingle(),
+    supabase.from('market_snapshots')
+      .select('id')
+      .eq('status', 'complete')
+      .eq('is_latest', true)
+      .maybeSingle(),
+    loadCandidateTracking(),
+  ])
   if (snapshotError || !snapshot) throw new Error(`No complete leadership snapshot is available: ${snapshotError?.message ?? 'missing'}`)
+  if (marketSnapshotError || !marketSnapshot) throw new Error(`No complete market snapshot is available: ${marketSnapshotError?.message ?? 'missing'}`)
   const [{ data: stockRows, error: stockError }, { data: groupRows, error: groupError }, { data: historyRows, error: historyError }] = await Promise.all([
     supabase.from('market_stock_metrics').select('*').eq('snapshot_id', snapshot.id),
     supabase.from('market_group_metrics').select('*').eq('snapshot_id', snapshot.id).eq('group_type', 'sub_industry'),
@@ -207,17 +330,22 @@ export async function materializeCandidateScout(
     throw new Error(`Unable to load Candidate Scout inputs: ${stockError?.message ?? groupError?.message ?? historyError?.message}`)
   }
   const leadershipStocks = (stockRows ?? []).map((row) => normalizeStockLeadershipRow(row))
-  const trackedStocks = await loadTrackedStockMetrics(
-    leadershipStocks,
-    apiKey,
-    options.fetchImpl ?? fetch,
-    now,
-  )
-  const stocks = [...leadershipStocks, ...trackedStocks]
+  const screenerStocks = await loadExpandedScreenerMetrics(marketSnapshot.id)
+  const stocks = mergeScreenerMetrics(leadershipStocks, screenerStocks)
   const groups = (groupRows ?? []).map((row) => normalizeGroup(row))
-  const prefiltered = technicalPrefilter(stocks)
+  const prefiltered = multiLanePrefilter(stocks, trackingBySymbol)
   const fundamentals = await Promise.all(prefiltered.map((stock) =>
     fetchCandidateFundamentals(stock.symbol, apiKey, options.fetchImpl ?? fetch, now)))
+  const fundamentalsBySymbol = new Map(fundamentals.map((item) => [item.symbol, item]))
+  const classified = prefiltered.map((stock) => {
+    const item = fundamentalsBySymbol.get(stock.symbol)
+    return item ? {
+      ...stock,
+      company: item.company || stock.company,
+      sector: item.sector,
+      subIndustry: item.subIndustry,
+    } : stock
+  })
   const history: CandidateHistory[] = (historyRows ?? []).map((row) => {
     const content = record(row.content)
     const signals = Array.isArray(content.signals) ? content.signals.map(record) : []
@@ -227,11 +355,11 @@ export async function materializeCandidateScout(
       materialKeys: signals.flatMap((signal) => typeof signal.materialKey === 'string' ? [signal.materialKey] : []),
     }
   })
-  const ranked = rankCandidateUniverse(prefiltered, groups, fundamentals)
+  const ranked = rankCandidateUniverse(classified, groups, fundamentals, 200, trackingBySymbol)
   const briefs = selectCandidateBriefs(ranked, {
     tradingDate: snapshot.trading_date,
     generatedAt: now.toISOString(),
-    targetCount: options.targetCount ?? 5,
+    targetCount: options.targetCount ?? 8,
     maximumPerSubIndustry: 2,
     suppressionTradingDays: 5,
     history,
@@ -276,7 +404,9 @@ export async function materializeCandidateScout(
       owner_id: ownerId,
       item_type: 'new_candidate',
       symbol: brief.symbol,
-      title: `${brief.symbol} surfaced in Candidate Scout`,
+      title: brief.primaryLane === 'leadership'
+        ? `${brief.symbol} surfaced in Candidate Scout`
+        : `${brief.symbol} selloff requires investment review`,
       summary: brief.whySurfaced,
       evidence: brief.evidence,
       dedupe_key: `candidate:${brief.id}`,

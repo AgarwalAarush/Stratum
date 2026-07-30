@@ -164,12 +164,14 @@ export async function proposeStockThesis(
 export async function proposeIndustryTheses(ownerId: string, briefs: CandidateBrief[]): Promise<number> {
   const groups = new Map<string, CandidateBrief[]>()
   for (const brief of briefs) {
+    if (brief.subIndustry === 'Unknown' || brief.subIndustry === 'Classification pending') continue
     const key = `${brief.sector}\u0000${brief.subIndustry}`
     groups.set(key, [...(groups.get(key) ?? []), brief])
   }
   let created = 0
   for (const group of groups.values()) {
     const first = group[0]!
+    if (group.length < 2 && first.primaryLane !== 'leadership') continue
     const proposal = await saveProposal({
       ownerId,
       entityType: 'sub_industry',

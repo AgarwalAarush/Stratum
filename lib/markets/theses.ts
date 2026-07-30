@@ -21,12 +21,13 @@ export function stockThesisContent(research: EquityResearchNote): ThesisContent 
 export function industryThesisContent(briefs: CandidateBrief[]): ThesisContent | null {
   const first = briefs[0]
   if (!first) return null
+  const laneLabels = [...new Set(briefs.map((brief) => brief.primaryLane.replaceAll('_', ' ')))]
   const changed = [...new Set(briefs.flatMap((brief) => brief.whatChanged))].slice(0, 4)
   const catalysts = [...new Set(briefs.map((brief) => brief.catalyst))].slice(0, 4)
   const invalidation = [...new Set(briefs.flatMap((brief) => brief.redFlags))].slice(0, 4)
   return {
-    headline: `${first.subIndustry}: leadership requires research`,
-    summary: `${first.subIndustry} has produced ${briefs.length} new candidate${briefs.length === 1 ? '' : 's'} in the latest post-close screen.`,
+    headline: `${first.subIndustry}: candidate activity requires research`,
+    summary: `${first.subIndustry} produced ${briefs.length} candidate${briefs.length === 1 ? '' : 's'} across ${laneLabels.join(', ')} discovery.`,
     coreBelief: first.industryContext,
     whatChanged: changed.join(' '),
     catalysts,

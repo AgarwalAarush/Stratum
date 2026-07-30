@@ -145,6 +145,7 @@ export interface StockLeadershipMetric {
   subIndustry: string
   price: number
   dayReturn: number | null
+  return5d: number | null
   return30d: number | null
   return50d: number | null
   return200d: number | null
@@ -162,6 +163,7 @@ export interface MarketGroupMetric {
   sector: string | null
   constituentCount: number
   dayReturn: number | null
+  return5d: number | null
   return30d: number | null
   return50d: number | null
   return200d: number | null
@@ -219,11 +221,26 @@ export interface CandidateSignal {
     | 'leadership_transition'
     | 'company_group_divergence'
     | 'price_volume_confirmation'
+    | 'selloff_dislocation'
+    | 'tracked_thesis_dislocation'
+    | 'fundamental_resilience'
     | 'relative_valuation'
     | 'earnings_or_estimate_catalyst'
     | 'quality_improvement'
   summary: string
   materialKey: string
+}
+
+export type CandidateLane =
+  | 'thesis_led'
+  | 'dislocation'
+  | 'fundamental_inflection'
+  | 'leadership'
+
+export interface CandidateTrackingContext {
+  acceptedThesis: boolean
+  watched: boolean
+  owned: boolean
 }
 
 export interface CandidateBrief {
@@ -233,6 +250,15 @@ export interface CandidateBrief {
   sector: string
   subIndustry: string
   tradingDate: string
+  primaryLane: CandidateLane
+  lanes: CandidateLane[]
+  tracking: CandidateTrackingContext
+  selloff: {
+    day: number | null
+    fiveDay: number | null
+    thirtyDay: number | null
+  }
+  entryContext: string
   whySurfaced: string
   whatChanged: string[]
   industryContext: string

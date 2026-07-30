@@ -7,6 +7,7 @@ import {
   selectCandidateBriefs,
   type CandidateFundamentals,
 } from '../lib/markets/candidates.ts'
+import { multiLanePrefilter } from '../lib/server/candidate-scout.ts'
 import type { MarketGroupMetric, StockLeadershipMetric } from '../lib/markets/types.ts'
 
 function stock(symbol: string, subIndustry: string, return30d: number): StockLeadershipMetric {
@@ -17,6 +18,7 @@ function stock(symbol: string, subIndustry: string, return30d: number): StockLea
     subIndustry,
     price: 100,
     dayReturn: 1,
+    return5d: return30d / 4,
     return30d,
     return50d: 12,
     return200d: 24,
@@ -32,6 +34,9 @@ function stock(symbol: string, subIndustry: string, return30d: number): StockLea
 function fundamentals(symbol: string): CandidateFundamentals {
   return {
     symbol,
+    company: `${symbol} Corp`,
+    sector: 'Technology',
+    subIndustry: 'Software',
     marketCap: 10_000_000_000,
     peRatio: 22,
     priceToSales: 4,
@@ -54,6 +59,7 @@ const groups: MarketGroupMetric[] = [
     sector: 'Technology',
     constituentCount: 8,
     dayReturn: 1,
+    return5d: 1,
     return30d: 2,
     return50d: 5,
     return200d: 10,
@@ -67,6 +73,7 @@ const groups: MarketGroupMetric[] = [
     sector: 'Technology',
     constituentCount: 5,
     dayReturn: 0.5,
+    return5d: 0.5,
     return30d: 1,
     return50d: 3,
     return200d: 8,
@@ -85,11 +92,69 @@ test('Candidate Scout ranks explainable triggers and preserves six visible dimen
   assert.ok(ranked[0]?.signals.every((signal) => signal.materialKey))
 })
 
+test('Candidate Scout treats sharp weakness with resilient fundamentals as a dislocation, not an exclusion', () => {
+  const falling = {
+    ...stock('DROP', 'Software', -15),
+    dayReturn: -4.5,
+    return5d: -9,
+    vs50DayAverage: -8,
+    return1y: 12,
+  }
+  const ranked = rankCandidateUniverse([falling], groups, [fundamentals('DROP')])
+
+  assert.equal(ranked.length, 1)
+  assert.ok(ranked[0]?.lanes.includes('dislocation'))
+  assert.ok(!ranked[0]?.lanes.includes('leadership'))
+  const brief = selectCandidateBriefs(ranked, { tradingDate: '2026-07-30', targetCount: 1 })[0]
+  assert.equal(brief?.primaryLane, 'dislocation')
+  assert.equal(brief?.selloff.fiveDay, -9)
+  assert.match(brief?.entryContext ?? '', /overreaction/)
+})
+
+test('accepted theses bypass momentum and quality gates when price weakness requires review', () => {
+  const falling = {
+    ...stock('THESIS', 'Hardware', -10),
+    dayReturn: -2,
+    return5d: -5,
+    vs50DayAverage: -12,
+  }
+  const weak = {
+    ...fundamentals('THESIS'),
+    peRatio: 55,
+    returnOnEquity: -2,
+    netMargin: -4,
+    debtToEquity: 4,
+    revenueGrowth: -5,
+    earningsGrowth: -8,
+    estimateGrowth: -3,
+  }
+  const tracking = new Map([['THESIS', { acceptedThesis: true, watched: false, owned: false }]])
+  const ranked = rankCandidateUniverse([falling], groups, [weak], 200, tracking)
+
+  assert.deepEqual(ranked[0]?.lanes, ['thesis_led'])
+  assert.ok(ranked[0]?.signals.some((signal) => signal.kind === 'tracked_thesis_dislocation'))
+})
+
+test('multi-lane prefilter retains selloffs and leaders without a negative-return rejection', () => {
+  const falling = {
+    ...stock('DROP', 'Software', -18),
+    dayReturn: -5,
+    return5d: -10,
+    vs50DayAverage: -11,
+  }
+  const leader = stock('LEAD', 'Software', 18)
+  const selected = multiLanePrefilter([falling, leader], new Map(), 2)
+
+  assert.deepEqual(new Set(selected.map((item) => item.symbol)), new Set(['DROP', 'LEAD']))
+})
+
 test('Candidate Scout expands beyond the S&P 500 to watched and owned names', async () => {
   const source = await readFile(new URL('../lib/server/candidate-scout.ts', import.meta.url), 'utf8')
   assert.match(source, /market_watchlist_items/)
   assert.match(source, /manual_positions/)
-  assert.match(source, /buildStockLeadershipMetrics/)
+  assert.match(source, /investment_theses/)
+  assert.match(source, /loadExpandedScreenerMetrics/)
+  assert.match(source, /multiLanePrefilter/)
 })
 
 test('Candidate Scout caps sub-industries and suppresses repeats for five trading days', () => {

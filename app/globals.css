@@ -1182,7 +1182,7 @@
   border: 1px solid var(--market-border);
   display: grid;
   gap: 1px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .market-candidate-card {
@@ -1191,6 +1191,28 @@
   flex-direction: column;
   min-height: 196px;
   padding: 18px;
+}
+
+.market-candidate-card-kicker {
+  align-items: flex-start;
+  flex-direction: row !important;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.market-candidate-card-kicker span {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 8px !important;
+  letter-spacing: .08em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.market-candidate-card-kicker span:last-child {
+  color: var(--market-text);
+  text-align: right;
 }
 
 .market-candidate-card:hover {
@@ -1535,7 +1557,7 @@
 .market-candidate-card p {
   font-size: 12px;
   line-height: 1.45;
-  margin: 24px 0 auto;
+  margin: 18px 0 auto;
 }
 
 .market-candidate-weekly-summary {

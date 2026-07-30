@@ -1,13 +1,18 @@
 import type {
   CandidateBrief,
   CandidateDimension,
+  CandidateLane,
   CandidateSignal,
+  CandidateTrackingContext,
   MarketGroupMetric,
   StockLeadershipMetric,
 } from './types.ts'
 
 export interface CandidateFundamentals {
   symbol: string
+  company: string
+  sector: string
+  subIndustry: string
   marketCap: number | null
   peRatio: number | null
   priceToSales: number | null
@@ -44,7 +49,29 @@ export interface RankedCandidate {
   group: MarketGroupMetric | null
   signals: CandidateSignal[]
   dimensions: CandidateDimension[]
+  lanes: CandidateLane[]
+  tracking: CandidateTrackingContext
   attentionPriority: number
+}
+
+const EMPTY_TRACKING: CandidateTrackingContext = {
+  acceptedThesis: false,
+  watched: false,
+  owned: false,
+}
+
+const LANE_ORDER: CandidateLane[] = [
+  'thesis_led',
+  'dislocation',
+  'fundamental_inflection',
+  'leadership',
+]
+
+const LANE_TARGETS: Record<CandidateLane, number> = {
+  thesis_led: 2,
+  dislocation: 3,
+  fundamental_inflection: 2,
+  leadership: 3,
 }
 
 function finite(value: number | null): value is number {
@@ -57,6 +84,41 @@ function formatPercent(value: number | null): string {
 
 function formatMultiple(value: number | null): string {
   return finite(value) ? `${value.toFixed(1)}×` : 'Unavailable'
+}
+
+function selloffThreshold(
+  stock: StockLeadershipMetric,
+  tracking: CandidateTrackingContext,
+): { triggered: boolean; summary: string; materialKey: string } {
+  const tracked = tracking.acceptedThesis || tracking.watched || tracking.owned
+  const thresholds = tracked
+    ? { day: -1.5, fiveDay: -4, thirtyDay: -8 }
+    : { day: -3, fiveDay: -7, thirtyDay: -12 }
+  const moves = [
+    finite(stock.dayReturn) && stock.dayReturn <= thresholds.day
+      ? { period: 'one session', value: stock.dayReturn, key: '1d' }
+      : null,
+    finite(stock.return5d) && stock.return5d <= thresholds.fiveDay
+      ? { period: 'five trading days', value: stock.return5d, key: '5d' }
+      : null,
+    finite(stock.return30d) && stock.return30d <= thresholds.thirtyDay
+      ? { period: '30 days', value: stock.return30d, key: '30d' }
+      : null,
+  ].filter((move): move is { period: string; value: number; key: string } => move !== null)
+  if (moves.length === 0) return { triggered: false, summary: '', materialKey: '' }
+  const decisive = [...moves].sort((left, right) =>
+    Math.abs(right.value) - Math.abs(left.value))[0]!
+  return {
+    triggered: true,
+    summary: `${stock.symbol} fell ${Math.abs(decisive.value).toFixed(1)}% over ${decisive.period}; determine whether the move changed the business thesis or only the entry price.`,
+    materialKey: `selloff:${decisive.key}:${Math.round(decisive.value / 2) * 2}`,
+  }
+}
+
+function trackingLabel(tracking: CandidateTrackingContext): string {
+  if (tracking.acceptedThesis) return 'an accepted thesis'
+  if (tracking.owned) return 'an owned position'
+  return 'a watchlist'
 }
 
 function tradingDateDistance(left: string, right: string): number {
@@ -74,8 +136,24 @@ function candidateSignals(
   stock: StockLeadershipMetric,
   group: MarketGroupMetric | null,
   fundamentals: CandidateFundamentals,
+  tracking: CandidateTrackingContext,
 ): CandidateSignal[] {
   const signals: CandidateSignal[] = []
+  const selloff = selloffThreshold(stock, tracking)
+  if (selloff.triggered) {
+    signals.push({
+      kind: 'selloff_dislocation',
+      summary: selloff.summary,
+      materialKey: selloff.materialKey,
+    })
+  }
+  if (selloff.triggered && (tracking.acceptedThesis || tracking.watched || tracking.owned)) {
+    signals.push({
+      kind: 'tracked_thesis_dislocation',
+      summary: `${stock.symbol} is covered by ${trackingLabel(tracking)}, so price weakness triggers thesis review instead of removing the company from consideration.`,
+      materialKey: `tracked:${tracking.acceptedThesis ? 'thesis' : tracking.owned ? 'owned' : 'watched'}`,
+    })
+  }
   if (finite(stock.return30d) && finite(stock.return1y) && stock.return30d > 5 && stock.return1y <= 5) {
     signals.push({
       kind: 'leadership_transition',
@@ -128,6 +206,20 @@ function candidateSignals(
       kind: 'quality_improvement',
       summary: `Profitability and growth screen positively: ${formatPercent(fundamentals.returnOnEquity)} ROE and ${formatPercent(fundamentals.revenueGrowth)} revenue growth.`,
       materialKey: `quality:${Math.round((fundamentals.returnOnEquity ?? 0) / 5) * 5}`,
+    })
+  }
+  if (
+    selloff.triggered
+    && (
+      ((fundamentals.returnOnEquity ?? 0) >= 10 && (fundamentals.netMargin ?? 0) >= 5)
+      || (fundamentals.revenueGrowth ?? 0) >= 5
+      || (fundamentals.estimateGrowth ?? 0) >= 8
+    )
+  ) {
+    signals.push({
+      kind: 'fundamental_resilience',
+      summary: `The lightweight fundamental screen remains constructive despite the selloff: ${formatPercent(fundamentals.revenueGrowth)} revenue growth and ${formatPercent(fundamentals.estimateGrowth)} estimate growth.`,
+      materialKey: `resilience:${Math.round((fundamentals.estimateGrowth ?? fundamentals.revenueGrowth ?? 0) / 5) * 5}`,
     })
   }
   return signals
@@ -199,9 +291,59 @@ function candidateDimensions(
   ]
 }
 
-function priority(dimensions: CandidateDimension[], signals: CandidateSignal[]): number {
+function candidateLanes(
+  stock: StockLeadershipMetric,
+  fundamentals: CandidateFundamentals,
+  signals: CandidateSignal[],
+  dimensions: CandidateDimension[],
+  tracking: CandidateTrackingContext,
+  minimumHistory: number,
+): CandidateLane[] {
+  const hasSelloff = signals.some((signal) => signal.kind === 'selloff_dislocation')
+  const tracked = tracking.acceptedThesis || tracking.watched || tracking.owned
+  const leadershipSignals = signals.filter((signal) => [
+    'leadership_transition',
+    'company_group_divergence',
+    'price_volume_confirmation',
+  ].includes(signal.kind))
+  const ownershipSupport = dimensions.filter((dimension) =>
+    ['business_quality', 'growth', 'valuation'].includes(dimension.name)
+    && (dimension.assessment === 'strong' || dimension.assessment === 'positive')).length
+  const risk = dimensions.find((dimension) => dimension.name === 'risk')?.assessment
+  const estimateInflection = (fundamentals.estimateGrowth ?? fundamentals.earningsGrowth ?? 0) >= 10
+    && (fundamentals.revenueGrowth ?? 0) >= 0
+  const lanes: CandidateLane[] = []
+  if (tracked && hasSelloff) lanes.push('thesis_led')
+  if (hasSelloff && ownershipSupport >= 2 && risk !== 'caution') lanes.push('dislocation')
+  if (hasSelloff && estimateInflection) lanes.push('fundamental_inflection')
+  if (stock.observationCount >= minimumHistory && leadershipSignals.length >= 2) lanes.push('leadership')
+  return lanes
+}
+
+function priority(
+  stock: StockLeadershipMetric,
+  dimensions: CandidateDimension[],
+  signals: CandidateSignal[],
+  lanes: CandidateLane[],
+  tracking: CandidateTrackingContext,
+): number {
   const dimensionValue = { strong: 3, positive: 2, mixed: 1, caution: 0 }
-  return dimensions.reduce((sum, dimension) => sum + dimensionValue[dimension.assessment], 0) + signals.length * 2
+  const laneBonus = lanes.reduce((sum, lane) => sum + ({
+    thesis_led: 8,
+    dislocation: 6,
+    fundamental_inflection: 4,
+    leadership: 2,
+  })[lane], 0)
+  const selloffUrgency = Math.max(
+    Math.abs(Math.min(stock.dayReturn ?? 0, 0)),
+    Math.abs(Math.min(stock.return5d ?? 0, 0)) / 2,
+    Math.abs(Math.min(stock.return30d ?? 0, 0)) / 4,
+  )
+  return dimensions.reduce((sum, dimension) => sum + dimensionValue[dimension.assessment], 0)
+    + signals.length * 2
+    + laneBonus
+    + Math.min(8, selloffUrgency)
+    + (tracking.acceptedThesis ? 5 : 0)
 }
 
 export function rankCandidateUniverse(
@@ -209,17 +351,29 @@ export function rankCandidateUniverse(
   groups: MarketGroupMetric[],
   fundamentals: CandidateFundamentals[],
   minimumHistory = 200,
+  trackingBySymbol: ReadonlyMap<string, CandidateTrackingContext> = new Map(),
 ): RankedCandidate[] {
   const groupByKey = new Map(groups.map((group) => [`${group.sector}\u0000${group.label}`, group]))
   const fundamentalsBySymbol = new Map(fundamentals.map((item) => [item.symbol, item]))
   return stocks.flatMap((stock) => {
     const companyFundamentals = fundamentalsBySymbol.get(stock.symbol)
-    if (!companyFundamentals || stock.observationCount < minimumHistory) return []
+    if (!companyFundamentals) return []
     const group = groupByKey.get(`${stock.sector}\u0000${stock.subIndustry}`) ?? null
-    const signals = candidateSignals(stock, group, companyFundamentals)
-    if (signals.length < 2) return []
+    const tracking = trackingBySymbol.get(stock.symbol) ?? EMPTY_TRACKING
+    const signals = candidateSignals(stock, group, companyFundamentals, tracking)
     const dimensions = candidateDimensions(stock, companyFundamentals)
-    return [{ stock, fundamentals: companyFundamentals, group, signals, dimensions, attentionPriority: priority(dimensions, signals) }]
+    const lanes = candidateLanes(stock, companyFundamentals, signals, dimensions, tracking, minimumHistory)
+    if (lanes.length === 0) return []
+    return [{
+      stock,
+      fundamentals: companyFundamentals,
+      group,
+      signals,
+      dimensions,
+      lanes,
+      tracking,
+      attentionPriority: priority(stock, dimensions, signals, lanes, tracking),
+    }]
   }).sort((left, right) =>
     right.attentionPriority - left.attentionPriority
     || (right.stock.return30d ?? -Infinity) - (left.stock.return30d ?? -Infinity)
@@ -230,14 +384,16 @@ export function selectCandidateBriefs(
   ranked: RankedCandidate[],
   options: CandidateScoutOptions,
 ): CandidateBrief[] {
-  const targetCount = options.targetCount ?? 5
+  const targetCount = options.targetCount ?? 8
   const maximumPerSubIndustry = options.maximumPerSubIndustry ?? 2
   const suppressionTradingDays = options.suppressionTradingDays ?? 5
   const history = options.history ?? []
   const groupCounts = new Map<string, number>()
   const selected: RankedCandidate[] = []
-
-  for (const candidate of ranked) {
+  const selectedSymbols = new Set<string>()
+  const suppressedSymbols = new Set<string>()
+  const canSelect = (candidate: RankedCandidate): boolean => {
+    if (selectedSymbols.has(candidate.stock.symbol) || suppressedSymbols.has(candidate.stock.symbol)) return false
     const prior = history
       .filter((item) => item.symbol === candidate.stock.symbol)
       .sort((left, right) => right.tradingDate.localeCompare(left.tradingDate))[0]
@@ -245,17 +401,46 @@ export function selectCandidateBriefs(
     const repeated = prior
       && tradingDateDistance(prior.tradingDate, options.tradingDate) < suppressionTradingDays
       && currentKeys.every((key) => prior.materialKeys.includes(key))
-    if (repeated) continue
-    const groupKey = `${candidate.stock.sector}\u0000${candidate.stock.subIndustry}`
-    if ((groupCounts.get(groupKey) ?? 0) >= maximumPerSubIndustry) continue
+    if (repeated) {
+      suppressedSymbols.add(candidate.stock.symbol)
+      return false
+    }
+    const classified = candidate.stock.subIndustry !== 'Unknown'
+      && candidate.stock.subIndustry !== 'Classification pending'
+    const groupKey = classified
+      ? `${candidate.stock.sector}\u0000${candidate.stock.subIndustry}`
+      : `symbol\u0000${candidate.stock.symbol}`
+    if ((groupCounts.get(groupKey) ?? 0) >= maximumPerSubIndustry) return false
     selected.push(candidate)
+    selectedSymbols.add(candidate.stock.symbol)
     groupCounts.set(groupKey, (groupCounts.get(groupKey) ?? 0) + 1)
+    return true
+  }
+
+  for (const lane of LANE_ORDER) {
+    let laneCount = 0
+    for (const candidate of ranked) {
+      if (!candidate.lanes.includes(lane)) continue
+      if (canSelect(candidate)) laneCount += 1
+      if (laneCount >= LANE_TARGETS[lane] || selected.length >= targetCount) break
+    }
     if (selected.length >= targetCount) break
+  }
+  for (const candidate of ranked) {
+    if (selected.length >= targetCount) break
+    canSelect(candidate)
   }
 
   const generatedAt = options.generatedAt ?? new Date().toISOString()
-  return selected.map(({ stock, fundamentals, group, signals, dimensions }) => {
-    const primary = signals[0]!
+  return selected.map(({ stock, fundamentals, group, signals, dimensions, lanes, tracking }) => {
+    const primaryLane = LANE_ORDER.find((lane) => lanes.includes(lane)) ?? lanes[0]!
+    const primaryKinds: Record<CandidateLane, CandidateSignal['kind'][]> = {
+      thesis_led: ['tracked_thesis_dislocation'],
+      dislocation: ['selloff_dislocation', 'fundamental_resilience'],
+      fundamental_inflection: ['fundamental_resilience', 'earnings_or_estimate_catalyst'],
+      leadership: ['leadership_transition', 'company_group_divergence', 'price_volume_confirmation'],
+    }
+    const primary = signals.find((signal) => primaryKinds[primaryLane].includes(signal.kind)) ?? signals[0]!
     const redFlags = [
       dimensions.find((dimension) => dimension.name === 'valuation')?.assessment === 'caution'
         ? `Valuation is elevated at ${formatMultiple(fundamentals.peRatio)} earnings.`
@@ -272,12 +457,28 @@ export function selectCandidateBriefs(
       sector: stock.sector,
       subIndustry: stock.subIndustry,
       tradingDate: options.tradingDate,
+      primaryLane,
+      lanes,
+      tracking,
+      selloff: {
+        day: stock.dayReturn,
+        fiveDay: stock.return5d,
+        thirtyDay: stock.return30d,
+      },
+      entryContext: ({
+        thesis_led: 'Review whether the selloff changed the accepted or user-tracked thesis; if not, reassess the entry zone.',
+        dislocation: 'Test whether recent weakness is fundamentals-driven or an overreaction before considering an entry.',
+        fundamental_inflection: 'Verify that improving estimates or operating evidence can outlast the current price weakness.',
+        leadership: 'Establish ownership quality and valuation before treating technical leadership as an entry.',
+      })[primaryLane],
       whySurfaced: primary.summary,
       whatChanged: signals.map((signal) => signal.summary),
       industryContext: group
         ? `${stock.subIndustry} returned ${formatPercent(group.return30d)} over 30 days and ${formatPercent(group.return1y)} over one year.`
         : `${stock.subIndustry} context is still being established.`,
       decisiveNumbers: [
+        { label: '1-day return', value: formatPercent(stock.dayReturn) },
+        { label: '5-day return', value: formatPercent(stock.return5d) },
         { label: '30-day return', value: formatPercent(stock.return30d) },
         { label: 'vs 50-day average', value: formatPercent(stock.vs50DayAverage) },
         { label: 'Relative volume', value: finite(stock.relativeVolume) ? `${stock.relativeVolume.toFixed(1)}×` : 'Unavailable' },
@@ -294,7 +495,9 @@ export function selectCandidateBriefs(
       catalyst: fundamentals.nextEarningsDate
         ? `Earnings expected ${fundamentals.nextEarningsDate}.`
         : signals.find((signal) => signal.kind === 'earnings_or_estimate_catalyst')?.summary ?? 'Watch for the next estimate revision or company filing.',
-      nextResearchQuestion: `Is ${stock.symbol}'s improvement durable enough to justify its valuation relative to ${stock.subIndustry} peers?`,
+      nextResearchQuestion: primaryLane === 'leadership'
+        ? `Is ${stock.symbol}'s improvement durable enough to justify its valuation relative to ${stock.subIndustry} peers?`
+        : `Did the selloff change ${stock.symbol}'s 1–2 year ownership case, or did it only improve the entry price?`,
       status: 'new',
       generatedAt,
     }

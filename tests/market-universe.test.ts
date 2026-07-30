@@ -5,6 +5,10 @@ import { join } from 'node:path'
 import { strToU8, zipSync } from 'fflate'
 import type { MarketAsset } from '../lib/markets/types.ts'
 import {
+  MARKET_THEME_SYMBOLS,
+  selectExpandedUniverseAssets,
+} from '../lib/markets/investable-universe.ts'
+import {
   MARKET_BENCHMARK_SYMBOLS,
   MIN_SP500_ASSETS,
   parseSpyHoldingsWorkbook,
@@ -54,6 +58,49 @@ test('market universe includes S&P 500 and tracked assets only once', () => {
 
 test('market universe always carries the overview benchmark instruments', () => {
   assert.deepEqual(MARKET_BENCHMARK_SYMBOLS, ['SPY', 'QQQ', 'IWM', 'TLT', 'UUP', 'USO'])
+})
+
+test('expanded universe selects liquid non-index names and always retains themes', () => {
+  const asset = (symbol: string, name = `${symbol} Common Stock`, exchange = 'NASDAQ'): MarketAsset => ({
+    symbol,
+    name,
+    exchange,
+    assetClass: 'us_equity',
+    active: true,
+    tradable: true,
+  })
+  const assets = [
+    asset('AAPL'),
+    asset('ARM', 'Arm Holdings plc American Depositary Shares'),
+    asset('CRDO'),
+    asset('JUNK-W', 'Junk Holdings Warrants'),
+  ]
+  const snapshot = (symbol: string, price: number, volume: number) => ({
+    symbol,
+    price,
+    previousClose: price,
+    open: price,
+    high: price,
+    low: price,
+    volume,
+    asOf: '2026-07-30T20:00:00.000Z',
+    feed: 'iex' as const,
+  })
+  const selected = selectExpandedUniverseAssets(
+    assets,
+    [
+      snapshot('AAPL', 200, 1_000_000),
+      snapshot('ARM', 150, 200_000),
+      snapshot('CRDO', 80, 150_000),
+      snapshot('JUNK-W', 10, 2_000_000),
+    ],
+    ['ARM'],
+    { targetCount: 3 },
+  )
+
+  assert.deepEqual(new Set(selected.map((item) => item.symbol)), new Set(['AAPL', 'ARM', 'CRDO']))
+  assert.ok(MARKET_THEME_SYMBOLS.includes('ARM'))
+  assert.ok(MARKET_THEME_SYMBOLS.includes('TSM'))
 })
 
 test('resolved universe loads both watchlisted and manually owned symbols', () => {

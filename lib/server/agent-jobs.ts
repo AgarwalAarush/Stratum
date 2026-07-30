@@ -13,7 +13,7 @@ import { scanResearchRefreshes } from './research-monitoring.ts'
 import { monitorInvestmentTheses } from './thesis-monitoring.ts'
 import { materializeMarketMemo } from './market-memo.ts'
 import { pruneMarketData } from './market-retention.ts'
-import { resolveMarketUniverse } from './market-universe.ts'
+import { refreshExpandedMarketUniverse, resolveMarketUniverse } from './market-universe.ts'
 import { getFmpUsageSnapshot, type FmpUsageSnapshot } from './fmp.ts'
 import {
   fetchPersistedMarketAssets,
@@ -273,9 +273,15 @@ async function executeJob(
   reportProgress: (progress: number, phase: string) => Promise<void> = async () => {},
 ): Promise<unknown> {
   if (job.job_type === 'sync-market-assets') {
-    const assets = await syncAlpacaAssets()
-    const universe = await resolveMarketUniverse(assets, { forceRefresh: true })
-    return { count: assets.length, screenerUniverseCount: universe.length }
+    const client = getAlpacaClient()
+    if (!client) throw new Error('Alpaca credentials are not configured')
+    const assets = await syncAlpacaAssets(client)
+    const expanded = await refreshExpandedMarketUniverse(assets, client, { forceRefresh: true })
+    return {
+      count: assets.length,
+      eligibleListingCount: expanded.eligibleListingCount,
+      screenerUniverseCount: expanded.selectedCount,
+    }
   }
 
   if (job.job_type === 'prune-market-data') {
