@@ -2,7 +2,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
-import { buildMarketLeadershipSnapshot, rankDailySubIndustries } from '../lib/markets/leadership.ts'
+import {
+  aggregateLeadershipGroups,
+  applyCurrentDayReturns,
+  buildMarketLeadershipSnapshot,
+  rankDailySubIndustries,
+} from '../lib/markets/leadership.ts'
 import { parseGicsConstituents, renderLeadershipSlack } from '../lib/server/market-leadership.ts'
 
 function bars(symbol: string, slope: number) {
@@ -45,6 +50,26 @@ test('leadership builds equal-weight groups, breadth, divergences, and coverage'
   assert.match(renderLeadershipSlack(snapshot), /Data quality/)
 })
 
+test('current screener returns fill the active-day group view without changing historical returns', () => {
+  const snapshot = buildMarketLeadershipSnapshot(
+    [
+      { symbol: 'AAA', company: 'Alpha', sector: 'Technology', subIndustry: 'Systems' },
+      { symbol: 'BBB', company: 'Beta', sector: 'Technology', subIndustry: 'Systems' },
+    ],
+    [...bars('AAA', 0.08), ...bars('BBB', -0.03)],
+  )
+  const stocks = applyCurrentDayReturns(snapshot.stocks, new Map([
+    ['AAA', 2.5],
+    ['BBB', -0.5],
+  ]))
+  const sector = aggregateLeadershipGroups(stocks, 'sector')[0]
+
+  assert.equal(stocks.find((stock) => stock.symbol === 'AAA')?.dayReturn, 2.5)
+  assert.equal(stocks.find((stock) => stock.symbol === 'BBB')?.dayReturn, -0.5)
+  assert.equal(sector?.dayReturn, 1)
+  assert.equal(sector?.return30d, snapshot.sectors[0]?.return30d)
+})
+
 test('GICS CSV parser normalizes dotted symbols and quoted company names', () => {
   const csv = [
     'Symbol,Security,GICS Sector,GICS Sub-Industry',
@@ -72,4 +97,16 @@ test('leadership migration requires complete atomic publication', async () => {
   }
   assert.match(sql, /stock_count < 450/)
   assert.match(sql, /publish_market_leadership_snapshot/)
+})
+
+test('group metrics persist the market-day return', async () => {
+  const [schema, materializer, migration] = await Promise.all([
+    readFile(new URL('../supabase/migrations/202607280002_market_leadership_and_candidates.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/server/market-leadership.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/202607300003_market_group_day_returns.sql', import.meta.url), 'utf8'),
+  ])
+  assert.match(schema, /create table if not exists public\.market_group_metrics/)
+  assert.match(migration, /add column if not exists day_return numeric/)
+  assert.match(materializer, /day_return: group\.dayReturn/)
+  assert.match(materializer, /applyCurrentDayReturns/)
 })

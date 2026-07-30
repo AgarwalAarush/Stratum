@@ -1,4 +1,6 @@
 import {
+  aggregateLeadershipGroups,
+  applyCurrentDayReturns,
   buildMarketLeadershipSnapshot,
   type LeadershipCompany,
   type LeadershipPriceBar,
@@ -99,9 +101,10 @@ interface PersistedBar {
   close: number | string
 }
 
-interface ScreenerRelativeVolume {
+interface ScreenerSnapshotMetric {
   symbol: string
   relative_volume: number | string
+  daily_change: number | string | null
 }
 
 async function loadAllRows<T>(
@@ -145,7 +148,7 @@ export async function materializeMarketLeadership(
   const symbols = companies.map((company) => company.symbol)
   const start = new Date(now)
   start.setUTCDate(start.getUTCDate() - 430)
-  const [persistedBars, relativeVolumes] = await Promise.all([
+  const [persistedBars, screenerMetrics] = await Promise.all([
     loadAllRows<PersistedBar>(async (from, to) => await supabase
       .from('market_bars_daily')
       .select('symbol,trading_date,close')
@@ -154,9 +157,9 @@ export async function materializeMarketLeadership(
       .gte('trading_date', start.toISOString().slice(0, 10))
       .order('trading_date', { ascending: true })
       .range(from, to)),
-    loadAllRows<ScreenerRelativeVolume>(async (from, to) => await supabase
+    loadAllRows<ScreenerSnapshotMetric>(async (from, to) => await supabase
       .from('screener_rows')
-      .select('symbol,relative_volume')
+      .select('symbol,relative_volume,daily_change')
       .eq('snapshot_id', snapshot.id)
       .range(from, to)),
   ])
@@ -165,11 +168,28 @@ export async function materializeMarketLeadership(
     tradingDate: bar.trading_date,
     close: Number(bar.close),
   }))
-  const relativeVolumeBySymbol = new Map(relativeVolumes.map((row) => [row.symbol, Number(row.relative_volume)]))
-  const artifact = buildMarketLeadershipSnapshot(companies, bars, {
+  const relativeVolumeBySymbol = new Map(screenerMetrics.map((row) => [row.symbol, Number(row.relative_volume)]))
+  const dayReturnBySymbol = new Map(screenerMetrics.flatMap((row) => {
+    const value = row.daily_change === null ? Number.NaN : Number(row.daily_change)
+    return Number.isFinite(value) ? [[row.symbol, value] as const] : []
+  }))
+  const baseArtifact = buildMarketLeadershipSnapshot(companies, bars, {
     generatedAt: now.toISOString(),
     relativeVolumeBySymbol,
   })
+  const stocks = applyCurrentDayReturns(baseArtifact.stocks, dayReturnBySymbol)
+  const sectors = aggregateLeadershipGroups(stocks, 'sector')
+    .sort((left, right) => (right.return1y ?? -Infinity) - (left.return1y ?? -Infinity))
+  const subIndustries = aggregateLeadershipGroups(stocks, 'sub_industry')
+    .filter((group) => group.constituentCount >= 2)
+    .sort((left, right) => (right.return1y ?? -Infinity) - (left.return1y ?? -Infinity))
+  const artifact: MarketLeadershipSnapshot = {
+    ...baseArtifact,
+    stocks,
+    sectors,
+    subIndustries,
+    advancingPercent: Math.round((stocks.filter((stock) => (stock.dayReturn ?? 0) > 0).length / stocks.length) * 10_000) / 100,
+  }
 
   const { data: record, error: createError } = await supabase
     .from('market_leadership_snapshots')
@@ -217,6 +237,7 @@ export async function materializeMarketLeadership(
       label: group.label,
       sector: group.sector ?? '',
       constituent_count: group.constituentCount,
+      day_return: group.dayReturn,
       return_30d: group.return30d,
       return_50d: group.return50d,
       return_200d: group.return200d,

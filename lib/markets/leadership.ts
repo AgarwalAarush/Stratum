@@ -145,6 +145,23 @@ export function aggregateLeadershipGroups(
   }))
 }
 
+/**
+ * Daily bars can lag the active session. When a current screener snapshot is
+ * available, it is the authoritative close-to-close return for the day while
+ * the persisted daily-bar history remains the source for longer horizons.
+ */
+export function applyCurrentDayReturns(
+  stocks: StockLeadershipMetric[],
+  dayReturnBySymbol: ReadonlyMap<string, number>,
+): StockLeadershipMetric[] {
+  return stocks.map((stock) => {
+    const dayReturn = dayReturnBySymbol.get(stock.symbol)
+    return dayReturn === undefined || !Number.isFinite(dayReturn)
+      ? stock
+      : { ...stock, dayReturn: rounded(dayReturn) }
+  })
+}
+
 export function rankDailySubIndustries(
   stocks: Array<Pick<StockLeadershipMetric, 'sector' | 'subIndustry' | 'dayReturn'>>,
   limit = 5,
