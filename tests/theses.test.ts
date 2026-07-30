@@ -52,3 +52,10 @@ test('thesis migration preserves owner-scoped immutable versions and review stat
   assert.match(migration, /'proposed', 'accepted', 'rejected', 'superseded'/)
   assert.match(migration, /unique \(owner_id, entity_key, version\)/)
 })
+
+test('Candidate Scout proposes industry theses for every Markets user', async () => {
+  const candidateScout = await readFile(new URL('../lib/server/candidate-scout.ts', import.meta.url), 'utf8')
+  assert.match(candidateScout, /supabase\.from\('market_users'\)\.select\('id'\)/)
+  assert.match(candidateScout, /\(marketUsers \?\? \[\]\)\.map\(\(row\) => row\.id\)/)
+  assert.match(candidateScout, /await proposeIndustryTheses\(ownerId, briefs\)/)
+})

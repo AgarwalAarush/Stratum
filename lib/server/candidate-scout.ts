@@ -261,11 +261,13 @@ export async function materializeCandidateScout(
     })), { onConflict: 'candidate_id,kind,material_key' })
     if (signalError) throw new Error(`Unable to persist candidate signals for ${brief.symbol}: ${signalError.message}`)
   }
-  const [{ data: watchlistOwners }, { data: positionOwners }] = await Promise.all([
+  const [{ data: marketUsers }, { data: watchlistOwners }, { data: positionOwners }] = await Promise.all([
+    supabase.from('market_users').select('id'),
     supabase.from('market_watchlists').select('owner_id').not('owner_id', 'is', null),
     supabase.from('manual_positions').select('owner_id'),
   ])
   const owners = new Set([
+    ...(marketUsers ?? []).map((row) => row.id),
     ...(watchlistOwners ?? []).map((row) => row.owner_id),
     ...(positionOwners ?? []).map((row) => row.owner_id),
   ].filter((owner): owner is string => typeof owner === 'string'))
