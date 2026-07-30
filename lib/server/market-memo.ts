@@ -78,7 +78,7 @@ export async function materializeMarketMemo(
   for (let from = 0; ; from += ROW_PAGE_SIZE) {
     const { data, error } = await supabase
       .from('screener_rows')
-      .select('symbol,company,price,daily_change,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,tradable,data_as_of')
+      .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,tradable,data_as_of')
       .eq('snapshot_id', snapshotId)
       .range(from, from + ROW_PAGE_SIZE - 1)
     if (error) throw new Error(`Unable to load screener rows: ${error.message}`)
@@ -87,6 +87,12 @@ export async function materializeMarketMemo(
       company: row.company,
       price: Number(row.price),
       dailyChange: Number(row.daily_change),
+      return5d: row.return_5d == null ? null : Number(row.return_5d),
+      return30d: row.return_30d == null ? null : Number(row.return_30d),
+      return90d: row.return_90d == null ? null : Number(row.return_90d),
+      return180d: row.return_180d == null ? null : Number(row.return_180d),
+      returnYtd: row.return_ytd == null ? null : Number(row.return_ytd),
+      return1y: row.return_1y == null ? null : Number(row.return_1y),
       gap: Number(row.gap),
       volume: Number(row.volume),
       relativeVolume: Number(row.relative_volume),

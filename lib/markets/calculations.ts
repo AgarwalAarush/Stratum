@@ -33,6 +33,34 @@ function newYorkTradingDate(timestamp: string): string | null {
   return `${part('year')}-${part('month')}-${part('day')}`
 }
 
+function nearestClose(bars: MarketDailyBar[], target: Date): number | null {
+  let closest: MarketDailyBar | null = null
+  let closestDistance = Number.POSITIVE_INFINITY
+
+  for (const bar of bars) {
+    const barTime = Date.parse(`${bar.tradingDate}T00:00:00.000Z`)
+    const distance = Math.abs(barTime - target.getTime())
+    const closestTime = closest ? Date.parse(`${closest.tradingDate}T00:00:00.000Z`) : Number.POSITIVE_INFINITY
+    if (distance < closestDistance || (distance === closestDistance && barTime <= target.getTime() && closestTime > target.getTime())) {
+      closest = bar
+      closestDistance = distance
+    }
+  }
+
+  return closest?.close ?? null
+}
+
+function historicalReturn(currentPrice: number, baseline: number | null | undefined): number | null {
+  if (baseline == null || !Number.isFinite(currentPrice) || !Number.isFinite(baseline) || baseline === 0) return null
+  return round(percentChange(currentPrice, baseline))
+}
+
+function daysBefore(tradingDate: string, days: number): Date {
+  const target = new Date(`${tradingDate}T00:00:00.000Z`)
+  target.setUTCDate(target.getUTCDate() - days)
+  return target
+}
+
 export function calculateScreenerRow(
   asset: MarketAsset,
   snapshot: MarketSnapshot,
@@ -58,12 +86,22 @@ export function calculateScreenerRow(
   const yearHigh = Math.max(...yearBars.map((bar) => bar.high))
   const yearRange = yearHigh - yearLow
   const fiftyTwoWeekPosition = yearRange <= 0 ? 50 : ((snapshot.price - yearLow) / yearRange) * 100
+  const asOfDate = currentTradingDate ?? sorted[0]!.tradingDate
+  const asOfYear = Number(asOfDate.slice(0, 4))
 
   return {
     symbol: asset.symbol,
     company: asset.name,
     price: round(snapshot.price),
     dailyChange: round(percentChange(snapshot.price, snapshot.previousClose)),
+    return5d: historicalReturn(snapshot.price, sorted[4]?.close),
+    return30d: historicalReturn(snapshot.price, nearestClose(sorted, daysBefore(asOfDate, 30))),
+    return90d: historicalReturn(snapshot.price, nearestClose(sorted, daysBefore(asOfDate, 90))),
+    return180d: historicalReturn(snapshot.price, nearestClose(sorted, daysBefore(asOfDate, 180))),
+    returnYtd: Number.isFinite(asOfYear)
+      ? historicalReturn(snapshot.price, nearestClose(sorted, new Date(Date.UTC(asOfYear, 0, 1))))
+      : null,
+    return1y: historicalReturn(snapshot.price, nearestClose(sorted, daysBefore(asOfDate, 365))),
     gap: round(percentChange(snapshot.open, snapshot.previousClose)),
     volume: snapshot.volume,
     relativeVolume: round(averageVolume > 0 ? snapshot.volume / averageVolume : 0),

@@ -35,6 +35,7 @@ test('condition builder exposes only API-supported v1 fields', () => {
   ]) {
     assert.match(conditionBuilderSource, new RegExp(`field: '${field}'`))
   }
+  assert.match(conditionBuilderSource, /SCREENER_RETURN_PERIODS/)
   assert.equal(conditionBuilderSource.includes("field: 'marketCap'"), false)
 })
 

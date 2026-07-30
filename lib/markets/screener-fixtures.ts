@@ -62,6 +62,12 @@ function makeRange(seed: number): number[] {
 
 export const ILLUSTRATIVE_SCREENER_ROWS: ScreenerRow[] = BASE_ROWS.map((row, index) => ({
   ...row,
+  return5d: row.dailyChange * 1.8,
+  return30d: row.dailyChange * 4.2,
+  return90d: row.dailyChange * 7.4,
+  return180d: row.dailyChange * 10.8,
+  returnYtd: row.dailyChange * 8.6,
+  return1y: row.dailyChange * 17.2,
   volume: row.volume * 1_000_000,
   range: makeRange(index + 3),
   tradable: true,

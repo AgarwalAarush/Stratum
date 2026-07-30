@@ -8,13 +8,16 @@ import { ScreenerConditionBuilder } from './ScreenerConditionBuilder'
 import {
   DEFAULT_SCREENER_FILTERS,
   DEFAULT_SCREENER_QUERY,
+  isScreenerReturnField,
   nextScreenerSort,
+  SCREENER_RETURN_PERIODS,
 } from '@/lib/markets/screener'
 import type {
   ScreenerFilter,
   ScreenerPreset,
   ScreenerQuery,
   ScreenerResponse,
+  ScreenerReturnField,
   ScreenerSortField,
 } from '@/lib/markets/types'
 
@@ -84,7 +87,8 @@ function formatPrice(value: number): string {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
 }
 
-function formatPercent(value: number): string {
+function formatPercent(value: number | null): string {
+  if (value === null) return '—'
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
 }
 
@@ -205,6 +209,8 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   const endRow = Math.min(response.page * response.pageSize, response.total)
   const openStock = (symbol: string) => router.push(`/markets/stocks/${symbol}`, { scroll: false })
   const preloadStock = (symbol: string) => router.prefetch(`/markets/stocks/${symbol}`)
+  const selectedReturnField = (filters.find((filter) => isScreenerReturnField(filter.field))?.field ?? 'dailyChange') as ScreenerReturnField
+  const selectedReturnPeriod = SCREENER_RETURN_PERIODS.find((period) => period.field === selectedReturnField)!
 
   return (
     <section className="market-screener" aria-labelledby="stock-screener-title">
@@ -261,7 +267,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
               <th>Symbol</th>
               <th>Company</th>
               <SortableHeader field="price" label="Price" sort={sort} direction={direction} onSort={changeSort} />
-              <SortableHeader field="dailyChange" label="Change" sort={sort} direction={direction} onSort={changeSort} />
+              <SortableHeader field={selectedReturnField} label={`Change (${selectedReturnPeriod.shortLabel})`} sort={sort} direction={direction} onSort={changeSort} />
               <SortableHeader field="gap" label="Gap" sort={sort} direction={direction} onSort={changeSort} />
               <SortableHeader field="volume" label="Volume" sort={sort} direction={direction} onSort={changeSort} />
               <SortableHeader field="relativeVolume" label="Rel. volume" sort={sort} direction={direction} onSort={changeSort} />
@@ -295,7 +301,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
                   <td><span className="market-symbol-button">{row.symbol}</span></td>
                   <td>{row.company}</td>
                   <td>{formatPrice(row.price)}</td>
-                  <td className={row.dailyChange >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(row.dailyChange)}</td>
+                  <td className={(row[selectedReturnField] ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(row[selectedReturnField])}</td>
                   <td className={row.gap >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(row.gap)}</td>
                   <td>{formatVolume(row.volume)}</td>
                   <td className="market-positive">{row.relativeVolume.toFixed(2)}×</td>

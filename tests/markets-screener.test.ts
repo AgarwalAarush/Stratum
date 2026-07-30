@@ -24,6 +24,18 @@ test('sortable headers cycle descending, ascending, then preset ordering', () =>
   assert.deepEqual(restored, presetDefault)
 })
 
+test('screener supports filtering and sorting by a selected fixed return period', () => {
+  const response = runIllustrativeScreener({
+    ...DEFAULT_SCREENER_QUERY,
+    filters: [{ id: 'month', field: 'return30d', operator: 'gt', value: 20, label: 'Price change · 1M > 20%' }],
+    sort: 'return30d',
+  })
+
+  assert.ok(response.total > 0)
+  assert.ok(response.rows.every((row) => (row.return30d ?? -Infinity) > 20))
+  assert.ok((response.rows[0]?.return30d ?? -Infinity) >= (response.rows[1]?.return30d ?? -Infinity))
+})
+
 test('screener parser rejects unsupported fields and oversized pages', () => {
   assert.throws(() => parseScreenerQuery({ ...DEFAULT_SCREENER_QUERY, filters: [{ id: 'bad', field: 'marketCap', operator: 'gt', value: 1, label: 'Bad' }] }), /field is not supported/)
   assert.throws(() => parseScreenerQuery({ ...DEFAULT_SCREENER_QUERY, pageSize: 51 }), /pageSize must be between 1 and 50/)

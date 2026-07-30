@@ -471,9 +471,21 @@ export interface PortfolioWorkspaceData {
 
 export type ScreenerPreset = 'momentum' | 'unusual-volume' | 'near-highs' | 'gap-movers'
 
+export const SCREENER_RETURN_FIELDS = [
+  'dailyChange',
+  'return5d',
+  'return30d',
+  'return90d',
+  'return180d',
+  'returnYtd',
+  'return1y',
+] as const
+
+export type ScreenerReturnField = typeof SCREENER_RETURN_FIELDS[number]
+
 export type ScreenerFilterField =
+  | ScreenerReturnField
   | 'price'
-  | 'dailyChange'
   | 'gap'
   | 'volume'
   | 'relativeVolume'
@@ -495,7 +507,7 @@ export interface ScreenerFilter {
 export type ScreenerSortField =
   | 'symbol'
   | 'price'
-  | 'dailyChange'
+  | ScreenerReturnField
   | 'gap'
   | 'volume'
   | 'relativeVolume'
@@ -516,6 +528,12 @@ export interface ScreenerRow {
   company: string
   price: number
   dailyChange: number
+  return5d: number | null
+  return30d: number | null
+  return90d: number | null
+  return180d: number | null
+  returnYtd: number | null
+  return1y: number | null
   gap: number
   volume: number
   relativeVolume: number

@@ -47,6 +47,12 @@ test('market calculations derive price, gap, relative volume, moving average, an
 
   assert.ok(row)
   assert.equal(row?.dailyChange, 10)
+  assert.notEqual(row?.return5d, null)
+  assert.notEqual(row?.return30d, null)
+  assert.notEqual(row?.return90d, null)
+  assert.notEqual(row?.return180d, null)
+  assert.notEqual(row?.returnYtd, null)
+  assert.notEqual(row?.return1y, null)
   assert.equal(row?.gap, 5)
   assert.equal(row?.relativeVolume, 2)
   assert.equal(row?.tradable, true)
@@ -54,6 +60,13 @@ test('market calculations derive price, gap, relative volume, moving average, an
   assert.ok((row?.fiftyDayAverage ?? 0) > 100)
   assert.ok((row?.fiftyTwoWeekPosition ?? -1) >= 0)
   assert.ok((row?.fiftyTwoWeekPosition ?? 101) <= 100)
+})
+
+test('market calculations anchor multi-period returns to daily history, not page-view provider requests', () => {
+  const row = calculateScreenerRow(asset, snapshot, buildBars(252))
+
+  assert.equal(row?.return5d, 8.91)
+  assert.equal(row?.return30d, 3.77)
 })
 
 test('market calculations reject mismatched symbols and incomplete history', () => {

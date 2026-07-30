@@ -5,15 +5,30 @@ import type {
   ScreenerFilterOperator,
   ScreenerPreset,
   ScreenerQuery,
+  ScreenerReturnField,
   ScreenerResponse,
   ScreenerRow,
   ScreenerSortField,
 } from './types.ts'
 
 const PRESETS: ScreenerPreset[] = ['momentum', 'unusual-volume', 'near-highs', 'gap-movers']
-const FILTER_FIELDS: ScreenerFilterField[] = ['price', 'dailyChange', 'gap', 'volume', 'relativeVolume', 'above50DayAverage', 'fiftyTwoWeekPosition', 'exchange', 'tradable']
+const FILTER_FIELDS: ScreenerFilterField[] = ['price', 'dailyChange', 'return5d', 'return30d', 'return90d', 'return180d', 'returnYtd', 'return1y', 'gap', 'volume', 'relativeVolume', 'above50DayAverage', 'fiftyTwoWeekPosition', 'exchange', 'tradable']
 const FILTER_OPERATORS: ScreenerFilterOperator[] = ['gt', 'gte', 'lt', 'lte', 'eq']
-const SORT_FIELDS: ScreenerSortField[] = ['symbol', 'price', 'dailyChange', 'gap', 'volume', 'relativeVolume', 'fiftyDayAverage', 'fiftyTwoWeekPosition']
+const SORT_FIELDS: ScreenerSortField[] = ['symbol', 'price', 'dailyChange', 'return5d', 'return30d', 'return90d', 'return180d', 'returnYtd', 'return1y', 'gap', 'volume', 'relativeVolume', 'fiftyDayAverage', 'fiftyTwoWeekPosition']
+
+export const SCREENER_RETURN_PERIODS: Array<{ field: ScreenerReturnField; label: string; shortLabel: string }> = [
+  { field: 'dailyChange', label: 'Today', shortLabel: 'Today' },
+  { field: 'return5d', label: '1 week', shortLabel: '1W' },
+  { field: 'return30d', label: '1 month', shortLabel: '1M' },
+  { field: 'return90d', label: '3 months', shortLabel: '3M' },
+  { field: 'return180d', label: '6 months', shortLabel: '6M' },
+  { field: 'returnYtd', label: 'Year to date', shortLabel: 'YTD' },
+  { field: 'return1y', label: '1 year', shortLabel: '1Y' },
+]
+
+export function isScreenerReturnField(field: ScreenerFilterField): field is ScreenerReturnField {
+  return SCREENER_RETURN_PERIODS.some((period) => period.field === field)
+}
 
 export type ScreenerSort = Pick<ScreenerQuery, 'sort' | 'direction'>
 
@@ -87,7 +102,8 @@ export function parseScreenerQuery(value: unknown): ScreenerQuery {
 
 function comparableValue(row: ScreenerRow, field: ScreenerFilterField): number | string | boolean {
   if (field === 'above50DayAverage') return row.price > row.fiftyDayAverage
-  return row[field]
+  const value = row[field]
+  return value === null ? Number.NaN : value
 }
 
 function matchesFilter(row: ScreenerRow, filter: ScreenerFilter): boolean {
@@ -103,7 +119,8 @@ function matchesFilter(row: ScreenerRow, filter: ScreenerFilter): boolean {
 }
 
 function sortValue(row: ScreenerRow, field: ScreenerSortField): number | string {
-  return row[field]
+  const value = row[field]
+  return value === null ? Number.NEGATIVE_INFINITY : value
 }
 
 export function runIllustrativeScreener(query: ScreenerQuery): ScreenerResponse {

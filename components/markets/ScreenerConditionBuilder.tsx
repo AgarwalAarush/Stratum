@@ -12,7 +12,9 @@ import type {
   ScreenerFilter,
   ScreenerFilterField,
   ScreenerFilterOperator,
+  ScreenerReturnField,
 } from '@/lib/markets/types'
+import { isScreenerReturnField, SCREENER_RETURN_PERIODS } from '@/lib/markets/screener'
 
 interface ScreenerConditionBuilderProps {
   filters: ScreenerFilter[]
@@ -75,11 +77,16 @@ const OPERATOR_SYMBOLS: Record<ScreenerFilterOperator, string> = {
 }
 
 function definitionFor(field: ScreenerFilterField): ConditionDefinition {
+  if (isScreenerReturnField(field)) return CONDITION_DEFINITIONS.find((definition) => definition.field === 'dailyChange')!
   return CONDITION_DEFINITIONS.find((definition) => definition.field === field)!
 }
 
 function directionalField(field: ScreenerFilterField): boolean {
-  return field === 'dailyChange' || field === 'gap'
+  return isScreenerReturnField(field) || field === 'gap'
+}
+
+function returnPeriodFor(field: ScreenerReturnField) {
+  return SCREENER_RETURN_PERIODS.find((period) => period.field === field)!
 }
 
 function numberLabel(field: ScreenerFilterField, value: number, unit?: string): string {
@@ -98,7 +105,10 @@ export function formatScreenerFilter(filter: ScreenerFilter): string {
   if (filter.field === 'tradable') return `Tradable ${filter.value ? 'Yes' : 'No'}`
   if (filter.field === 'exchange') return `Exchange ${String(filter.value)}`
   const value = numberLabel(filter.field, Number(filter.value), definition.unit)
-  return `${definition.title} ${OPERATOR_SYMBOLS[filter.operator]} ${value}`
+  const title = isScreenerReturnField(filter.field)
+    ? `${definition.title} · ${returnPeriodFor(filter.field).shortLabel}`
+    : definition.title
+  return `${title} ${OPERATOR_SYMBOLS[filter.operator]} ${value}`
 }
 
 function createDraft(definition: ConditionDefinition): ScreenerFilter {
@@ -144,6 +154,18 @@ function ConditionForm({ draft, onChange }: ConditionFormProps) {
         <strong>{definition.title}</strong>
         <span>{definition.description}</span>
       </div>
+
+      {isScreenerReturnField(draft.field) && (
+        <label className="market-condition-control">
+          <span>Period</span>
+          <select
+            value={draft.field}
+            onChange={(event) => onChange({ ...draft, field: event.target.value as ScreenerReturnField })}
+          >
+            {SCREENER_RETURN_PERIODS.map((period) => <option key={period.field} value={period.field}>{period.label}</option>)}
+          </select>
+        </label>
+      )}
 
       {isDirectional && (
         <fieldset className="market-condition-fieldset">
