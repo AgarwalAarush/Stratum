@@ -9,7 +9,7 @@ import { normalizeCompanySegmentPeriods } from '../markets/company-segments.ts'
 import { fetchFmpStableJson } from './fmp.ts'
 import { fetchLatestDecision } from './portfolio.ts'
 import { runCodexJson } from './codex-exec.ts'
-import { fetchLatestMarketLeadership } from './markets-repository.ts'
+import { fetchLatestMarketLeadership, fetchStockViewerData } from './markets-repository.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { proposeStockThesis } from './theses.ts'
 
@@ -117,10 +117,26 @@ export async function materializeCompanyPacket(
   if (!apiKey) throw new Error('FMP_API_KEY is not configured')
   if (!supabase) throw new Error('Supabase service credentials are not configured')
 
-  const leadership = await fetchLatestMarketLeadership()
-  const stock = leadership?.stocks.find((item) => item.symbol === symbol)
-  if (!stock) throw new Error(`${symbol} is not in the current materialized market universe`)
-  const group = leadership?.subIndustries.find((item) => item.label === stock.subIndustry && item.sector === stock.sector)
+  const [leadership, stockViewer] = await Promise.all([
+    fetchLatestMarketLeadership(),
+    fetchStockViewerData(symbol),
+  ])
+  const leadershipStock = leadership?.stocks.find((item) => item.symbol === symbol)
+  if (!leadershipStock && !stockViewer) throw new Error(`${symbol} is not in the current materialized market universe`)
+  const stock = leadershipStock ?? {
+    price: stockViewer!.price,
+    return30d: null,
+    return1y: null,
+    vs50DayAverage: null,
+    vs200DayAverage: null,
+    sector: stockViewer!.sector,
+    subIndustry: stockViewer!.subIndustry,
+    asOf: stockViewer!.dataAsOf,
+  }
+  const group = leadershipStock
+    ? leadership?.subIndustries.find((item) =>
+        item.label === leadershipStock.subIndustry && item.sector === leadershipStock.sector)
+    : null
   const request = <T>(endpoint: string, parameters: Record<string, string | number> = {}) =>
     fetchFmpStableJson<T>(endpoint, { symbol, ...parameters }, { apiKey })
   const [profileResult, incomeResult, balanceResult, cashResult, ratiosResult, estimatesResult, peersResult, thesis] = await Promise.all([
@@ -134,6 +150,12 @@ export async function materializeCompanyPacket(
     fetchLatestDecision(ownerId, symbol),
   ])
   const profile = serializableRecord(records(profileResult)[0] ?? record(profileResult))
+  const sector = stock.sector === 'Classification pending'
+    ? String(profile.sector ?? 'Classification pending')
+    : stock.sector
+  const subIndustry = stock.subIndustry === 'Classification pending'
+    ? String(profile.industry ?? 'Classification pending')
+    : stock.subIndustry
   const ratiosRaw = records(ratiosResult)[0] ?? record(ratiosResult)
   const [
     incomeQuarterlyResult,
@@ -258,8 +280,8 @@ export async function materializeCompanyPacket(
     ].slice(0, 20),
     events: items,
     industryContext: {
-      sector: stock.sector,
-      subIndustry: stock.subIndustry,
+      sector,
+      subIndustry,
       groupReturn30d: group?.return30d ?? null,
       groupReturn1y: group?.return1y ?? null,
     },
