@@ -7,6 +7,7 @@ test('Markets overview fixture is explicitly illustrative and internally timesta
   assert.equal(ILLUSTRATIVE_MARKET_OVERVIEW.feed, 'illustrative')
   assert.equal(ILLUSTRATIVE_MARKET_OVERVIEW.dataAsOf, ILLUSTRATIVE_MARKET_OVERVIEW.state.dataAsOf)
   assert.ok(ILLUSTRATIVE_MARKET_OVERVIEW.evidence.length >= 3)
+  assert.ok(ILLUSTRATIVE_MARKET_OVERVIEW.evidence.every((item) => Number.isFinite(Date.parse(item.publishedAt))))
   assert.ok(ILLUSTRATIVE_MARKET_OVERVIEW.memo.changes.length >= 3)
 })
 

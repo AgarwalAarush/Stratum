@@ -137,11 +137,25 @@ function selloffScore(stock: StockLeadershipMetric, tracked: boolean): number {
   )
 }
 
+function hasUnnormalizedPriceDiscontinuity(stock: StockLeadershipMetric): boolean {
+  return [
+    stock.dayReturn,
+    stock.return5d,
+    stock.return30d,
+    stock.return1y,
+  ].some((value) => value !== null && value !== undefined && (
+    !Number.isFinite(value)
+    || value < -100
+    || value > 1_000
+  ))
+}
+
 export function multiLanePrefilter(
   stocks: StockLeadershipMetric[],
   trackingBySymbol: ReadonlyMap<string, CandidateTrackingContext>,
   count = 48,
 ): StockLeadershipMetric[] {
+  const eligibleStocks = stocks.filter((stock) => !hasUnnormalizedPriceDiscontinuity(stock))
   const selected: StockLeadershipMetric[] = []
   const selectedSymbols = new Set<string>()
   const add = (stock: StockLeadershipMetric) => {
@@ -149,19 +163,19 @@ export function multiLanePrefilter(
     selected.push(stock)
     selectedSymbols.add(stock.symbol)
   }
-  const tracked = stocks
+  const tracked = eligibleStocks
     .filter((stock) => {
       const context = trackingBySymbol.get(stock.symbol)
       return Boolean(context?.acceptedThesis || context?.watched || context?.owned)
         && selloffScore(stock, true) >= 1
     })
     .sort((left, right) => selloffScore(right, true) - selloffScore(left, true))
-  const dislocations = stocks
+  const dislocations = eligibleStocks
     .filter((stock) => stock.observationCount >= 5 && selloffScore(stock, false) >= 1)
     .sort((left, right) =>
       selloffScore(right, false) - selloffScore(left, false)
       || (right.relativeVolume ?? 0) - (left.relativeVolume ?? 0))
-  const leaders = stocks
+  const leaders = eligibleStocks
     .filter((stock) => stock.observationCount >= 200)
     .sort((left, right) => leadershipScore(right) - leadershipScore(left))
 

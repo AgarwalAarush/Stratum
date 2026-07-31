@@ -148,6 +148,17 @@ test('multi-lane prefilter retains selloffs and leaders without a negative-retur
   assert.deepEqual(new Set(selected.map((item) => item.symbol)), new Set(['DROP', 'LEAD']))
 })
 
+test('multi-lane prefilter quarantines split-like price discontinuities', () => {
+  const splitLike = {
+    ...stock('SPLT', 'Software', 2_150),
+    dayReturn: 3_558,
+    return5d: 2_915,
+  }
+  const selected = multiLanePrefilter([splitLike, stock('VALID', 'Software', 18)], new Map(), 2)
+
+  assert.deepEqual(selected.map((item) => item.symbol), ['VALID'])
+})
+
 test('Candidate Scout expands beyond the S&P 500 to watched and owned names', async () => {
   const source = await readFile(new URL('../lib/server/candidate-scout.ts', import.meta.url), 'utf8')
   assert.match(source, /market_watchlist_items/)
