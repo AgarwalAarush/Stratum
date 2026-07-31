@@ -66,6 +66,8 @@ test('direct intake rejects a question in place of a thesis statement', () => {
 test('direct stock intake queues full research after preserving the authored proposal', async () => {
   const route = await readFile(new URL('../app/api/markets/theses/route.ts', import.meta.url), 'utf8')
   assert.match(route, /proposeUserAuthoredThesis/)
+  assert.match(route, /addSymbolToPrimaryWatchlist/)
+  assert.match(route, /refresh-market-screener/)
   assert.match(route, /generate-company-research/)
   assert.match(route, /reason: 'thesis-intake'/)
   assert.match(route, /The authored proposal is durable even if background enrichment/)

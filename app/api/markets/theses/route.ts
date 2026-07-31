@@ -7,6 +7,7 @@ import {
   updateThesisMonitorStatus,
 } from '@/lib/server/theses'
 import { enqueueAgentJob } from '@/lib/server/agent-jobs'
+import { addSymbolToPrimaryWatchlist } from '@/lib/server/portfolio'
 import { thesisEntityKey, userAuthoredThesisContent } from '@/lib/markets/theses'
 import type { InvestmentThesis, ThesisEntityType, ThesisIntakeDraft } from '@/lib/markets/types'
 
@@ -54,6 +55,17 @@ export async function POST(request: Request) {
       if (!thesis) throw new Error('Unable to save this thesis')
       let researchQueued = false
       if (thesis.symbol) {
+        try {
+          await addSymbolToPrimaryWatchlist(user.id, thesis.symbol)
+          if (!thesis.sector) {
+            await enqueueAgentJob('refresh-market-screener', {
+              mode: 'thesis-intake',
+              symbol: thesis.symbol,
+            }, `refresh-market-screener:thesis-intake:${thesis.symbol}:${new Date().toISOString().slice(0, 10)}`)
+          }
+        } catch {
+          // Intake remains usable while market coverage catches up or is temporarily unavailable.
+        }
         try {
           await enqueueAgentJob('generate-company-research', {
             ownerId: user.id,
