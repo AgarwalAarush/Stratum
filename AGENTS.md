@@ -126,6 +126,18 @@ The AI must not invent current prices, economic values, or source claims. Numeri
 
 ## Markets data architecture
 
+### Candidate, thesis, and research loop (implemented)
+
+Keep three decisions distinct: discovery answers **what deserves investigation**; a thesis records **the affirmative, versioned belief**; an entry decision answers **what to do with capital now**. Never turn a Candidate Scout screen into an unreviewed buy recommendation or silently rewrite an accepted thesis.
+
+- Candidate Scout covers the S&P 500, Russell 2000, explicit technology/theme coverage, and every owned, watchlisted, or thesis-covered symbol. It uses multiple lanes, including thesis-led selloffs and possible overreactions; momentum strength is not a universal gate.
+- Every candidate must open to a deterministic partial brief at `/markets/stocks/[symbol]`: why it surfaced, what changed, the question before acting, light risk checks, decisive numbers, and source links. Label it screening evidence rather than a completed investment opinion.
+- A full CompanyPacket is durable evidence, not UI state. It currently combines Alpaca price/technical history; FMP profile, statements, ratios, consensus estimates, segments, grades, and peers; the latest two FMP earnings-call transcripts; SEC filing links; persisted company events; industry context; and the user's existing thesis/decision.
+- Display forward P/E as the price divided by the nearest positive annual consensus EPS estimate after the packet's data date. It is unavailable for missing or non-positive estimates; do not substitute a trailing P/E.
+- `generate-company-research` runs on the private worker, writes an immutable research version, validates the fixed 15-section schema, and persists its source ledger. A refresh loads the complete preceding version and must return a structured opinion comparison: `more_constructive`, `less_constructive`, or `unchanged`, with explained before/after fields.
+- Research revisions are first-class evidence in note content. `previous_research_note_id` is an optional database foreign-key optimization introduced by `202607300006_research_revision_lineage.sql`; keep the runtime fallback until production migration history has been reconciled. Legacy reports should render an explicit legacy revision fallback rather than pretending they contain a structured comparison.
+- Links from an intercepted stock modal to full research must use canonical navigation so the research page is not left behind the modal or returned to the underlying portfolio page on close.
+
 ### Alpaca role
 
 Alpaca is the planned primary source for US equity assets, quotes, trades, snapshots, and historical bars. It is appropriate for a price/volume/technical screener, but it is not the complete fundamentals source.
@@ -181,7 +193,7 @@ Suggested initial tables or equivalent entities:
 
 Copy `.env.example` to `.env.local`. Redis (`UPSTASH_REDIS_REST_URL`/`TOKEN`) is the only required variable for the current feed cache. Supabase (`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`) is needed for overview and future market-data persistence. QStash signing keys (`QSTASH_CURRENT_SIGNING_KEY`/`QSTASH_NEXT_SIGNING_KEY`) are needed for cron job verification. FMP, FRED, SEC, GitHub, proxy, and the current Anthropic integration are optional and gracefully degrade.
 
-Markets uses Alpaca credentials plus server-only OpenAI/Codex worker credentials. Never expose these through `NEXT_PUBLIC_*`. Anthropic is no longer part of the runtime or deployment configuration.
+Markets uses Alpaca credentials plus server-only OpenAI/Codex worker credentials. Never expose these through `NEXT_PUBLIC_*`. Anthropic remains legacy infrastructure for the existing Intelligence workflows until their per-workflow migration is complete; do not use it for new Markets work.
 
 ## Deployment topology
 

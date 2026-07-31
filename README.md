@@ -4,7 +4,7 @@
     <strong style="font-size:3.5em; letter-spacing:-0.02em;">tratum</strong>
   </span>
 </p>
-<p align="center" style="font-size:1.4em; font-weight:500; margin-top:-0.5em; color:#333;">Tech Intelligence Dashboard</p>
+<p align="center" style="font-size:1.4em; font-weight:500; margin-top:-0.5em; color:#333;">Intelligence and market-analysis platform</p>
 
 > A minimalist, real-time aggregation dashboard for technology, research, startups, and finance — signal over noise.
 
@@ -46,6 +46,17 @@ Stratum is organized into **scopes** — top-level navigation tabs that each con
 - **Research Reports** — Citrini, ARK Invest, a16z, Delphi Digital, and other publications via RSS
 - **Macro** — FRED indicators (CPI, PCE, unemployment, Fed funds rate) + Fed calendar events
 
+### Markets
+
+Markets is a private, evidence-first investment workflow—not a trading terminal. Its flow is deliberately separated:
+
+1. **Candidate Scout** identifies names worth investigating across the S&P 500, Russell 2000, technology themes, and user-owned/watchlisted/thesis names. It can surface leadership, dislocations, and thesis-led selloffs; a price decline is not automatically a rejection.
+2. **Stock dossier** provides a deterministic partial brief: why it surfaced, what changed, the remaining question, risks, decisive numbers, price history, and links to the underlying feeds. This is screening evidence, not an investment recommendation.
+3. **Full equity research** builds a durable CompanyPacket and a validated, 15-section research note. Each refresh creates a new immutable version and explains whether the opinion became more constructive, less constructive, or stayed unchanged.
+4. **Theses and portfolio decisions** remain explicit user-reviewed records. Monitoring can flag entry-zone, kill-criteria, and material thesis events, but it never silently changes an accepted view or places trades.
+
+Current CompanyPacket evidence includes Alpaca price history; FMP statements, ratios, analyst estimates, segments, grades, peers, and the latest two earnings-call transcripts; SEC filing links; stored company events; industry context; and prior user research/thesis context. Forward P/E uses the nearest positive annual consensus EPS estimate and remains blank when that estimate is unavailable or non-positive.
+
 ---
 
 ## Tech Stack
@@ -56,11 +67,12 @@ Stratum is organized into **scopes** — top-level navigation tabs that each con
 | Styling | Tailwind CSS 4, IBM Plex Sans/Mono |
 | State | Zustand (theme) + SWR (data fetching) |
 | Data sources | RSS/Atom feeds, arXiv API, HN Algolia, GitHub Search, FMP, FRED, SEC EDGAR |
-| AI | Anthropic Claude API (Haiku for daily overviews, Sonnet for morning briefs & periodic overviews) |
+| AI | Server-only OpenAI/Codex synthesis for Markets research; legacy intelligence workflows remain separately managed |
 | Caching | Two-tier: in-memory Map + Upstash Redis (REST API) |
 | Persistence | Supabase (overview storage) |
 | Scheduling | Upstash QStash (cron job triggers with signature verification) |
 | Deployment | Vercel |
+| Long-running work | Private macserver worker (Supabase queue) |
 
 ---
 
@@ -88,6 +100,8 @@ npm run dev
 | `QSTASH_NEXT_SIGNING_KEY` | Yes* | QStash cron key rotation |
 | `ANTHROPIC_API_KEY` | No | AI overviews & morning brief (falls back to static content) |
 | `FMP_API_KEY` | No | Finance earnings/deals enrichment |
+| `ALPACA_API_KEY` / `ALPACA_API_SECRET` | Worker | Server-side US-equity snapshots and bars |
+| `CODEX_API_KEY` | Worker | Scoped key for background schema-constrained research synthesis |
 | `FRED_API_KEY` | No | Macro indicators from FRED |
 | `SEC_API_USER_AGENT` | No | SEC EDGAR requests |
 | `GITHUB_TOKEN` | No | Higher GitHub API rate limits |
@@ -156,7 +170,9 @@ store/
 
 **Data flow:** Client (`ScopeFeed` via SWR) -> API routes -> `cachedFetchWithFallback()` -> external APIs. Cache layers: in-memory -> Redis -> fresh fetch -> stale fallback.
 
-**Scheduled overviews:** QStash cron -> POST `/api/cron/*` (signature-verified) -> generate with Claude -> persist to Supabase `overviews` table (upsert on type+date) -> served via public GET routes with in-memory + Redis caching.
+**Markets data flow:** private worker -> Supabase materialized data and immutable artifacts -> Vercel read APIs -> authenticated Markets UI. The browser never calls Alpaca/FMP directly and Vercel never starts a Codex process during a page view.
+
+See [Markets deployment](docs/markets-deployment.md) for the queue, worker, credential boundary, and production operations.
 
 ---
 

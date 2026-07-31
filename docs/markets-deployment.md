@@ -62,10 +62,11 @@ The worker process needs Supabase and Alpaca credentials to execute jobs. When c
 
 ## Database and Vercel
 
-1. Apply `supabase/migrations/202607150001_markets_core.sql`.
-2. Apply `supabase/migrations/202607150002_agent_job_deduplication.sql`.
-3. Configure Supabase, QStash signing keys, and read-side cache values in Vercel.
-4. Keep Alpaca and Codex credentials on macserver unless direct OpenAI Responses generation is intentionally enabled on Vercel.
+Migrations are an ordered, durable record. Before any `supabase db push`, run `supabase migration list` from the repository root and make sure the local and remote histories agree. Do not run `migration repair` merely to silence unknown historical versions; reconcile the actual source history first.
+
+The current Markets migration set ends with `202607300006_research_revision_lineage.sql`, which adds an optional foreign-key link between immutable research versions. The application remains backward-compatible if that column is absent: the structured revision information is stored inside the research artifact itself. Do not let an unreconciled legacy migration ledger block the read path or worker.
+
+Configure Supabase, QStash signing keys, and read-side cache values in Vercel. Keep Alpaca, FMP, and Codex credentials on macserver unless direct OpenAI Responses generation is intentionally enabled on Vercel.
 
 ## Worker schedule and optional QStash redundancy
 
@@ -76,6 +77,8 @@ The worker scheduler is enabled by default and checks once per minute. It create
 | Daily | `sync-market-assets` | `/api/cron/agent-jobs` with `{"jobType":"sync-market-assets"}` |
 | Every five minutes | `refresh-market-screener` | `/api/cron/agent-jobs` with `{"jobType":"refresh-market-screener"}` |
 | Every fifteen minutes | `refresh-fmp-intelligence` | `/api/cron/agent-jobs` with `{"jobType":"refresh-fmp-intelligence"}` |
+| After market-leadership materialization | `run-candidate-scout` | Enqueued by the materializer with a trading-date dedupe key |
+| Every five minutes while relevant | `monitor-investment-theses` | `/api/cron/agent-jobs` with the monitored-thesis payload |
 | Daily after 12:00 UTC | `generate-morning-brief` | `/api/cron/morning-brief` |
 | Mondays after 13:00 UTC | `generate-weekly-overview` | `/api/cron/weekly-overview` |
 | 1st and 15th after 14:00 UTC | `generate-monthly-overview` | `/api/cron/monthly-overview` |
