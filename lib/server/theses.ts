@@ -10,6 +10,7 @@ import type {
   ThesisMonitorStatus,
   ThesisSource,
   ThesisStatus,
+  ThesisIntakeDraft,
   ThesisWorkspaceData,
 } from '../markets/types.ts'
 import {
@@ -17,7 +18,9 @@ import {
   stockThesisContent,
   thesisEntityKey,
   thesisSources,
+  userAuthoredThesisContent,
 } from '../markets/theses.ts'
+import { fetchLatestMarketLeadership } from './markets-repository.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 function validOwnerId(ownerId: string): boolean {
@@ -98,7 +101,7 @@ async function saveProposal(input: ProposalInput): Promise<InvestmentThesis | nu
   if (!supabase) return null
   const entityKey = thesisEntityKey(input.entityType, input)
   const { data: latest, error: latestError } = await supabase.from('investment_theses')
-    .select('version,status,content').eq('owner_id', input.ownerId).eq('entity_key', entityKey)
+    .select('id,version,status,content').eq('owner_id', input.ownerId).eq('entity_key', entityKey)
     .order('version', { ascending: false }).limit(1).maybeSingle()
   if (latestError) {
     if (thesisStorageUnavailable(latestError.message)) return null
@@ -121,6 +124,13 @@ async function saveProposal(input: ProposalInput): Promise<InvestmentThesis | nu
     research_note_id: input.researchNoteId ?? null,
   }).select('*').single()
   if (error || !data) throw new Error(`Unable to save thesis proposal: ${error?.message ?? 'unknown error'}`)
+  if (latest?.status === 'proposed' && latest.id) {
+    const { error: supersedeError } = await supabase.from('investment_theses').update({
+      status: 'superseded',
+      reviewed_at: data.generated_at,
+    }).eq('id', latest.id).eq('owner_id', input.ownerId).eq('status', 'proposed')
+    if (supersedeError) throw new Error(`Unable to supersede the prior proposal: ${supersedeError.message}`)
+  }
   return normalize(data)
 }
 
@@ -141,6 +151,52 @@ export async function proposeStockThesis(
     sources: thesisSources(packet, research),
     dataAsOf: research.dataAsOf,
     researchNoteId: research.id,
+  })
+}
+
+export async function proposeUserAuthoredThesis(
+  ownerId: string,
+  draft: ThesisIntakeDraft,
+): Promise<InvestmentThesis | null> {
+  const dataAsOf = new Date().toISOString()
+  if (draft.entityType === 'stock') {
+    const symbol = draft.symbol?.trim().toUpperCase() ?? ''
+    if (!symbol || !/^[A-Z][A-Z0-9.-]{0,9}$/.test(symbol)) throw new Error('Enter a valid stock symbol')
+    const leadership = await fetchLatestMarketLeadership()
+    const stock = leadership?.stocks.find((item) => item.symbol === symbol)
+    const supabase = getSupabaseClient()
+    if (!supabase) throw new Error('Supabase service credentials are not configured')
+    const { data: asset, error: assetError } = stock
+      ? { data: { symbol }, error: null }
+      : await supabase.from('market_assets').select('symbol').eq('symbol', symbol)
+        .eq('active', true).eq('tradable', true).maybeSingle()
+    if (assetError) throw new Error(`Unable to verify ${symbol}: ${assetError.message}`)
+    if (!asset) throw new Error(`${symbol} is not recognized as an active tradable U.S. stock`)
+    return saveProposal({
+      ownerId,
+      entityType: 'stock',
+      symbol,
+      sector: stock?.sector,
+      subIndustry: stock?.subIndustry,
+      trigger: 'user-authored',
+      content: userAuthoredThesisContent({ ...draft, symbol }),
+      sources: [],
+      dataAsOf,
+    })
+  }
+
+  const sector = draft.sector?.trim() ?? ''
+  const subIndustry = draft.subIndustry?.trim() ?? ''
+  if (!sector || !subIndustry) throw new Error('Enter both the sector and industry')
+  return saveProposal({
+    ownerId,
+    entityType: 'sub_industry',
+    sector,
+    subIndustry,
+    trigger: 'user-authored',
+    content: userAuthoredThesisContent({ ...draft, sector, subIndustry }),
+    sources: [],
+    dataAsOf,
   })
 }
 

@@ -316,6 +316,17 @@ export interface ThesisContent {
   confidence: number
 }
 
+export interface ThesisIntakeDraft {
+  entityType: ThesisEntityType
+  symbol?: string
+  sector?: string
+  subIndustry?: string
+  statement: string
+  mispricing?: string
+  keyDebate?: string
+  fastestKillSignal?: string
+}
+
 export interface InvestmentThesis {
   id: string
   entityType: ThesisEntityType

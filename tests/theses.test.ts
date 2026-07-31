@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
-import { normalizeThesisContent, stockThesisContent, thesisEntityKey } from '../lib/markets/theses.ts'
+import {
+  normalizeThesisContent,
+  stockThesisContent,
+  thesisEntityKey,
+  userAuthoredThesisContent,
+} from '../lib/markets/theses.ts'
 import { evaluateIndustryThesisSignals } from '../lib/markets/thesis-monitoring.ts'
 import type { EquityResearchNote } from '../lib/markets/types.ts'
 
@@ -32,6 +37,38 @@ test('a stock thesis derives concise decision context from structured research',
   assert.equal(thesis.confidence, 72)
   assert.deepEqual(thesis.catalysts, ['Earnings', 'Estimate revision'])
   assert.deepEqual(thesis.invalidation, ['Bookings decline', 'Margins contract'])
+})
+
+test('direct intake preserves a declarative user view without turning it into a research question', () => {
+  const thesis = userAuthoredThesisContent({
+    entityType: 'stock',
+    symbol: 'INTC',
+    statement: 'Intel’s selloff underprices the strategic value of its U.S. fabs and advanced packaging as AI compute demand broadens.',
+    mispricing: 'The market is focused on near-term foundry losses instead of domestic capacity value.',
+    keyDebate: 'Can utilization improve before cash burn overwhelms the upside?',
+    fastestKillSignal: 'Another major process delay with no external foundry wins.',
+  })
+  assert.equal(thesis.headline, 'Intel’s selloff underprices the strategic value of its U.S. fabs and advanced packaging as AI compute demand broadens.')
+  assert.equal(thesis.summary, 'The market is focused on near-term foundry losses instead of domestic capacity value.')
+  assert.equal(thesis.keyDebate, 'Can utilization improve before cash burn overwhelms the upside?')
+  assert.deepEqual(thesis.invalidation, ['Another major process delay with no external foundry wins.'])
+  assert.equal(thesis.confidence, 50)
+})
+
+test('direct intake rejects a question in place of a thesis statement', () => {
+  assert.throws(() => userAuthoredThesisContent({
+    entityType: 'stock',
+    symbol: 'MSFT',
+    statement: 'Is Microsoft oversold?',
+  }), /should state what you believe/)
+})
+
+test('direct stock intake queues full research after preserving the authored proposal', async () => {
+  const route = await readFile(new URL('../app/api/markets/theses/route.ts', import.meta.url), 'utf8')
+  assert.match(route, /proposeUserAuthoredThesis/)
+  assert.match(route, /generate-company-research/)
+  assert.match(route, /reason: 'thesis-intake'/)
+  assert.match(route, /The authored proposal is durable even if background enrichment/)
 })
 
 test('legacy question-led thesis records render an affirmative belief and preserve the debate separately', () => {

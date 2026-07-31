@@ -1,4 +1,10 @@
-import type { CompanyPacket, EquityResearchNote, ThesisContent, ThesisEntityType } from './types.ts'
+import type {
+  CompanyPacket,
+  EquityResearchNote,
+  ThesisContent,
+  ThesisEntityType,
+  ThesisIntakeDraft,
+} from './types.ts'
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -99,6 +105,27 @@ export function stockThesisContent(research: EquityResearchNote): ThesisContent 
     invalidation: invalidation.length > 0 ? invalidation : [research.fastestKillSignal],
     fastestKillSignal: research.fastestKillSignal,
     confidence: research.confidence,
+  }
+}
+
+export function userAuthoredThesisContent(draft: ThesisIntakeDraft): ThesisContent {
+  const statement = cleanStatement(draft.statement)
+  if (statement.length < 12) throw new Error('Write a specific thesis statement')
+  if (isQuestionLike(statement)) throw new Error('The thesis should state what you believe, not ask a question')
+
+  const mispricing = cleanResearchLine(draft.mispricing ?? '')
+  const keyDebate = cleanResearchLine(draft.keyDebate ?? '')
+  const fastestKillSignal = cleanResearchLine(draft.fastestKillSignal ?? '')
+  return {
+    headline: statement,
+    summary: mispricing,
+    coreBelief: statement,
+    keyDebate,
+    whatChanged: 'Initial user-authored view captured for research and monitoring.',
+    catalysts: [],
+    invalidation: fastestKillSignal ? [fastestKillSignal] : [],
+    fastestKillSignal,
+    confidence: 50,
   }
 }
 

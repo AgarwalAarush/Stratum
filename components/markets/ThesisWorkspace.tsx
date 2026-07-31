@@ -1,13 +1,26 @@
 'use client'
 
-import { useState } from 'react'
+import { type FormEvent, useState } from 'react'
 import type {
   InvestmentThesis,
+  ThesisEntityType,
+  ThesisIntakeDraft,
   ThesisMonitor,
   ThesisMonitorStatus,
   ThesisWorkspaceData,
 } from '@/lib/markets/types'
 import { MarketsIntentLink } from './MarketsIntentLink'
+
+const emptyDraft: ThesisIntakeDraft = {
+  entityType: 'stock',
+  symbol: '',
+  sector: '',
+  subIndustry: '',
+  statement: '',
+  mispricing: '',
+  keyDebate: '',
+  fastestKillSignal: '',
+}
 
 function title(thesis: InvestmentThesis): string {
   return thesis.entityType === 'stock' ? thesis.symbol ?? thesis.entityKey : thesis.subIndustry ?? thesis.entityKey
@@ -52,6 +65,57 @@ export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceD
   const [monitors, setMonitors] = useState(initialData.monitors)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
+  const [showIntake, setShowIntake] = useState(false)
+  const [draft, setDraft] = useState<ThesisIntakeDraft>(emptyDraft)
+
+  const updateDraft = (field: keyof ThesisIntakeDraft, value: string) => {
+    setDraft((current) => ({ ...current, [field]: value }))
+  }
+
+  const setEntityType = (entityType: ThesisEntityType) => {
+    setDraft((current) => ({ ...current, entityType }))
+  }
+
+  const createThesis = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setBusy('create')
+    setNotice('')
+    try {
+      const response = await fetch('/api/markets/theses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', ...draft }),
+      })
+      const payload = await response.json() as {
+        error?: string
+        thesis?: InvestmentThesis
+        researchQueued?: boolean
+        workspace?: ThesisWorkspaceData
+      }
+      if (!response.ok || !payload.thesis) throw new Error(payload.error ?? 'Unable to capture thesis')
+      if (payload.workspace) {
+        setProposals(payload.workspace.proposals)
+        setAccepted(payload.workspace.accepted)
+        setMonitors(payload.workspace.monitors)
+      } else {
+        setProposals((current) => [
+          payload.thesis as InvestmentThesis,
+          ...current.filter((item) => item.entityKey !== payload.thesis?.entityKey),
+        ])
+      }
+      setNotice(
+        payload.researchQueued
+          ? `${title(payload.thesis)} added; full research is queued to enrich it.`
+          : `${title(payload.thesis)} added to the review queue.`,
+      )
+      setDraft(emptyDraft)
+      setShowIntake(false)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to capture thesis')
+    } finally {
+      setBusy(null)
+    }
+  }
 
   const review = async (thesis: InvestmentThesis, decision: 'accept' | 'reject') => {
     setBusy(thesis.id)
@@ -116,9 +180,98 @@ export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceD
           <p className="markets-eyebrow">Evidence-backed and versioned</p>
           <h1 className="markets-display">Theses</h1>
         </div>
-        <span>{proposals.length} awaiting review · {activeMonitorCount} monitored</span>
+        <div className="thesis-heading-actions">
+          <span>{proposals.length} awaiting review · {activeMonitorCount} monitored</span>
+          <button type="button" onClick={() => setShowIntake((current) => !current)}>
+            {showIntake ? 'Close intake' : 'New thesis'}
+          </button>
+        </div>
       </header>
       <p className="thesis-intro">A screen can surface a name; a thesis states the belief, what changed, and what would prove it wrong. New evidence creates a proposal—never a silent rewrite.</p>
+
+      {showIntake ? (
+        <form className="thesis-intake" data-entity-type={draft.entityType} onSubmit={createThesis}>
+          <header>
+            <div>
+              <p className="markets-eyebrow">Direct intake</p>
+              <h2>Capture the view before the full research</h2>
+            </div>
+            <div className="thesis-intake-kind" aria-label="Thesis type">
+              <button type="button" data-active={draft.entityType === 'stock'} onClick={() => setEntityType('stock')}>Stock</button>
+              <button type="button" data-active={draft.entityType === 'sub_industry'} onClick={() => setEntityType('sub_industry')}>Industry</button>
+            </div>
+          </header>
+          <p className="thesis-intake-help">This records your view as a proposal immediately. Research can add evidence and revise it later; accepting it turns on monitoring.</p>
+          <div className="thesis-intake-grid">
+            {draft.entityType === 'stock' ? (
+              <label className="thesis-intake-symbol">
+                <span>Ticker</span>
+                <input
+                  required
+                  autoCapitalize="characters"
+                  maxLength={10}
+                  value={draft.symbol}
+                  onChange={(event) => updateDraft('symbol', event.target.value.toUpperCase())}
+                  placeholder="INTC"
+                />
+              </label>
+            ) : (
+              <>
+                <label>
+                  <span>Sector</span>
+                  <input required value={draft.sector} onChange={(event) => updateDraft('sector', event.target.value)} placeholder="Information Technology" />
+                </label>
+                <label>
+                  <span>Industry</span>
+                  <input required value={draft.subIndustry} onChange={(event) => updateDraft('subIndustry', event.target.value)} placeholder="Semiconductors" />
+                </label>
+              </>
+            )}
+            <label className="thesis-intake-statement">
+              <span>What you believe</span>
+              <textarea
+                required
+                minLength={12}
+                maxLength={1000}
+                value={draft.statement}
+                onChange={(event) => updateDraft('statement', event.target.value)}
+                placeholder="Intel’s selloff underprices the strategic value of its U.S. fabs and advanced packaging as AI compute demand broadens."
+              />
+            </label>
+            <label className="thesis-intake-mispricing">
+              <span>Why the market may be wrong</span>
+              <textarea
+                maxLength={1000}
+                value={draft.mispricing}
+                onChange={(event) => updateDraft('mispricing', event.target.value)}
+                placeholder="The market is focused on near-term foundry losses and execution risk, not the value of domestic capacity if demand and policy support compound."
+              />
+            </label>
+            <label>
+              <span>Key debate <small>optional</small></span>
+              <input
+                maxLength={500}
+                value={draft.keyDebate}
+                onChange={(event) => updateDraft('keyDebate', event.target.value)}
+                placeholder="Can foundry utilization improve before cash burn overwhelms the upside?"
+              />
+            </label>
+            <label>
+              <span>Fastest disconfirming evidence <small>optional</small></span>
+              <input
+                maxLength={500}
+                value={draft.fastestKillSignal}
+                onChange={(event) => updateDraft('fastestKillSignal', event.target.value)}
+                placeholder="Another major process delay with no external foundry wins."
+              />
+            </label>
+          </div>
+          <footer>
+            <span>Saved as proposed · confidence starts neutral</span>
+            <button type="submit" disabled={busy === 'create'}>{busy === 'create' ? 'Capturing…' : 'Add to review queue'}</button>
+          </footer>
+        </form>
+      ) : null}
 
       <section className="thesis-review-queue" aria-labelledby="thesis-review-title">
         <header>
@@ -129,23 +282,21 @@ export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceD
           <div className="thesis-proposal-list">
             {proposals.map((thesis) => (
               <article key={thesis.id} className="thesis-proposal">
-                <header>
-                  <div><span>{thesis.entityType === 'stock' ? 'Stock thesis' : 'Industry thesis'}</span><h3>{title(thesis)}</h3><small>{label(thesis)} · proposed v{thesis.version}</small></div>
+                <header className="thesis-proposal-identity">
+                  <div><span>{thesis.entityType === 'stock' ? 'Stock thesis' : 'Industry thesis'}</span><h3>{title(thesis)}</h3><small>{label(thesis)}<br />proposed v{thesis.version}</small></div>
                   <time dateTime={thesis.generatedAt}>{new Date(thesis.generatedAt).toLocaleDateString()}</time>
                 </header>
                 <div className="thesis-proposal-copy">
                   <span>Thesis</span>
                   <strong>{thesis.content.headline}</strong>
-                  <small>Why it may be mispriced</small>
-                  <p>{thesis.content.summary}</p>
+                  {thesis.content.summary ? <><small>Why it may be mispriced</small><p>{thesis.content.summary}</p></> : null}
                 </div>
                 <dl>
-                  <div><dt>What changed</dt><dd>{thesis.content.whatChanged}</dd></div>
-                  <div><dt>Key debate</dt><dd>{thesis.content.keyDebate}</dd></div>
-                  <div><dt>Fastest disconfirming evidence</dt><dd>{thesis.content.fastestKillSignal}</dd></div>
+                  {thesis.content.keyDebate ? <div><dt>Key debate</dt><dd>{thesis.content.keyDebate}</dd></div> : null}
+                  <div><dt>Fastest disconfirming evidence</dt><dd>{thesis.content.fastestKillSignal || 'Not defined yet.'}</dd></div>
                 </dl>
                 <footer>
-                  <span>{thesis.sources.length} linked source{thesis.sources.length === 1 ? '' : 's'} · {thesis.trigger.replaceAll('-', ' ')}</span>
+                  <span><strong>Changed:</strong> {thesis.content.whatChanged} · {thesis.sources.length} linked source{thesis.sources.length === 1 ? '' : 's'} · {thesis.trigger.replaceAll('-', ' ')}</span>
                   <div><button type="button" onClick={() => review(thesis, 'reject')} disabled={busy === thesis.id}>Reject</button><button type="button" onClick={() => review(thesis, 'accept')} disabled={busy === thesis.id}>{busy === thesis.id ? 'Saving…' : 'Accept thesis'}</button></div>
                 </footer>
               </article>
