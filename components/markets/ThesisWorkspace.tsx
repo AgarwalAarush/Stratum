@@ -48,6 +48,15 @@ function checkedLabel(value: string | null): string {
   return `Checked ${formatted} ET`
 }
 
+function proposalDate(value: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'numeric',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'America/New_York',
+  }).format(new Date(value))
+}
+
 function coverageLabel(monitor: ThesisMonitor): string {
   const labels: Record<string, string> = {
     price: 'Price',
@@ -284,7 +293,7 @@ export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceD
               <article key={thesis.id} className="thesis-proposal">
                 <header className="thesis-proposal-identity">
                   <div><span>{thesis.entityType === 'stock' ? 'Stock thesis' : 'Industry thesis'}</span><h3>{title(thesis)}</h3><small>{label(thesis)}<br />proposed v{thesis.version}</small></div>
-                  <time dateTime={thesis.generatedAt}>{new Date(thesis.generatedAt).toLocaleDateString()}</time>
+                  <time dateTime={thesis.generatedAt}>{proposalDate(thesis.generatedAt)}</time>
                 </header>
                 <div className="thesis-proposal-copy">
                   <span>Thesis</span>

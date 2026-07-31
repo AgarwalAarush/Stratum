@@ -73,6 +73,13 @@ test('direct stock intake queues full research after preserving the authored pro
   assert.match(route, /The authored proposal is durable even if background enrichment/)
 })
 
+test('thesis proposal dates use a deterministic market timezone for hydration', async () => {
+  const workspace = await readFile(new URL('../components/markets/ThesisWorkspace.tsx', import.meta.url), 'utf8')
+  assert.match(workspace, /timeZone: 'America\/New_York'/)
+  assert.match(workspace, /proposalDate\(thesis\.generatedAt\)/)
+  assert.doesNotMatch(workspace, /generatedAt\)\.toLocaleDateString/)
+})
+
 test('legacy question-led thesis records render an affirmative belief and preserve the debate separately', () => {
   const thesis = normalizeThesisContent({
     headline: 'Can margins expand fast enough?',
