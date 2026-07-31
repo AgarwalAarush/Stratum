@@ -11,11 +11,15 @@ import type { AlpacaClient } from './alpaca.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 export const SPY_HOLDINGS_URL = 'https://www.ssga.com/library-content/products/fund-data/etfs/us/holdings-daily-us-en-spy.xlsx'
+export const IWM_HOLDINGS_URL = 'https://www.ishares.com/us/products/239710/ishares-russell-2000-etf/latest-holdings.csv'
 export const MIN_SP500_ASSETS = 450
+export const MIN_RUSSELL_2000_ASSETS = 1_800
+export const RUSSELL_2000_UNIVERSE_NAME = 'russell-2000'
 export const MARKET_BENCHMARK_SYMBOLS = ['SPY', 'QQQ', 'IWM', 'TLT', 'UUP', 'USO'] as const
 const UNIVERSE_CACHE_MS = 20 * 60 * 60 * 1_000
 const DATABASE_PAGE_SIZE = 1_000
 const SOURCE_NAME = 'state-street-spy-holdings'
+const RUSSELL_SOURCE_NAME = 'blackrock-ishares-iwm-holdings'
 const EXPANDED_SOURCE_NAME = 'alpaca-liquidity-and-stratum-themes'
 
 function decodeXml(value: string): string {
@@ -67,6 +71,79 @@ export function parseSpyHoldingsWorkbook(workbook: ArrayBuffer | Uint8Array): st
   return [...symbols]
 }
 
+function parseCsvRows(value: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let quoted = false
+
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index]!
+    if (quoted) {
+      if (character === '"' && value[index + 1] === '"') {
+        field += '"'
+        index += 1
+      } else if (character === '"') {
+        quoted = false
+      } else {
+        field += character
+      }
+      continue
+    }
+    if (character === '"') {
+      quoted = true
+    } else if (character === ',') {
+      row.push(field)
+      field = ''
+    } else if (character === '\n') {
+      row.push(field)
+      rows.push(row)
+      row = []
+      field = ''
+    } else if (character !== '\r') {
+      field += character
+    }
+  }
+  if (field || row.length > 0) {
+    row.push(field)
+    rows.push(row)
+  }
+  return rows
+}
+
+function holdingsDate(value: string): string {
+  const match = value.trim().match(/^([A-Z][a-z]{2}) (\d{1,2}), (\d{4})$/)
+  if (!match) throw new Error(`iShares IWM holdings date is invalid: ${value}`)
+  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(match[1]!)
+  if (month < 0) throw new Error(`iShares IWM holdings month is invalid: ${value}`)
+  return new Date(Date.UTC(Number(match[3]), month, Number(match[2]))).toISOString()
+}
+
+export function parseIwmHoldingsCsv(value: string): { symbols: string[]; sourceAsOf: string } {
+  const rows = parseCsvRows(value)
+  const asOfRow = rows.find((row) => row[0]?.trim() === 'Fund Holdings as of')
+  const headerIndex = rows.findIndex((row) =>
+    row[0]?.trim() === 'Ticker'
+    && row.includes('Asset Class'))
+  if (!asOfRow?.[1] || headerIndex < 0) throw new Error('iShares IWM holdings CSV is missing metadata or headers')
+
+  const header = rows[headerIndex]!
+  const tickerIndex = header.indexOf('Ticker')
+  const assetClassIndex = header.indexOf('Asset Class')
+  const symbols = new Set(rows.slice(headerIndex + 1).flatMap((row) => {
+    if (row[assetClassIndex]?.trim().toLowerCase() !== 'equity') return []
+    const symbol = row[tickerIndex]?.trim().toUpperCase() ?? ''
+    return /^[A-Z0-9][A-Z0-9.-]{0,11}$/.test(symbol) ? [symbol] : []
+  }))
+  if (symbols.size < MIN_RUSSELL_2000_ASSETS) {
+    throw new Error(`iShares IWM holdings CSV contained only ${symbols.size} eligible symbols`)
+  }
+  return {
+    symbols: [...symbols],
+    sourceAsOf: holdingsDate(asOfRow[1]),
+  }
+}
+
 export function selectMarketUniverseAssets(
   assets: MarketAsset[],
   sp500Symbols: Iterable<string>,
@@ -98,6 +175,18 @@ async function fetchOfficialSp500Symbols(fetchImpl: typeof fetch): Promise<{ sym
   const symbols = parseSpyHoldingsWorkbook(await response.arrayBuffer())
   const modified = response.headers.get('last-modified')
   return { symbols, sourceAsOf: modified ? new Date(modified).toISOString() : new Date().toISOString() }
+}
+
+async function fetchRussell2000Symbols(fetchImpl: typeof fetch): Promise<{ symbols: string[]; sourceAsOf: string }> {
+  const response = await fetchImpl(IWM_HOLDINGS_URL, {
+    headers: {
+      Accept: 'text/csv',
+      'User-Agent': 'Stratum Markets/1.0 (private market-data worker)',
+    },
+    signal: AbortSignal.timeout(20_000),
+  })
+  if (!response.ok) throw new Error(`iShares IWM holdings request failed with ${response.status}`)
+  return parseIwmHoldingsCsv(await response.text())
 }
 
 async function loadPersistedUniverse(
@@ -153,6 +242,39 @@ async function resolveSp500Symbols(
   return sp500Symbols
 }
 
+async function resolveRussell2000Symbols(
+  assets: MarketAsset[],
+  supabase: SupabaseServiceClient,
+  options: ResolveMarketUniverseOptions,
+): Promise<string[]> {
+  const now = options.now ?? new Date()
+  const persisted = await loadPersistedUniverse(supabase, RUSSELL_2000_UNIVERSE_NAME)
+  const newestRefresh = persisted.reduce((latest, row) => row.refreshed_at > latest ? row.refreshed_at : latest, '')
+  const cacheFresh = newestRefresh !== '' && now.getTime() - new Date(newestRefresh).getTime() < UNIVERSE_CACHE_MS
+  let russellSymbols = persisted.map((row) => row.symbol)
+
+  if (options.forceRefresh || !cacheFresh || russellSymbols.length < MIN_RUSSELL_2000_ASSETS) {
+    try {
+      const holdings = await fetchRussell2000Symbols(options.fetchImpl ?? fetch)
+      const eligible = selectMarketUniverseAssets(assets, holdings.symbols, []).map((asset) => asset.symbol)
+      if (eligible.length < MIN_RUSSELL_2000_ASSETS) {
+        throw new Error(`Only ${eligible.length} IWM holdings matched active Alpaca assets`)
+      }
+      const { error } = await supabase.rpc('replace_market_universe', {
+        p_universe: RUSSELL_2000_UNIVERSE_NAME,
+        p_symbols: eligible,
+        p_source: RUSSELL_SOURCE_NAME,
+        p_source_as_of: holdings.sourceAsOf,
+      })
+      if (error) throw new Error(`Unable to persist the Russell 2000 universe: ${error.message}`)
+      russellSymbols = eligible
+    } catch (error) {
+      if (russellSymbols.length < MIN_RUSSELL_2000_ASSETS) throw error
+    }
+  }
+  return russellSymbols
+}
+
 async function loadTrackedSymbols(supabase: SupabaseServiceClient): Promise<string[]> {
   const [
     { data: watchlistRows, error: watchlistError },
@@ -180,15 +302,16 @@ export async function resolveMarketUniverse(
 ): Promise<MarketAsset[]> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const [sp500Symbols, expandedRows, trackedSymbols] = await Promise.all([
+  const [sp500Symbols, russell2000Symbols, expandedRows, trackedSymbols] = await Promise.all([
     resolveSp500Symbols(assets, supabase, options),
+    resolveRussell2000Symbols(assets, supabase, options),
     loadPersistedUniverse(supabase, EXPANDED_UNIVERSE_NAME),
     loadTrackedSymbols(supabase),
   ])
   const expandedSymbols = expandedRows.map((row) => row.symbol)
   const baseSymbols = expandedSymbols.length >= MIN_EXPANDED_UNIVERSE_ASSETS
     ? expandedSymbols
-    : sp500Symbols
+    : [...sp500Symbols, ...russell2000Symbols]
 
   const universe = selectMarketUniverseAssets(
     assets,
@@ -217,8 +340,9 @@ export async function refreshExpandedMarketUniverse(
 ): Promise<RefreshExpandedUniverseResult> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const [sp500Symbols, trackedSymbols] = await Promise.all([
+  const [sp500Symbols, russell2000Symbols, trackedSymbols] = await Promise.all([
     resolveSp500Symbols(assets, supabase, options),
+    resolveRussell2000Symbols(assets, supabase, options),
     loadTrackedSymbols(supabase),
   ])
   const eligibleListings = assets.filter(isExpandedUniverseListing)
@@ -228,6 +352,7 @@ export async function refreshExpandedMarketUniverse(
     snapshots.data,
     [
       ...sp500Symbols,
+      ...russell2000Symbols,
       ...trackedSymbols,
       ...MARKET_THEME_SYMBOLS,
       ...MARKET_BENCHMARK_SYMBOLS,

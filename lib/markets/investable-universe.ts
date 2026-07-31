@@ -1,8 +1,8 @@
 import type { MarketAsset, MarketSnapshot } from './types.ts'
 
 export const EXPANDED_UNIVERSE_NAME = 'investable-us'
-export const EXPANDED_UNIVERSE_TARGET = 1_500
-export const MIN_EXPANDED_UNIVERSE_ASSETS = 900
+export const EXPANDED_UNIVERSE_TARGET = 2_500
+export const MIN_EXPANDED_UNIVERSE_ASSETS = 2_200
 
 export const MARKET_THEME_SYMBOLS = [
   // Semiconductors, foundries, equipment, memory, connectivity, and photonics.

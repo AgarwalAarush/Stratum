@@ -9,8 +9,12 @@ import {
   selectExpandedUniverseAssets,
 } from '../lib/markets/investable-universe.ts'
 import {
+  IWM_HOLDINGS_URL,
   MARKET_BENCHMARK_SYMBOLS,
+  MIN_RUSSELL_2000_ASSETS,
   MIN_SP500_ASSETS,
+  RUSSELL_2000_UNIVERSE_NAME,
+  parseIwmHoldingsCsv,
   parseSpyHoldingsWorkbook,
   selectMarketUniverseAssets,
 } from '../lib/server/market-universe.ts'
@@ -28,6 +32,16 @@ function workbookWithSymbols(symbols: string[]): Uint8Array {
   })
 }
 
+function iwmCsvWithSymbols(symbols: string[]): string {
+  return [
+    'iShares Russell 2000 ETF',
+    'Fund Holdings as of,"Jul 29, 2026"',
+    'Ticker,Name,Sector,Asset Class,Market Value,Weight (%),Exchange,Currency',
+    ...symbols.map((symbol) => `"${symbol}","${symbol}, Inc.","Technology","Equity","1,000","0.01","NASDAQ","USD"`),
+    '"XTSLA","Cash Fund","Cash and/or Derivatives","Money Market","1,000","0.01","-","USD"',
+  ].join('\n')
+}
+
 test('SPY workbook parser extracts a complete constituent universe', () => {
   const symbols = Array.from({ length: MIN_SP500_ASSETS }, (_, index) => `T${index}`)
   symbols[0] = 'BRK.B'
@@ -39,6 +53,20 @@ test('SPY workbook parser extracts a complete constituent universe', () => {
 
 test('SPY workbook parser rejects incomplete source data', () => {
   assert.throws(() => parseSpyHoldingsWorkbook(workbookWithSymbols(['AAPL', 'MSFT'])), /only 2 eligible symbols/)
+})
+
+test('IWM CSV parser extracts Russell 2000 equity holdings and source date', () => {
+  const symbols = Array.from({ length: MIN_RUSSELL_2000_ASSETS }, (_, index) => `R${index}`)
+  const parsed = parseIwmHoldingsCsv(iwmCsvWithSymbols(symbols))
+
+  assert.equal(parsed.symbols.length, MIN_RUSSELL_2000_ASSETS)
+  assert.ok(parsed.symbols.includes('R0'))
+  assert.equal(parsed.sourceAsOf, '2026-07-29T00:00:00.000Z')
+  assert.equal(parsed.symbols.includes('XTSLA'), false)
+})
+
+test('IWM CSV parser rejects incomplete Russell 2000 source data', () => {
+  assert.throws(() => parseIwmHoldingsCsv(iwmCsvWithSymbols(['BTSG', 'MOGA'])), /only 2 eligible symbols/)
 })
 
 test('market universe includes S&P 500 and tracked assets only once', () => {
@@ -58,6 +86,8 @@ test('market universe includes S&P 500 and tracked assets only once', () => {
 
 test('market universe always carries the overview benchmark instruments', () => {
   assert.deepEqual(MARKET_BENCHMARK_SYMBOLS, ['SPY', 'QQQ', 'IWM', 'TLT', 'UUP', 'USO'])
+  assert.equal(RUSSELL_2000_UNIVERSE_NAME, 'russell-2000')
+  assert.match(IWM_HOLDINGS_URL, /ishares-russell-2000-etf\/latest-holdings\.csv/)
 })
 
 test('expanded universe selects liquid non-index names and always retains themes', () => {
@@ -108,6 +138,8 @@ test('resolved universe loads both watchlisted and manually owned symbols', () =
   assert.match(source, /from\('market_watchlist_items'\)\.select\('symbol'\)/)
   assert.match(source, /from\('manual_positions'\)\.select\('symbol'\)/)
   assert.match(source, /investment_theses/)
+  assert.match(source, /resolveRussell2000Symbols/)
+  assert.match(source, /\.\.\.russell2000Symbols/)
   assert.match(source, /\.range\(from, from \+ DATABASE_PAGE_SIZE - 1\)/)
 })
 
