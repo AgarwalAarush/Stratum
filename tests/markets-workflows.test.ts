@@ -49,6 +49,10 @@ test('ticker surfaces converge on the canonical Stock Viewer route', () => {
   assert.equal(decisionRail.includes('Trading and order placement are intentionally out of scope.'), false)
   assert.equal(source('components/markets/ResearchActionButton.tsx').includes('macserver worker'), false)
   assert.match(viewer, /Full equity research/)
+  assert.match(viewer, /<a[\s\S]*href=\{`\/markets\/stocks\/\$\{data\.symbol\}\/research`\}/)
+  assert.doesNotMatch(viewer, /<MarketsIntentLink[\s\S]*Full equity research/)
+  assert.match(viewer, /Why \{data\.symbol\} was surfaced/)
+  assert.match(viewer, /Next FY P\/E/)
   assert.equal(viewer.includes('stock-viewer-research-summary'), false)
 })
 
@@ -57,6 +61,7 @@ test('Stock Viewer supports intercepted desktop routing and a canonical deep lin
   assert.match(source('app/markets/@modal/(.)stocks/[symbol]/page.tsx'), /<StockViewerModal/)
   assert.match(source('components/markets/StockViewerModal.tsx'), /router\.back\(\)/)
   assert.match(source('components/markets/StockViewerModal.tsx'), /event\.key === 'Escape'/)
+  assert.match(source('components/markets/ResearchActionButton.tsx'), /href=\{`\/markets\/stocks\/\$\{symbol\}\/research`\}/)
 })
 
 test('Stock Viewer chart is interactive and modal navigation sticks to the modal edge', () => {

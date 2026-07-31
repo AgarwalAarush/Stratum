@@ -34,6 +34,17 @@ function validResearch() {
     entryZoneLow: 90,
     entryZoneHigh: 100,
     confidence: 72,
+    revision: {
+      priorVersion: null,
+      opinionChange: 'initial',
+      summary: 'Initial evidence baseline.',
+      changes: [{
+        field: 'evidence',
+        previous: '',
+        current: 'Initial packet',
+        explanation: 'The first report establishes the comparison baseline.',
+      }],
+    },
     sections: sectionIds.map((id) => ({
       id,
       title: id.replaceAll('_', ' '),
@@ -49,6 +60,7 @@ test('equity research validator requires the fixed 15-section contract', () => {
   assert.equal(result.sections.length, 15)
   assert.equal(result.formalRating, 'HOLD')
   assert.equal(result.entryAction, 'wait')
+  assert.equal(result.revision.opinionChange, 'initial')
   assert.match(result.investmentThesis, /compound earnings/)
 
   const missing = validResearch()
@@ -83,6 +95,12 @@ test('research packet includes quarterly evidence, SEC filings, and skill-aligne
   assert.match(source, /profile\.sector/)
   assert.match(source, /profile\.industry/)
   assert.match(source, /data\.sec\.gov\/submissions/)
+  assert.match(source, /earning-call-transcript-dates/)
+  assert.match(source, /earning-call-transcript/)
+  assert.match(source, /management commentary, not audited fact/)
+  assert.match(source, /Treat the prior report as the analytical baseline/)
+  assert.match(source, /previous_research_note_id/)
+  assert.match(source, /forwardPriceToEarnings/)
   assert.match(source, /1,800-2,500 total words/)
   assert.match(source, /Write an investor memo, not an audit workpaper/)
   assert.match(source, /affirmative, falsifiable ownership belief/)
@@ -92,6 +110,7 @@ test('research packet includes quarterly evidence, SEC filings, and skill-aligne
   assert.match(source, /Kill Criteria must contain 3-5 specific numeric thresholds/)
   assert.match(schema, /"business_model_and_moat"/)
   assert.match(schema, /"sentiment_and_positioning"/)
+  assert.match(schema, /"opinionChange"/)
 })
 
 test('research persistence migration creates immutable owned versions and sources', async () => {
@@ -101,4 +120,10 @@ test('research persistence migration creates immutable owned versions and source
   assert.match(sql, /unique \(owner_id, symbol, version\)/i)
   assert.match(sql, /create table if not exists public\.equity_research_sources/i)
   assert.match(sql, /enable row level security/i)
+})
+
+test('research revision migration links each refresh to its prior immutable version', async () => {
+  const sql = await readFile(new URL('../supabase/migrations/202607300006_research_revision_lineage.sql', import.meta.url), 'utf8')
+  assert.match(sql, /previous_research_note_id/i)
+  assert.match(sql, /references public\.equity_research_notes\(id\)/i)
 })

@@ -9,9 +9,11 @@ import { ResearchProgressRing } from './ResearchProgressRing'
 export function ResearchActionButton({
   symbol,
   hasResearch,
+  currentVersion,
 }: {
   symbol: string
   hasResearch: boolean
+  currentVersion?: number
 }) {
   const router = useRouter()
   const [status, setStatus] = useState<'idle' | 'submitting' | 'error'>('idle')
@@ -61,7 +63,7 @@ export function ResearchActionButton({
       const response = await fetch('/api/markets/research', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol, refresh: hasResearch }),
+        body: JSON.stringify({ symbol, refresh: hasResearch, baseVersion: currentVersion }),
       })
       if (!response.ok) throw new Error('Unable to queue research')
       const payload = await response.json() as { id: string }
@@ -86,7 +88,7 @@ export function ResearchActionButton({
       <div className="research-action">
         <ResearchProgressRing job={job} />
         {job.status === 'succeeded'
-          ? <Link href={`/markets/stocks/${symbol}/research`}>Open full research →</Link>
+          ? <a href={`/markets/stocks/${symbol}/research`}>Open full research →</a>
           : job.status === 'failed'
             ? <button type="button" onClick={() => setJob(null)}>Try again</button>
             : <Link href="/markets/research">View research queue →</Link>}
@@ -102,7 +104,11 @@ export function ResearchActionButton({
           : hasResearch ? 'Refresh research' : 'Generate research'}
       </button>
       <span aria-live="polite">
-        {status === 'error' ? 'The job could not be queued.' : ''}
+        {status === 'error'
+          ? 'The job could not be queued.'
+          : hasResearch && currentVersion
+            ? `Uses version ${currentVersion} as the baseline and publishes a new version with an opinion-change log.`
+            : ''}
       </span>
     </div>
   )

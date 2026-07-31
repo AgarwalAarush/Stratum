@@ -13,6 +13,7 @@ import type {
 import { fetchFmpStableJson } from './fmp.ts'
 import { normalizeStockLeadershipRow } from './market-leadership.ts'
 import { getSupabaseClient } from './supabase.ts'
+import { forwardPriceToEarnings, selectForwardAnnualEstimate } from '../markets/valuation.ts'
 
 interface CandidateScoutMaterializationOptions {
   now?: Date
@@ -46,18 +47,20 @@ function dateValue(value: unknown): string | null {
 
 async function fetchCandidateFundamentals(
   symbol: string,
+  price: number,
   apiKey: string,
   fetchImpl: typeof fetch,
   now: Date,
 ): Promise<CandidateFundamentals> {
   const request = <T>(endpoint: string, parameters: Record<string, string | number>) =>
     fetchFmpStableJson<T>(endpoint, { symbol, ...parameters }, { apiKey, fetchImpl })
-  const [profileResult, ratiosResult, metricsResult, growthResult, estimatesResult] = await Promise.allSettled([
+  const [profileResult, ratiosResult, metricsResult, growthResult, estimatesResult, earningsResult] = await Promise.allSettled([
     request<unknown>('profile', {}),
     request<unknown>('ratios-ttm', {}),
     request<unknown>('key-metrics-ttm', {}),
     request<unknown>('income-statement-growth', { limit: 2 }),
     request<unknown>('analyst-estimates', { period: 'annual', limit: 4 }),
+    request<unknown>('earnings', {}),
   ])
   const settled = (value: PromiseSettledResult<unknown>) => value.status === 'fulfilled' ? value.value : []
   const profile = first(settled(profileResult))
@@ -67,10 +70,19 @@ async function fetchCandidateFundamentals(
   const estimates = Array.isArray(settled(estimatesResult))
     ? settled(estimatesResult) as Array<Record<string, unknown>>
     : []
+  const earnings = Array.isArray(settled(earningsResult))
+    ? settled(earningsResult) as Array<Record<string, unknown>>
+    : []
+  const today = now.toISOString().slice(0, 10)
+  const nextEarningsDate = [
+    dateValue(profile.earningsAnnouncement),
+    ...earnings.map((item) => dateValue(record(item).date)),
+  ].filter((date): date is string => typeof date === 'string' && date >= today)
+    .sort()[0] ?? null
+  const selectedForwardEstimate = selectForwardAnnualEstimate(estimates, now)
   const futureEstimate = estimates
     .map(record)
-    .filter((item) => dateValue(item.date))
-    .sort((left, right) => String(left.date).localeCompare(String(right.date)))[0]
+    .find((item) => dateValue(item.date) === selectedForwardEstimate?.date)
   const estimateRevenue = number(futureEstimate?.estimatedRevenueAvg)
   const priorRevenue = number(growth.revenueGrowth) !== null
     ? null
@@ -86,6 +98,8 @@ async function fetchCandidateFundamentals(
     subIndustry: String(profile.industry ?? 'Unknown'),
     marketCap: number(profile.mktCap ?? profile.marketCap),
     peRatio: number(ratios.priceToEarningsRatioTTM ?? ratios.peRatioTTM ?? metrics.peRatioTTM),
+    forwardPe: forwardPriceToEarnings(price, selectedForwardEstimate),
+    forwardEstimateDate: selectedForwardEstimate?.date ?? null,
     priceToSales: number(ratios.priceToSalesRatioTTM ?? metrics.priceToSalesRatioTTM),
     returnOnEquity: percentValue(ratios.returnOnEquityTTM ?? metrics.roeTTM),
     netMargin: percentValue(ratios.netProfitMarginTTM ?? metrics.netIncomePerEBTTTM),
@@ -93,7 +107,7 @@ async function fetchCandidateFundamentals(
     revenueGrowth: percentValue(growth.growthRevenue ?? growth.revenueGrowth),
     earningsGrowth: percentValue(growth.growthNetIncome ?? growth.netIncomeGrowth),
     estimateGrowth,
-    nextEarningsDate: dateValue(profile.earningsAnnouncement ?? futureEstimate?.date),
+    nextEarningsDate,
     profileUrl: `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(symbol)}`,
     fundamentalsAsOf: now.toISOString(),
   }
@@ -348,7 +362,7 @@ export async function materializeCandidateScout(
   const groups = (groupRows ?? []).map((row) => normalizeGroup(row))
   const prefiltered = multiLanePrefilter(stocks, trackingBySymbol)
   const fundamentals = await Promise.all(prefiltered.map((stock) =>
-    fetchCandidateFundamentals(stock.symbol, apiKey, options.fetchImpl ?? fetch, now)))
+    fetchCandidateFundamentals(stock.symbol, stock.price, apiKey, options.fetchImpl ?? fetch, now)))
   const fundamentalsBySymbol = new Map(fundamentals.map((item) => [item.symbol, item]))
   const classified = prefiltered.map((stock) => {
     const item = fundamentalsBySymbol.get(stock.symbol)

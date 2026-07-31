@@ -29,8 +29,12 @@ export async function POST(request: Request) {
     const symbol = typeof body.symbol === 'string' ? body.symbol.trim().toUpperCase() : ''
     if (!/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol)) throw new Error('A valid symbol is required')
     const refresh = body.refresh === true
+    const parsedBaseVersion = Number(body.baseVersion)
+    const baseVersion = Number.isInteger(parsedBaseVersion) && parsedBaseVersion > 0
+      ? parsedBaseVersion
+      : null
     const jobType = 'generate-company-research' as const
-    const dedupeKey = `${jobType}:${user.id}:${symbol}:${new Date().toISOString().slice(0, 10)}${refresh ? ':refresh' : ''}`
+    const dedupeKey = `${jobType}:${user.id}:${symbol}:${new Date().toISOString().slice(0, 10)}${refresh ? `:refresh:v${baseVersion ?? 'latest'}` : ''}`
     if (user.id === 'local-development-user') {
       return NextResponse.json({ accepted: true, id: dedupeKey, deduplicated: false }, { status: 202 })
     }

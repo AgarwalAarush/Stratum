@@ -15,6 +15,8 @@ export interface CandidateFundamentals {
   subIndustry: string
   marketCap: number | null
   peRatio: number | null
+  forwardPe: number | null
+  forwardEstimateDate: string | null
   priceToSales: number | null
   returnOnEquity: number | null
   netMargin: number | null
@@ -84,6 +86,10 @@ function formatPercent(value: number | null): string {
 
 function formatMultiple(value: number | null): string {
   return finite(value) ? `${value.toFixed(1)}×` : 'Unavailable'
+}
+
+function formatEarningsMultiple(value: number | null): string {
+  return finite(value) && value > 0 ? `${value.toFixed(1)}×` : 'Not meaningful'
 }
 
 function selloffThreshold(
@@ -267,8 +273,8 @@ function candidateDimensions(
     {
       name: 'valuation',
       label: 'Valuation',
-      assessment: assessment(valuationValue, (v) => v > 0 && v <= 20, (v) => v <= 30, (v) => v <= 0 || v > 45),
-      evidence: `${formatMultiple(fundamentals.peRatio)} P/E · ${formatMultiple(fundamentals.priceToSales)} sales`,
+      assessment: assessment(valuationValue, (v) => v > 0 && v <= 20, (v) => v > 0 && v <= 30, (v) => v <= 0 || v > 45),
+      evidence: `${formatEarningsMultiple(fundamentals.peRatio)} trailing · ${formatEarningsMultiple(fundamentals.forwardPe)} next FY`,
     },
     {
       name: 'price_setup',
@@ -443,7 +449,9 @@ export function selectCandidateBriefs(
     const primary = signals.find((signal) => primaryKinds[primaryLane].includes(signal.kind)) ?? signals[0]!
     const redFlags = [
       dimensions.find((dimension) => dimension.name === 'valuation')?.assessment === 'caution'
-        ? `Valuation is elevated at ${formatMultiple(fundamentals.peRatio)} earnings.`
+        ? fundamentals.peRatio !== null && fundamentals.peRatio <= 0
+          ? 'Trailing earnings are negative, so P/E is not meaningful.'
+          : `Valuation is elevated at ${formatEarningsMultiple(fundamentals.peRatio)} earnings.`
         : null,
       dimensions.find((dimension) => dimension.name === 'risk')?.assessment === 'caution'
         ? `Leverage is elevated at ${fundamentals.debtToEquity?.toFixed(2)} debt/equity.`
@@ -483,8 +491,11 @@ export function selectCandidateBriefs(
         { label: 'vs 50-day average', value: formatPercent(stock.vs50DayAverage) },
         { label: 'Relative volume', value: finite(stock.relativeVolume) ? `${stock.relativeVolume.toFixed(1)}×` : 'Unavailable' },
         { label: 'Revenue growth', value: formatPercent(fundamentals.revenueGrowth) },
+        { label: 'Next FY P/E', value: formatEarningsMultiple(fundamentals.forwardPe) },
       ],
-      valuationSnapshot: `${formatMultiple(fundamentals.peRatio)} P/E and ${formatMultiple(fundamentals.priceToSales)} price/sales; compare against its own history and direct peers in full research.`,
+      forwardPe: fundamentals.forwardPe,
+      forwardEstimateDate: fundamentals.forwardEstimateDate,
+      valuationSnapshot: `${formatEarningsMultiple(fundamentals.peRatio)} trailing P/E, ${formatEarningsMultiple(fundamentals.forwardPe)} next-fiscal-year P/E, and ${formatMultiple(fundamentals.priceToSales)} price/sales; compare against its own history and direct peers in full research.`,
       dimensions,
       signals,
       evidence: [

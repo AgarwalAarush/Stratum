@@ -155,6 +155,91 @@
   margin-top: 7px;
 }
 
+.equity-research-revision {
+  border-bottom: 1px solid var(--market-border);
+  padding: 30px 0 34px;
+}
+
+.equity-research-revision > header {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+}
+
+.equity-research-revision h2 {
+  font-family: var(--font-instrument-serif), Georgia, serif;
+  font-size: 37px;
+  font-weight: 400;
+  margin: 5px 0 0;
+}
+
+.equity-research-revision[data-opinion-change="more_constructive"] h2 {
+  color: var(--market-green);
+}
+
+.equity-research-revision[data-opinion-change="less_constructive"] h2 {
+  color: var(--market-red);
+}
+
+.equity-research-revision > header > span,
+.equity-research-revision-grid > article > span,
+.equity-research-revision-grid small {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.equity-research-revision > p {
+  color: var(--market-text-dim);
+  font-size: 14px;
+  line-height: 1.65;
+  margin-top: 15px;
+  max-width: 900px;
+}
+
+.equity-research-revision-grid {
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 24px;
+}
+
+.equity-research-revision-grid > article {
+  border-bottom: 1px solid var(--market-border);
+  border-right: 1px solid var(--market-border);
+  padding: 17px 18px 19px 0;
+}
+
+.equity-research-revision-grid > article:nth-child(3n + 2),
+.equity-research-revision-grid > article:nth-child(3n + 3) {
+  padding-left: 18px;
+}
+
+.equity-research-revision-grid > article:nth-child(3n) {
+  border-right: 0;
+}
+
+.equity-research-revision-grid > article > div {
+  margin: 12px 0;
+}
+
+.equity-research-revision-grid p {
+  color: var(--market-text-dim);
+  font-size: 11px;
+  line-height: 1.45;
+  margin: 3px 0 9px;
+}
+
+.equity-research-revision-grid strong {
+  color: var(--market-text);
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
 .equity-research-debate-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -6386,6 +6471,91 @@ body:has(.markets-shell) {
   margin-top: 18px;
 }
 
+.stock-viewer-section-heading time {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 9px;
+}
+
+.stock-viewer-candidate-lead {
+  color: var(--market-text) !important;
+  font-size: 18px !important;
+  line-height: 1.5 !important;
+  max-width: 920px !important;
+}
+
+.stock-viewer-candidate-grid {
+  border-bottom: 1px solid var(--market-border);
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 28px;
+}
+
+.stock-viewer-candidate-grid > div {
+  border-right: 1px solid var(--market-border);
+  min-width: 0;
+  padding: 19px 20px 21px 0;
+}
+
+.stock-viewer-candidate-grid > div + div {
+  padding-left: 20px;
+}
+
+.stock-viewer-candidate-grid > div:last-child {
+  border-right: 0;
+}
+
+.stock-viewer-candidate-grid span,
+.stock-viewer-candidate-sources > span {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.stock-viewer-candidate-grid p,
+.stock-viewer-candidate-grid li,
+.stock-viewer-candidate-grid strong {
+  color: var(--market-text-dim);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.stock-viewer-candidate-grid ul {
+  list-style: disc;
+  margin: 11px 0 0;
+  padding-left: 16px;
+}
+
+.stock-viewer-candidate-grid p {
+  margin: 11px 0 9px;
+}
+
+.stock-viewer-candidate-grid strong {
+  color: var(--market-text);
+  display: block;
+  font-weight: 500;
+}
+
+.stock-viewer-candidate-numbers {
+  margin-top: 18px;
+}
+
+.stock-viewer-candidate-sources {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 25px;
+}
+
+.stock-viewer-candidate-sources a {
+  color: var(--market-accent);
+  font-size: 10px;
+}
+
 .stock-viewer-dimensions {
   display: grid;
   gap: 1px;
@@ -6532,6 +6702,23 @@ body:has(.markets-shell) {
 
 .stock-viewer-modal .stock-viewer-section {
   scroll-margin-top: 43px;
+}
+
+@media (max-width: 767px) {
+  .stock-viewer-candidate-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stock-viewer-candidate-grid > div,
+  .stock-viewer-candidate-grid > div + div {
+    border-bottom: 1px solid var(--market-border);
+    border-right: 0;
+    padding: 17px 0;
+  }
+
+  .stock-viewer-candidate-grid > div:last-child {
+    border-bottom: 0;
+  }
 }
 
 @media (max-width: 1260px) and (min-width: 768px) {
@@ -8005,6 +8192,17 @@ body:has(.equity-research-note) {
     grid-template-columns: 105px minmax(0, 1fr);
     min-height: 0;
     padding: 17px 0;
+  }
+
+  .equity-research-revision-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .equity-research-revision-grid > article,
+  .equity-research-revision-grid > article:nth-child(3n + 2),
+  .equity-research-revision-grid > article:nth-child(3n + 3) {
+    border-right: 0;
+    padding: 16px 0;
   }
 
   .equity-research-debate-grid > div:last-child {

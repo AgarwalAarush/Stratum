@@ -263,6 +263,8 @@ export interface CandidateBrief {
   whatChanged: string[]
   industryContext: string
   decisiveNumbers: Array<{ label: string; value: string }>
+  forwardPe?: number | null
+  forwardEstimateDate?: string | null
   valuationSnapshot: string
   dimensions: CandidateDimension[]
   signals: CandidateSignal[]
@@ -406,6 +408,14 @@ export interface CompanyPacketSource {
   asOf: string
 }
 
+export interface CompanyTranscript {
+  year: number
+  quarter: number
+  date: string
+  content: string
+  sourceId: string
+}
+
 export interface CompanySegmentValue {
   label: string
   revenue: number
@@ -442,6 +452,11 @@ export interface CompanyPacket {
     cashFlowQuarterly: Array<Record<string, string | number | boolean | null>>
   }
   ratios: Record<string, number | null>
+  forwardEstimate?: {
+    date: string
+    eps: number
+    forwardPe: number | null
+  } | null
   sentiment?: {
     gradesConsensus: Record<string, string | number | boolean | null>
     keyMetrics: Record<string, string | number | boolean | null>
@@ -451,6 +466,7 @@ export interface CompanyPacket {
     geographic: CompanySegmentPeriod[]
   }
   estimates: Array<Record<string, string | number | null>>
+  transcripts?: CompanyTranscript[]
   peers: string[]
   filings: Array<{ title: string; url: string; publishedAt: string }>
   events: Array<{ title: string; url: string; publishedAt: string; category: string }>
@@ -488,6 +504,26 @@ export interface EquityResearchSection {
   sourceIds: string[]
 }
 
+export type EquityResearchOpinionChange =
+  | 'initial'
+  | 'more_constructive'
+  | 'less_constructive'
+  | 'unchanged'
+
+export interface EquityResearchRevisionChange {
+  field: 'formal_rating' | 'entry_action' | 'fair_value' | 'investment_thesis' | 'key_debate' | 'kill_criteria' | 'evidence'
+  previous: string
+  current: string
+  explanation: string
+}
+
+export interface EquityResearchRevision {
+  priorVersion: number | null
+  opinionChange: EquityResearchOpinionChange
+  summary: string
+  changes: EquityResearchRevisionChange[]
+}
+
 export interface EquityResearchNote {
   id: string
   symbol: string
@@ -503,6 +539,7 @@ export interface EquityResearchNote {
   entryZoneLow: number | null
   entryZoneHigh: number | null
   confidence: number
+  revision: EquityResearchRevision
   sections: EquityResearchSection[]
   sourceIds: string[]
   provider: string

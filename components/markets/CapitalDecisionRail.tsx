@@ -108,7 +108,7 @@ export function CapitalDecisionRail({
       </dl>
       <button type="button" onClick={() => setEditing(true)}>Edit decision</button>
       <button type="button" className="capital-watchlist-button" onClick={addToWatchlist}>Add to watchlist</button>
-      <ResearchActionButton symbol={symbol} hasResearch={Boolean(research)} />
+      <ResearchActionButton symbol={symbol} hasResearch={Boolean(research)} currentVersion={research?.version} />
       {notice ? <small>{notice}</small> : null}
     </aside>
   )

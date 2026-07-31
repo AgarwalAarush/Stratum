@@ -146,6 +146,19 @@ function multiple(value: number | null | undefined): string {
   return value === null || value === undefined ? '—' : `${value.toFixed(1)}×`
 }
 
+function opinionChangeLabel(value: string): string {
+  return ({
+    initial: 'Initial view',
+    more_constructive: 'More constructive',
+    less_constructive: 'Less constructive',
+    unchanged: 'Opinion unchanged',
+  })[value] ?? value.replaceAll('_', ' ')
+}
+
+function revisionFieldLabel(value: string): string {
+  return value.replaceAll('_', ' ')
+}
+
 function statementDate(row: Record<string, unknown>): string {
   return String(row.date ?? row.calendarYear ?? row.fiscalYear ?? '')
 }
@@ -339,7 +352,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
         <div className="equity-research-header-actions">
           <Link href={`/markets/stocks/${symbol}`}>← Stock Viewer</Link>
           {research?.status === 'complete' ? <ResearchEvidenceToggle /> : null}
-          {research?.status === 'complete' ? <ResearchActionButton symbol={symbol} hasResearch /> : null}
+          {research?.status === 'complete' ? <ResearchActionButton symbol={symbol} hasResearch currentVersion={research.version} /> : null}
         </div>
       </header>
 
@@ -348,7 +361,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
           <p className="markets-eyebrow">{research?.status === 'failed' ? 'Last generation failed' : research ? 'Background job in progress' : 'No report yet'}</p>
           <h2>{research ? `Research version ${research.version} is ${research.status}.` : 'Generate the full, versioned equity-research report.'}</h2>
           {research?.error ? <p>{research.error}</p> : null}
-          <ResearchActionButton symbol={symbol} hasResearch={Boolean(research)} />
+          <ResearchActionButton symbol={symbol} hasResearch={Boolean(research)} currentVersion={research?.version} />
         </section>
       ) : (
         <>
@@ -359,6 +372,33 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
             <div><span>Base fair value</span><strong>{money(research.fairValue)}</strong><small>{research.fairValue ? `${percent((research.fairValue / stock.price - 1) * 100)} implied` : 'Not established'}</small></div>
             <div><span>Entry zone</span><strong>{research.entryZoneLow === null ? '—' : `${money(research.entryZoneLow)}–${money(research.entryZoneHigh)}`}</strong><small>Risk/reward threshold</small></div>
             <div><span>Conviction</span><strong>{confidence?.toFixed(0)}%</strong><small>Evidence confidence</small></div>
+          </section>
+
+          <section className="equity-research-revision" data-opinion-change={research.revision.opinionChange} aria-labelledby="research-revision-title">
+            <header>
+              <div>
+                <p className="markets-eyebrow">{research.revision.priorVersion ? `Updated from version ${research.revision.priorVersion}` : 'Initial evidence baseline'}</p>
+                <h2 id="research-revision-title">{opinionChangeLabel(research.revision.opinionChange)}</h2>
+              </div>
+              <span>Version {research.version}</span>
+            </header>
+            <p>{research.revision.summary}</p>
+            {research.revision.changes.length > 0 ? (
+              <div className="equity-research-revision-grid">
+                {research.revision.changes.map((change, index) => (
+                  <article key={`${change.field}-${index}`}>
+                    <span>{revisionFieldLabel(change.field)}</span>
+                    {change.previous || change.current ? (
+                      <div>
+                        <small>Before</small><p>{change.previous || '—'}</p>
+                        <small>Now</small><p>{change.current || '—'}</p>
+                      </div>
+                    ) : null}
+                    <strong>{change.explanation}</strong>
+                  </article>
+                ))}
+              </div>
+            ) : null}
           </section>
 
           <section className="equity-research-debate-grid" aria-label="Executive read">
@@ -406,6 +446,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
                 <div>
                   <dl>
                     <div><dt>P / E</dt><dd>{multiple(packet?.ratios.peRatio)}</dd></div>
+                    <div><dt>Next FY P / E</dt><dd>{multiple(packet?.forwardEstimate?.forwardPe ?? packet?.ratios.forwardPe)}</dd></div>
                     <div><dt>Price / sales</dt><dd>{multiple(packet?.ratios.priceToSales)}</dd></div>
                     <div><dt>EV / EBITDA</dt><dd>{multiple(packet?.ratios.enterpriseValueToEbitda)}</dd></div>
                     <div><dt>FCF yield</dt><dd>{percent(packet?.ratios.freeCashFlowYield, true)}</dd></div>
@@ -520,7 +561,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
 
               <footer className="equity-research-footer">
                 <span>Version {research.version} · {research.provider}/{research.model} · Generated {formatMarketDate(research.generatedAt)}</span>
-                <ResearchActionButton symbol={symbol} hasResearch />
+                <ResearchActionButton symbol={symbol} hasResearch currentVersion={research.version} />
               </footer>
             </div>
           </div>

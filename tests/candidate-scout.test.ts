@@ -39,6 +39,8 @@ function fundamentals(symbol: string): CandidateFundamentals {
     subIndustry: 'Software',
     marketCap: 10_000_000_000,
     peRatio: 22,
+    forwardPe: 18,
+    forwardEstimateDate: '2026-12-31',
     priceToSales: 4,
     returnOnEquity: 22,
     netMargin: 14,
@@ -109,6 +111,8 @@ test('Candidate Scout treats sharp weakness with resilient fundamentals as a dis
   assert.equal(brief?.primaryLane, 'dislocation')
   assert.equal(brief?.selloff.fiveDay, -9)
   assert.match(brief?.entryContext ?? '', /overreaction/)
+  assert.equal(brief?.forwardPe, 18)
+  assert.ok(brief?.decisiveNumbers.some((item) => item.label === 'Next FY P/E'))
 })
 
 test('accepted theses bypass momentum and quality gates when price weakness requires review', () => {

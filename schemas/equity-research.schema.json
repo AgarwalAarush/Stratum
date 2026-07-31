@@ -13,6 +13,7 @@
     "entryZoneLow",
     "entryZoneHigh",
     "confidence",
+    "revision",
     "sections",
     "sourceIds"
   ],
@@ -27,6 +28,44 @@
     "entryZoneLow": { "type": ["number", "null"] },
     "entryZoneHigh": { "type": ["number", "null"] },
     "confidence": { "type": "number", "minimum": 0, "maximum": 100 },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["priorVersion", "opinionChange", "summary", "changes"],
+      "properties": {
+        "priorVersion": { "type": ["integer", "null"], "minimum": 1 },
+        "opinionChange": {
+          "enum": ["initial", "more_constructive", "less_constructive", "unchanged"]
+        },
+        "summary": { "type": "string", "minLength": 1 },
+        "changes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["field", "previous", "current", "explanation"],
+            "properties": {
+              "field": {
+                "enum": [
+                  "formal_rating",
+                  "entry_action",
+                  "fair_value",
+                  "investment_thesis",
+                  "key_debate",
+                  "kill_criteria",
+                  "evidence"
+                ]
+              },
+              "previous": { "type": "string" },
+              "current": { "type": "string" },
+              "explanation": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
     "sections": {
       "type": "array",
       "minItems": 15,

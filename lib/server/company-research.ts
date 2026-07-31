@@ -1,11 +1,15 @@
 import type {
   CompanyPacket,
   CompanyPacketSource,
+  CompanyTranscript,
   EquityResearchNote,
+  EquityResearchRevision,
+  EquityResearchRevisionChange,
   EquityResearchSection,
   EquityResearchSectionId,
 } from '../markets/types.ts'
 import { normalizeCompanySegmentPeriods } from '../markets/company-segments.ts'
+import { forwardPriceToEarnings, selectForwardAnnualEstimate } from '../markets/valuation.ts'
 import { fetchFmpStableJson } from './fmp.ts'
 import { fetchLatestDecision } from './portfolio.ts'
 import { runCodexJson } from './codex-exec.ts'
@@ -62,6 +66,62 @@ interface SecSubmissionRecent {
   reportDate?: string[]
   form?: string[]
   primaryDocument?: string[]
+}
+
+type FmpRequest = <T>(
+  endpoint: string,
+  parameters?: Record<string, string | number>,
+) => Promise<T>
+
+function transcriptDate(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  return value.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? null
+}
+
+function transcriptContent(value: unknown): string {
+  const content = String(value ?? '').replace(/\u0000/g, '').trim()
+  if (content.length <= 45_000) return content
+  return `${content.slice(0, 25_000)}\n\n[Transcript middle omitted for packet size]\n\n${content.slice(-20_000)}`
+}
+
+function quarterEndDate(year: number, quarter: number): string {
+  return `${year}-${['03-31', '06-30', '09-30', '12-31'][quarter - 1]}`
+}
+
+async function fetchRecentEarningsTranscripts(
+  request: FmpRequest,
+): Promise<CompanyTranscript[]> {
+  const datesPayload = await request<unknown>('earning-call-transcript-dates')
+  const dates = records(datesPayload).flatMap((item) => {
+    const year = number(item.year ?? item.fiscalYear)
+    const quarter = number(item.quarter)
+    const date = transcriptDate(item.date ?? item.transcriptDate)
+    return year !== null
+      && Number.isInteger(year)
+      && quarter !== null
+      && Number.isInteger(quarter)
+      && quarter >= 1
+      && quarter <= 4
+      ? [{ year, quarter, date }]
+      : []
+  }).sort((left, right) =>
+    (right.date ?? `${right.year}-${right.quarter}`).localeCompare(left.date ?? `${left.year}-${left.quarter}`))
+    .slice(0, 2)
+
+  const settled = await Promise.allSettled(dates.map(async ({ year, quarter, date }) => {
+    const payload = await request<unknown>('earning-call-transcript', { year, quarter })
+    const row = records(payload)[0] ?? record(payload)
+    const content = transcriptContent(row.content ?? row.transcript)
+    if (!content) throw new Error(`Transcript ${year} Q${quarter} was empty`)
+    return {
+      year,
+      quarter,
+      date: transcriptDate(row.date ?? row.transcriptDate) ?? date ?? quarterEndDate(year, quarter),
+      content,
+      sourceId: `fmp-transcript-${year}-q${quarter}`,
+    } satisfies CompanyTranscript
+  }))
+  return settled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
 }
 
 async function fetchRecentSecFilings(
@@ -165,6 +225,7 @@ export async function materializeCompanyPacket(
     productSegmentsResult,
     geographicSegmentsResult,
     secFilings,
+    transcripts,
   ] = await Promise.all([
     request<unknown>('income-statement', { period: 'quarter', limit: 8 }).catch(() => []),
     request<unknown>('cash-flow-statement', { period: 'quarter', limit: 8 }).catch(() => []),
@@ -173,6 +234,7 @@ export async function materializeCompanyPacket(
     request<unknown>('revenue-product-segmentation', { period: 'annual', limit: 6 }).catch(() => []),
     request<unknown>('revenue-geographic-segmentation', { period: 'annual', limit: 6 }).catch(() => []),
     fetchRecentSecFilings(profile.cik).catch(() => []),
+    fetchRecentEarningsTranscripts(request).catch(() => []),
   ])
   const incomeAnnual = records(incomeResult).map(serializableRecord)
   const balanceAnnual = records(balanceResult).map(serializableRecord)
@@ -183,6 +245,11 @@ export async function materializeCompanyPacket(
   const gradesConsensus = serializableRecord(records(gradesResult)[0] ?? record(gradesResult))
   const productSegments = normalizeCompanySegmentPeriods(productSegmentsResult)
   const geographicSegments = normalizeCompanySegmentPeriods(geographicSegmentsResult)
+  const estimates = records(estimatesResult).map((item) =>
+    Object.fromEntries(Object.entries(serializableRecord(item)).flatMap(([key, value]) =>
+      typeof value === 'string' || typeof value === 'number' || value === null ? [[key, value]] : [])))
+  const forwardEstimate = selectForwardAnnualEstimate(estimates, now)
+  const forwardPe = forwardPriceToEarnings(stock.price, forwardEstimate)
   const filingsAndEvents = await supabase.from('feed_items').select('title,url,published_at,metadata,section')
     .eq('scope', 'markets').contains('metadata', { topic: `company:${symbol}` })
     .order('published_at', { ascending: false }).limit(50)
@@ -196,7 +263,15 @@ export async function materializeCompanyPacket(
     { id: 'alpaca-price-history', label: 'Alpaca price history', url: 'https://alpaca.markets/data', source: 'Alpaca', asOf: stock.asOf },
     { id: 'fmp-profile', label: 'FMP company profile', url: `https://financialmodelingprep.com/stable/profile?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
     { id: 'fmp-financials', label: 'FMP financial statements', url: `https://financialmodelingprep.com/stable/income-statement?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
+    { id: 'fmp-ratios', label: 'FMP trailing ratios', url: `https://financialmodelingprep.com/stable/ratios-ttm?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
     { id: 'fmp-estimates', label: 'FMP analyst estimates', url: `https://financialmodelingprep.com/stable/analyst-estimates?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
+    ...transcripts.map((transcript) => ({
+      id: transcript.sourceId,
+      label: `${symbol} ${transcript.year} Q${transcript.quarter} earnings-call transcript`,
+      url: `https://financialmodelingprep.com/stable/earning-call-transcript?symbol=${symbol}&year=${transcript.year}&quarter=${transcript.quarter}`,
+      source: 'FMP earnings transcript',
+      asOf: transcript.date,
+    })),
     ...(productSegments.length > 0 ? [{
       id: 'fmp-product-segments',
       label: 'FMP revenue by product',
@@ -237,7 +312,12 @@ export async function materializeCompanyPacket(
     id: '',
     symbol,
     version,
-    dataAsOf: [stock.asOf, ...items.map((item) => item.publishedAt), ...secFilings.map((item) => item.publishedAt)].sort().at(-1) ?? stock.asOf,
+    dataAsOf: [
+      stock.asOf,
+      ...items.map((item) => item.publishedAt),
+      ...secFilings.map((item) => item.publishedAt),
+      ...transcripts.map((item) => item.date),
+    ].sort().at(-1) ?? stock.asOf,
     generatedAt,
     priceHistory: {
       latestPrice: stock.price,
@@ -264,15 +344,18 @@ export async function materializeCompanyPacket(
       returnOnEquity: number(ratiosRaw.returnOnEquityTTM),
       netMargin: number(ratiosRaw.netProfitMarginTTM),
       debtToEquity: number(ratiosRaw.debtToEquityRatioTTM),
+      forwardPe,
     },
+    forwardEstimate: forwardEstimate
+      ? { ...forwardEstimate, forwardPe }
+      : null,
     sentiment: { gradesConsensus, keyMetrics },
     segmentRevenue: {
       product: productSegments,
       geographic: geographicSegments,
     },
-    estimates: records(estimatesResult).map((item) =>
-      Object.fromEntries(Object.entries(serializableRecord(item)).flatMap(([key, value]) =>
-        typeof value === 'string' || typeof value === 'number' || value === null ? [[key, value]] : []))),
+    estimates,
+    transcripts,
     peers,
     filings: [
       ...secFilings,
@@ -315,6 +398,7 @@ interface ResearchGeneration {
   entryZoneLow: number | null
   entryZoneHigh: number | null
   confidence: number
+  revision: EquityResearchRevision
   sections: EquityResearchSection[]
   sourceIds: string[]
 }
@@ -349,6 +433,48 @@ export function validateEquityResearch(value: unknown): ResearchGeneration {
   if (/^(?:BUY|HOLD|SELL|NOT_RATED)\b/.test(investmentThesis.trim())) {
     throw new Error('Investment thesis must state the belief rather than repeat the rating')
   }
+  const revisionRecord = record(output.revision)
+  const opinionChange = revisionRecord.opinionChange as EquityResearchRevision['opinionChange']
+  if (!['initial', 'more_constructive', 'less_constructive', 'unchanged'].includes(opinionChange)) {
+    throw new Error('Invalid research opinion change')
+  }
+  const priorVersion = revisionRecord.priorVersion === null
+    ? null
+    : number(revisionRecord.priorVersion)
+  if (priorVersion !== null && (!Number.isInteger(priorVersion) || priorVersion < 1)) {
+    throw new Error('Invalid prior research version')
+  }
+  if (typeof revisionRecord.summary !== 'string' || !revisionRecord.summary.trim()) {
+    throw new Error('Missing research revision summary')
+  }
+  const allowedChangeFields = new Set<EquityResearchRevisionChange['field']>([
+    'formal_rating',
+    'entry_action',
+    'fair_value',
+    'investment_thesis',
+    'key_debate',
+    'kill_criteria',
+    'evidence',
+  ])
+  const revisionChanges = Array.isArray(revisionRecord.changes)
+    ? revisionRecord.changes.map(record)
+    : []
+  if (revisionChanges.length < 1 || revisionChanges.length > 8) {
+    throw new Error('Research revision must contain 1-8 material changes')
+  }
+  const changes = revisionChanges.map((change) => {
+    const field = change.field as EquityResearchRevisionChange['field']
+    if (!allowedChangeFields.has(field)) throw new Error('Invalid research revision field')
+    if (typeof change.explanation !== 'string' || !change.explanation.trim()) {
+      throw new Error('Research revision change requires an explanation')
+    }
+    return {
+      field,
+      previous: String(change.previous ?? ''),
+      current: String(change.current ?? ''),
+      explanation: change.explanation,
+    }
+  })
   return {
     formalRating,
     entryAction,
@@ -360,6 +486,12 @@ export function validateEquityResearch(value: unknown): ResearchGeneration {
     entryZoneLow: number(output.entryZoneLow),
     entryZoneHigh: number(output.entryZoneHigh),
     confidence,
+    revision: {
+      priorVersion,
+      opinionChange,
+      summary: revisionRecord.summary,
+      changes,
+    },
     sections: sections.map((section) => ({
       id: section.id as EquityResearchSectionId,
       title: String(section.title),
@@ -370,10 +502,25 @@ export function validateEquityResearch(value: unknown): ResearchGeneration {
   }
 }
 
-function researchPrompt(packet: CompanyPacket): string {
+function researchPrompt(
+  packet: CompanyPacket,
+  priorResearch: EquityResearchNote | null,
+  reason: string,
+): string {
+  const revisionInstructions = priorResearch
+    ? [
+        `This is a refresh of research version ${priorResearch.version}, triggered by "${reason}". Treat the prior report as the analytical baseline.`,
+        'Preserve conclusions and section analysis that remain supported. Revise only where the new CompanyPacket adds, removes, or contradicts material evidence.',
+        'Compare the new formal rating, entry action, fair value, thesis, key debate, and kill criteria against the prior report. Do not manufacture a change when the evidence is unchanged.',
+        `Set revision.priorVersion to ${priorResearch.version}. Set revision.opinionChange to more_constructive, less_constructive, or unchanged. Summarize the net opinion change in plain English and list 1-8 material changes. If nothing material changed, use one evidence change explaining what was refreshed and why the opinion stayed unchanged.`,
+      ]
+    : [
+        'This is the initial report. Set revision.priorVersion to null, revision.opinionChange to initial, and include one evidence change explaining the initial evidence baseline.',
+      ]
   return [
     'Act as a senior equity research analyst. Create an institutional-quality GARP equity research note for a 12-month fair-value decision and 1-2 year ownership lens.',
     'Use only facts and source IDs present in the CompanyPacket. Never invent a current price, estimate, event, source, or citation.',
+    ...revisionInstructions,
     'Take a position, defend it with structured evidence, and state exactly what would prove it wrong. Commit or omit; do not use empty hedging language.',
     'Keep formal BUY/HOLD/SELL separate from the practical entry action.',
     'The investmentThesis field must be a concise affirmative, falsifiable ownership belief—not a question. In one or two sentences, state what the company can become or sustain, why the market is wrong now, and the 1-2 year mechanism that can close the gap. Do not merely restate the rating, fair value, or key debate.',
@@ -386,6 +533,7 @@ function researchPrompt(packet: CompanyPacket): string {
     'Keep factual, consensus, and analyst thinking distinct through natural attribution: write “reported data show” or “the latest filing shows” for facts, “consensus expects” for market expectations, “our view” for analysis, and “in our base case” for assumptions. For auditability, prefix each distinct claim paragraph with **FACT:**, **CONSENSUS:**, **VIEW:** or **ESTIMATE:**. The application strips these internal markers in its default memo view and exposes them only in Evidence mode.',
     'Attach supporting CompanyPacket source IDs only through each section sourceIds array and the report sourceIds array. Never print bracketed source IDs inside prose. Never imply a claim is sourced if the supporting source is absent.',
     'Financial Profile must analyze the available 6-8 quarter history and call out growth, margin, cash-flow, balance-sheet, and share-count inflections.',
+    'Earnings-call transcripts are management commentary, not audited fact. When transcripts are present, compare guidance, operating priorities, demand commentary, and changed language across the two most recent calls; attribute claims to management.',
     'Business Model & Moat must cover revenue mechanics, customer value, geographic/FX exposure, concentration, switching costs, and a none/narrow/wide moat judgment.',
     'When segmentRevenue is present, Business Model & Moat must identify which product or service lines drive revenue, growth, and mix shifts. Do not confuse product revenue categories with reportable operating segments or imply segment profit data that the packet does not contain.',
     'Valuation must reconcile growth assumptions with the current multiple and perform a reverse-DCF-style implied-expectations analysis. If inputs are inadequate, explicitly say which calculation cannot be completed.',
@@ -394,6 +542,8 @@ function researchPrompt(packet: CompanyPacket): string {
     'Kill Criteria must contain 3-5 specific numeric thresholds or observable events—not vibes.',
     'When evidence is unavailable (TAM, 13F, short interest, options, geographic mix, unit economics, etc.), say “Not available in the current packet” and explain what source would be required.',
     'If evidence is inadequate, say so explicitly and use NOT_RATED or wait rather than filling gaps.',
+    '',
+    priorResearch ? `PRIOR RESEARCH VERSION ${priorResearch.version}:\n${JSON.stringify(priorResearch)}` : 'PRIOR RESEARCH: none',
     '',
     JSON.stringify(packet),
   ].join('\n')
@@ -408,23 +558,32 @@ export async function generateFullEquityResearch(
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required for research ownership')
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  await onProgress?.(15, 'Collecting company evidence')
+  const priorResearch = await fetchLatestCompletedEquityResearch(ownerId, symbol)
+  await onProgress?.(15, priorResearch ? `Refreshing version ${priorResearch.version} evidence` : 'Collecting company evidence')
   const packet = await materializeCompanyPacket(symbol, ownerId)
   await onProgress?.(45, 'Company packet assembled')
   const version = await nextVersion('equity_research_notes', ownerId, symbol)
-  const { data: noteRecord, error: createError } = await supabase.from('equity_research_notes').insert({
+  const notePayload = {
     symbol,
     owner_id: ownerId,
     company_packet_id: packet.id,
     version,
     status: 'running',
     data_as_of: packet.dataAsOf,
+  }
+  let createResult = await supabase.from('equity_research_notes').insert({
+    ...notePayload,
+    previous_research_note_id: priorResearch?.id ?? null,
   }).select('id').single()
+  if (createResult.error?.message.includes('previous_research_note_id')) {
+    createResult = await supabase.from('equity_research_notes').insert(notePayload).select('id').single()
+  }
+  const { data: noteRecord, error: createError } = createResult
   if (createError || !noteRecord) throw new Error(`Unable to create research version: ${createError?.message ?? 'unknown error'}`)
   try {
     await onProgress?.(55, 'Synthesizing 15-section analysis')
     const result = await runCodexJson({
-      prompt: researchPrompt(packet),
+      prompt: researchPrompt(packet, priorResearch, reason),
       schemaPath: 'schemas/equity-research.schema.json',
       validate: validateEquityResearch,
       timeoutMs: 20 * 60 * 1_000,
@@ -496,6 +655,32 @@ function normalizeResearch(row: Record<string, unknown>): EquityResearchNote {
     entryZoneLow: number(content.entryZoneLow),
     entryZoneHigh: number(content.entryZoneHigh),
     confidence: Number(content.confidence ?? 0),
+    revision: (() => {
+      const revision = record(content.revision)
+      const changes = Array.isArray(revision.changes) ? revision.changes.map(record) : []
+      return {
+        priorVersion: revision.priorVersion === null
+          ? null
+          : number(revision.priorVersion) ?? (Number(row.version) > 1 ? Number(row.version) - 1 : null),
+        opinionChange: ['initial', 'more_constructive', 'less_constructive', 'unchanged'].includes(String(revision.opinionChange))
+          ? revision.opinionChange as EquityResearchRevision['opinionChange']
+          : Number(row.version) > 1 ? 'unchanged' : 'initial',
+        summary: String(revision.summary ?? (Number(row.version) > 1
+          ? 'Legacy refresh did not include a structured opinion-change summary.'
+          : 'Initial research baseline.')),
+        changes: changes.flatMap((change) => {
+          const field = String(change.field) as EquityResearchRevisionChange['field']
+          return ['formal_rating', 'entry_action', 'fair_value', 'investment_thesis', 'key_debate', 'kill_criteria', 'evidence'].includes(field)
+            ? [{
+                field,
+                previous: String(change.previous ?? ''),
+                current: String(change.current ?? ''),
+                explanation: String(change.explanation ?? ''),
+              }]
+            : []
+        }),
+      }
+    })(),
     sections: Array.isArray(content.sections) ? content.sections as EquityResearchSection[] : [],
     sourceIds: Array.isArray(content.sourceIds) ? content.sourceIds.filter((item): item is string => typeof item === 'string') : [],
     provider: String(row.provider ?? ''),
@@ -521,6 +706,19 @@ export async function fetchLatestEquityResearch(ownerId: string, symbol: string)
   if (!supabase || !validOwnerId(ownerId)) return null
   const { data } = await supabase.from('equity_research_notes').select('*').eq('owner_id', ownerId).eq('symbol', symbol)
     .order('version', { ascending: false }).limit(1).maybeSingle()
+  return data ? normalizeResearch(data) : null
+}
+
+async function fetchLatestCompletedEquityResearch(ownerId: string, symbol: string): Promise<EquityResearchNote | null> {
+  const supabase = getSupabaseClient()
+  if (!supabase || !validOwnerId(ownerId)) return null
+  const { data } = await supabase.from('equity_research_notes').select('*')
+    .eq('owner_id', ownerId)
+    .eq('symbol', symbol)
+    .eq('status', 'complete')
+    .order('version', { ascending: false })
+    .limit(1)
+    .maybeSingle()
   return data ? normalizeResearch(data) : null
 }
 

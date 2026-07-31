@@ -44,12 +44,12 @@ export function StockViewer({ data }: { data: StockViewerData }) {
             <span>{money(data.price)}</span>
             <span className={(data.dailyChange ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{percent(data.dailyChange)}</span>
           </div>
-          <MarketsIntentLink
+          <a
             className="stock-viewer-research-button"
             href={`/markets/stocks/${data.symbol}/research`}
           >
             Full equity research
-          </MarketsIntentLink>
+          </a>
         </div>
         <div className="stock-viewer-provenance">
           <span>{data.feed === 'delayed_sip' ? 'Delayed SIP' : data.feed.toUpperCase()}</span>
@@ -58,7 +58,15 @@ export function StockViewer({ data }: { data: StockViewerData }) {
       </header>
 
       <nav className="stock-viewer-outline" aria-label={`${data.symbol} page sections`}>
-        {['Overview', 'Financials', 'Valuation', 'Industry Context', 'Earnings', 'Events'].map((section) => (
+        {[
+          'Overview',
+          ...(candidate ? ['Candidate Brief'] : []),
+          'Financials',
+          'Valuation',
+          'Industry Context',
+          'Earnings',
+          'Events',
+        ].map((section) => (
           <a key={section} href={`#${section.toLowerCase().replaceAll(' ', '-')}`}>{section}</a>
         ))}
       </nav>
@@ -76,6 +84,45 @@ export function StockViewer({ data }: { data: StockViewerData }) {
               <div><span>52-week position</span><strong>{data.fiftyTwoWeekPosition === null ? '—' : `${data.fiftyTwoWeekPosition.toFixed(0)}%`}</strong></div>
             </div>
           </section>
+
+          {candidate ? (
+            <section className="stock-viewer-section stock-viewer-candidate-brief" id="candidate-brief" aria-labelledby="candidate-brief-title">
+              <div className="stock-viewer-section-heading">
+                <div>
+                  <p className="markets-eyebrow">Candidate Scout · partial brief · {candidate.primaryLane.replaceAll('_', ' ')}</p>
+                  <h2 id="candidate-brief-title">Why {data.symbol} was surfaced</h2>
+                </div>
+                <time dateTime={candidate.generatedAt}>{new Date(candidate.generatedAt).toLocaleDateString()}</time>
+              </div>
+              <p className="stock-viewer-candidate-lead">{candidate.whySurfaced}</p>
+              <div className="stock-viewer-candidate-grid">
+                <div>
+                  <span>What changed</span>
+                  <ul>{candidate.whatChanged.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul>
+                </div>
+                <div>
+                  <span>Question before acting</span>
+                  <p>{candidate.entryContext}</p>
+                  <strong>{candidate.nextResearchQuestion}</strong>
+                </div>
+                <div>
+                  <span>Lightweight risk check</span>
+                  <ul>{candidate.redFlags.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul>
+                </div>
+              </div>
+              <div className="stock-viewer-stat-grid stock-viewer-candidate-numbers">
+                {candidate.decisiveNumbers.slice(0, 6).map((item) => (
+                  <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong></div>
+                ))}
+              </div>
+              <footer className="stock-viewer-candidate-sources">
+                <span>Screening evidence—not a completed investment opinion.</span>
+                {candidate.evidence.map((item) => (
+                  <a key={item.url} href={item.url} target="_blank" rel="noreferrer">{item.label} ↗</a>
+                ))}
+              </footer>
+            </section>
+          ) : null}
 
           <section className="stock-viewer-section stock-viewer-thesis" aria-labelledby="stock-thesis-title">
             <div className="stock-viewer-section-heading">
@@ -116,11 +163,20 @@ export function StockViewer({ data }: { data: StockViewerData }) {
               {packet ? (
                 <div className="stock-viewer-stat-grid">
                   <div><span>P/E</span><strong>{multiple(packet.ratios.peRatio)}</strong></div>
+                  <div><span>Next FY P/E</span><strong>{multiple(packet.forwardEstimate?.forwardPe ?? packet.ratios.forwardPe ?? candidate?.forwardPe)}</strong></div>
                   <div><span>Price / sales</span><strong>{multiple(packet.ratios.priceToSales)}</strong></div>
                   <div><span>Return on equity</span><strong>{percent(packet.ratios.returnOnEquity === null ? null : packet.ratios.returnOnEquity * 100)}</strong></div>
                   <div><span>Net margin</span><strong>{percent(packet.ratios.netMargin === null ? null : packet.ratios.netMargin * 100)}</strong></div>
                 </div>
-              ) : <p>{candidate?.valuationSnapshot ?? 'Current and historical valuation context will appear after the CompanyPacket is materialized.'}</p>}
+              ) : candidate ? (
+                <>
+                  <div className="stock-viewer-stat-grid">
+                    <div><span>Next FY P/E</span><strong>{multiple(candidate.forwardPe)}</strong></div>
+                    <div><span>Estimate period</span><strong>{candidate.forwardEstimateDate ?? '—'}</strong></div>
+                  </div>
+                  <p>{candidate.valuationSnapshot}</p>
+                </>
+              ) : <p>Current and historical valuation context will appear after the CompanyPacket is materialized.</p>}
             </section>
 
             <section className="stock-viewer-section stock-viewer-section-compact" id="industry-context">
