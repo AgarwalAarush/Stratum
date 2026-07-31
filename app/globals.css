@@ -1539,6 +1539,64 @@
   margin: 7px 0 3px;
 }
 
+.thesis-stock-destinations {
+  display: inline-block;
+  position: relative;
+}
+
+.thesis-stock-destinations summary {
+  align-items: center;
+  color: var(--market-text);
+  cursor: pointer;
+  display: inline-flex;
+  gap: 6px;
+  list-style: none;
+  outline-offset: 4px;
+}
+
+.thesis-stock-destinations summary::-webkit-details-marker {
+  display: none;
+}
+
+.thesis-stock-destinations summary span {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 140ms ease;
+}
+
+.thesis-stock-destinations[open] summary span {
+  transform: rotate(180deg);
+}
+
+.thesis-stock-destinations-menu {
+  background: var(--market-bg);
+  border: 1px solid var(--market-border);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--market-text) 12%, transparent);
+  display: grid;
+  left: 0;
+  min-width: 150px;
+  padding: 4px;
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 4;
+}
+
+.thesis-stock-destinations-menu a {
+  color: var(--market-text);
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 12px;
+  padding: 8px 9px;
+  white-space: nowrap;
+}
+
+.thesis-stock-destinations-menu a:hover,
+.thesis-stock-destinations-menu a:focus-visible {
+  background: var(--market-surface);
+  outline: none;
+}
+
 .thesis-proposal header small,
 .thesis-proposal time,
 .thesis-library-item small,

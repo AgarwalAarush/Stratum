@@ -80,6 +80,14 @@ test('thesis proposal dates use a deterministic market timezone for hydration', 
   assert.doesNotMatch(workspace, /generatedAt\)\.toLocaleDateString/)
 })
 
+test('stock thesis tickers offer canonical stock and equity-research destinations', async () => {
+  const workspace = await readFile(new URL('../components/markets/ThesisWorkspace.tsx', import.meta.url), 'utf8')
+  assert.match(workspace, /function StockDestinationMenu/)
+  assert.match(workspace, /href=\{`\/markets\/stocks\/\$\{normalizedSymbol\}`\}/)
+  assert.match(workspace, /href=\{`\/markets\/stocks\/\$\{normalizedSymbol\}\/research`\}/)
+  assert.match(workspace, /<StockDestinationMenu symbol=\{thesis\.symbol\} \/>/)
+})
+
 test('legacy question-led thesis records render an affirmative belief and preserve the debate separately', () => {
   const thesis = normalizeThesisContent({
     headline: 'Can margins expand fast enough?',

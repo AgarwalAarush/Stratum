@@ -68,6 +68,26 @@ function coverageLabel(monitor: ThesisMonitor): string {
   return monitor.coverage.map((item) => labels[item] ?? item).join(' · ')
 }
 
+function StockDestinationMenu({ symbol }: { symbol: string }) {
+  const normalizedSymbol = symbol.toUpperCase()
+
+  return (
+    <details className="thesis-stock-destinations">
+      <summary aria-label={`Choose a destination for ${normalizedSymbol}`}>
+        {normalizedSymbol}<span aria-hidden="true">⌄</span>
+      </summary>
+      <div className="thesis-stock-destinations-menu">
+        <MarketsIntentLink href={`/markets/stocks/${normalizedSymbol}`}>
+          Stock page
+        </MarketsIntentLink>
+        <MarketsIntentLink href={`/markets/stocks/${normalizedSymbol}/research`}>
+          Equity research
+        </MarketsIntentLink>
+      </div>
+    </details>
+  )
+}
+
 export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceData }) {
   const [proposals, setProposals] = useState(initialData.proposals)
   const [accepted, setAccepted] = useState(initialData.accepted)
@@ -292,7 +312,7 @@ export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceD
             {proposals.map((thesis) => (
               <article key={thesis.id} className="thesis-proposal">
                 <header className="thesis-proposal-identity">
-                  <div><span>{thesis.entityType === 'stock' ? 'Stock thesis' : 'Industry thesis'}</span><h3>{title(thesis)}</h3><small>{label(thesis)}<br />proposed v{thesis.version}</small></div>
+                  <div><span>{thesis.entityType === 'stock' ? 'Stock thesis' : 'Industry thesis'}</span><h3>{thesis.symbol ? <StockDestinationMenu symbol={thesis.symbol} /> : title(thesis)}</h3><small>{label(thesis)}<br />proposed v{thesis.version}</small></div>
                   <time dateTime={thesis.generatedAt}>{proposalDate(thesis.generatedAt)}</time>
                 </header>
                 <div className="thesis-proposal-copy">
@@ -321,7 +341,7 @@ export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceD
             {accepted.map((thesis) => {
               const monitor = monitorByEntity.get(thesis.entityKey)
               return <article key={thesis.id} className="thesis-library-item">
-                <header><div><span>{thesis.entityType === 'stock' ? 'Stock' : 'Industry'}</span><h3>{title(thesis)}</h3></div><small>v{thesis.version}</small></header>
+                <header><div><span>{thesis.entityType === 'stock' ? 'Stock' : 'Industry'}</span><h3>{thesis.symbol ? <StockDestinationMenu symbol={thesis.symbol} /> : title(thesis)}</h3></div><small>v{thesis.version}</small></header>
                 <strong className="thesis-library-statement">{thesis.content.headline}</strong>
                 <p>{thesis.content.summary}</p>
                 {monitor ? (
@@ -346,7 +366,7 @@ export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceD
                   <div><span>Catalysts</span>{list(thesis.content.catalysts).map((item) => <p key={item}>{item}</p>)}</div>
                   <div><span>Invalidation</span>{list(thesis.content.invalidation).map((item) => <p key={item}>{item}</p>)}</div>
                 </div>
-                {thesis.symbol ? <MarketsIntentLink href={`/markets/stocks/${thesis.symbol}`}>Open {thesis.symbol} dossier →</MarketsIntentLink> : <small>{label(thesis)}</small>}
+                {thesis.symbol ? null : <small>{label(thesis)}</small>}
               </article>
             })}
           </div>
