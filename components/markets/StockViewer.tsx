@@ -27,10 +27,20 @@ function multiple(value: number | null | undefined): string {
   return value === null || value === undefined ? '—' : `${value.toFixed(1)}×`
 }
 
+function hasHistoryFor(data: StockViewerData, days: number): boolean {
+  const oldest = data.history[0]
+  if (!oldest) return false
+  const cutoff = new Date(data.dataAsOf)
+  if (!Number.isFinite(cutoff.getTime())) return false
+  cutoff.setUTCDate(cutoff.getUTCDate() - days + 7)
+  const oldestDate = new Date(`${oldest.tradingDate}T00:00:00.000Z`)
+  return Number.isFinite(oldestDate.getTime()) && oldestDate <= cutoff
+}
+
 export function StockViewer({ data }: { data: StockViewerData }) {
   const metric = {
-    return30d: data.return30d ?? data.leadership?.return30d ?? null,
-    return1y: data.return1y ?? data.leadership?.return1y ?? null,
+    return30d: hasHistoryFor(data, 30) ? data.return30d ?? data.leadership?.return30d ?? null : null,
+    return1y: hasHistoryFor(data, 365) ? data.return1y ?? data.leadership?.return1y ?? null : null,
     vs50DayAverage: data.fiftyDayAverage === null || data.fiftyDayAverage === 0
       ? data.leadership?.vs50DayAverage ?? null
       : (data.price / data.fiftyDayAverage - 1) * 100,
