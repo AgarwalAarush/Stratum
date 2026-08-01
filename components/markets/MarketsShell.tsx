@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ArrowClockwise, List, X } from '@phosphor-icons/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { StockSearch } from './StockSearch'
 
 const MARKET_NAV_ITEMS = [
   { href: '/markets', label: 'Overview' },
@@ -102,6 +103,7 @@ export function MarketsShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="markets-status">
+          <StockSearch />
           <button
             type="button"
             className="markets-icon-button"
