@@ -425,32 +425,5 @@ export async function materializeCandidateScout(
     })), { onConflict: 'candidate_id,kind,material_key' })
     if (signalError) throw new Error(`Unable to persist candidate signals for ${brief.symbol}: ${signalError.message}`)
   }
-  const [{ data: marketUsers }, { data: watchlistOwners }, { data: positionOwners }, { data: portfolioOwners }] = await Promise.all([
-    supabase.from('market_users').select('id'),
-    supabase.from('market_watchlists').select('owner_id').not('owner_id', 'is', null),
-    supabase.from('manual_positions').select('owner_id'),
-    supabase.from('portfolios').select('owner_id'),
-  ])
-  const owners = new Set([
-    ...(marketUsers ?? []).map((row) => row.id),
-    ...(watchlistOwners ?? []).map((row) => row.owner_id),
-    ...(positionOwners ?? []).map((row) => row.owner_id),
-    ...(portfolioOwners ?? []).map((row) => row.owner_id),
-  ].filter((owner): owner is string => typeof owner === 'string'))
-  for (const ownerId of owners) {
-    const { error } = await supabase.from('decision_inbox_items').upsert(briefs.map((brief) => ({
-      owner_id: ownerId,
-      item_type: 'new_candidate',
-      symbol: brief.symbol,
-      title: brief.primaryLane === 'leadership'
-        ? `${brief.symbol} surfaced in Candidate Scout`
-        : `${brief.symbol} selloff requires investment review`,
-      summary: brief.whySurfaced,
-      evidence: brief.evidence,
-      dedupe_key: `candidate:${brief.id}`,
-      occurred_at: brief.generatedAt,
-    })), { onConflict: 'owner_id,dedupe_key', ignoreDuplicates: true })
-    if (error) throw new Error(`Unable to publish candidate inbox items: ${error.message}`)
-  }
   return briefs
 }

@@ -25,6 +25,7 @@ interface MarketsWatchlistsProps {
   universe: ScreenerResponse
   initialState?: MarketWatchlistState
   migrateLocalOnMount?: boolean
+  embedded?: boolean
 }
 
 function formatPrice(value: number): string {
@@ -62,7 +63,7 @@ function nextListId(): string {
     : `list-${Date.now()}`
 }
 
-export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount = false }: MarketsWatchlistsProps) {
+export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount = false, embedded = false }: MarketsWatchlistsProps) {
   const fallbackState = useMemo(
     () => createDefaultWatchlistState(universe.rows.map((row) => row.symbol)),
     [universe.rows],
@@ -216,11 +217,11 @@ export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount 
   }
 
   return (
-    <section className="market-watchlists" aria-labelledby="market-watchlists-title">
-      <header className="market-screener-heading market-watchlists-heading">
+    <section className={`market-watchlists${embedded ? ' market-watchlists-embedded' : ''}`} aria-labelledby="market-watchlists-title">
+      {!embedded ? <header className="market-screener-heading market-watchlists-heading">
         <h1 id="market-watchlists-title" className="markets-display">Watchlists</h1>
         <p>{feedLabel(universe.feed)} data · As of {formatMarketTime(universe.dataAsOf)}{universe.stale ? ' · Stale' : ''} · {persistence === 'server' ? 'Saved privately' : 'Local fallback'}</p>
-      </header>
+      </header> : <h2 id="market-watchlists-title" className="sr-only">Watchlists</h2>}
 
       <div className="market-watchlist-toolbar">
         <nav className="market-watchlist-tabs" aria-label="Saved watchlists">

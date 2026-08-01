@@ -2,16 +2,41 @@
 
 import { FormEvent, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { CaretDown, Check, Plus } from '@phosphor-icons/react'
 import { formatEntryAction } from '@/lib/markets/research-presentation'
 import { parsePortfolioUpdate, type ParsedPortfolioUpdate } from '@/lib/markets/portfolio-updates'
 import { MarketsIntentLink } from './MarketsIntentLink'
-import { MarketsWatchlists } from './MarketsWatchlists'
-import type { PortfolioWorkspaceData, ScreenerResponse } from '@/lib/markets/types'
+import { MarketSparkline } from './MarketSparkline'
+import type { PortfolioHolding, PortfolioWorkspaceData, ScreenerResponse, ScreenerRow } from '@/lib/markets/types'
 
-type PortfolioView = 'watchlists' | 'ideas' | 'owned' | 'decision-inbox' | 'history'
+type PortfolioView = 'owned' | 'alerts' | 'history'
 
 function formatMoney(value: number | null): string {
   return value === null ? '—' : value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+}
+
+function formatPrice(value: number | null): string {
+  return value === null ? '—' : value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function formatPercent(value: number | null): string {
+  return value === null ? '—' : `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+}
+
+function weightedReturn(holdings: PortfolioHolding[], rows: Map<string, ScreenerRow>, key: 'dailyChange' | 'return30d' | 'return90d' | 'returnYtd' | 'return1y'): number | null {
+  const eligible = holdings.flatMap((holding) => {
+    const row = rows.get(holding.symbol)
+    const weight = holding.currentValue ?? holding.totalCost
+    const value = row?.[key]
+    return value === null || value === undefined || weight <= 0 ? [] : [{ weight, value }]
+  })
+  const totalWeight = eligible.reduce((total, item) => total + item.weight, 0)
+  return totalWeight === 0 ? null : eligible.reduce((total, item) => total + item.weight * item.value, 0) / totalWeight
+}
+
+function asOf(value: string | undefined): string {
+  if (!value) return '—'
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(value))
 }
 
 export function PortfolioWorkspace({
@@ -22,10 +47,11 @@ export function PortfolioWorkspace({
   universe: ScreenerResponse
 }) {
   const router = useRouter()
-  const [view, setView] = useState<PortfolioView>('watchlists')
+  const [view, setView] = useState<PortfolioView>('owned')
   const portfolios = initialData.portfolios
-  const portfolioTransactions = initialData.portfolioTransactions
   const [activePortfolioId, setActivePortfolioId] = useState(initialData.portfolios[0]?.account.id ?? '')
+  const [portfolioPickerOpen, setPortfolioPickerOpen] = useState(false)
+  const [recordingOpen, setRecordingOpen] = useState(false)
   const [updateMode, setUpdateMode] = useState<'form' | 'language'>('form')
   const [structuredAction, setStructuredAction] = useState<ParsedPortfolioUpdate['action']>('buy')
   const [instruction, setInstruction] = useState('')
@@ -135,61 +161,67 @@ export function PortfolioWorkspace({
     setNotice(`${symbol} decision review saved.`)
   }
 
-  const decisions = initialData.decisions
-  const ideas = decisions.filter((decision) => decision.disposition !== 'own')
   const priceBySymbol = new Map(universe.rows.map((row) => [row.symbol, row.price]))
+  const rowBySymbol = new Map(universe.rows.map((row) => [row.symbol, row]))
   const reviewByDecision = new Map(reviews.map((review) => [review.decisionId, review]))
+  const performance = activePortfolio ? [
+    ['Today', weightedReturn(activePortfolio.holdings, rowBySymbol, 'dailyChange')],
+    ['30D', weightedReturn(activePortfolio.holdings, rowBySymbol, 'return30d')],
+    ['3M', weightedReturn(activePortfolio.holdings, rowBySymbol, 'return90d')],
+    ['YTD', weightedReturn(activePortfolio.holdings, rowBySymbol, 'returnYtd')],
+    ['1Y', weightedReturn(activePortfolio.holdings, rowBySymbol, 'return1y')],
+  ] as const : []
+  const activeAlerts = activePortfolio
+    ? inbox.filter((item) => item.portfolioId === activePortfolio.account.id)
+    : []
   return (
     <section className="portfolio-workspace">
       <header className="market-explore-heading">
-        <div><p className="markets-eyebrow">Manual state · no brokerage execution</p><h1 className="markets-display">Portfolio</h1></div>
-        <span>{inbox.length} actionable items</span>
+        <div><p className="markets-eyebrow">Capital allocation workspace</p><h1 className="markets-display">Portfolio</h1></div>
+        <div className="portfolio-heading-actions">
+          <div className="portfolio-picker">
+            <span>Active portfolio</span>
+            <button type="button" aria-haspopup="listbox" aria-expanded={portfolioPickerOpen} onClick={() => setPortfolioPickerOpen((open) => !open)}>
+              <strong>{activePortfolio?.account.name ?? 'Choose a portfolio'}</strong><CaretDown size={15} weight="bold" />
+            </button>
+            {portfolioPickerOpen ? <div className="portfolio-picker-menu" role="listbox" aria-label="Active portfolio">
+              {portfolios.map((portfolio) => <button key={portfolio.account.id} type="button" role="option" aria-selected={portfolio.account.id === activePortfolioId} onClick={() => {
+                setActivePortfolioId(portfolio.account.id)
+                setPortfolioPickerOpen(false)
+              }}>
+                <span>{portfolio.account.name}</span>{portfolio.account.id === activePortfolioId ? <Check size={15} weight="bold" /> : null}
+              </button>)}
+            </div> : null}
+          </div>
+          <button type="button" className="portfolio-record-trigger" aria-expanded={recordingOpen} onClick={() => setRecordingOpen((open) => !open)}><Plus size={14} weight="bold" /> Record update</button>
+        </div>
       </header>
-      <section className="portfolio-account-switcher" aria-label="Portfolio selection">
-        <label>
-          Active portfolio
-          <select value={activePortfolioId} onChange={(event) => setActivePortfolioId(event.target.value)}>
-            {portfolios.map((portfolio) => <option key={portfolio.account.id} value={portfolio.account.id}>{portfolio.account.name}</option>)}
-          </select>
-        </label>
-        {activePortfolio ? <div className="portfolio-account-summary">
-          <span><small>Opening fund</small>{formatMoney(activePortfolio.account.initialFunds)}</span>
-          <span><small>Cash</small>{formatMoney(activePortfolio.cashBalance)}</span>
-          <span><small>Market value</small>{formatMoney(activePortfolio.marketValue)}</span>
-          <span><small>Unrealized P&amp;L</small>{formatMoney(activePortfolio.unrealizedPnl)}</span>
-        </div> : <p className="portfolio-empty-state">Portfolio records will appear after the database migration is applied.</p>}
-      </section>
       <nav className="market-portfolio-tabs" aria-label="Portfolio workflow">
         {([
-          ['watchlists', 'Watchlists'],
-          ['ideas', 'Ideas'],
           ['owned', 'Owned'],
-          ['decision-inbox', 'Decision Inbox'],
+          ['alerts', 'Alerts'],
           ['history', 'History'],
         ] as const).map(([id, label]) => (
           <button key={id} type="button" aria-current={view === id ? 'page' : undefined} onClick={() => setView(id)}>{label}</button>
         ))}
       </nav>
-      {view === 'watchlists' ? (
-        <MarketsWatchlists
-          universe={universe}
-          initialState={initialData.watchlists}
-          migrateLocalOnMount={!initialData.watchlistsPersisted}
-        />
-      ) : null}
-      {view === 'ideas' ? (
-        <div className="portfolio-record-list">
-          {ideas.length === 0 ? <p>No classified ideas yet. Save a Stock Viewer decision as Watch or Avoid.</p> : ideas.map((decision) => (
-            <MarketsIntentLink key={decision.id} href={`/markets/stocks/${decision.symbol}`}>
-              <strong>{decision.symbol}</strong><span>{decision.disposition} · {decision.formalRating} · {formatEntryAction(decision.entryAction)}</span>
-            </MarketsIntentLink>
-          ))}
-        </div>
-      ) : null}
       {view === 'owned' ? (
-        <div className="portfolio-owned-layout">
-          <div className="portfolio-update-panel">
-            <div className="portfolio-update-heading"><p className="markets-eyebrow">Record an update</p><h2>{activePortfolio?.account.name ?? 'Portfolio'}</h2></div>
+        <div className="portfolio-owned-workspace">
+          {activePortfolio ? <>
+            <section className="portfolio-owned-overview" aria-label={`${activePortfolio.account.name} overview`}>
+              <div className="portfolio-value-summary">
+                <div><span>Portfolio value</span><strong>{formatMoney(activePortfolio.totalValue)}</strong></div>
+                <div><span>Equities</span><strong>{formatMoney(activePortfolio.marketValue)}</strong></div>
+                <div><span>Cash</span><strong>{formatMoney(activePortfolio.cashBalance)}</strong></div>
+                <div><span>Unrealized P&amp;L</span><strong className={(activePortfolio.unrealizedPnl ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{formatMoney(activePortfolio.unrealizedPnl)}</strong></div>
+              </div>
+              <div className="portfolio-performance-grid" aria-label="Market performance by holding weight">
+                {performance.map(([label, value]) => <div key={label}><span>{label}</span><strong className={value === null ? '' : value >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(value)}</strong></div>)}
+              </div>
+              <p>Weighted from the current market snapshot · {universe.feed === 'illustrative' ? 'Illustrative' : 'Market'} data as of {asOf(universe.dataAsOf)}</p>
+            </section>
+            {recordingOpen ? <section className="portfolio-update-panel" aria-label="Record a portfolio update">
+            <div className="portfolio-update-heading"><p className="markets-eyebrow">Record an update</p><h2>{activePortfolio.account.name}</h2></div>
             <div className="portfolio-update-mode" role="group" aria-label="Update method">
               <button type="button" aria-pressed={updateMode === 'form'} onClick={() => setUpdateMode('form')}>Enter transaction</button>
               <button type="button" aria-pressed={updateMode === 'language'} onClick={() => setUpdateMode('language')}>Use natural language</button>
@@ -216,22 +248,23 @@ export function PortfolioWorkspace({
               <div><button type="button" onClick={() => void recordPortfolioUpdate(preview, 'natural_language')}>Confirm and record</button><button type="button" onClick={() => setPreview(null)}>Edit</button></div>
             </div> : null}
             {notice ? <p className="portfolio-update-notice" role="status">{notice}</p> : null}
-          </div>
-          <div className="portfolio-position-list">
-            <div className="portfolio-position-list-heading"><div><p className="markets-eyebrow">Calculated holdings</p><h2>{activePortfolio?.holdings.length ?? 0} positions</h2></div><span>{activePortfolio?.marketValue === null ? 'Quotes incomplete' : `Value ${formatMoney(activePortfolio?.marketValue ?? null)}`}</span></div>
-            {activePortfolio?.holdings.length ? activePortfolio.holdings.map((holding) => (
-              <MarketsIntentLink key={holding.symbol} href={`/markets/stocks/${holding.symbol}`}>
-                <strong>{holding.symbol}</strong>
-                <span>{holding.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })} shares · {formatMoney(holding.costBasisPerShare)} basis · {holding.currentPrice === null ? 'No current quote' : `${formatMoney(holding.currentValue)} value`}</span>
-              </MarketsIntentLink>
-            )) : <p>No holdings recorded for this portfolio yet.</p>}
-            {portfolioTransactions.filter((transaction) => transaction.portfolioId === activePortfolioId).length > 0 ? <div className="portfolio-recent-transactions"><p className="markets-eyebrow">Recent ledger</p>{portfolioTransactions.filter((transaction) => transaction.portfolioId === activePortfolioId).slice(-5).reverse().map((transaction) => <p key={transaction.id}>{transaction.occurredAt} · {transaction.action.replaceAll('_', ' ')}{transaction.symbol ? ` ${transaction.symbol}` : ''}</p>)}</div> : null}
-          </div>
+            </section> : null}
+            <section className="portfolio-holdings-table-section">
+              <header><div><p className="markets-eyebrow">Owned</p><h2>{activePortfolio.holdings.length} positions</h2></div><span>{activePortfolio.marketValue === null ? 'Some quotes are unavailable' : `${formatMoney(activePortfolio.marketValue)} in equities`}</span></header>
+              <div className="market-watchlist-table-wrap scrollbar-none">
+                <table className="market-screen-table portfolio-holdings-table">
+                  <thead><tr><th>Symbol</th><th>Company</th><th>Price</th><th>Change</th><th>Shares</th><th>Value</th><th>Gain</th><th>Range</th><th>50D MA</th><th>52W position</th><th>As of</th></tr></thead>
+                  <tbody>{activePortfolio.holdings.length === 0 ? <tr><td colSpan={11} className="market-watchlist-empty"><strong>No holdings recorded for this portfolio.</strong><span>Use Record update to add a position or cash movement.</span></td></tr> : activePortfolio.holdings.map((holding) => <PortfolioHoldingRow key={holding.symbol} holding={holding} row={rowBySymbol.get(holding.symbol)} />)}</tbody>
+                </table>
+              </div>
+            </section>
+          </> : <p className="portfolio-empty-state">Portfolio records will appear after the database migration is applied.</p>}
         </div>
       ) : null}
-      {view === 'decision-inbox' ? (
-        <div className="decision-inbox-list">
-          {inbox.length === 0 ? <p>Nothing requires a decision right now.</p> : inbox.map((item) => (
+      {view === 'alerts' ? (
+        <div className="decision-inbox-list portfolio-alert-list">
+          <header><div><p className="markets-eyebrow">Tracking</p><h2>{activePortfolio?.account.name ?? 'Portfolio'} alerts</h2></div><span>{activeAlerts.length} open</span></header>
+          {activeAlerts.length === 0 ? <p className="portfolio-alert-empty">No open alerts for this portfolio. Material company events and position-level thesis thresholds will appear here.</p> : activeAlerts.map((item) => (
             <article key={item.id}>
               <div><span>{item.type.replaceAll('_', ' ')}</span><time>{new Date(item.occurredAt).toLocaleString()}</time></div>
               <h2>{item.symbol
@@ -285,5 +318,25 @@ export function PortfolioWorkspace({
         </div>
       ) : null}
     </section>
+  )
+}
+
+function PortfolioHoldingRow({ holding, row }: { holding: PortfolioHolding; row: ScreenerRow | undefined }) {
+  const gain = holding.unrealizedPnl
+  const gainPercent = holding.totalCost === 0 || gain === null ? null : (gain / holding.totalCost) * 100
+  return (
+    <tr>
+      <td><MarketsIntentLink className="market-symbol-button" href={`/markets/stocks/${holding.symbol}`} scroll={false}>{holding.symbol}</MarketsIntentLink></td>
+      <td>{row?.company ?? 'No company data in the current snapshot'}</td>
+      <td>{formatPrice(holding.currentPrice ?? row?.price ?? null)}</td>
+      <td className={(row?.dailyChange ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(row?.dailyChange ?? null)}</td>
+      <td>{holding.quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
+      <td>{formatMoney(holding.currentValue)}</td>
+      <td className={gain === null ? '' : gain >= 0 ? 'market-positive' : 'market-negative'}>{gainPercent === null ? '—' : `${formatMoney(gain)} · ${formatPercent(gainPercent)}`}</td>
+      <td>{row ? <MarketSparkline values={row.range} label={`${holding.symbol} intraday range`} /> : '—'}</td>
+      <td>{formatPrice(row?.fiftyDayAverage ?? null)}</td>
+      <td>{row ? <div className="market-52-week-cell"><span>{row.fiftyTwoWeekPosition}%</span><span className="market-52-week-track"><i style={{ left: `${row.fiftyTwoWeekPosition}%` }} /></span></div> : '—'}</td>
+      <td>{asOf(row?.asOf)}</td>
+    </tr>
   )
 }

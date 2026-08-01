@@ -36,17 +36,41 @@ test('multi-portfolio migration seeds Personal and a separate $100k Dad portfoli
   assert.match(sql, /'robinhood-holdings-2026-07-30-'/)
 })
 
-test('portfolio UI supports switching portfolios, structured entries, and confirmation for natural language', async () => {
+test('portfolio UI defaults to owned holdings and scopes alerts to the active portfolio', async () => {
   const [component, route, repository] = await Promise.all([
     readFile(new URL('../components/markets/PortfolioWorkspace.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../app/api/markets/portfolio/route.ts', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/portfolio.ts', import.meta.url), 'utf8'),
   ])
   assert.match(component, /Active portfolio/)
+  assert.match(component, /aria-haspopup="listbox"/)
+  assert.match(component, /Portfolio value/)
+  assert.match(component, /\['30D'/)
+  assert.match(component, /Record update/)
+  assert.doesNotMatch(component, /\['watchlists', 'Watchlists'\]/)
+  assert.doesNotMatch(component, /\['ideas', 'Ideas'\]/)
+  assert.match(component, /item\.portfolioId === activePortfolio\.account\.id/)
+  assert.match(component, /portfolio-alert-list/)
   assert.match(component, /Use natural language/)
   assert.match(component, /Confirm and record/)
   assert.match(route, /record-portfolio-update/)
   assert.match(route, /parsePortfolioUpdate/)
   assert.match(repository, /recordPortfolioTransaction/)
   assert.match(repository, /Cannot sell/)
+})
+
+test('portfolio alert migration excludes ideation and scopes retained alerts to a portfolio', async () => {
+  const sql = await readFile(new URL('../supabase/migrations/202607310005_portfolio_alerts.sql', import.meta.url), 'utf8')
+  assert.match(sql, /add column if not exists portfolio_id uuid/i)
+  assert.match(sql, /decision_inbox_portfolio_open/i)
+  assert.match(sql, /item_type not in \('new_candidate', 'thesis_refresh'\)/i)
+  assert.match(sql, /delete from public\.decision_inbox_items/i)
+})
+
+test('portfolio monitoring derives alerts from open position lots, not watchlists or candidates', async () => {
+  const monitoring = await readFile(new URL('../lib/server/research-monitoring.ts', import.meta.url), 'utf8')
+  assert.match(monitoring, /portfolio_transactions/)
+  assert.match(monitoring, /portfolio_id: item\.portfolioId/)
+  assert.match(monitoring, /portfolio_id: trackedName\.portfolioId/)
+  assert.doesNotMatch(monitoring, /market_watchlist_items/)
 })

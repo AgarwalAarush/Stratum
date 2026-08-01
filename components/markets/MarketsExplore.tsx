@@ -3,9 +3,11 @@
 import { useState } from 'react'
 import { MarketsIntentLink } from './MarketsIntentLink'
 import { MarketsScreener } from './MarketsScreener'
+import { MarketsWatchlists } from './MarketsWatchlists'
 import type { MarketGroupMetric, MarketLeadershipSnapshot, ScreenerResponse } from '@/lib/markets/types'
+import type { MarketWatchlistState } from '@/lib/markets/watchlists'
 
-type ExploreView = 'stocks' | 'sectors' | 'sub-industries'
+type ExploreView = 'stocks' | 'sectors' | 'sub-industries' | 'watchlists'
 
 function percent(value: number | null): string {
   return value === null ? '—' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
@@ -90,10 +92,14 @@ export function MarketsExplore({
   initialView,
   screener,
   leadership,
+  watchlists,
+  watchlistsPersisted,
 }: {
   initialView: ExploreView
   screener: ScreenerResponse
   leadership: MarketLeadershipSnapshot | null
+  watchlists?: MarketWatchlistState
+  watchlistsPersisted?: boolean
 }) {
   return (
     <section className="market-explore">
@@ -109,11 +115,19 @@ export function MarketsExplore({
           ['stocks', 'Stocks'],
           ['sectors', 'Sectors'],
           ['sub-industries', 'Sub-industries'],
+          ['watchlists', 'Watchlists'],
         ] as const).map(([id, label]) => (
           <MarketsIntentLink key={id} href={`/markets/explore?view=${id}`} aria-current={initialView === id ? 'page' : undefined}>{label}</MarketsIntentLink>
         ))}
       </nav>
-      {initialView === 'stocks' ? <MarketsScreener initialResponse={screener} /> : (
+      {initialView === 'stocks' ? <MarketsScreener initialResponse={screener} /> : initialView === 'watchlists' ? (
+        <MarketsWatchlists
+          embedded
+          universe={screener}
+          initialState={watchlists}
+          migrateLocalOnMount={!watchlistsPersisted}
+        />
+      ) : (
         <GroupTable
           groups={initialView === 'sectors' ? leadership?.sectors ?? [] : leadership?.subIndustries ?? []}
           leadership={leadership}

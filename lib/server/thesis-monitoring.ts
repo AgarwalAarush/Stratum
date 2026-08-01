@@ -158,7 +158,6 @@ export async function monitorInvestmentTheses(now = new Date()): Promise<{
     if (error) throw new Error(`Unable to update stock thesis monitor: ${error.message}`)
   }))
 
-  let industryAlerts = 0
   for (const monitor of industryMonitors) {
     const thesis = thesisById.get(monitor.thesis_id)!
     if (!latestLeadership || !thesis.sub_industry) continue
@@ -181,7 +180,6 @@ export async function monitorInvestmentTheses(now = new Date()): Promise<{
       }
       const signals = evaluateIndustryThesisSignals(previousIndustryState(monitor.last_state), current)
       if (signals.length > 0) {
-        const severity = signals.some((signal) => signal.severity === 'urgent') ? 'urgent' : 'attention'
         const evidence = [{
           label: `${thesis.sub_industry} market leadership`,
           url: '/markets',
@@ -200,22 +198,6 @@ export async function monitorInvestmentTheses(now = new Date()): Promise<{
           evaluated_at: checkedAt,
         }, { onConflict: 'monitor_id,data_fingerprint', ignoreDuplicates: true })
         if (runError) throw new Error(runError.message)
-        const { data: alert, error: alertError } = await supabase.from('decision_inbox_items').upsert({
-          owner_id: thesis.owner_id,
-          item_type: 'thesis_refresh',
-          symbol: null,
-          title: `${thesis.sub_industry} thesis requires attention`,
-          summary: signals.map((signal) => signal.summary).join(' '),
-          evidence,
-          investment_thesis_id: thesis.id,
-          thesis_monitor_id: monitor.id,
-          entity_key: thesis.entity_key,
-          severity,
-          dedupe_key: `thesis-monitor:${monitor.id}:${fingerprint}`,
-          occurred_at: latestLeadership.data_as_of,
-        }, { onConflict: 'owner_id,dedupe_key', ignoreDuplicates: true }).select('id').maybeSingle()
-        if (alertError) throw new Error(alertError.message)
-        if (alert) industryAlerts += 1
       }
       const { error: updateError } = await supabase.from('thesis_monitors').update({
         last_state: current,
@@ -242,7 +224,7 @@ export async function monitorInvestmentTheses(now = new Date()): Promise<{
     activeMonitors: monitors.length,
     stockMonitors: stockMonitors.length,
     industryMonitors: industryMonitors.length,
-    alerts: research.eventAlerts + research.decisionAlerts + industryAlerts,
+    alerts: research.eventAlerts + research.decisionAlerts,
     researchJobs: research.researchJobs,
   }
 }

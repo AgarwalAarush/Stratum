@@ -654,6 +654,7 @@ export interface PortfolioAccountSummary {
 
 export interface DecisionInboxItem {
   id: string
+  portfolioId: string | null
   type: 'new_candidate' | 'thesis_refresh' | 'entry_zone_arrival' | 'catalyst' | 'kill_criterion_breach'
   symbol: string | null
   title: string

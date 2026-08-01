@@ -48,20 +48,22 @@ test('watchlist updates stay scoped to the active list', () => {
   assert.equal(isValidWatchlistSymbol('bad ticker'), false)
 })
 
-test('legacy watchlists route redirects into the private Portfolio workflow', () => {
+test('watchlists live inside Explore and the legacy route preserves the destination', () => {
   const legacyPage = readFileSync(join(process.cwd(), 'app/markets/watchlists/page.tsx'), 'utf8')
-  const page = readFileSync(join(process.cwd(), 'app/markets/portfolio/page.tsx'), 'utf8')
+  const page = readFileSync(join(process.cwd(), 'app/markets/explore/page.tsx'), 'utf8')
   const component = readFileSync(join(process.cwd(), 'components/markets/MarketsWatchlists.tsx'), 'utf8')
+  const explore = readFileSync(join(process.cwd(), 'components/markets/MarketsExplore.tsx'), 'utf8')
   const workspace = readFileSync(join(process.cwd(), 'components/markets/PortfolioWorkspace.tsx'), 'utf8')
-  assert.match(legacyPage, /redirect\('\/markets\/portfolio\?view=watchlists'\)/)
-  assert.match(page, /<PortfolioWorkspace initialData=/)
-  assert.match(workspace, /<MarketsWatchlists\s+universe=/)
+  assert.match(legacyPage, /redirect\('\/markets\/explore\?view=watchlists'\)/)
+  assert.match(page, /fetchPortfolioWorkspace/)
+  assert.match(explore, /\['watchlists', 'Watchlists'\]/)
+  assert.match(explore, /<MarketsWatchlists/)
   assert.match(component, /localStorage\.setItem\(WATCHLIST_STORAGE_KEY/)
   assert.match(component, /replace-watchlists/)
   assert.match(component, /createList/)
   assert.match(component, /removeSymbol/)
   assert.match(component, /Search symbol or company/)
-  assert.match(workspace, /Decision Inbox/)
+  assert.match(workspace, /portfolio-alert-list/)
   assert.match(workspace, /initialData\.decisionHistory\.map/)
 })
 
