@@ -24,11 +24,13 @@ function formatPercent(value: number | null): string {
 export function StockSearch() {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
+  const activeResultRef = useRef<HTMLButtonElement>(null)
   const previousFocus = useRef<HTMLElement | null>(null)
   const controllerRef = useRef<AbortController | null>(null)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<StockSearchResult[]>([])
+  const [activeIndex, setActiveIndex] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -49,6 +51,7 @@ export function StockSearch() {
     setOpen(false)
     setQuery('')
     setResults([])
+    setActiveIndex(0)
     setError('')
   }, [])
 
@@ -83,6 +86,10 @@ export function StockSearch() {
   }, [open])
 
   useEffect(() => {
+    activeResultRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [activeIndex, results])
+
+  useEffect(() => {
     if (!open || !query.trim()) return
     const timeout = window.setTimeout(() => {
       controllerRef.current?.abort()
@@ -98,6 +105,7 @@ export function StockSearch() {
         .then((response) => {
           if (controller.signal.aborted) return
           setResults(response.results)
+          setActiveIndex(0)
           const exactTicker = response.results.find((result) =>
             result.symbol === query.trim().toUpperCase() && !result.screenable)
           if (exactTicker) void requestCoverage(exactTicker.symbol)
@@ -125,6 +133,7 @@ export function StockSearch() {
   }
 
   const updateQuery = (value: string) => {
+    setActiveIndex(0)
     if (!value.trim()) {
       controllerRef.current?.abort()
       setResults([])
@@ -158,23 +167,47 @@ export function StockSearch() {
               value={query}
               onChange={(event) => updateQuery(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && results[0]) {
+                if (event.key === 'ArrowDown' && results.length > 0) {
                   event.preventDefault()
-                  openStock(results[0])
+                  setActiveIndex((current) => (current + 1) % results.length)
+                  return
+                }
+                if (event.key === 'ArrowUp' && results.length > 0) {
+                  event.preventDefault()
+                  setActiveIndex((current) => (current - 1 + results.length) % results.length)
+                  return
+                }
+                if (event.key === 'Enter' && results[activeIndex]) {
+                  event.preventDefault()
+                  openStock(results[activeIndex])
                 }
               }}
               placeholder="Ticker or company name"
               aria-describedby="markets-stock-search-help"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={results.length > 0}
+              aria-controls="markets-stock-search-results"
+              aria-activedescendant={results[activeIndex] ? `markets-stock-search-result-${results[activeIndex].symbol}` : undefined}
             />
-            <p id="markets-stock-search-help" className="markets-stock-search-help">Enter opens the Stock Viewer. Research opens the full equity research page.</p>
-            <div className="markets-stock-search-results" aria-live="polite">
+            <p id="markets-stock-search-help" className="markets-stock-search-help">Use ↑ ↓ to choose a stock. Enter opens the Stock Viewer.</p>
+            <div id="markets-stock-search-results" className="markets-stock-search-results" role="listbox" aria-live="polite">
               {!query.trim() ? <p>Search the current market universe by ticker or company.</p> : null}
               {loading ? <p>Searching current market data…</p> : null}
               {error ? <p role="alert">{error}</p> : null}
               {!loading && !error && query.trim() && results.length === 0 ? <p>No matching stock in the current universe.</p> : null}
-              {results.map((result) => (
+              {results.map((result, index) => (
                 <article key={result.symbol}>
-                  <button type="button" className="markets-stock-search-result" onClick={() => openStock(result)}>
+                  <button
+                    ref={index === activeIndex ? activeResultRef : undefined}
+                    id={`markets-stock-search-result-${result.symbol}`}
+                    type="button"
+                    className="markets-stock-search-result"
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    onMouseMove={() => setActiveIndex(index)}
+                    onClick={() => openStock(result)}
+                  >
                     <span className="markets-stock-search-identity"><strong>{result.symbol}</strong><span>{result.company}</span></span>
                     <span className="markets-stock-search-quote"><strong>{formatPrice(result.price)}</strong><span className={result.dailyChange === null ? '' : result.dailyChange >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(result.dailyChange)}</span></span>
                   </button>
@@ -184,7 +217,7 @@ export function StockSearch() {
                 </article>
               ))}
             </div>
-            <footer><span>Esc</span> close <span>↵</span> open Stock Viewer</footer>
+            <footer><span>Esc</span> close <span>↑ ↓</span> choose <span>↵</span> open Stock Viewer</footer>
           </section>
         </div>
       ) : null}

@@ -5474,7 +5474,8 @@ body:has(.markets-shell) {
 }
 
 .markets-stock-search-result:hover,
-.markets-stock-search-result:focus-visible { background: var(--market-surface); }
+.markets-stock-search-result:focus-visible,
+.markets-stock-search-result[aria-selected="true"] { background: var(--market-surface); }
 
 .markets-stock-search-identity,
 .markets-stock-search-quote { display: flex; flex-direction: column; min-width: 0; }
