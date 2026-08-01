@@ -452,9 +452,22 @@ async function loadPersistedMarketOverview(): Promise<MarketOverviewResponse | n
   const record = data as MarketHomeRecord
   const overview = normalizeMarketOverview(record.content)
   if (!overview || overview.dataAsOf !== snapshot.data_as_of) return null
+
+  // The after-close leadership and Candidate Scout jobs complete after the
+  // overview snapshot is first written. Rehydrate those independently so a
+  // visitor on a weekend sees the last completed trading session, rather than
+  // an otherwise-valid Friday overview that was persisted a few minutes early.
+  const [leadership, candidates, candidateWeeklySummary] = await Promise.all([
+    fetchLatestMarketLeadershipSummary(),
+    fetchLatestCandidates(),
+    fetchLatestCandidateWeeklySummary(),
+  ])
   return {
     ...overview,
     stale: isStale(record.data_as_of),
+    leadership: leadership ?? overview.leadership,
+    candidates: candidates.length > 0 ? candidates : overview.candidates,
+    candidateWeeklySummary: candidateWeeklySummary ?? overview.candidateWeeklySummary,
   }
 }
 

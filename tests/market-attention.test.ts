@@ -50,7 +50,7 @@ test('market attention surfaces participation, names, group motion, and a diverg
   assert.ok(items.some((item) => item.id === 'group-sector-Information Technology'))
   assert.ok(items.some((item) => item.id === 'divergence-semis'))
   assert.match(items.find((item) => item.id === 'leading-INTC')?.detail ?? '', /relative volume/)
-  assert.equal(items.find((item) => item.id === 'participation')?.title, "Today's market is weaker than the intermediate trend")
+  assert.equal(items.find((item) => item.id === 'participation')?.title, "Latest session's market is weaker than the intermediate trend")
   assert.equal(items.find((item) => item.id === 'leading-INTC')?.title, 'INTC is lifting the market')
   assert.equal(items.find((item) => item.id === 'falling-XYZ')?.title, 'XYZ is weighing on the market')
 })

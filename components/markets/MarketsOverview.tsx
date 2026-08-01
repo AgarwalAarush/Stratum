@@ -49,6 +49,16 @@ function formatEvidenceTime(value: string): string {
   }).format(new Date(value))
 }
 
+function tradingSessionLabel(value: string | undefined): string {
+  if (!value) return 'Latest session'
+  const date = new Date(`${value}T12:00:00.000Z`)
+  if (Number.isNaN(date.getTime())) return 'Latest session'
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'long',
+  }).format(date)
+}
+
 function formatInstrumentTime(value: string, dataStatus: MarketOverviewResponse['instruments'][number]['dataStatus']): string {
   const options: Intl.DateTimeFormatOptions = dataStatus === 'end_of_day'
     ? { timeZone: 'America/New_York', month: 'short', day: 'numeric' }
@@ -64,7 +74,8 @@ function dataStatusLabel(value: MarketOverviewResponse['instruments'][number]['d
 
 export function MarketsOverview({ overview }: MarketsOverviewProps) {
   const [selectedEvidenceId, setSelectedEvidenceId] = useState(overview.evidence[0]?.id ?? '')
-  const attention = buildMarketAttention(overview.leadership)
+  const sessionLabel = tradingSessionLabel(overview.leadership?.tradingDate)
+  const attention = buildMarketAttention(overview.leadership, sessionLabel)
   const checkpoints = buildMarketCheckpoints(overview.leadership)
 
   return (
@@ -148,7 +159,7 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
           <div className="market-section-heading">
             <div>
               <p className="markets-eyebrow">Hermes market structure</p>
-              <h2 id="market-structure-title">Today&apos;s Market Structure</h2>
+              <h2 id="market-structure-title">{sessionLabel}&apos;s Market Structure</h2>
             </div>
             <MarketsIntentLink href="/markets/explore?view=sub-industries">Explore all groups →</MarketsIntentLink>
           </div>
@@ -159,7 +170,7 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
           </div>
           <div className="market-structure-columns">
             <div>
-              <h3>Leading sub-industries <span>Today</span></h3>
+              <h3>Leading sub-industries <span>{sessionLabel}</span></h3>
               {overview.leadership.subIndustries.slice(0, 5).map((group) => (
                 <MarketsIntentLink key={`${group.sector}-${group.label}`} href={`/markets/explore?view=sub-industries&group=${encodeURIComponent(group.label)}`}>
                   <span>{group.label}</span>
@@ -186,7 +197,7 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
               <div className="market-section-heading">
                 <div>
                   <p className="markets-eyebrow">Market attention</p>
-                  <h2 id="market-attention-title">What deserves context now</h2>
+                  <h2 id="market-attention-title">{sessionLabel}&apos;s action items</h2>
                 </div>
                 <MarketsIntentLink href="/markets/events">View events →</MarketsIntentLink>
               </div>

@@ -8,6 +8,7 @@ import { materializeCrossAssetSnapshot } from './cross-asset.ts'
 import { materializeCandidateScout } from './candidate-scout.ts'
 import { materializeCandidateWeeklySummary } from './candidate-weekly-summary.ts'
 import { materializeMarketLeadership } from './market-leadership.ts'
+import { materializeMarketHomeSnapshot } from './market-home.ts'
 import { generateFullEquityResearch } from './company-research.ts'
 import { scanResearchRefreshes } from './research-monitoring.ts'
 import { monitorInvestmentTheses } from './thesis-monitoring.ts'
@@ -343,6 +344,7 @@ async function executeJob(
 
   if (job.job_type === 'materialize-market-leadership') {
     const leadership = await materializeMarketLeadership()
+    await materializeMarketHomeSnapshot()
     await enqueueAgentJob(
       'run-candidate-scout',
       { leadershipSnapshotId: leadership.id, tradingDate: leadership.tradingDate },
