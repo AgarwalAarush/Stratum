@@ -61,6 +61,7 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
 
 test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('sync-market-assets'), 'alpaca')
+  assert.equal(agentJobProvider('sync-robinhood-portfolio'), 'robinhood')
   assert.equal(agentJobProvider('refresh-market-screener'), 'alpaca')
   assert.equal(agentJobProvider('prune-market-data'), 'market-data')
   assert.equal(agentJobProvider('refresh-fmp-intelligence'), 'fmp')
@@ -87,6 +88,12 @@ test('provider work respects slow off-hours dedupe buckets', () => {
       mode: 'daily',
     }),
     'refresh-market-screener:daily:2026-07-29',
+  )
+  assert.equal(
+    buildAgentJobDedupeKey('sync-robinhood-portfolio', new Date('2026-08-03T13:22:00Z'), {
+      tradingDate: '2026-08-03', slot: 'open',
+    }),
+    'sync-robinhood-portfolio:2026-08-03:open',
   )
 })
 

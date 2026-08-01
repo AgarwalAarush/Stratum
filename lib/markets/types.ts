@@ -650,6 +650,8 @@ export interface PortfolioAccountSummary {
   totalValue: number | null
   unrealizedPnl: number | null
   holdings: PortfolioHolding[]
+  dataSource: 'ledger' | 'robinhood'
+  dataAsOf: string | null
 }
 
 export interface DecisionInboxItem {
