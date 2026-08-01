@@ -15,6 +15,7 @@ import { materializeMarketMemo } from './market-memo.ts'
 import { pruneMarketData } from './market-retention.ts'
 import { refreshExpandedMarketUniverse, resolveMarketUniverse } from './market-universe.ts'
 import { getFmpUsageSnapshot, type FmpUsageSnapshot } from './fmp.ts'
+import { syncRobinhoodPortfolio, type RobinhoodSyncSlot } from './robinhood-portfolio-sync.ts'
 import {
   fetchPersistedMarketAssets,
   materializeAlpacaScreener,
@@ -25,6 +26,7 @@ import { getSupabaseClient } from './supabase.ts'
 
 export const AGENT_JOB_TYPES = [
   'sync-market-assets',
+  'sync-robinhood-portfolio',
   'refresh-market-screener',
   'prune-market-data',
   'refresh-cross-asset',
@@ -43,7 +45,7 @@ export const AGENT_JOB_TYPES = [
 ] as const
 
 export type AgentJobType = typeof AGENT_JOB_TYPES[number]
-export type AgentJobProvider = 'alpaca' | 'fmp' | 'codex' | 'market-data'
+export type AgentJobProvider = 'alpaca' | 'fmp' | 'codex' | 'market-data' | 'robinhood'
 
 interface AgentJobRecord {
   id: string
@@ -91,6 +93,9 @@ export function parseAgentJobType(value: unknown): AgentJobType {
 }
 
 export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), payload: Record<string, unknown> = {}): string {
+  if (jobType === 'sync-robinhood-portfolio' && typeof payload.tradingDate === 'string' && typeof payload.slot === 'string') {
+    return `${jobType}:${payload.tradingDate}:${payload.slot}`
+  }
   if (jobType === 'generate-market-memo' && typeof payload.snapshotId === 'string') return `${jobType}:${payload.snapshotId}`
   if (jobType === 'refresh-market-screener') {
     if (payload.mode === 'daily') return `${jobType}:daily:${now.toISOString().slice(0, 10)}`
@@ -146,6 +151,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
 }
 
 export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
+  if (jobType === 'sync-robinhood-portfolio') return 'robinhood'
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'run-candidate-scout') return 'fmp'
   if (
@@ -272,6 +278,14 @@ async function executeJob(
   job: AgentJobRecord,
   reportProgress: (progress: number, phase: string) => Promise<void> = async () => {},
 ): Promise<unknown> {
+  if (job.job_type === 'sync-robinhood-portfolio') {
+    const slot = job.payload.slot
+    if (slot !== 'open' && slot !== 'midday' && slot !== 'close' && slot !== 'final') {
+      throw new Error('Robinhood sync requires a valid capture slot')
+    }
+    return syncRobinhoodPortfolio(undefined, slot as RobinhoodSyncSlot)
+  }
+
   if (job.job_type === 'sync-market-assets') {
     const client = getAlpacaClient()
     if (!client) throw new Error('Alpaca credentials are not configured')

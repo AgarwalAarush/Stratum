@@ -7,6 +7,7 @@ import {
   fmpIntelligenceCadenceMinutes,
   isUsMarketRefreshWindow,
   isWeekdayAfterMarketClose,
+  newYorkClockParts,
 } from '../markets/market-clock.ts'
 
 export interface ScheduledAgentJob {
@@ -18,6 +19,18 @@ export interface ScheduledAgentJob {
 export interface AgentScheduleOptions {
   includeFmp?: boolean
   includeCodex?: boolean
+  includeRobinhood?: boolean
+}
+
+function robinhoodSyncSlot(now: Date): 'open' | 'midday' | 'close' | 'final' | null {
+  const { weekday, hour, minute } = newYorkClockParts(now)
+  if (weekday === 'Sat' || weekday === 'Sun') return null
+  const minutes = hour * 60 + minute
+  if (minutes < 9 * 60 + 20) return null
+  if (minutes < 12 * 60 + 15) return 'open'
+  if (minutes < 16 * 60 + 15) return 'midday'
+  if (minutes < 20 * 60) return 'close'
+  return 'final'
 }
 
 function scheduledJob(
@@ -37,6 +50,13 @@ export function buildDueAgentJobs(
   options: AgentScheduleOptions = {},
 ): ScheduledAgentJob[] {
   const jobs = [scheduledJob('sync-market-assets', now)]
+  if (options.includeRobinhood === true) {
+    const slot = robinhoodSyncSlot(now)
+    if (slot) jobs.push(scheduledJob('sync-robinhood-portfolio', now, {
+      slot,
+      tradingDate: newYorkClockParts(now).date,
+    }))
+  }
   const intelligenceCadence = fmpIntelligenceCadenceMinutes(now)
   const monitorCadence = isUsMarketRefreshWindow(now) ? 5 : intelligenceCadence
   if (isUsMarketRefreshWindow(now)) {

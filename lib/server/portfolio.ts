@@ -24,7 +24,15 @@ function validOwnerId(ownerId: string): boolean {
 }
 
 function numberOrNull(value: unknown): number | null {
-  return value === null || value === undefined ? null : Number(value)
+  if (value === null || value === undefined) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
 }
 
 function normalizeDecision(row: Record<string, unknown>): ThesisDecision {
@@ -104,6 +112,20 @@ export interface PortfolioQuote {
   price: number
 }
 
+interface BrokerageSnapshot {
+  capturedAt: string
+  cashBalance: number
+  equityValue: number
+  totalValue: number
+  positions: Array<{
+    symbol: string
+    quantity: number
+    costBasisPerShare: number
+    currentPrice: number | null
+    quoteAsOf: string | null
+  }>
+}
+
 function calculatePortfolioSummary(
   account: PortfolioAccount,
   transactions: PortfolioTransaction[],
@@ -162,6 +184,66 @@ function calculatePortfolioSummary(
     totalValue: marketValue === null ? null : cashBalance + marketValue,
     unrealizedPnl: marketValue === null ? null : marketValue - investedCost,
     holdings,
+    dataSource: 'ledger',
+    dataAsOf: null,
+  }
+}
+
+function normalizeBrokerageSnapshot(row: Record<string, unknown>): BrokerageSnapshot | null {
+  const accountRows = Array.isArray(row.brokerage_account_snapshots) ? row.brokerage_account_snapshots : []
+  const account = record(accountRows[0])
+  const capturedAt = typeof row.captured_at === 'string' ? row.captured_at : null
+  const cashBalance = numberOrNull(account?.cash_balance)
+  const equityValue = numberOrNull(account?.equity_value)
+  const totalValue = numberOrNull(account?.total_value)
+  if (!capturedAt || cashBalance === null || equityValue === null || totalValue === null) return null
+  const positions = (Array.isArray(row.brokerage_position_snapshots) ? row.brokerage_position_snapshots : []).flatMap((value) => {
+    const position = record(value)
+    const symbol = typeof position?.symbol === 'string' ? position.symbol : ''
+    const quantity = numberOrNull(position?.quantity)
+    const costBasisPerShare = numberOrNull(position?.cost_basis_per_share)
+    if (!symbol || quantity === null || quantity <= 0 || costBasisPerShare === null || costBasisPerShare < 0) return []
+    return [{
+      symbol,
+      quantity,
+      costBasisPerShare,
+      currentPrice: numberOrNull(position?.current_price),
+      quoteAsOf: typeof position?.quote_as_of === 'string' ? position.quote_as_of : null,
+    }]
+  })
+  return { capturedAt, cashBalance, equityValue, totalValue, positions }
+}
+
+function calculateBrokeragePortfolioSummary(
+  account: PortfolioAccount,
+  snapshot: BrokerageSnapshot,
+  quotes: Map<string, number>,
+): PortfolioAccountSummary {
+  const holdings = snapshot.positions.map((position) => {
+    const currentPrice = position.currentPrice ?? quotes.get(position.symbol) ?? null
+    const totalCost = position.quantity * position.costBasisPerShare
+    const currentValue = currentPrice === null ? null : currentPrice * position.quantity
+    return {
+      symbol: position.symbol,
+      quantity: position.quantity,
+      costBasisPerShare: position.costBasisPerShare,
+      totalCost,
+      currentPrice,
+      currentValue,
+      unrealizedPnl: currentValue === null ? null : currentValue - totalCost,
+    }
+  }).sort((left, right) => right.totalCost - left.totalCost)
+  const investedCost = holdings.reduce((total, holding) => total + holding.totalCost, 0)
+  return {
+    account,
+    cashBalance: snapshot.cashBalance,
+    investedCost,
+    marketValue: snapshot.equityValue,
+    totalValue: snapshot.totalValue,
+    unrealizedPnl: snapshot.equityValue - investedCost,
+    holdings,
+    dataSource: 'robinhood',
+    dataAsOf: snapshot.capturedAt,
   }
 }
 
@@ -212,6 +294,7 @@ export async function fetchPortfolioWorkspace(
     { data: inboxRows },
     { data: portfolioRows },
     { data: portfolioTransactionRows },
+    { data: brokerageRows },
   ] = await Promise.all([
     supabase.from('market_watchlists').select('id,client_id,name,market_watchlist_items(symbol)').eq('owner_id', ownerId).order('created_at'),
     supabase.from('manual_positions').select('*').eq('owner_id', ownerId).order('updated_at', { ascending: false }),
@@ -220,6 +303,11 @@ export async function fetchPortfolioWorkspace(
     supabase.from('decision_inbox_items').select('*').eq('owner_id', ownerId).eq('status', 'open').not('portfolio_id', 'is', null).order('occurred_at', { ascending: false }),
     supabase.from('portfolios').select('*').eq('owner_id', ownerId).order('created_at'),
     supabase.from('portfolio_transactions').select('*').eq('owner_id', ownerId).order('occurred_at', { ascending: true }).order('created_at', { ascending: true }),
+    supabase.from('brokerage_sync_runs')
+      .select('portfolio_id,captured_at,brokerage_account_snapshots(cash_balance,equity_value,total_value),brokerage_position_snapshots(symbol,quantity,cost_basis_per_share,current_price,quote_as_of)')
+      .eq('owner_id', ownerId)
+      .eq('status', 'succeeded')
+      .order('captured_at', { ascending: false }),
   ])
   const lists = (listRows ?? []).map((row) => ({
     id: row.client_id ?? row.id,
@@ -236,11 +324,22 @@ export async function fetchPortfolioWorkspace(
   }
   const portfolioTransactions = (portfolioTransactionRows ?? []).map((row) => normalizePortfolioTransaction(row))
   const quotes = new Map(availableQuotes.map((quote) => [quote.symbol, quote.price]))
-  const portfolios = (portfolioRows ?? []).map((row) => normalizePortfolioAccount(row)).map((account) => calculatePortfolioSummary(
-    account,
-    portfolioTransactions.filter((transaction) => transaction.portfolioId === account.id),
-    quotes,
-  ))
+  const latestBrokerageSnapshotByPortfolio = new Map<string, BrokerageSnapshot>()
+  for (const row of brokerageRows ?? []) {
+    const portfolioId = typeof row.portfolio_id === 'string' ? row.portfolio_id : ''
+    if (!portfolioId || latestBrokerageSnapshotByPortfolio.has(portfolioId)) continue
+    const snapshot = normalizeBrokerageSnapshot(row)
+    if (snapshot) latestBrokerageSnapshotByPortfolio.set(portfolioId, snapshot)
+  }
+  const portfolios = (portfolioRows ?? []).map((row) => normalizePortfolioAccount(row)).map((account) => {
+    const brokerageSnapshot = account.kind === 'brokerage' ? latestBrokerageSnapshotByPortfolio.get(account.id) : null
+    if (brokerageSnapshot) return calculateBrokeragePortfolioSummary(account, brokerageSnapshot, quotes)
+    return calculatePortfolioSummary(
+      account,
+      portfolioTransactions.filter((transaction) => transaction.portfolioId === account.id),
+      quotes,
+    )
+  })
   return {
     watchlists,
     watchlistsPersisted: lists.length > 0,

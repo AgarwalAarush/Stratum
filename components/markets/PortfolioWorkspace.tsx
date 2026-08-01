@@ -261,7 +261,9 @@ export function PortfolioWorkspace({
               <div className="portfolio-performance-grid" aria-label="Market performance by holding weight">
                 {performance.map(([label, value]) => <div key={label}><span>{label}</span><strong className={value === null ? '' : value >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(value)}</strong></div>)}
               </div>
-              <p>Weighted from the current market snapshot · {universe.feed === 'illustrative' ? 'Illustrative' : 'Market'} data as of {asOf(universe.dataAsOf)}</p>
+              <p>{activePortfolio.dataSource === 'robinhood'
+                ? `Robinhood private account snapshot · captured ${asOf(activePortfolio.dataAsOf ?? universe.dataAsOf)}`
+                : `Weighted from the current market snapshot · ${universe.feed === 'illustrative' ? 'Illustrative' : 'Market'} data as of ${asOf(universe.dataAsOf)}`}</p>
             </section>
             <section className="portfolio-holdings-table-section">
               <header><div><p className="markets-eyebrow">Owned</p><h2>{activePortfolio.holdings.length} positions</h2></div><span>{activePortfolio.marketValue === null ? 'Some quotes are unavailable' : `${formatMoney(activePortfolio.marketValue)} in equities`}</span></header>
