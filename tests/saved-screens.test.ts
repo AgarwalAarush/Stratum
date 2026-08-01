@@ -38,13 +38,17 @@ test('saved screens sanitize stale browser entries and screen names', () => {
   assert.throws(() => parseSavedScreenName('A'.repeat(49)), /48 characters or fewer/)
 })
 
-test('saved screens use account-backed storage and explicit screen-management controls', () => {
+test('saved screens use one account-backed picker alongside presets and explicit management controls', () => {
   const component = readFileSync(join(process.cwd(), 'components/markets/MarketsScreener.tsx'), 'utf8')
   const route = readFileSync(join(process.cwd(), 'app/api/markets/saved-screens/route.ts'), 'utf8')
   const persistence = readFileSync(join(process.cwd(), 'lib/server/saved-screens.ts'), 'utf8')
   const migration = readFileSync(join(process.cwd(), 'supabase/migrations/202607310002_saved_screener_screens.sql'), 'utf8')
 
   assert.match(component, /Your screens/)
+  assert.match(component, /market-screen-tabs/)
+  assert.match(component, /Screener screens/)
+  assert.match(component, /setActiveScreenId\(null\)/)
+  assert.doesNotMatch(component, /Current screen/)
   assert.match(component, /Save as new/)
   assert.match(component, /Save changes/)
   assert.match(component, /Rename/)

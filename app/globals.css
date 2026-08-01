@@ -3534,12 +3534,12 @@
   padding: 8px 10px;
 }
 
-.market-preset-tabs {
+.market-screen-tabs {
   align-items: stretch;
   border-bottom: 1px solid var(--market-border);
   contain: inline-size paint;
   display: flex;
-  gap: 11px;
+  gap: 10px;
   margin-top: 10px;
   min-height: 50px;
   overflow-x: auto;
@@ -3547,24 +3547,27 @@
   scrollbar-width: none;
 }
 
-.market-preset-tabs::-webkit-scrollbar {
+.market-screen-tabs::-webkit-scrollbar {
   display: none;
 }
 
-.market-preset-tabs button {
+.market-screen-tabs button {
+  align-items: center;
   color: var(--market-text-dim);
+  display: inline-flex;
   flex: 0 0 auto;
   font-size: 12px;
+  gap: 5px;
   padding: 0 12px;
   position: relative;
 }
 
-.market-preset-tabs button:hover,
-.market-preset-tabs .market-preset-active {
+.market-screen-tabs button:hover,
+.market-screen-tabs .market-screen-tab-active {
   color: var(--market-text);
 }
 
-.market-preset-tabs .market-preset-active::after {
+.market-screen-tabs .market-screen-tab-active::after {
   background: var(--market-accent);
   bottom: -1px;
   content: '';
@@ -3574,53 +3577,32 @@
   right: 0;
 }
 
-.market-saved-screens {
-  border-bottom: 1px solid var(--market-border);
-  padding: 14px 0 12px;
-}
-
-.market-saved-screens-toolbar {
-  align-items: baseline;
-  display: flex;
-  gap: 18px;
-  justify-content: space-between;
-}
-
-.market-saved-screens-heading {
-  display: grid;
+.market-screen-tab-divider {
+  align-self: center;
+  background: var(--market-border);
   flex: 0 0 auto;
-  gap: 4px;
+  height: 22px;
+  margin: 0 2px;
+  width: 1px;
 }
 
-.market-saved-screens-heading > span {
-  color: var(--market-text);
+.market-screen-tab-label {
+  align-items: center;
+  color: var(--market-text-muted);
+  display: inline-flex;
+  flex: 0 0 auto;
   font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  padding-left: 2px;
   text-transform: uppercase;
 }
 
-.market-saved-screens-heading small,
 .market-saved-screen-notice {
   color: var(--market-text-muted);
   font-size: 10px;
 }
 
-.market-saved-screen-tabs {
-  align-items: center;
-  display: flex;
-  gap: 7px;
-  justify-content: flex-end;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.market-saved-screen-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.market-saved-screen-tabs button,
 .market-saved-screen-form button,
 .market-saved-screen-rename button {
   align-items: center;
@@ -3636,13 +3618,11 @@
   padding: 0 10px;
 }
 
-.market-saved-screen-tabs button:hover,
-.market-saved-screen-tabs .market-saved-screen-active {
-  border-color: var(--market-accent);
+.market-screen-tab-new,
+.market-screen-tabs .market-screen-tab-new:hover {
   color: var(--market-accent);
 }
 
-.market-saved-screen-tabs .market-saved-screen-new,
 .market-saved-screen-form button[type='submit'] {
   border-color: var(--market-accent);
   color: var(--market-accent);
@@ -3693,11 +3673,10 @@
 }
 
 .market-saved-screen-context {
-  border-top: 1px solid var(--market-border);
   justify-content: space-between;
-  margin-top: 12px;
+  margin-top: 0;
   min-height: 42px;
-  padding-top: 12px;
+  padding: 10px 0;
 }
 
 .market-saved-screen-context > div {
@@ -4151,20 +4130,14 @@
     display: none;
   }
 
-  .market-preset-tabs {
+  .market-screen-tabs {
     margin-top: 16px;
   }
 
-  .market-saved-screens-toolbar,
   .market-saved-screen-context,
   .market-saved-screen-form {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .market-saved-screen-tabs {
-    justify-content: flex-start;
-    padding-bottom: 2px;
   }
 
   .market-saved-screen-form input {
