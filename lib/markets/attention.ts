@@ -33,7 +33,9 @@ function stockItem(stock: StockLeadershipMetric | undefined, direction: 'leading
   return {
     id: `${direction}-${stock.symbol}`,
     eyebrow: isLeading ? 'Leading name' : 'Downside pressure',
-    title: `${stock.symbol} is ${isLeading ? 'lifting' : 'pressuring'} the tape`,
+    title: isLeading
+      ? `${stock.symbol} is lifting the market`
+      : `${stock.symbol} is weighing on the market`,
     detail: `${stock.company} · ${stock.subIndustry}${activity}`,
     metric: signedPercent(stock.dayReturn),
     tone: stock.dayReturn >= 0 ? 'positive' : 'negative',
@@ -53,7 +55,7 @@ function participationItem(leadership: MarketLeadershipSnapshot): MarketAttentio
   const title = broad
     ? 'Participation is supporting the move'
     : trendHealthy
-      ? 'The tape is weaker than the intermediate trend'
+      ? "Today's market is weaker than the intermediate trend"
       : 'Participation and trend health are both soft'
   return {
     id: 'participation',

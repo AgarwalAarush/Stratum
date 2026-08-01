@@ -636,7 +636,7 @@ async function loadLatestMarketLeadershipSummary(): Promise<MarketLeadershipSnap
       vs200DayAverage: null,
     })),
     // Keep the home artifact compact while retaining enough individual names
-    // to explain which stocks are driving today's tape.
+    // to explain which stocks are driving today's market.
     stocks: [],
     leaders: byDay.slice(0, 3),
     laggards: byDay.slice(-3).reverse(),
