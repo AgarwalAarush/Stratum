@@ -61,6 +61,7 @@ export function PortfolioWorkspace({
   const [reviewingDecisionId, setReviewingDecisionId] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
   const recordTriggerRef = useRef<HTMLButtonElement>(null)
+  const updateDialogRef = useRef<HTMLElement>(null)
 
   const activePortfolio = portfolios.find((portfolio) => portfolio.account.id === activePortfolioId) ?? null
   const structuredActionIsCash = structuredAction === 'cash_deposit' || structuredAction === 'cash_withdrawal'
@@ -190,14 +191,30 @@ export function PortfolioWorkspace({
 
   useEffect(() => {
     if (!recordingOpen) return
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      setPreview(null)
-      setRecordingOpen(false)
-      recordTriggerRef.current?.focus()
+    const dialog = updateDialogRef.current
+    dialog?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)')?.focus()
+    const keepFocusInDialog = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPreview(null)
+        setRecordingOpen(false)
+        recordTriggerRef.current?.focus()
+        return
+      }
+      if (event.key !== 'Tab' || !dialog) return
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)'))
+      const first = focusable[0]
+      const last = focusable.at(-1)
+      if (!first || !last) return
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
     }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
+    window.addEventListener('keydown', keepFocusInDialog)
+    return () => window.removeEventListener('keydown', keepFocusInDialog)
   }, [recordingOpen])
 
   return (
@@ -316,7 +333,7 @@ export function PortfolioWorkspace({
       ) : null}
       {recordingOpen ? <div className="portfolio-update-modal-layer">
         <button type="button" className="portfolio-update-modal-backdrop" aria-label="Close record update dialog" onClick={closeRecording} />
-        <section className="portfolio-update-panel" role="dialog" aria-modal="true" aria-labelledby="portfolio-update-title">
+        <section ref={updateDialogRef} className="portfolio-update-panel" role="dialog" aria-modal="true" aria-labelledby="portfolio-update-title">
           <header className="portfolio-update-heading">
             <div><p className="markets-eyebrow">Record an update</p><h2 id="portfolio-update-title">{activePortfolio?.account.name ?? 'Portfolio'}</h2></div>
             <button type="button" className="portfolio-update-close" aria-label="Close record update dialog" onClick={closeRecording}><X size={17} /></button>
