@@ -410,6 +410,32 @@ export interface CompanyPacketSource {
   asOf: string
 }
 
+/**
+ * Research-only material collected before the analysis model runs. This is
+ * deliberately distinct from market observations: it gives the model enough
+ * company, product, market, and competitive context to explain the business
+ * without turning unverified search results into market facts.
+ */
+export type CompanyResearchEvidenceKind =
+  | 'company_strategy'
+  | 'growth_driver'
+  | 'ai_and_product'
+  | 'market_and_competition'
+  | 'moat'
+
+export type CompanyResearchEvidenceQuality = 'primary' | 'regulatory' | 'independent' | 'discovery'
+
+export interface CompanyResearchEvidence {
+  id: string
+  kind: CompanyResearchEvidenceKind
+  title: string
+  url: string
+  source: string
+  publishedAt: string
+  excerpt: string | null
+  quality: CompanyResearchEvidenceQuality
+}
+
 export interface CompanyTranscript {
   year: number
   quarter: number
@@ -472,6 +498,7 @@ export interface CompanyPacket {
   peers: string[]
   filings: Array<{ title: string; url: string; publishedAt: string }>
   events: Array<{ title: string; url: string; publishedAt: string; category: string }>
+  researchEvidence?: CompanyResearchEvidence[]
   industryContext: {
     sector: string
     subIndustry: string

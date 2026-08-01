@@ -16,6 +16,7 @@ import { runCodexJson } from './codex-exec.ts'
 import { fetchLatestMarketLeadership, fetchStockViewerData } from './markets-repository.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { proposeStockThesis } from './theses.ts'
+import { collectCompanyResearchEvidence } from './company-research-evidence.ts'
 
 const RESEARCH_SECTION_IDS: EquityResearchSectionId[] = [
   'snapshot',
@@ -250,6 +251,11 @@ export async function materializeCompanyPacket(
       typeof value === 'string' || typeof value === 'number' || value === null ? [[key, value]] : [])))
   const forwardEstimate = selectForwardAnnualEstimate(estimates, now)
   const forwardPe = forwardPriceToEarnings(stock.price, forwardEstimate)
+  const researchEvidencePromise = collectCompanyResearchEvidence(
+    String(profile.companyName ?? profile.name ?? symbol),
+    symbol,
+    typeof profile.website === 'string' ? profile.website : null,
+  ).catch(() => [])
   const filingsAndEvents = await supabase.from('feed_items').select('title,url,published_at,metadata,section')
     .eq('scope', 'markets').contains('metadata', { topic: `company:${symbol}` })
     .order('published_at', { ascending: false }).limit(50)
@@ -259,6 +265,7 @@ export async function materializeCompanyPacket(
     publishedAt: item.published_at,
     category: typeof item.metadata?.category === 'string' ? item.metadata.category : item.section,
   })).filter((item) => item.url && item.publishedAt)
+  const researchEvidence = await researchEvidencePromise
   const sources: CompanyPacketSource[] = [
     { id: 'alpaca-price-history', label: 'Alpaca price history', url: 'https://alpaca.markets/data', source: 'Alpaca', asOf: stock.asOf },
     { id: 'fmp-profile', label: 'FMP company profile', url: `https://financialmodelingprep.com/stable/profile?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
@@ -300,6 +307,13 @@ export async function materializeCompanyPacket(
       source: item.category,
       asOf: item.publishedAt,
     })),
+    ...researchEvidence.map((evidence) => ({
+      id: evidence.id,
+      label: evidence.title,
+      url: evidence.url,
+      source: `${evidence.quality} research · ${evidence.source}`,
+      asOf: evidence.publishedAt,
+    })),
   ]
   const peersPayload = records(peersResult)
   const peerRecord = peersPayload[0] ?? record(peersResult)
@@ -317,6 +331,7 @@ export async function materializeCompanyPacket(
       ...items.map((item) => item.publishedAt),
       ...secFilings.map((item) => item.publishedAt),
       ...transcripts.map((item) => item.date),
+      ...researchEvidence.map((item) => item.publishedAt),
     ].sort().at(-1) ?? stock.asOf,
     generatedAt,
     priceHistory: {
@@ -362,6 +377,7 @@ export async function materializeCompanyPacket(
       ...items.filter((item) => item.category.toLowerCase().includes('sec')),
     ].slice(0, 20),
     events: items,
+    researchEvidence,
     industryContext: {
       sector,
       subIndustry,
@@ -520,6 +536,7 @@ function researchPrompt(
   return [
     'Act as a senior equity research analyst. Create an institutional-quality GARP equity research note for a 12-month fair-value decision and 1-2 year ownership lens.',
     'Use only facts and source IDs present in the CompanyPacket. Never invent a current price, estimate, event, source, or citation.',
+    'CompanyPacket.researchEvidence is a bounded company-and-industry research pack. It is useful for framing product, AI, market, competition, and moat—but a discovery item is only a lead, independent reporting needs attribution, and primary or regulatory evidence is preferred for company claims and numbers. Do not elevate an article excerpt into an unsupported fact.',
     ...revisionInstructions,
     'Take a position, defend it with structured evidence, and state exactly what would prove it wrong. Commit or omit; do not use empty hedging language.',
     'Keep formal BUY/HOLD/SELL separate from the practical entry action.',
@@ -534,8 +551,10 @@ function researchPrompt(
     'Attach supporting CompanyPacket source IDs only through each section sourceIds array and the report sourceIds array. Never print bracketed source IDs inside prose. Never imply a claim is sourced if the supporting source is absent.',
     'Financial Profile must analyze the available 6-8 quarter history and call out growth, margin, cash-flow, balance-sheet, and share-count inflections.',
     'Earnings-call transcripts are management commentary, not audited fact. When transcripts are present, compare guidance, operating priorities, demand commentary, and changed language across the two most recent calls; attribute claims to management.',
-    'Business Model & Moat must cover revenue mechanics, customer value, geographic/FX exposure, concentration, switching costs, and a none/narrow/wide moat judgment.',
+    'Business Model & Moat must cover revenue mechanics, customer value, geographic/FX exposure, concentration, switching costs, and a none/narrow/wide moat judgment. Identify the actual moat mechanisms (for example data, workflow embedding, switching costs, scale, regulatory approvals, distribution, or IP), the evidence for each, and the specific gaps that could erode the moat.',
     'When segmentRevenue is present, Business Model & Moat must identify which product or service lines drive revenue, growth, and mix shifts. Do not confuse product revenue categories with reportable operating segments or imply segment profit data that the packet does not contain.',
+    'Market & Competition must name the relevant market or value-chain layer, present TAM as a sourced estimate or a transparent bottom-up framework (with date, methodology, and limitations), and compare 3-5 direct competitors or credible alternatives by customer, capability, economics, and competitive implication. If the packet cannot support a TAM number or peer comparison, say exactly so rather than supplying a generic market claim.',
+    'Growth Drivers must rank 3-5 drivers by importance and include a compact Markdown table with: Driver; mechanism; horizon; supporting source; what proves it; and what breaks it. Separate funded/contracted or already-shipping drivers from management aspiration and optionality. Cover AI explicitly when evidence supports it: state whether it changes customer value, monetization, cost, or only narrative—and what would demonstrate adoption. Do not call AI a growth driver solely because it is mentioned in coverage.',
     'Valuation must reconcile growth assumptions with the current multiple and perform a reverse-DCF-style implied-expectations analysis. If inputs are inadequate, explicitly say which calculation cannot be completed.',
     'Bull, Base, and Bear must be three genuinely comparable mini-cases: lead each with the outcome, then use the same four compact bullets—operating assumptions, proof point, fair value / implied return, and what breaks the case. Do not repeat the general business description across scenarios.',
     'Verdict must cover ownership fit, current setup, behavior near highs and on weakness, entry action, better trigger, sizing, liquidity, and horizon.',
