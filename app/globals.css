@@ -7125,6 +7125,196 @@ body:has(.markets-shell) {
   padding: 32px 32px 70px;
 }
 
+.portfolio-heading-actions {
+  align-items: end;
+  display: flex;
+  gap: 10px;
+}
+
+.portfolio-picker {
+  position: relative;
+}
+
+.portfolio-picker > span {
+  color: var(--market-text-muted);
+  display: block;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .04em;
+  margin-bottom: 7px;
+  text-transform: uppercase;
+}
+
+.portfolio-picker > button {
+  align-items: center;
+  background: var(--market-bg);
+  border: 1px solid var(--market-border);
+  color: var(--market-text);
+  display: flex;
+  font-size: 13px;
+  gap: 28px;
+  justify-content: space-between;
+  min-height: 42px;
+  min-width: 230px;
+  padding: 0 12px;
+}
+
+.portfolio-picker > button:hover,
+.portfolio-picker > button[aria-expanded="true"] {
+  border-color: var(--market-text-muted);
+}
+
+.portfolio-picker-menu {
+  background: var(--market-surface);
+  border: 1px solid var(--market-border);
+  box-shadow: 0 15px 35px color-mix(in srgb, var(--market-text) 15%, transparent);
+  left: 0;
+  min-width: 100%;
+  padding: 5px;
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 20;
+}
+
+.portfolio-picker-menu button {
+  align-items: center;
+  color: var(--market-text-dim);
+  display: flex;
+  font-size: 13px;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 0 9px;
+  width: 100%;
+}
+
+.portfolio-picker-menu button:hover,
+.portfolio-picker-menu button[aria-selected="true"] {
+  background: var(--market-surface-soft);
+  color: var(--market-text);
+}
+
+.portfolio-record-trigger {
+  align-items: center;
+  background: var(--market-text);
+  color: var(--market-bg);
+  display: inline-flex;
+  font-size: 11px;
+  gap: 7px;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 13px;
+}
+
+.portfolio-record-trigger:hover {
+  opacity: .86;
+}
+
+.portfolio-owned-workspace {
+  padding-top: 28px;
+}
+
+.portfolio-owned-overview {
+  border-bottom: 1px solid var(--market-border);
+}
+
+.portfolio-value-summary,
+.portfolio-performance-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.portfolio-value-summary > div,
+.portfolio-performance-grid > div {
+  border-right: 1px solid var(--market-border);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 77px;
+  padding: 0 18px;
+}
+
+.portfolio-value-summary > div:first-child,
+.portfolio-performance-grid > div:first-child {
+  padding-left: 0;
+}
+
+.portfolio-value-summary > div:last-child,
+.portfolio-performance-grid > div:last-child {
+  border-right: 0;
+}
+
+.portfolio-value-summary span,
+.portfolio-performance-grid span,
+.portfolio-owned-overview > p,
+.portfolio-holdings-table-section > header > span {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.portfolio-value-summary strong {
+  color: var(--market-text);
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 23px;
+  font-weight: 500;
+  letter-spacing: -.035em;
+}
+
+.portfolio-performance-grid {
+  border-top: 1px solid var(--market-border);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.portfolio-performance-grid > div {
+  min-height: 61px;
+  padding-top: 13px;
+}
+
+.portfolio-performance-grid strong {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.portfolio-owned-overview > p {
+  margin: 13px 0 0;
+  padding-bottom: 15px;
+}
+
+.portfolio-update-panel {
+  margin-top: 24px;
+}
+
+.portfolio-holdings-table-section {
+  margin-top: 34px;
+}
+
+.portfolio-holdings-table-section > header {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.portfolio-holdings-table-section h2 {
+  color: var(--market-text);
+  font-size: 25px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.portfolio-holdings-table td:nth-child(5),
+.portfolio-holdings-table td:nth-child(6),
+.portfolio-holdings-table td:nth-child(7) {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+}
+
+.market-explore .market-watchlists-embedded {
+  padding: 26px 0 0;
+}
+
 .portfolio-workspace .market-watchlists {
   padding-left: 0;
   padding-right: 0;
@@ -7667,6 +7857,61 @@ body:has(.markets-shell) {
 
   .portfolio-workspace {
     padding: 24px 16px 45px;
+  }
+
+  .portfolio-heading-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .portfolio-picker > button {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .portfolio-record-trigger {
+    width: 100%;
+  }
+
+  .portfolio-value-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .portfolio-value-summary > div {
+    border-bottom: 1px solid var(--market-border);
+    min-height: 68px;
+    padding: 0 12px 13px;
+  }
+
+  .portfolio-value-summary > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .portfolio-value-summary > div:nth-child(3),
+  .portfolio-value-summary > div:nth-child(4) {
+    padding-top: 13px;
+  }
+
+  .portfolio-performance-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .portfolio-performance-grid > div {
+    border-bottom: 1px solid var(--market-border);
+    min-height: 57px;
+    padding: 12px 10px;
+  }
+
+  .portfolio-performance-grid > div:nth-child(3),
+  .portfolio-performance-grid > div:last-child {
+    border-right: 0;
+  }
+
+  .portfolio-holdings-table-section > header {
+    align-items: start;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .portfolio-owned-layout {

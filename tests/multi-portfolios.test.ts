@@ -36,13 +36,18 @@ test('multi-portfolio migration seeds Personal and a separate $100k Dad portfoli
   assert.match(sql, /'robinhood-holdings-2026-07-30-'/)
 })
 
-test('portfolio UI supports switching portfolios, structured entries, and confirmation for natural language', async () => {
+test('portfolio UI defaults to owned holdings with a custom portfolio picker and compact update control', async () => {
   const [component, route, repository] = await Promise.all([
     readFile(new URL('../components/markets/PortfolioWorkspace.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../app/api/markets/portfolio/route.ts', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/portfolio.ts', import.meta.url), 'utf8'),
   ])
   assert.match(component, /Active portfolio/)
+  assert.match(component, /aria-haspopup="listbox"/)
+  assert.match(component, /Portfolio value/)
+  assert.match(component, /\['30D'/)
+  assert.match(component, /Record update/)
+  assert.doesNotMatch(component, /\['watchlists', 'Watchlists'\]/)
   assert.match(component, /Use natural language/)
   assert.match(component, /Confirm and record/)
   assert.match(route, /record-portfolio-update/)
