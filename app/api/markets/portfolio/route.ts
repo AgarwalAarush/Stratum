@@ -7,8 +7,10 @@ import {
   updateInboxStatus,
   upsertManualPosition,
   addSymbolToPrimaryWatchlist,
+  recordPortfolioTransaction,
 } from '@/lib/server/portfolio'
 import { createDefaultWatchlistState, parseWatchlistState } from '@/lib/markets/watchlists'
+import { parsePortfolioUpdate, validatePortfolioUpdate, type ParsedPortfolioUpdate } from '@/lib/markets/portfolio-updates'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,6 +61,34 @@ export async function POST(request: Request) {
         openedAt: text(body.openedAt, 10) || null,
         notes: text(body.notes),
       }) })
+    }
+    if (body.action === 'record-portfolio-update') {
+      const portfolioId = text(body.portfolioId, 80)
+      const source = body.source === 'natural_language' ? 'natural_language' : 'manual'
+      const parsed = source === 'natural_language'
+        ? parsePortfolioUpdate(text(body.instruction, 1_000))
+        : {
+            action: body.transactionAction,
+            symbol: text(body.symbol, 12).toUpperCase() || null,
+            quantity: nullableNumber(body.quantity),
+            pricePerShare: nullableNumber(body.pricePerShare),
+            fees: nullableNumber(body.fees) ?? 0,
+            occurredAt: text(body.occurredAt, 10),
+            notes: text(body.notes, 1_000),
+          } as ParsedPortfolioUpdate
+      if (!parsed) throw new Error('I could not read that instruction. Try “Buy 10 shares of NVDA at $200” or “Deposit $5,000 cash”.')
+      const validationError = validatePortfolioUpdate(parsed)
+      if (validationError) throw new Error(validationError)
+      if (localDevelopment) {
+        return NextResponse.json({ transaction: {
+          id: `local-portfolio-transaction-${Date.now()}`,
+          portfolioId,
+          ...parsed,
+          source,
+          createdAt: new Date().toISOString(),
+        } })
+      }
+      return NextResponse.json({ transaction: await recordPortfolioTransaction(user.id, portfolioId, parsed, source) })
     }
     if (body.action === 'add-watchlist-symbol') {
       const symbol = text(body.symbol, 12).toUpperCase()

@@ -19,6 +19,11 @@ export default async function MarketsPortfolioPage() {
     requireAllowedMarketUser(),
     loadPortfolioUniverse(),
   ])
-  const data = await fetchPortfolioWorkspace(user.id, universe.rows.map((row) => row.symbol))
-  return <PortfolioWorkspace initialData={data} universe={universe} />
+  const data = await fetchPortfolioWorkspace(user.id, universe.rows.map((row) => ({
+    symbol: row.symbol,
+    price: row.price,
+  })))
+  return <PortfolioWorkspace initialData={data} universe={universe}
+    key={data.portfolioTransactions.map((transaction) => transaction.id).join(':')}
+  />
 }

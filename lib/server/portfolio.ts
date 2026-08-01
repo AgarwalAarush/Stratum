@@ -7,10 +7,16 @@ import type {
   DecisionReview,
   DecisionInboxItem,
   ManualPosition,
+  PortfolioAccount,
+  PortfolioAccountSummary,
+  PortfolioHolding,
+  PortfolioTransaction,
+  PortfolioTransactionAction,
   PortfolioWorkspaceData,
   ThesisDecision,
   ThesisKillCriterion,
 } from '../markets/types.ts'
+import { validatePortfolioUpdate, type ParsedPortfolioUpdate } from '../markets/portfolio-updates.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 function validOwnerId(ownerId: string): boolean {
@@ -66,6 +72,99 @@ function normalizePosition(row: Record<string, unknown>): ManualPosition {
   }
 }
 
+function normalizePortfolioAccount(row: Record<string, unknown>): PortfolioAccount {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    kind: row.kind === 'brokerage' ? 'brokerage' : 'manual',
+    initialFunds: Number(row.initial_funds ?? 0),
+    startedAt: String(row.started_at),
+    createdAt: String(row.created_at),
+  }
+}
+
+function normalizePortfolioTransaction(row: Record<string, unknown>): PortfolioTransaction {
+  return {
+    id: String(row.id),
+    portfolioId: String(row.portfolio_id),
+    action: row.action as PortfolioTransactionAction,
+    symbol: row.symbol === null ? null : String(row.symbol),
+    quantity: numberOrNull(row.quantity),
+    pricePerShare: numberOrNull(row.price_per_share),
+    fees: Number(row.fees ?? 0),
+    occurredAt: String(row.occurred_at),
+    notes: String(row.notes ?? ''),
+    source: row.source as PortfolioTransaction['source'],
+    createdAt: String(row.created_at),
+  }
+}
+
+export interface PortfolioQuote {
+  symbol: string
+  price: number
+}
+
+function calculatePortfolioSummary(
+  account: PortfolioAccount,
+  transactions: PortfolioTransaction[],
+  quotes: Map<string, number>,
+): PortfolioAccountSummary {
+  let cashBalance = account.initialFunds
+  const positions = new Map<string, { quantity: number, totalCost: number }>()
+  for (const transaction of transactions) {
+    const amount = (transaction.quantity ?? 0) * (transaction.pricePerShare ?? 0)
+    if (transaction.action === 'cash_deposit') cashBalance += transaction.pricePerShare ?? 0
+    if (transaction.action === 'cash_withdrawal') cashBalance -= transaction.pricePerShare ?? 0
+    if (transaction.action === 'buy') {
+      cashBalance -= amount + transaction.fees
+      const position = positions.get(transaction.symbol!) ?? { quantity: 0, totalCost: 0 }
+      position.quantity += transaction.quantity ?? 0
+      position.totalCost += amount + transaction.fees
+      positions.set(transaction.symbol!, position)
+    }
+    if (transaction.action === 'position_import') {
+      const position = positions.get(transaction.symbol!) ?? { quantity: 0, totalCost: 0 }
+      position.quantity += transaction.quantity ?? 0
+      position.totalCost += amount
+      positions.set(transaction.symbol!, position)
+    }
+    if (transaction.action === 'sell') {
+      cashBalance += amount - transaction.fees
+      const position = positions.get(transaction.symbol!)
+      if (!position || position.quantity <= 0) continue
+      const sold = Math.min(transaction.quantity ?? 0, position.quantity)
+      position.totalCost -= (position.totalCost / position.quantity) * sold
+      position.quantity -= sold
+      if (position.quantity <= 0.00000001) positions.delete(transaction.symbol!)
+    }
+  }
+  const holdings: PortfolioHolding[] = [...positions.entries()].map(([symbol, position]) => {
+    const currentPrice = quotes.get(symbol) ?? null
+    const currentValue = currentPrice === null ? null : currentPrice * position.quantity
+    return {
+      symbol,
+      quantity: position.quantity,
+      costBasisPerShare: position.totalCost / position.quantity,
+      totalCost: position.totalCost,
+      currentPrice,
+      currentValue,
+      unrealizedPnl: currentValue === null ? null : currentValue - position.totalCost,
+    }
+  }).sort((left, right) => right.totalCost - left.totalCost)
+  const investedCost = holdings.reduce((total, holding) => total + holding.totalCost, 0)
+  const allQuotesAvailable = holdings.every((holding) => holding.currentValue !== null)
+  const marketValue = allQuotesAvailable ? holdings.reduce((total, holding) => total + (holding.currentValue ?? 0), 0) : null
+  return {
+    account,
+    cashBalance,
+    investedCost,
+    marketValue,
+    totalValue: marketValue === null ? null : cashBalance + marketValue,
+    unrealizedPnl: marketValue === null ? null : marketValue - investedCost,
+    holdings,
+  }
+}
+
 function normalizeInbox(row: Record<string, unknown>): DecisionInboxItem {
   return {
     id: String(row.id),
@@ -87,9 +186,9 @@ function normalizeInbox(row: Record<string, unknown>): DecisionInboxItem {
 
 export async function fetchPortfolioWorkspace(
   ownerId: string,
-  availableSymbols: string[] = [],
+  availableQuotes: PortfolioQuote[] = [],
 ): Promise<PortfolioWorkspaceData> {
-  const fallback = createDefaultWatchlistState(availableSymbols)
+  const fallback = createDefaultWatchlistState(availableQuotes.map((quote) => quote.symbol))
   const supabase = getSupabaseClient()
   if (!supabase || !validOwnerId(ownerId)) {
     return {
@@ -100,6 +199,8 @@ export async function fetchPortfolioWorkspace(
       decisionHistory: [],
       reviews: [],
       inbox: [],
+      portfolios: [],
+      portfolioTransactions: [],
     }
   }
   const [
@@ -108,12 +209,16 @@ export async function fetchPortfolioWorkspace(
     { data: decisionRows },
     { data: reviewRows },
     { data: inboxRows },
+    { data: portfolioRows },
+    { data: portfolioTransactionRows },
   ] = await Promise.all([
     supabase.from('market_watchlists').select('id,client_id,name,market_watchlist_items(symbol)').eq('owner_id', ownerId).order('created_at'),
     supabase.from('manual_positions').select('*').eq('owner_id', ownerId).order('updated_at', { ascending: false }),
     supabase.from('thesis_decisions').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
     supabase.from('decision_reviews').select('*').eq('owner_id', ownerId).order('reviewed_at', { ascending: false }),
     supabase.from('decision_inbox_items').select('*').eq('owner_id', ownerId).eq('status', 'open').order('occurred_at', { ascending: false }),
+    supabase.from('portfolios').select('*').eq('owner_id', ownerId).order('created_at'),
+    supabase.from('portfolio_transactions').select('*').eq('owner_id', ownerId).order('occurred_at', { ascending: true }).order('created_at', { ascending: true }),
   ])
   const lists = (listRows ?? []).map((row) => ({
     id: row.client_id ?? row.id,
@@ -128,6 +233,13 @@ export async function fetchPortfolioWorkspace(
   for (const decision of decisionHistory) {
     if (!latestDecisionBySymbol.has(decision.symbol)) latestDecisionBySymbol.set(decision.symbol, decision)
   }
+  const portfolioTransactions = (portfolioTransactionRows ?? []).map((row) => normalizePortfolioTransaction(row))
+  const quotes = new Map(availableQuotes.map((quote) => [quote.symbol, quote.price]))
+  const portfolios = (portfolioRows ?? []).map((row) => normalizePortfolioAccount(row)).map((account) => calculatePortfolioSummary(
+    account,
+    portfolioTransactions.filter((transaction) => transaction.portfolioId === account.id),
+    quotes,
+  ))
   return {
     watchlists,
     watchlistsPersisted: lists.length > 0,
@@ -136,7 +248,48 @@ export async function fetchPortfolioWorkspace(
     decisionHistory,
     reviews: (reviewRows ?? []).map((row) => normalizeReview(row)),
     inbox: (inboxRows ?? []).map((row) => normalizeInbox(row)),
+    portfolios,
+    portfolioTransactions,
   }
+}
+
+export async function recordPortfolioTransaction(
+  ownerId: string,
+  portfolioId: string,
+  input: ParsedPortfolioUpdate,
+  source: PortfolioTransaction['source'],
+): Promise<PortfolioTransaction> {
+  if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required')
+  const validationError = validatePortfolioUpdate(input)
+  if (validationError) throw new Error(validationError)
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data: portfolio } = await supabase.from('portfolios').select('id').eq('id', portfolioId).eq('owner_id', ownerId).maybeSingle()
+  if (!portfolio) throw new Error('Choose one of your portfolios')
+  if (input.action === 'sell') {
+    const { data: rows } = await supabase.from('portfolio_transactions').select('*')
+      .eq('portfolio_id', portfolioId).eq('owner_id', ownerId).eq('symbol', input.symbol!)
+      .order('occurred_at', { ascending: true }).order('created_at', { ascending: true })
+    const available = (rows ?? []).map((row) => normalizePortfolioTransaction(row)).reduce((shares, transaction) => {
+      if (transaction.action === 'buy' || transaction.action === 'position_import') return shares + (transaction.quantity ?? 0)
+      return transaction.action === 'sell' ? shares - (transaction.quantity ?? 0) : shares
+    }, 0)
+    if (available + 0.00000001 < (input.quantity ?? 0)) throw new Error(`Cannot sell ${input.quantity} shares; this portfolio has ${available.toFixed(6)} ${input.symbol} shares`)
+  }
+  const { data, error } = await supabase.from('portfolio_transactions').insert({
+    owner_id: ownerId,
+    portfolio_id: portfolioId,
+    action: input.action,
+    symbol: input.symbol,
+    quantity: input.quantity,
+    price_per_share: input.pricePerShare,
+    fees: input.fees,
+    occurred_at: input.occurredAt,
+    notes: input.notes,
+    source,
+  }).select('*').single()
+  if (error || !data) throw new Error(`Unable to record portfolio update: ${error?.message ?? 'unknown error'}`)
+  return normalizePortfolioTransaction(data)
 }
 
 export async function replaceUserWatchlists(ownerId: string, input: unknown): Promise<MarketWatchlistState> {

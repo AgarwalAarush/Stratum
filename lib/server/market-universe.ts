@@ -279,19 +279,22 @@ async function loadTrackedSymbols(supabase: SupabaseServiceClient): Promise<stri
   const [
     { data: watchlistRows, error: watchlistError },
     { data: positionRows, error: positionError },
+    { data: portfolioTransactionRows, error: portfolioTransactionError },
     { data: thesisRows, error: thesisError },
   ] = await Promise.all([
     supabase.from('market_watchlist_items').select('symbol'),
     supabase.from('manual_positions').select('symbol'),
+    supabase.from('portfolio_transactions').select('symbol,action').not('symbol', 'is', null),
     supabase.from('investment_theses').select('symbol')
       .eq('entity_type', 'stock').eq('status', 'accepted').not('symbol', 'is', null),
   ])
-  if (watchlistError || positionError || thesisError) {
-    throw new Error(`Unable to load tracked symbols: ${watchlistError?.message ?? positionError?.message ?? thesisError?.message}`)
+  if (watchlistError || positionError || portfolioTransactionError || thesisError) {
+    throw new Error(`Unable to load tracked symbols: ${watchlistError?.message ?? positionError?.message ?? portfolioTransactionError?.message ?? thesisError?.message}`)
   }
   return [...new Set([
     ...(watchlistRows ?? []).map((row) => row.symbol),
     ...(positionRows ?? []).map((row) => row.symbol),
+    ...(portfolioTransactionRows ?? []).flatMap((row) => typeof row.symbol === 'string' && (row.action === 'buy' || row.action === 'position_import') ? [row.symbol] : []),
     ...(thesisRows ?? []).flatMap((row) => typeof row.symbol === 'string' ? [row.symbol] : []),
   ])]
 }

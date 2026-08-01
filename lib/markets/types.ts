@@ -607,6 +607,51 @@ export interface ManualPosition {
   updatedAt: string
 }
 
+export type PortfolioTransactionAction = 'cash_deposit' | 'cash_withdrawal' | 'buy' | 'sell' | 'position_import'
+
+export interface PortfolioAccount {
+  id: string
+  name: string
+  kind: 'brokerage' | 'manual'
+  initialFunds: number
+  startedAt: string
+  createdAt: string
+}
+
+export interface PortfolioTransaction {
+  id: string
+  portfolioId: string
+  action: PortfolioTransactionAction
+  symbol: string | null
+  quantity: number | null
+  pricePerShare: number | null
+  fees: number
+  occurredAt: string
+  notes: string
+  source: 'manual' | 'natural_language' | 'import'
+  createdAt: string
+}
+
+export interface PortfolioHolding {
+  symbol: string
+  quantity: number
+  costBasisPerShare: number
+  totalCost: number
+  currentPrice: number | null
+  currentValue: number | null
+  unrealizedPnl: number | null
+}
+
+export interface PortfolioAccountSummary {
+  account: PortfolioAccount
+  cashBalance: number
+  investedCost: number
+  marketValue: number | null
+  totalValue: number | null
+  unrealizedPnl: number | null
+  holdings: PortfolioHolding[]
+}
+
 export interface DecisionInboxItem {
   id: string
   type: 'new_candidate' | 'thesis_refresh' | 'entry_zone_arrival' | 'catalyst' | 'kill_criterion_breach'
@@ -632,6 +677,8 @@ export interface PortfolioWorkspaceData {
   decisionHistory: ThesisDecision[]
   reviews: DecisionReview[]
   inbox: DecisionInboxItem[]
+  portfolios: PortfolioAccountSummary[]
+  portfolioTransactions: PortfolioTransaction[]
 }
 
 export type ScreenerPreset = 'momentum' | 'unusual-volume' | 'near-highs' | 'gap-movers'

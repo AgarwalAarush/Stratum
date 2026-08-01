@@ -295,14 +295,15 @@ function mergeScreenerMetrics(
 async function loadCandidateTracking(): Promise<Map<string, CandidateTrackingContext>> {
   const supabase = getSupabaseClient()
   if (!supabase) return new Map()
-  const [{ data: watchlists, error: watchlistError }, { data: positions, error: positionError }, { data: theses, error: thesisError }] = await Promise.all([
+  const [{ data: watchlists, error: watchlistError }, { data: positions, error: positionError }, { data: portfolioTransactions, error: portfolioTransactionError }, { data: theses, error: thesisError }] = await Promise.all([
     supabase.from('market_watchlist_items').select('symbol'),
     supabase.from('manual_positions').select('symbol'),
+    supabase.from('portfolio_transactions').select('symbol,action,quantity').not('symbol', 'is', null),
     supabase.from('investment_theses').select('symbol')
       .eq('entity_type', 'stock').eq('status', 'accepted').not('symbol', 'is', null),
   ])
-  if (watchlistError || positionError || thesisError) {
-    throw new Error(`Unable to load candidate tracking context: ${watchlistError?.message ?? positionError?.message ?? thesisError?.message}`)
+  if (watchlistError || positionError || portfolioTransactionError || thesisError) {
+    throw new Error(`Unable to load candidate tracking context: ${watchlistError?.message ?? positionError?.message ?? portfolioTransactionError?.message ?? thesisError?.message}`)
   }
   const result = new Map<string, CandidateTrackingContext>()
   const update = (symbol: string, patch: Partial<CandidateTrackingContext>) => {
@@ -316,6 +317,14 @@ async function loadCandidateTracking(): Promise<Map<string, CandidateTrackingCon
   }
   for (const row of watchlists ?? []) update(row.symbol, { watched: true })
   for (const row of positions ?? []) update(row.symbol, { owned: true })
+  const portfolioShares = new Map<string, number>()
+  for (const row of portfolioTransactions ?? []) {
+    if (typeof row.symbol !== 'string') continue
+    const quantity = Number(row.quantity ?? 0)
+    const delta = row.action === 'sell' ? -quantity : row.action === 'buy' || row.action === 'position_import' ? quantity : 0
+    portfolioShares.set(row.symbol, (portfolioShares.get(row.symbol) ?? 0) + delta)
+  }
+  for (const [symbol, shares] of portfolioShares) if (shares > 0.00000001) update(symbol, { owned: true })
   for (const row of theses ?? []) if (typeof row.symbol === 'string') update(row.symbol, { acceptedThesis: true })
   return result
 }
@@ -416,15 +425,17 @@ export async function materializeCandidateScout(
     })), { onConflict: 'candidate_id,kind,material_key' })
     if (signalError) throw new Error(`Unable to persist candidate signals for ${brief.symbol}: ${signalError.message}`)
   }
-  const [{ data: marketUsers }, { data: watchlistOwners }, { data: positionOwners }] = await Promise.all([
+  const [{ data: marketUsers }, { data: watchlistOwners }, { data: positionOwners }, { data: portfolioOwners }] = await Promise.all([
     supabase.from('market_users').select('id'),
     supabase.from('market_watchlists').select('owner_id').not('owner_id', 'is', null),
     supabase.from('manual_positions').select('owner_id'),
+    supabase.from('portfolios').select('owner_id'),
   ])
   const owners = new Set([
     ...(marketUsers ?? []).map((row) => row.id),
     ...(watchlistOwners ?? []).map((row) => row.owner_id),
     ...(positionOwners ?? []).map((row) => row.owner_id),
+    ...(portfolioOwners ?? []).map((row) => row.owner_id),
   ].filter((owner): owner is string => typeof owner === 'string'))
   for (const ownerId of owners) {
     const { error } = await supabase.from('decision_inbox_items').upsert(briefs.map((brief) => ({

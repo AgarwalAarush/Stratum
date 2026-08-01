@@ -167,6 +167,7 @@ test('Candidate Scout expands beyond the S&P 500 to watched and owned names', as
   const source = await readFile(new URL('../lib/server/candidate-scout.ts', import.meta.url), 'utf8')
   assert.match(source, /market_watchlist_items/)
   assert.match(source, /manual_positions/)
+  assert.match(source, /portfolio_transactions/)
   assert.match(source, /investment_theses/)
   assert.match(source, /loadExpandedScreenerMetrics/)
   assert.match(source, /multiLanePrefilter/)
