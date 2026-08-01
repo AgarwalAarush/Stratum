@@ -5,9 +5,10 @@ export interface SearchableStock {
 
 export interface StockSearchResult extends SearchableStock {
   exchange: string
-  price: number
-  dailyChange: number
-  asOf: string
+  price: number | null
+  dailyChange: number | null
+  asOf: string | null
+  screenable: boolean
 }
 
 function normalized(value: string): string {

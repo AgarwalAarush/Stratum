@@ -11,10 +11,16 @@ interface StockSearchRecord {
   data_as_of: string
 }
 
+interface MarketAssetSearchRecord {
+  symbol: string
+  name: string
+  exchange: string
+}
+
 export interface StockSearchResponse {
   results: StockSearchResult[]
-  feed: string
-  dataAsOf: string
+  feed: string | null
+  dataAsOf: string | null
   stale: boolean
 }
 
@@ -22,39 +28,58 @@ const STALE_AFTER_MS = 20 * 60 * 1_000
 const MAX_CANDIDATES = 50
 
 function safeSearchTerm(input: string): string {
-  return input.trim().replace(/[,()%]/g, '').slice(0, 80)
+  return input.trim().replace(/[^a-z0-9 .-]/gi, '').slice(0, 80)
 }
 
 /**
- * Reads matches from the latest materialized screener snapshot. Search never
- * calls a quote provider and is intentionally bounded before ranking locally.
+ * Search joins the active Alpaca asset catalog with the latest materialized
+ * screener snapshot. That keeps newly listed or newly requested equities
+ * discoverable before they have enough daily history for every screener metric.
  */
 export async function searchLatestStocks(input: string, limit = 8): Promise<StockSearchResponse | null> {
   const query = safeSearchTerm(input)
   const supabase = getSupabaseClient()
   const snapshot = await fetchLatestSnapshotMeta()
-  if (!query || !supabase || !snapshot) return null
+  if (!query || !supabase) return null
 
-  const { data, error } = await supabase
-    .from('screener_rows')
-    .select('symbol,company,exchange,price,daily_change,data_as_of')
-    .eq('snapshot_id', snapshot.id)
-    .or(`symbol.ilike.%${query}%,company.ilike.%${query}%`)
+  const assetsPromise = supabase
+    .from('market_assets')
+    .select('symbol,name,exchange')
+    .eq('active', true)
+    .eq('tradable', true)
+    .or(`symbol.ilike.%${query}%,name.ilike.%${query}%`)
     .limit(MAX_CANDIDATES)
-  if (error) return null
+  const screenerPromise = snapshot
+    ? supabase
+      .from('screener_rows')
+      .select('symbol,company,exchange,price,daily_change,data_as_of')
+      .eq('snapshot_id', snapshot.id)
+      .or(`symbol.ilike.%${query}%,company.ilike.%${query}%`)
+      .limit(MAX_CANDIDATES)
+    : Promise.resolve({ data: [], error: null })
+  const [{ data: assetData, error: assetError }, { data: screenerData, error: screenerError }] = await Promise.all([
+    assetsPromise,
+    screenerPromise,
+  ])
+  if (assetError || screenerError) return null
 
-  const candidates = ((data ?? []) as StockSearchRecord[]).map((row) => ({
-    symbol: row.symbol,
-    company: row.company,
-    exchange: row.exchange,
-    price: Number(row.price),
-    dailyChange: Number(row.daily_change),
-    asOf: row.data_as_of,
-  }))
+  const screenerBySymbol = new Map(((screenerData ?? []) as StockSearchRecord[]).map((row) => [row.symbol, row]))
+  const candidates = ((assetData ?? []) as MarketAssetSearchRecord[]).map((asset) => {
+    const screener = screenerBySymbol.get(asset.symbol)
+    return {
+      symbol: asset.symbol,
+      company: screener?.company ?? asset.name,
+      exchange: screener?.exchange ?? asset.exchange,
+      price: screener ? Number(screener.price) : null,
+      dailyChange: screener ? Number(screener.daily_change) : null,
+      asOf: screener?.data_as_of ?? null,
+      screenable: Boolean(screener),
+    }
+  })
   return {
     results: rankStockSearchResults(candidates, query, limit),
-    feed: snapshot.feed,
-    dataAsOf: snapshot.data_as_of,
-    stale: Date.now() - Date.parse(snapshot.data_as_of) > STALE_AFTER_MS,
+    feed: snapshot?.feed ?? null,
+    dataAsOf: snapshot?.data_as_of ?? null,
+    stale: !snapshot || Date.now() - Date.parse(snapshot.data_as_of) > STALE_AFTER_MS,
   }
 }

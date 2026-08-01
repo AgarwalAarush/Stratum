@@ -11,11 +11,13 @@ interface StockSearchResponse {
 
 const SEARCH_DELAY_MS = 140
 
-function formatPrice(value: number): string {
+function formatPrice(value: number | null): string {
+  if (value === null) return '—'
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
 }
 
-function formatPercent(value: number): string {
+function formatPercent(value: number | null): string {
+  if (value === null) return '—'
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
 }
 
@@ -29,6 +31,18 @@ export function StockSearch() {
   const [results, setResults] = useState<StockSearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const requestCoverage = useCallback(async (symbol: string) => {
+    try {
+      await fetch('/api/markets/stocks/coverage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol }),
+      })
+    } catch {
+      // Search stays available if the non-blocking coverage request is temporarily unavailable.
+    }
+  }, [])
 
   const close = useCallback(() => {
     controllerRef.current?.abort()
@@ -82,7 +96,11 @@ export function StockSearch() {
           return await response.json() as StockSearchResponse
         })
         .then((response) => {
-          if (!controller.signal.aborted) setResults(response.results)
+          if (controller.signal.aborted) return
+          setResults(response.results)
+          const exactTicker = response.results.find((result) =>
+            result.symbol === query.trim().toUpperCase() && !result.screenable)
+          if (exactTicker) void requestCoverage(exactTicker.symbol)
         })
         .catch((caught: unknown) => {
           if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : 'Search is temporarily unavailable.')
@@ -92,16 +110,18 @@ export function StockSearch() {
         })
     }, SEARCH_DELAY_MS)
     return () => window.clearTimeout(timeout)
-  }, [open, query])
+  }, [open, query, requestCoverage])
 
-  const openStock = (symbol: string) => {
+  const openStock = (result: StockSearchResult) => {
+    if (!result.screenable) void requestCoverage(result.symbol)
     close()
-    router.push(`/markets/stocks/${symbol}`, { scroll: false })
+    router.push(`/markets/stocks/${result.symbol}`, { scroll: false })
   }
 
-  const openResearch = (symbol: string) => {
+  const openResearch = (result: StockSearchResult) => {
+    if (!result.screenable) void requestCoverage(result.symbol)
     close()
-    router.push(`/markets/stocks/${symbol}/research`)
+    router.push(`/markets/stocks/${result.symbol}/research`)
   }
 
   const updateQuery = (value: string) => {
@@ -140,7 +160,7 @@ export function StockSearch() {
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && results[0]) {
                   event.preventDefault()
-                  openStock(results[0].symbol)
+                  openStock(results[0])
                 }
               }}
               placeholder="Ticker or company name"
@@ -154,11 +174,11 @@ export function StockSearch() {
               {!loading && !error && query.trim() && results.length === 0 ? <p>No matching stock in the current universe.</p> : null}
               {results.map((result) => (
                 <article key={result.symbol}>
-                  <button type="button" className="markets-stock-search-result" onClick={() => openStock(result.symbol)}>
+                  <button type="button" className="markets-stock-search-result" onClick={() => openStock(result)}>
                     <span className="markets-stock-search-identity"><strong>{result.symbol}</strong><span>{result.company}</span></span>
-                    <span className="markets-stock-search-quote"><strong>{formatPrice(result.price)}</strong><span className={result.dailyChange >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(result.dailyChange)}</span></span>
+                    <span className="markets-stock-search-quote"><strong>{formatPrice(result.price)}</strong><span className={result.dailyChange === null ? '' : result.dailyChange >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(result.dailyChange)}</span></span>
                   </button>
-                  <button type="button" className="markets-stock-search-research" onClick={() => openResearch(result.symbol)} aria-label={`Open ${result.symbol} equity research`}>
+                  <button type="button" className="markets-stock-search-research" onClick={() => openResearch(result)} aria-label={`Open ${result.symbol} equity research`}>
                     Research <ArrowUpRight size={13} aria-hidden="true" />
                   </button>
                 </article>

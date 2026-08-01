@@ -15,6 +15,7 @@ export const IWM_HOLDINGS_URL = 'https://www.ishares.com/us/products/239710/isha
 export const MIN_SP500_ASSETS = 450
 export const MIN_RUSSELL_2000_ASSETS = 1_800
 export const RUSSELL_2000_UNIVERSE_NAME = 'russell-2000'
+export const SEARCH_COVERAGE_UNIVERSE_NAME = 'search-coverage'
 export const MARKET_BENCHMARK_SYMBOLS = ['SPY', 'QQQ', 'IWM', 'TLT', 'UUP', 'USO'] as const
 const UNIVERSE_CACHE_MS = 20 * 60 * 60 * 1_000
 const DATABASE_PAGE_SIZE = 1_000
@@ -281,22 +282,54 @@ async function loadTrackedSymbols(supabase: SupabaseServiceClient): Promise<stri
     { data: positionRows, error: positionError },
     { data: portfolioTransactionRows, error: portfolioTransactionError },
     { data: thesisRows, error: thesisError },
+    { data: coverageRows, error: coverageError },
   ] = await Promise.all([
     supabase.from('market_watchlist_items').select('symbol'),
     supabase.from('manual_positions').select('symbol'),
     supabase.from('portfolio_transactions').select('symbol,action').not('symbol', 'is', null),
     supabase.from('investment_theses').select('symbol')
       .eq('entity_type', 'stock').eq('status', 'accepted').not('symbol', 'is', null),
+    supabase.from('market_universe_members').select('symbol')
+      .eq('universe', SEARCH_COVERAGE_UNIVERSE_NAME).eq('active', true),
   ])
-  if (watchlistError || positionError || portfolioTransactionError || thesisError) {
-    throw new Error(`Unable to load tracked symbols: ${watchlistError?.message ?? positionError?.message ?? portfolioTransactionError?.message ?? thesisError?.message}`)
+  if (watchlistError || positionError || portfolioTransactionError || thesisError || coverageError) {
+    throw new Error(`Unable to load tracked symbols: ${watchlistError?.message ?? positionError?.message ?? portfolioTransactionError?.message ?? thesisError?.message ?? coverageError?.message}`)
   }
   return [...new Set([
     ...(watchlistRows ?? []).map((row) => row.symbol),
     ...(positionRows ?? []).map((row) => row.symbol),
     ...(portfolioTransactionRows ?? []).flatMap((row) => typeof row.symbol === 'string' && (row.action === 'buy' || row.action === 'position_import') ? [row.symbol] : []),
     ...(thesisRows ?? []).flatMap((row) => typeof row.symbol === 'string' ? [row.symbol] : []),
+    ...(coverageRows ?? []).map((row) => row.symbol),
   ])]
+}
+
+/** Records an eligible stock as durable priority coverage without changing a user's watchlist. */
+export async function requestMarketCoverage(symbolInput: string): Promise<boolean> {
+  const symbol = symbolInput.trim().toUpperCase()
+  if (!/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol)) return false
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data: asset, error: assetError } = await supabase
+    .from('market_assets')
+    .select('symbol')
+    .eq('symbol', symbol)
+    .eq('active', true)
+    .eq('tradable', true)
+    .maybeSingle()
+  if (assetError) throw new Error(`Unable to verify ${symbol}: ${assetError.message}`)
+  if (!asset) return false
+  const requestedAt = new Date().toISOString()
+  const { error } = await supabase.from('market_universe_members').upsert({
+    universe: SEARCH_COVERAGE_UNIVERSE_NAME,
+    symbol,
+    source: 'stock-search',
+    source_as_of: requestedAt,
+    active: true,
+    refreshed_at: requestedAt,
+  }, { onConflict: 'universe,symbol' })
+  if (error) throw new Error(`Unable to request market coverage for ${symbol}: ${error.message}`)
+  return true
 }
 
 export async function resolveMarketUniverse(

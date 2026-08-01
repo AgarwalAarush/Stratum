@@ -76,6 +76,12 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('monitor-investment-theses'), 'market-data')
 })
 
+test('stock coverage requests refresh the materialized screener through the existing Alpaca worker', async () => {
+  const source = await readFile(new URL('../app/api/markets/stocks/coverage/route.ts', import.meta.url), 'utf8')
+  assert.match(source, /requestMarketCoverage\(symbol\)/)
+  assert.match(source, /enqueueAgentJob\('refresh-market-screener'/)
+})
+
 test('provider work respects slow off-hours dedupe buckets', () => {
   assert.equal(
     buildAgentJobDedupeKey('refresh-fmp-intelligence', new Date('2026-07-29T08:31:00Z'), {
