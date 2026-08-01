@@ -3316,9 +3316,10 @@
   color: var(--market-text);
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  max-height: min(720px, calc(100dvh - 48px));
+  height: min(680px, calc(100dvh - 48px));
+  max-height: calc(100dvh - 48px);
   max-width: 940px;
-  min-height: 610px;
+  min-height: 0;
   position: relative;
   width: min(940px, calc(100vw - 48px));
 }

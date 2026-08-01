@@ -13,6 +13,8 @@ const conditionBuilderSource = readFileSync(
   'utf8',
 )
 
+const marketStyles = readFileSync(join(process.cwd(), 'app/globals.css'), 'utf8')
+
 test('screener delegates filter editing to the condition builder', () => {
   assert.match(screenerSource, /<ScreenerConditionBuilder filters=\{filters\} onChange=\{changeFilters\}/)
   assert.match(screenerSource, /market-screen-table-wrap scrollbar-none/)
@@ -60,6 +62,12 @@ test('condition chips and add-condition flow are accessible dialogs', () => {
   assert.match(conditionBuilderSource, /setAddOpen\(false\)/)
   assert.match(conditionBuilderSource, /if \(event\.key !== 'Tab'\) return/)
   assert.match(conditionBuilderSource, /document\.body\.style\.overflow = 'hidden'/)
+})
+
+test('add-condition modal has a stable desktop height while its lists scroll independently', () => {
+  assert.match(marketStyles, /\.market-condition-modal \{[\s\S]*height: min\(680px, calc\(100dvh - 48px\)\);/)
+  assert.match(marketStyles, /\.market-condition-options \{[\s\S]*overflow-y: auto;/)
+  assert.match(marketStyles, /\.market-condition-config \{[\s\S]*overflow-y: auto;/)
 })
 
 test('existing conditions update in place and new fields append', () => {
