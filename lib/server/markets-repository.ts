@@ -594,19 +594,22 @@ async function loadLatestMarketLeadershipSummary(): Promise<MarketLeadershipSnap
     { data: divergenceRows, error: divergenceError },
     { data: screenerDailyRows, error: screenerDailyError },
   ] = await Promise.all([
-    supabase.from('market_stock_metrics').select('symbol,sector,sub_industry,day_return').eq('snapshot_id', snapshot.id),
+    supabase.from('market_stock_metrics').select('symbol,company,sector,sub_industry,price,day_return,return_30d,return_50d,return_200d,return_1y,vs_50_day_average,vs_200_day_average,relative_volume,observation_count,data_as_of').eq('snapshot_id', snapshot.id),
     supabase.from('market_divergence_signals').select('*').eq('snapshot_id', snapshot.id),
     supabase.from('screener_rows').select('symbol,daily_change').eq('snapshot_id', snapshot.id),
   ])
   if (stockDailyError || divergenceError || screenerDailyError) return null
   const currentDayReturns = currentDayReturnMap((screenerDailyRows ?? []) as Array<Record<string, unknown>>)
-  const dailyStocks = (stockDailyRows ?? []).map((row) => ({
-    sector: String(row.sector),
-    subIndustry: String(row.sub_industry),
-    dayReturn: currentDayReturns.get(String(row.symbol))
-      ?? (row.day_return === null || row.day_return === undefined ? null : Number(row.day_return)),
-  }))
+  const dailyStocks = applyCurrentDayReturns(
+    (stockDailyRows ?? []).map((row) => normalizeStockLeadershipRow(row)),
+    currentDayReturns,
+  )
   const dailySubIndustries = rankDailySubIndustries(dailyStocks)
+  const dailySectors = aggregateLeadershipGroups(dailyStocks, 'sector')
+    .sort((left, right) => (right.dayReturn ?? -Infinity) - (left.dayReturn ?? -Infinity))
+  const byDay = [...dailyStocks]
+    .filter((stock) => stock.dayReturn !== null)
+    .sort((left, right) => right.dayReturn! - left.dayReturn!)
   return {
     id: snapshot.id,
     tradingDate: snapshot.trading_date,
@@ -617,7 +620,7 @@ async function loadLatestMarketLeadershipSummary(): Promise<MarketLeadershipSnap
     freshCount: snapshot.fresh_count,
     advancingPercent: currentAdvancingPercent(dailyStocks, Number(snapshot.advancing_percent)),
     above50DayPercent: Number(snapshot.above_50_day_percent),
-    sectors: [],
+    sectors: dailySectors,
     subIndustries: dailySubIndustries.map((group) => ({
       groupType: 'sub_industry',
       label: group.label,
@@ -632,9 +635,11 @@ async function loadLatestMarketLeadershipSummary(): Promise<MarketLeadershipSnap
       vs50DayAverage: null,
       vs200DayAverage: null,
     })),
+    // Keep the home artifact compact while retaining enough individual names
+    // to explain which stocks are driving today's tape.
     stocks: [],
-    leaders: [],
-    laggards: [],
+    leaders: byDay.slice(0, 3),
+    laggards: byDay.slice(-3).reverse(),
     divergences: (divergenceRows ?? []).map((row) => normalizeDivergence(row)).slice(0, 5),
   }
 }

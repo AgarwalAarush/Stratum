@@ -1,8 +1,9 @@
 'use client'
 
-import { ArrowDown, ArrowSquareOut, ArrowUp } from '@phosphor-icons/react'
+import { ArrowSquareOut } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { MarketsIntentLink } from './MarketsIntentLink'
+import { buildMarketAttention, buildMarketCheckpoints } from '@/lib/markets/attention'
 import type { MarketOverviewResponse } from '@/lib/markets/types'
 
 interface MarketsOverviewProps {
@@ -63,6 +64,8 @@ function dataStatusLabel(value: MarketOverviewResponse['instruments'][number]['d
 
 export function MarketsOverview({ overview }: MarketsOverviewProps) {
   const [selectedEvidenceId, setSelectedEvidenceId] = useState(overview.evidence[0]?.id ?? '')
+  const attention = buildMarketAttention(overview.leadership)
+  const checkpoints = buildMarketCheckpoints(overview.leadership)
 
   return (
     <article className="market-overview">
@@ -176,85 +179,116 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
         </section>
       ) : null}
 
-      {overview.candidates && overview.candidates.length > 0 ? (
-        <section className="market-candidate-panel" aria-labelledby="candidate-scout-title">
-          <div className="market-section-heading">
-            <div>
-              <p className="markets-eyebrow">Candidate Scout</p>
-              <h2 id="candidate-scout-title">Candidates to investigate</h2>
-            </div>
-            <span>{overview.candidates.length} post-close briefs</span>
-          </div>
-          <div className="market-candidate-grid">
-            {overview.candidates.map((candidate) => (
-              <MarketsIntentLink key={candidate.id} href={`/markets/stocks/${candidate.symbol}`} className="market-candidate-card">
-                <div className="market-candidate-card-kicker">
-                  <span>{CANDIDATE_LANE_LABEL[candidate.primaryLane ?? 'leadership']}</span>
-                  <span>{[
-                    candidateMove(candidate.selloff?.day, '1D'),
-                    candidateMove(candidate.selloff?.fiveDay, '1W'),
-                    candidateMove(candidate.selloff?.thirtyDay, '1M'),
-                  ].filter(Boolean).join(' · ')}</span>
-                </div>
+      {attention.length > 0 || (overview.candidates && overview.candidates.length > 0) ? (
+        <section className="market-priority-grid" aria-label="Market attention and candidates">
+          {attention.length > 0 ? (
+            <section className="market-attention-panel" aria-labelledby="market-attention-title">
+              <div className="market-section-heading">
                 <div>
-                  <strong>{candidate.symbol}</strong>
-                  <span>{candidate.company}</span>
+                  <p className="markets-eyebrow">Market attention</p>
+                  <h2 id="market-attention-title">What deserves context now</h2>
                 </div>
-                <p>{candidate.whySurfaced}</p>
-                <span>{candidate.subIndustry} · Open dossier →</span>
-              </MarketsIntentLink>
-            ))}
-          </div>
-          {overview.candidateWeeklySummary ? (
-            <aside className="market-candidate-weekly-summary" aria-label="Candidate Scout weekly summary">
-              <div>
-                <p className="markets-eyebrow">This week</p>
-                <strong>{overview.candidateWeeklySummary.candidateCount} briefs · {overview.candidateWeeklySummary.uniqueSymbolCount} names</strong>
-                <span>Week ended {new Date(`${overview.candidateWeeklySummary.weekEnding}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                <MarketsIntentLink href="/markets/events">View events →</MarketsIntentLink>
               </div>
-              <div>
-                <p>Decision flow</p>
-                <strong>{overview.candidateWeeklySummary.statusCounts.promoted} promoted · {overview.candidateWeeklySummary.statusCounts.watchlisted} watched</strong>
+              <div className="market-attention-grid">
+                {attention.map((item) => (
+                  <MarketsIntentLink key={item.id} href={item.href} className={`market-attention-card market-attention-${item.tone}`}>
+                    <div><span>{item.eyebrow}</span><strong>{item.metric}</strong></div>
+                    <h3>{item.title}</h3>
+                    <p>{item.detail}</p>
+                    <small>Market data · Open context →</small>
+                  </MarketsIntentLink>
+                ))}
               </div>
-              <div>
-                <p>Recurring groups</p>
-                <strong>{overview.candidateWeeklySummary.leadingSubIndustries.length === 0
-                  ? 'No recurring groups'
-                  : overview.candidateWeeklySummary.leadingSubIndustries.map((group) => `${group.label} (${group.candidateCount})`).join(' · ')}</strong>
+            </section>
+          ) : null}
+
+          {overview.candidates && overview.candidates.length > 0 ? (
+            <section className="market-candidate-panel" aria-labelledby="candidate-scout-title">
+              <div className="market-section-heading">
+                <div>
+                  <p className="markets-eyebrow">Candidate Scout</p>
+                  <h2 id="candidate-scout-title">Candidates to investigate</h2>
+                </div>
+                <span>{overview.candidates.length} post-close briefs</span>
               </div>
-            </aside>
+              <div className="market-candidate-grid">
+                {overview.candidates.map((candidate) => (
+                  <MarketsIntentLink key={candidate.id} href={`/markets/stocks/${candidate.symbol}`} className="market-candidate-card">
+                    <div className="market-candidate-card-kicker">
+                      <span>{CANDIDATE_LANE_LABEL[candidate.primaryLane ?? 'leadership']}</span>
+                      <span>{[
+                        candidateMove(candidate.selloff?.day, '1D'),
+                        candidateMove(candidate.selloff?.fiveDay, '1W'),
+                        candidateMove(candidate.selloff?.thirtyDay, '1M'),
+                      ].filter(Boolean).join(' · ')}</span>
+                    </div>
+                    <div>
+                      <strong>{candidate.symbol}</strong>
+                      <span>{candidate.company}</span>
+                    </div>
+                    <p>{candidate.whySurfaced}</p>
+                    <span>{candidate.subIndustry} · Open dossier →</span>
+                  </MarketsIntentLink>
+                ))}
+              </div>
+              {overview.candidateWeeklySummary ? (
+                <aside className="market-candidate-weekly-summary" aria-label="Candidate Scout weekly summary">
+                  <div>
+                    <p className="markets-eyebrow">This week</p>
+                    <strong>{overview.candidateWeeklySummary.candidateCount} briefs · {overview.candidateWeeklySummary.uniqueSymbolCount} names</strong>
+                    <span>Week ended {new Date(`${overview.candidateWeeklySummary.weekEnding}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                  </div>
+                  <div>
+                    <p>Decision flow</p>
+                    <strong>{overview.candidateWeeklySummary.statusCounts.promoted} promoted · {overview.candidateWeeklySummary.statusCounts.watchlisted} watched</strong>
+                  </div>
+                  <div>
+                    <p>Recurring groups</p>
+                    <strong>{overview.candidateWeeklySummary.leadingSubIndustries.length === 0
+                      ? 'No recurring groups'
+                      : overview.candidateWeeklySummary.leadingSubIndustries.map((group) => `${group.label} (${group.candidateCount})`).join(' · ')}</strong>
+                  </div>
+                </aside>
+              ) : null}
+            </section>
           ) : null}
         </section>
       ) : null}
 
-      <section className="market-implication-grid">
-        <div>
-          <h2>Sector implications</h2>
-          <ul className="market-sector-list">
-            {overview.memo.sectorImplications.map((item) => (
-              <li key={item.text}>
-                {item.direction === 'up' ? <ArrowUp size={14} className="market-positive" /> : <ArrowDown size={14} className="market-negative" />}
-                <span>{item.text}</span>
-              </li>
+      {overview.leadership ? (
+        <section className="market-analysis-grid" aria-label="Market analysis">
+          <div className="market-leadership-map">
+            <div className="market-analysis-heading"><p className="markets-eyebrow">Leadership map</p><h2>Where the move is concentrated</h2></div>
+            <div className="market-group-readings">
+              {overview.leadership.sectors.slice(0, 5).map((group) => (
+                <MarketsIntentLink key={group.label} href={`/markets/explore?view=sectors&group=${encodeURIComponent(group.label)}`}>
+                  <span>{group.label}</span>
+                  <span>{group.constituentCount} names</span>
+                  <strong className={(group.dayReturn ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{group.dayReturn === null ? '—' : `${group.dayReturn >= 0 ? '+' : ''}${group.dayReturn.toFixed(1)}%`}</strong>
+                </MarketsIntentLink>
+              ))}
+            </div>
+            <MarketsIntentLink href="/markets/explore?view=sectors" className="market-analysis-link">Explore sector depth →</MarketsIntentLink>
+          </div>
+          <div className="market-counter-signals">
+            <div className="market-analysis-heading"><p className="markets-eyebrow">Counter-signals</p><h2>What is not confirming</h2></div>
+            {overview.leadership.divergences.length > 0 ? overview.leadership.divergences.slice(0, 3).map((signal) => (
+              <MarketsIntentLink key={signal.id} href={`/markets/explore?view=sub-industries&group=${encodeURIComponent(signal.groupLabel)}`}>
+                <strong>{signal.groupLabel}</strong><span>{signal.summary}</span>
+              </MarketsIntentLink>
+            )) : <p className="market-analysis-empty">No material short-term versus long-term divergence is available in this snapshot.</p>}
+          </div>
+          <div className="market-checkpoints">
+            <div className="market-analysis-heading"><p className="markets-eyebrow">Market checkpoints</p><h2>What would change the read</h2></div>
+            {checkpoints.map((item) => (
+              <div key={item.id} className={`market-checkpoint market-checkpoint-${item.tone}`}>
+                <span>{item.label}</span><strong>{item.value}</strong><small>{item.detail}</small>
+              </div>
             ))}
-          </ul>
-          <MarketsIntentLink href="/markets/explore?view=stocks" className="market-open-screener">
-            Explore Stocks <span aria-hidden="true">→</span>
-          </MarketsIntentLink>
-        </div>
-        <div>
-          <h2>Catalysts</h2>
-          <ul>{overview.memo.catalysts.map((item) => <li key={item}>{item}</li>)}</ul>
-        </div>
-        <div>
-          <h2>Risks</h2>
-          <ul className="market-risk-list">{overview.memo.risks.map((item) => <li key={item}>{item}</li>)}</ul>
-        </div>
-        <div>
-          <h2>Watch items</h2>
-          <ul>{overview.memo.watchItems.map((item) => <li key={item}>{item}</li>)}</ul>
-        </div>
-      </section>
+          </div>
+        </section>
+      ) : null}
 
       <footer className="market-overview-footer">
         <span>{feedLabel(overview.feed)} data · Data as of {formatMarketTime(overview.dataAsOf)}</span>
