@@ -74,3 +74,14 @@ test('portfolio monitoring derives alerts from open position lots, not watchlist
   assert.match(monitoring, /portfolio_id: trackedName\.portfolioId/)
   assert.doesNotMatch(monitoring, /market_watchlist_items/)
 })
+
+test('portfolio valuation loads every held symbol directly instead of a paginated screener slice', async () => {
+  const [page, repository] = await Promise.all([
+    readFile(new URL('../app/markets/portfolio/page.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/server/markets-repository.ts', import.meta.url), 'utf8'),
+  ])
+  assert.match(page, /fetchLatestScreenerSymbols\(symbols\)/)
+  assert.doesNotMatch(page, /fetchLatestScreener\(PORTFOLIO_UNIVERSE_QUERY\)/)
+  assert.match(repository, /\.in\('symbol', requested\)/)
+  assert.match(repository, /Portfolio valuation must never depend on whichever/)
+})
