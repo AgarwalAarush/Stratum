@@ -258,7 +258,13 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
     setFilters([...next.filters])
     setSort(next.sort)
     setDirection(next.direction)
-    setScreenDirty(Boolean(activeScreenId))
+    // Presets and saved screens are one mutually exclusive screen picker. A
+    // preset is a fresh starting point, not an edit to whichever saved screen
+    // happened to be selected before it.
+    setActiveScreenId(null)
+    setScreenDirty(false)
+    setScreenDeleteArmed(false)
+    setScreenEditor(null)
     void execute({ preset: nextPreset, filters: next.filters, sort: next.sort, direction: next.direction, page: 1 })
   }
 
@@ -273,7 +279,10 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
     setFilters([...DEFAULT_SCREENER_FILTERS])
     setSort(DEFAULT_SCREENER_QUERY.sort)
     setDirection(DEFAULT_SCREENER_QUERY.direction)
-    setScreenDirty(Boolean(activeScreenId))
+    setActiveScreenId(null)
+    setScreenDirty(false)
+    setScreenDeleteArmed(false)
+    setScreenEditor(null)
     void execute(DEFAULT_SCREENER_QUERY)
   }
 
@@ -531,74 +540,65 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
 
       {error && <p className="market-screen-error" role="alert">{error}</p>}
 
-      <nav className="market-preset-tabs" aria-label="Screener presets">
+      <nav className="market-screen-tabs" aria-label="Screener screens">
         {PRESETS.map((item) => (
           <button
             key={item.id}
             type="button"
-            className={preset === item.id ? 'market-preset-active' : ''}
-            aria-current={preset === item.id ? 'page' : undefined}
+            className={!activeScreenId && preset === item.id ? 'market-screen-tab-active' : ''}
+            aria-current={!activeScreenId && preset === item.id ? 'page' : undefined}
             onClick={() => choosePreset(item.id)}
           >
             {item.label}
           </button>
         ))}
+        <span className="market-screen-tab-divider" aria-hidden="true" />
+        <span className="market-screen-tab-label" id="saved-screens-title">Your screens</span>
+        {savedScreens.map((screen) => (
+          <button
+            key={screen.id}
+            type="button"
+            className={screen.id === activeScreenId ? 'market-screen-tab-active' : ''}
+            aria-current={screen.id === activeScreenId ? 'page' : undefined}
+            onClick={() => applySavedScreen(screen)}
+          >
+            {screen.name}
+          </button>
+        ))}
+        <button type="button" className="market-screen-tab-new" onClick={() => { setScreenEditor('create'); setScreenName('') }}>
+          <Plus size={13} aria-hidden="true" /> New screen
+        </button>
       </nav>
 
-      <section className="market-saved-screens" aria-labelledby="saved-screens-title">
-        <div className="market-saved-screens-toolbar">
-          <div className="market-saved-screens-heading">
-            <span id="saved-screens-title">Your screens</span>
-            <small>{screenPersistence === 'server' ? 'Saved privately' : screenPersistence === 'local' ? 'Local fallback' : 'Loading…'}</small>
+      {screenEditor === 'create' && (
+        <form className="market-saved-screen-form" onSubmit={saveNewScreen}>
+          <label htmlFor="saved-screen-name">Name this screen</label>
+          <input id="saved-screen-name" value={screenName} onChange={(event) => setScreenName(event.target.value)} maxLength={48} autoFocus placeholder="e.g. AI infrastructure pullbacks" />
+          <button type="submit" disabled={screenSaving || !screenName.trim()}><Check size={14} /> Save screen</button>
+          <button type="button" aria-label="Cancel new saved screen" onClick={() => { setScreenEditor(null); setScreenName('') }}><X size={14} /></button>
+        </form>
+      )}
+
+      {activeScreen && screenEditor !== 'create' && (
+        <div className="market-saved-screen-context">
+          {screenEditor === 'rename' ? (
+            <form className="market-saved-screen-rename" onSubmit={renameScreen}>
+              <input aria-label="Saved screen name" value={screenName} onChange={(event) => setScreenName(event.target.value)} maxLength={48} autoFocus />
+              <button type="submit" aria-label="Save screen name" disabled={screenSaving || !screenName.trim()}><Check size={14} /></button>
+              <button type="button" aria-label="Cancel rename" onClick={() => { setScreenEditor(null); setScreenName('') }}><X size={14} /></button>
+            </form>
+          ) : (
+            <p><strong>{activeScreen.name}</strong>{screenDirty ? ' · Unsaved changes' : ''}</p>
+          )}
+          <div>
+            <button type="button" className="market-action-link" onClick={() => void saveCurrentScreen()} disabled={!screenDirty || screenSaving}>Save changes</button>
+            <button type="button" className="market-action-link" onClick={() => { setScreenEditor('rename'); setScreenName(activeScreen.name); setScreenDeleteArmed(false) }}><PencilSimple size={13} /> Rename</button>
+            <button type="button" className={screenDeleteArmed ? 'market-action-link market-action-danger' : 'market-action-link'} onClick={() => void deleteCurrentScreen()}><Trash size={13} /> {screenDeleteArmed ? 'Confirm delete' : 'Delete'}</button>
           </div>
-          <nav className="market-saved-screen-tabs" aria-label="Saved screens">
-            {savedScreens.map((screen) => (
-              <button
-                key={screen.id}
-                type="button"
-                className={screen.id === activeScreenId ? 'market-saved-screen-active' : ''}
-                aria-current={screen.id === activeScreenId ? 'page' : undefined}
-                onClick={() => applySavedScreen(screen)}
-              >
-                {screen.name}
-              </button>
-            ))}
-            <button type="button" className="market-saved-screen-new" onClick={() => { setScreenEditor('create'); setScreenName('') }}>
-              <Plus size={13} aria-hidden="true" /> New screen
-            </button>
-          </nav>
         </div>
+      )}
 
-        {screenEditor === 'create' && (
-          <form className="market-saved-screen-form" onSubmit={saveNewScreen}>
-            <label htmlFor="saved-screen-name">Name this screen</label>
-            <input id="saved-screen-name" value={screenName} onChange={(event) => setScreenName(event.target.value)} maxLength={48} autoFocus placeholder="e.g. AI infrastructure pullbacks" />
-            <button type="submit" disabled={screenSaving || !screenName.trim()}><Check size={14} /> Save screen</button>
-            <button type="button" aria-label="Cancel new saved screen" onClick={() => { setScreenEditor(null); setScreenName('') }}><X size={14} /></button>
-          </form>
-        )}
-
-        {activeScreen && screenEditor !== 'create' && (
-          <div className="market-saved-screen-context">
-            {screenEditor === 'rename' ? (
-              <form className="market-saved-screen-rename" onSubmit={renameScreen}>
-                <input aria-label="Saved screen name" value={screenName} onChange={(event) => setScreenName(event.target.value)} maxLength={48} autoFocus />
-                <button type="submit" aria-label="Save screen name" disabled={screenSaving || !screenName.trim()}><Check size={14} /></button>
-                <button type="button" aria-label="Cancel rename" onClick={() => { setScreenEditor(null); setScreenName('') }}><X size={14} /></button>
-              </form>
-            ) : (
-              <p><strong>{activeScreen.name}</strong>{screenDirty ? ' · Unsaved changes' : ' · Current screen'}</p>
-            )}
-            <div>
-              <button type="button" className="market-action-link" onClick={() => void saveCurrentScreen()} disabled={!screenDirty || screenSaving}>Save changes</button>
-              <button type="button" className="market-action-link" onClick={() => { setScreenEditor('rename'); setScreenName(activeScreen.name); setScreenDeleteArmed(false) }}><PencilSimple size={13} /> Rename</button>
-              <button type="button" className={screenDeleteArmed ? 'market-action-link market-action-danger' : 'market-action-link'} onClick={() => void deleteCurrentScreen()}><Trash size={13} /> {screenDeleteArmed ? 'Confirm delete' : 'Delete'}</button>
-            </div>
-          </div>
-        )}
-
-        {screenNotice && <p className="market-saved-screen-notice" aria-live="polite">{screenNotice}</p>}
-      </section>
+      {screenNotice && <p className="market-saved-screen-notice" aria-live="polite">{screenNotice}</p>}
 
       <div className="market-screen-summary">
         <span>{response.total} matches</span>
