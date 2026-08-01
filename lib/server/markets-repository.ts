@@ -316,6 +316,37 @@ export async function fetchLatestScreener(query: ScreenerQuery): Promise<Screene
   })
 }
 
+/**
+ * Loads the current snapshot rows for named symbols without passing through the
+ * paginated screener view. Portfolio valuation must never depend on whichever
+ * alphabetical slice happens to be visible in the screener UI.
+ */
+export async function fetchLatestScreenerSymbols(symbols: string[]): Promise<ScreenerResponse | null> {
+  const supabase = getSupabaseClient()
+  const snapshot = await fetchLatestSnapshotMeta()
+  const requested = [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))]
+  if (!supabase || !snapshot || requested.length === 0) return null
+
+  const { data, error } = await supabase
+    .from('screener_rows')
+    .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,tradable,data_as_of')
+    .eq('snapshot_id', snapshot.id)
+    .in('symbol', requested)
+  if (error) return null
+
+  const rows = ((data ?? []) as ScreenerRowRecord[]).map(normalizeScreenerRow)
+  return {
+    rows,
+    total: rows.length,
+    page: 1,
+    pageSize: rows.length,
+    feed: snapshot.feed,
+    dataAsOf: snapshot.data_as_of,
+    snapshotId: snapshot.id,
+    stale: isStale(snapshot.data_as_of),
+  }
+}
+
 function normalizeMarketOverview(value: unknown): MarketOverviewResponse | null {
   if (!isRecord(value) || !isRecord(value.state) || !isRecord(value.memo)) return null
   if (
