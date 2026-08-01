@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { MarketsIntentLink } from './MarketsIntentLink'
 import { MarketsScreener } from './MarketsScreener'
 import { MarketsWatchlists } from './MarketsWatchlists'
@@ -13,6 +13,24 @@ function percent(value: number | null): string {
   return value === null ? '—' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
 }
 
+const GROUP_COLUMNS = [
+  { key: 'label', label: 'Group' },
+  { key: 'dayReturn', label: '1d' },
+  { key: 'return30d', label: '30d' },
+  { key: 'return50d', label: '50d' },
+  { key: 'return200d', label: '200d' },
+  { key: 'return1y', label: '1yr' },
+  { key: 'vs50DayAverage', label: 'vs 50d avg', title: 'Average distance from each constituent’s 50-trading-day moving average' },
+  { key: 'vs200DayAverage', label: 'vs 200d avg', title: 'Average distance from each constituent’s 200-trading-day moving average' },
+] as const
+
+type GroupSortKey = (typeof GROUP_COLUMNS)[number]['key']
+
+function metricTone(value: number | null): string | undefined {
+  if (value === null || value === 0) return undefined
+  return value > 0 ? 'market-positive' : 'market-negative'
+}
+
 function GroupTable({
   groups,
   leadership,
@@ -21,7 +39,22 @@ function GroupTable({
   leadership: MarketLeadershipSnapshot | null
 }) {
   const [selected, setSelected] = useState(groups[0]?.label ?? '')
+  const [sort, setSort] = useState<{ key: GroupSortKey; direction: 'ascending' | 'descending' }>({
+    key: 'return30d',
+    direction: 'descending',
+  })
   const group = groups.find((item) => item.label === selected) ?? groups[0]
+  const sortedGroups = useMemo(() => [...groups].sort((left, right) => {
+    const multiplier = sort.direction === 'ascending' ? 1 : -1
+    if (sort.key === 'label') {
+      return left.label.localeCompare(right.label) * multiplier
+    }
+    const leftValue = left[sort.key]
+    const rightValue = right[sort.key]
+    if (leftValue === null) return 1
+    if (rightValue === null) return -1
+    return (leftValue - rightValue) * multiplier
+  }), [groups, sort])
   const constituents = leadership?.stocks
     .filter((stock) => group?.groupType === 'sector' ? stock.sector === group.label : stock.subIndustry === group?.label)
     .sort((left, right) => (right.return30d ?? -Infinity) - (left.return30d ?? -Infinity)) ?? []
@@ -30,9 +63,24 @@ function GroupTable({
     <div className="market-explore-groups">
       <div className="market-group-table-wrap">
         <table className="market-group-table">
-          <thead><tr><th>Group</th><th>n</th><th>1d</th><th>30d</th><th>50d</th><th>200d</th><th>1yr</th><th>vs50</th><th>vs200</th></tr></thead>
+          <thead><tr>{GROUP_COLUMNS.map((column) => {
+            const active = sort.key === column.key
+            const direction = active ? sort.direction : undefined
+            return (
+              <th key={column.key} aria-sort={direction} title={'title' in column ? column.title : undefined}>
+                <button
+                  type="button"
+                  onClick={() => setSort((current) => current.key === column.key
+                    ? { ...current, direction: current.direction === 'ascending' ? 'descending' : 'ascending' }
+                    : { key: column.key, direction: 'descending' })}
+                >
+                  {column.label}<span aria-hidden="true">{active ? (sort.direction === 'ascending' ? ' ↑' : ' ↓') : ''}</span>
+                </button>
+              </th>
+            )
+          })}</tr></thead>
           <tbody>
-            {groups.map((item) => (
+            {sortedGroups.map((item) => (
               <tr
                 key={`${item.sector}-${item.label}`}
                 className={item.label === group?.label ? 'market-group-selected' : ''}
@@ -48,14 +96,13 @@ function GroupTable({
                 }}
               >
                 <td>{item.label}</td>
-                <td>{item.constituentCount}</td>
-                <td className={(item.dayReturn ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{percent(item.dayReturn)}</td>
-                <td className={(item.return30d ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{percent(item.return30d)}</td>
-                <td>{percent(item.return50d)}</td>
-                <td>{percent(item.return200d)}</td>
-                <td>{percent(item.return1y)}</td>
-                <td>{percent(item.vs50DayAverage)}</td>
-                <td>{percent(item.vs200DayAverage)}</td>
+                <td className={metricTone(item.dayReturn)}>{percent(item.dayReturn)}</td>
+                <td className={metricTone(item.return30d)}>{percent(item.return30d)}</td>
+                <td className={metricTone(item.return50d)}>{percent(item.return50d)}</td>
+                <td className={metricTone(item.return200d)}>{percent(item.return200d)}</td>
+                <td className={metricTone(item.return1y)}>{percent(item.return1y)}</td>
+                <td className={metricTone(item.vs50DayAverage)}>{percent(item.vs50DayAverage)}</td>
+                <td className={metricTone(item.vs200DayAverage)}>{percent(item.vs200DayAverage)}</td>
               </tr>
             ))}
           </tbody>

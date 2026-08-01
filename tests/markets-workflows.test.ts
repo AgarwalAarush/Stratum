@@ -77,14 +77,26 @@ test('Stock Viewer chart is interactive and modal navigation sticks to the modal
   assert.match(styles, /\.stock-viewer-chart polyline[\s\S]*stroke-width: 1\.75;/)
 })
 
-test('group rows expose full-row selection and a balanced constituent grid', () => {
+test('group rows expose full-row selection, sortable metric columns, and a balanced constituent grid', () => {
   const explore = source('components/markets/MarketsExplore.tsx')
   const styles = source('app/globals.css')
   assert.match(explore, /role="button"[\s\S]*onClick=\{\(\) => setSelected\(item\.label\)\}/)
-  assert.match(explore, /<th>1d<\/th>/)
+  assert.match(explore, /const GROUP_COLUMNS/)
+  assert.match(explore, /key: 'return30d'/)
+  assert.match(explore, /aria-sort=\{direction\}/)
+  assert.match(explore, /sortedGroups\.map/)
+  assert.doesNotMatch(explore, /<th>n<\/th>/)
+  assert.match(explore, /metricTone\(item\.return200d\)/)
+  assert.match(explore, /metricTone\(item\.vs200DayAverage\)/)
   assert.match(explore, /percent\(item\.dayReturn\)/)
   assert.match(explore, /percent\(group\.dayReturn\)/)
   assert.match(styles, /\.market-group-constituents \{[\s\S]*grid-template-columns: repeat\(2,/)
+})
+
+test('watchlist symbol search stays visually quiet while typing', () => {
+  const styles = source('app/globals.css')
+  assert.match(styles, /\.market-watchlist-search-field:focus-within \{\s*border-color: var\(--market-border\);\s*box-shadow: none;/)
+  assert.match(styles, /\.market-watchlist-search-field input:focus-visible \{\s*outline: none;/)
 })
 
 test('return filters use a custom period picker instead of the browser select menu', () => {
