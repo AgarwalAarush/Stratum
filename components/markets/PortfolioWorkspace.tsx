@@ -1,8 +1,8 @@
 'use client'
 
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CaretDown, Check, Plus } from '@phosphor-icons/react'
+import { CaretDown, Check, Plus, X } from '@phosphor-icons/react'
 import { formatEntryAction } from '@/lib/markets/research-presentation'
 import { parsePortfolioUpdate, type ParsedPortfolioUpdate } from '@/lib/markets/portfolio-updates'
 import { MarketsIntentLink } from './MarketsIntentLink'
@@ -60,6 +60,7 @@ export function PortfolioWorkspace({
   const [reviews, setReviews] = useState(initialData.reviews)
   const [reviewingDecisionId, setReviewingDecisionId] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
+  const recordTriggerRef = useRef<HTMLButtonElement>(null)
 
   const activePortfolio = portfolios.find((portfolio) => portfolio.account.id === activePortfolioId) ?? null
   const structuredActionIsCash = structuredAction === 'cash_deposit' || structuredAction === 'cash_withdrawal'
@@ -174,6 +175,31 @@ export function PortfolioWorkspace({
   const activeAlerts = activePortfolio
     ? inbox.filter((item) => item.portfolioId === activePortfolio.account.id)
     : []
+
+  const openRecording = () => {
+    setNotice('')
+    setPreview(null)
+    setRecordingOpen(true)
+  }
+
+  const closeRecording = () => {
+    setPreview(null)
+    setRecordingOpen(false)
+    recordTriggerRef.current?.focus()
+  }
+
+  useEffect(() => {
+    if (!recordingOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setPreview(null)
+      setRecordingOpen(false)
+      recordTriggerRef.current?.focus()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [recordingOpen])
+
   return (
     <section className="portfolio-workspace">
       <header className="market-explore-heading">
@@ -193,7 +219,7 @@ export function PortfolioWorkspace({
               </button>)}
             </div> : null}
           </div>
-          <button type="button" className="portfolio-record-trigger" aria-expanded={recordingOpen} onClick={() => setRecordingOpen((open) => !open)}><Plus size={14} weight="bold" /> Record update</button>
+          <button ref={recordTriggerRef} type="button" className="portfolio-record-trigger" aria-haspopup="dialog" aria-expanded={recordingOpen} onClick={openRecording}><Plus size={14} weight="bold" /> Record update</button>
         </div>
       </header>
       <nav className="market-portfolio-tabs" aria-label="Portfolio workflow">
@@ -220,35 +246,6 @@ export function PortfolioWorkspace({
               </div>
               <p>Weighted from the current market snapshot · {universe.feed === 'illustrative' ? 'Illustrative' : 'Market'} data as of {asOf(universe.dataAsOf)}</p>
             </section>
-            {recordingOpen ? <section className="portfolio-update-panel" aria-label="Record a portfolio update">
-            <div className="portfolio-update-heading"><p className="markets-eyebrow">Record an update</p><h2>{activePortfolio.account.name}</h2></div>
-            <div className="portfolio-update-mode" role="group" aria-label="Update method">
-              <button type="button" aria-pressed={updateMode === 'form'} onClick={() => setUpdateMode('form')}>Enter transaction</button>
-              <button type="button" aria-pressed={updateMode === 'language'} onClick={() => setUpdateMode('language')}>Use natural language</button>
-            </div>
-            {updateMode === 'form' ? <form className="manual-position-form" onSubmit={submitStructuredUpdate}>
-              <label>Action<select name="transactionAction" required value={structuredAction} onChange={(event) => setStructuredAction(event.target.value as ParsedPortfolioUpdate['action'])}><option value="buy">Buy</option><option value="sell">Sell</option><option value="cash_deposit">Add cash</option><option value="cash_withdrawal">Withdraw cash</option></select></label>
-              {structuredActionIsCash ? <label>Cash amount<input name="cashAmount" type="number" step="0.01" min="0.01" required /></label> : <>
-                <label>Symbol<input name="symbol" maxLength={12} placeholder="NVDA" required /></label>
-                <label>Shares<input name="quantity" type="number" step="any" min="0.000001" required /></label>
-                <label>Price / share<input name="pricePerShare" type="number" step="0.0001" min="0.0001" required /></label>
-                <label>Fees<input name="fees" type="number" step="0.01" min="0" defaultValue="0" /></label>
-              </>}
-              <label>Date<input name="occurredAt" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
-              <label>Notes<textarea name="notes" placeholder="Optional reason or context" /></label>
-              <button type="submit" disabled={!activePortfolio}>Record transaction</button>
-            </form> : <form className="natural-language-update" onSubmit={previewNaturalLanguageUpdate}>
-              <label>Describe the update<textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="Buy 10 shares of NVDA at $200" required /></label>
-              <p>Also works for: “Sell 2 AMD at $490” or “Deposit $5,000 cash”.</p>
-              <button type="submit" disabled={!activePortfolio}>Preview update</button>
-            </form>}
-            {preview ? <div className="portfolio-update-preview" role="status">
-              <strong>Confirm this update</strong>
-              <p>{preview.action.replaceAll('_', ' ')}{preview.symbol ? ` · ${preview.quantity} ${preview.symbol} at ${formatMoney(preview.pricePerShare)}` : ` · ${formatMoney(preview.pricePerShare)}`} · {preview.occurredAt}</p>
-              <div><button type="button" onClick={() => void recordPortfolioUpdate(preview, 'natural_language')}>Confirm and record</button><button type="button" onClick={() => setPreview(null)}>Edit</button></div>
-            </div> : null}
-            {notice ? <p className="portfolio-update-notice" role="status">{notice}</p> : null}
-            </section> : null}
             <section className="portfolio-holdings-table-section">
               <header><div><p className="markets-eyebrow">Owned</p><h2>{activePortfolio.holdings.length} positions</h2></div><span>{activePortfolio.marketValue === null ? 'Some quotes are unavailable' : `${formatMoney(activePortfolio.marketValue)} in equities`}</span></header>
               <div className="market-watchlist-table-wrap scrollbar-none">
@@ -317,6 +314,41 @@ export function PortfolioWorkspace({
           {notice ? <p className="portfolio-review-notice">{notice}</p> : null}
         </div>
       ) : null}
+      {recordingOpen ? <div className="portfolio-update-modal-layer">
+        <button type="button" className="portfolio-update-modal-backdrop" aria-label="Close record update dialog" onClick={closeRecording} />
+        <section className="portfolio-update-panel" role="dialog" aria-modal="true" aria-labelledby="portfolio-update-title">
+          <header className="portfolio-update-heading">
+            <div><p className="markets-eyebrow">Record an update</p><h2 id="portfolio-update-title">{activePortfolio?.account.name ?? 'Portfolio'}</h2></div>
+            <button type="button" className="portfolio-update-close" aria-label="Close record update dialog" onClick={closeRecording}><X size={17} /></button>
+          </header>
+          <div className="portfolio-update-mode" role="group" aria-label="Update method">
+            <button type="button" aria-pressed={updateMode === 'form'} onClick={() => setUpdateMode('form')}>Enter transaction</button>
+            <button type="button" aria-pressed={updateMode === 'language'} onClick={() => setUpdateMode('language')}>Use natural language</button>
+          </div>
+          {updateMode === 'form' ? <form className="manual-position-form" onSubmit={submitStructuredUpdate}>
+            <label>Action<select name="transactionAction" required value={structuredAction} onChange={(event) => setStructuredAction(event.target.value as ParsedPortfolioUpdate['action'])}><option value="buy">Buy</option><option value="sell">Sell</option><option value="cash_deposit">Add cash</option><option value="cash_withdrawal">Withdraw cash</option></select></label>
+            {structuredActionIsCash ? <label>Cash amount<input name="cashAmount" type="number" step="0.01" min="0.01" required /></label> : <>
+              <label>Symbol<input name="symbol" maxLength={12} placeholder="NVDA" required /></label>
+              <label>Shares<input name="quantity" type="number" step="any" min="0.000001" required /></label>
+              <label>Price / share<input name="pricePerShare" type="number" step="0.0001" min="0.0001" required /></label>
+              <label>Fees<input name="fees" type="number" step="0.01" min="0" defaultValue="0" /></label>
+            </>}
+            <label>Date<input name="occurredAt" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
+            <label className="portfolio-update-notes">Notes<textarea name="notes" placeholder="Optional reason or context" /></label>
+            <button type="submit" disabled={!activePortfolio}>Record transaction</button>
+          </form> : <form className="natural-language-update" onSubmit={previewNaturalLanguageUpdate}>
+            <label>Describe the update<textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="Buy 10 shares of NVDA at $200" required /></label>
+            <p>Also works for: “Sell 2 AMD at $490” or “Deposit $5,000 cash”.</p>
+            <button type="submit" disabled={!activePortfolio}>Preview update</button>
+          </form>}
+          {preview ? <div className="portfolio-update-preview" role="status">
+            <strong>Confirm this update</strong>
+            <p>{preview.action.replaceAll('_', ' ')}{preview.symbol ? ` · ${preview.quantity} ${preview.symbol} at ${formatMoney(preview.pricePerShare)}` : ` · ${formatMoney(preview.pricePerShare)}`} · {preview.occurredAt}</p>
+            <div><button type="button" onClick={() => void recordPortfolioUpdate(preview, 'natural_language')}>Confirm and record</button><button type="button" onClick={() => setPreview(null)}>Edit</button></div>
+          </div> : null}
+          {notice ? <p className="portfolio-update-notice" role="status">{notice}</p> : null}
+        </section>
+      </div> : null}
     </section>
   )
 }

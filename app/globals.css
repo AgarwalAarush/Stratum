@@ -7283,10 +7283,6 @@ body:has(.markets-shell) {
   padding-bottom: 15px;
 }
 
-.portfolio-update-panel {
-  margin-top: 24px;
-}
-
 .portfolio-holdings-table-section {
   margin-top: 34px;
 }
@@ -7415,9 +7411,37 @@ body:has(.markets-shell) {
   padding-top: 38px;
 }
 
+.portfolio-update-modal-layer {
+  align-items: center;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 50;
+}
+
+.portfolio-update-modal-backdrop {
+  background: color-mix(in srgb, var(--market-bg) 70%, transparent);
+  inset: 0;
+  position: absolute;
+}
+
 .portfolio-update-panel {
+  background: var(--market-surface);
   border: 1px solid var(--market-border);
-  padding: 22px;
+  box-shadow: 0 22px 54px color-mix(in srgb, var(--market-text) 18%, transparent);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  padding: 20px;
+  position: relative;
+  width: min(520px, calc(100vw - 40px));
+}
+
+.portfolio-update-heading {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
 }
 
 .portfolio-update-heading h2,
@@ -7425,6 +7449,21 @@ body:has(.markets-shell) {
   font-size: 26px;
   font-weight: 500;
   margin-top: 5px;
+}
+
+.portfolio-update-close {
+  align-items: center;
+  color: var(--market-text-muted);
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  margin: -6px -6px 0 0;
+  width: 32px;
+}
+
+.portfolio-update-close:hover {
+  background: var(--market-surface-soft);
+  color: var(--market-text);
 }
 
 .portfolio-update-mode {
@@ -7456,11 +7495,9 @@ body:has(.markets-shell) {
 }
 
 .manual-position-form {
-  border: 1px solid var(--market-border);
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 11px;
-  padding: 22px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .manual-position-form h2 {
@@ -7477,6 +7514,12 @@ body:has(.markets-shell) {
   gap: 4px;
 }
 
+.manual-position-form > label:first-child,
+.manual-position-form > button,
+.portfolio-update-notes {
+  grid-column: 1 / -1;
+}
+
 .manual-position-form input,
 .manual-position-form textarea,
 .manual-position-form select,
@@ -7490,7 +7533,7 @@ body:has(.markets-shell) {
 }
 
 .manual-position-form textarea {
-  min-height: 70px;
+  min-height: 58px;
 }
 
 .manual-position-form select {
