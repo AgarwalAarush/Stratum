@@ -1,8 +1,8 @@
 'use client'
 
-import { CaretDown, CaretUp, Funnel } from '@phosphor-icons/react'
+import { CaretDown, CaretUp, Check, Funnel, PencilSimple, Plus, Trash, X } from '@phosphor-icons/react'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { MarketSparkline } from './MarketSparkline'
 import { ScreenerConditionBuilder } from './ScreenerConditionBuilder'
 import {
@@ -12,7 +12,16 @@ import {
   nextScreenerSort,
   SCREENER_RETURN_PERIODS,
 } from '@/lib/markets/screener'
+import {
+  LEGACY_SAVED_SCREEN_STORAGE_KEY,
+  parseSavedScreenerQuery,
+  parseSavedScreenerScreens,
+  SAVED_SCREENS_STORAGE_KEY,
+  screenQueryFromCurrent,
+} from '@/lib/markets/saved-screens'
 import type {
+  SavedScreenerQuery,
+  SavedScreenerScreen,
   ScreenerFilter,
   ScreenerPreset,
   ScreenerQuery,
@@ -28,6 +37,16 @@ interface MarketsScreenerProps {
 const RESULTS_PAGE_SIZE = 50
 const MAX_PREFETCHED_STOCKS = 3
 const STOCK_PREFETCH_DELAY_MS = 140
+
+function newLocalScreenId(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? `local-${crypto.randomUUID()}`
+    : `local-${Date.now()}`
+}
+
+function screenErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback
+}
 
 interface SortableHeaderProps {
   direction: 'asc' | 'desc'
@@ -126,8 +145,16 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   const [response, setResponse] = useState(initialResponse)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [savedScreens, setSavedScreens] = useState<SavedScreenerScreen[]>([])
+  const [activeScreenId, setActiveScreenId] = useState<string | null>(null)
+  const [screenDirty, setScreenDirty] = useState(false)
+  const [screenEditor, setScreenEditor] = useState<'create' | 'rename' | null>(null)
+  const [screenName, setScreenName] = useState('')
+  const [screenSaving, setScreenSaving] = useState(false)
+  const [screenDeleteArmed, setScreenDeleteArmed] = useState(false)
+  const [screenNotice, setScreenNotice] = useState('')
+  const [screenPersistence, setScreenPersistence] = useState<'loading' | 'server' | 'local'>('loading')
   const requestRef = useRef<AbortController | null>(null)
   const prefetchTimer = useRef<number | null>(null)
   const prefetchedStocks = useRef(new Set<string>())
@@ -135,6 +162,56 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   useEffect(() => () => {
     requestRef.current?.abort()
     if (prefetchTimer.current !== null) window.clearTimeout(prefetchTimer.current)
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const parseLocalScreens = () => {
+      try {
+        const stored = localStorage.getItem(SAVED_SCREENS_STORAGE_KEY)
+        return stored ? parseSavedScreenerScreens(JSON.parse(stored)) : []
+      } catch {
+        return []
+      }
+    }
+    const legacyScreen = (): SavedScreenerQuery | null => {
+      try {
+        const stored = localStorage.getItem(LEGACY_SAVED_SCREEN_STORAGE_KEY)
+        return stored ? parseSavedScreenerQuery(JSON.parse(stored)) : null
+      } catch {
+        return null
+      }
+    }
+    const hydrateScreens = async () => {
+      const localScreens = parseLocalScreens()
+      const legacy = legacyScreen()
+      try {
+        const result = await fetch('/api/markets/saved-screens')
+        const payload = await result.json()
+        if (!result.ok) throw new Error(payload?.error ?? 'Unable to load saved screens')
+        let screens = Array.isArray(payload.screens) ? payload.screens as SavedScreenerScreen[] : []
+        if (screens.length === 0 && legacy) {
+          const migration = await fetch('/api/markets/saved-screens', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'create', name: 'Saved screen', query: legacy }),
+          })
+          const migrated = await migration.json()
+          if (migration.ok && migrated.screen) {
+            screens = [migrated.screen as SavedScreenerScreen]
+            localStorage.removeItem(LEGACY_SAVED_SCREEN_STORAGE_KEY)
+          }
+        }
+        if (!active) return
+        setSavedScreens(screens)
+        setScreenPersistence('server')
+      } catch {
+        if (!active) return
+        setSavedScreens(localScreens)
+        setScreenPersistence('local')
+      }
+    }
+    void hydrateScreens()
+    return () => { active = false }
   }, [])
 
   const execute = useCallback(async (nextQuery?: Partial<ScreenerQuery>) => {
@@ -181,13 +258,13 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
     setFilters([...next.filters])
     setSort(next.sort)
     setDirection(next.direction)
-    setSaved(false)
+    setScreenDirty(Boolean(activeScreenId))
     void execute({ preset: nextPreset, filters: next.filters, sort: next.sort, direction: next.direction, page: 1 })
   }
 
   const changeFilters = (nextFilters: ScreenerFilter[]) => {
     setFilters(nextFilters)
-    setSaved(false)
+    setScreenDirty(Boolean(activeScreenId))
     void execute({ filters: nextFilters, page: 1 })
   }
 
@@ -196,13 +273,198 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
     setFilters([...DEFAULT_SCREENER_FILTERS])
     setSort(DEFAULT_SCREENER_QUERY.sort)
     setDirection(DEFAULT_SCREENER_QUERY.direction)
-    setSaved(false)
+    setScreenDirty(Boolean(activeScreenId))
     void execute(DEFAULT_SCREENER_QUERY)
   }
 
-  const saveScreen = () => {
-    localStorage.setItem('stratum:markets:saved-screen:v1', JSON.stringify({ preset, filters, sort, direction }))
-    setSaved(true)
+  const currentScreenQuery = (): SavedScreenerQuery => screenQueryFromCurrent({ preset, filters, sort, direction })
+
+  const persistLocalScreens = (screens: SavedScreenerScreen[]) => {
+    localStorage.setItem(SAVED_SCREENS_STORAGE_KEY, JSON.stringify({ version: 1, screens }))
+  }
+
+  const saveNewScreen = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const name = screenName.trim()
+    if (!name || screenSaving) return
+    setScreenSaving(true)
+    setScreenNotice('')
+    const query = currentScreenQuery()
+    let didSave = false
+    try {
+      const response = await fetch('/api/markets/saved-screens', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', name, query }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload?.error ?? 'Unable to save screen')
+      const screen = payload.screen as SavedScreenerScreen
+      setSavedScreens((current) => [screen, ...current])
+      setActiveScreenId(screen.id)
+      setScreenPersistence('server')
+      setScreenNotice(`${screen.name} saved privately.`)
+      didSave = true
+    } catch (error) {
+      if (screenPersistence === 'server') {
+        setScreenNotice(screenErrorMessage(error, 'Unable to save screen.'))
+        return
+      }
+      const now = new Date().toISOString()
+      const screen: SavedScreenerScreen = { id: newLocalScreenId(), name, query, createdAt: now, updatedAt: now }
+      setSavedScreens((current) => {
+        const next = [screen, ...current]
+        persistLocalScreens(next)
+        return next
+      })
+      setActiveScreenId(screen.id)
+      setScreenPersistence('local')
+      setScreenNotice(`${screen.name} is saved on this device until private sync is available.`)
+      didSave = true
+    } finally {
+      setScreenSaving(false)
+      if (didSave) {
+        setScreenDirty(false)
+        setScreenEditor(null)
+        setScreenName('')
+      }
+    }
+  }
+
+  const saveCurrentScreen = async () => {
+    const activeScreen = savedScreens.find((screen) => screen.id === activeScreenId)
+    if (!activeScreen || screenSaving) return
+    setScreenSaving(true)
+    setScreenNotice('')
+    const query = currentScreenQuery()
+    let didSave = false
+    try {
+      const response = await fetch('/api/markets/saved-screens', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update', id: activeScreen.id, query }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload?.error ?? 'Unable to save screen')
+      const updated = payload.screen as SavedScreenerScreen
+      setSavedScreens((current) => current.map((screen) => screen.id === updated.id ? updated : screen))
+      setScreenPersistence('server')
+      setScreenNotice(`${updated.name} updated.`)
+      didSave = true
+    } catch (error) {
+      if (screenPersistence === 'server' && !activeScreen.id.startsWith('local-')) {
+        setScreenNotice(screenErrorMessage(error, 'Unable to update screen.'))
+        return
+      }
+      const updated = { ...activeScreen, query, updatedAt: new Date().toISOString() }
+      setSavedScreens((current) => {
+        const next = current.map((screen) => screen.id === updated.id ? updated : screen)
+        persistLocalScreens(next)
+        return next
+      })
+      setScreenPersistence('local')
+      setScreenNotice(`${updated.name} is updated on this device until private sync is available.`)
+      didSave = true
+    } finally {
+      setScreenSaving(false)
+      if (didSave) setScreenDirty(false)
+    }
+  }
+
+  const renameScreen = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const activeScreen = savedScreens.find((screen) => screen.id === activeScreenId)
+    const name = screenName.trim()
+    if (!activeScreen || !name || screenSaving) return
+    setScreenSaving(true)
+    let didRename = false
+    try {
+      const response = await fetch('/api/markets/saved-screens', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update', id: activeScreen.id, name }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload?.error ?? 'Unable to rename screen')
+      const updated = payload.screen as SavedScreenerScreen
+      setSavedScreens((current) => current.map((screen) => screen.id === updated.id ? updated : screen))
+      setScreenPersistence('server')
+      setScreenNotice(`Renamed to ${updated.name}.`)
+      didRename = true
+    } catch (error) {
+      if (screenPersistence === 'server' && !activeScreen.id.startsWith('local-')) {
+        setScreenNotice(screenErrorMessage(error, 'Unable to rename screen.'))
+        return
+      }
+      const updated = { ...activeScreen, name, updatedAt: new Date().toISOString() }
+      setSavedScreens((current) => {
+        const next = current.map((screen) => screen.id === updated.id ? updated : screen)
+        persistLocalScreens(next)
+        return next
+      })
+      setScreenPersistence('local')
+      setScreenNotice(`Renamed on this device until private sync is available.`)
+      didRename = true
+    } finally {
+      setScreenSaving(false)
+      if (didRename) {
+        setScreenEditor(null)
+        setScreenName('')
+      }
+    }
+  }
+
+  const applySavedScreen = (screen: SavedScreenerScreen) => {
+    setPreset(screen.query.preset)
+    setFilters(screen.query.filters)
+    setSort(screen.query.sort)
+    setDirection(screen.query.direction)
+    setActiveScreenId(screen.id)
+    setScreenDirty(false)
+    setScreenDeleteArmed(false)
+    setScreenEditor(null)
+    setScreenNotice(`${screen.name} loaded.`)
+    void execute({ ...screen.query, page: 1 })
+  }
+
+  const deleteCurrentScreen = async () => {
+    const activeScreen = savedScreens.find((screen) => screen.id === activeScreenId)
+    if (!activeScreen || screenSaving) return
+    if (!screenDeleteArmed) {
+      setScreenDeleteArmed(true)
+      setScreenNotice(`Select delete again to remove ${activeScreen.name}.`)
+      return
+    }
+    setScreenSaving(true)
+    let didDelete = false
+    try {
+      const response = await fetch('/api/markets/saved-screens', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', id: activeScreen.id }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload?.error ?? 'Unable to delete screen')
+      setScreenPersistence('server')
+      didDelete = true
+    } catch (error) {
+      if (screenPersistence === 'server' && !activeScreen.id.startsWith('local-')) {
+        setScreenNotice(screenErrorMessage(error, 'Unable to delete screen.'))
+        return
+      }
+      setScreenPersistence('local')
+      didDelete = true
+    } finally {
+      setScreenSaving(false)
+      if (!didDelete) {
+        setScreenDeleteArmed(false)
+        return
+      }
+      setSavedScreens((current) => {
+        const next = current.filter((screen) => screen.id !== activeScreen.id)
+        persistLocalScreens(next)
+        return next
+      })
+      setActiveScreenId(null)
+      setScreenDeleteArmed(false)
+      setScreenNotice(`${activeScreen.name} deleted.`)
+    }
   }
 
   const changeSort = (field: ScreenerSortField) => {
@@ -210,6 +472,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
     const next = nextScreenerSort(field, { sort, direction }, presetDefault)
     setSort(next.sort)
     setDirection(next.direction)
+    setScreenDirty(Boolean(activeScreenId))
     void execute({ sort: next.sort, direction: next.direction, page: 1 })
   }
 
@@ -235,6 +498,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   const endRow = Math.min(response.page * response.pageSize, response.total)
   const selectedReturnField = (filters.find((filter) => isScreenerReturnField(filter.field))?.field ?? 'dailyChange') as ScreenerReturnField
   const selectedReturnPeriod = SCREENER_RETURN_PERIODS.find((period) => period.field === selectedReturnField)!
+  const activeScreen = savedScreens.find((screen) => screen.id === activeScreenId) ?? null
 
   return (
     <section className="market-screener" aria-labelledby="stock-screener-title">
@@ -259,7 +523,9 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
         <div className="market-filter-actions">
           <button type="button" className="market-action-link" onClick={resetScreen}>Reset</button>
           <span className="market-action-divider" aria-hidden="true" />
-          <button type="button" className="market-action-link" onClick={saveScreen}>{saved ? 'Saved locally' : 'Save screen'}</button>
+          <button type="button" className="market-action-link" onClick={() => { setScreenEditor('create'); setScreenName('') }}>
+            <Plus size={13} aria-hidden="true" /> Save as new
+          </button>
         </div>
       </div>
 
@@ -278,6 +544,61 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
           </button>
         ))}
       </nav>
+
+      <section className="market-saved-screens" aria-labelledby="saved-screens-title">
+        <div className="market-saved-screens-toolbar">
+          <div className="market-saved-screens-heading">
+            <span id="saved-screens-title">Your screens</span>
+            <small>{screenPersistence === 'server' ? 'Saved privately' : screenPersistence === 'local' ? 'Local fallback' : 'Loading…'}</small>
+          </div>
+          <nav className="market-saved-screen-tabs" aria-label="Saved screens">
+            {savedScreens.map((screen) => (
+              <button
+                key={screen.id}
+                type="button"
+                className={screen.id === activeScreenId ? 'market-saved-screen-active' : ''}
+                aria-current={screen.id === activeScreenId ? 'page' : undefined}
+                onClick={() => applySavedScreen(screen)}
+              >
+                {screen.name}
+              </button>
+            ))}
+            <button type="button" className="market-saved-screen-new" onClick={() => { setScreenEditor('create'); setScreenName('') }}>
+              <Plus size={13} aria-hidden="true" /> New screen
+            </button>
+          </nav>
+        </div>
+
+        {screenEditor === 'create' && (
+          <form className="market-saved-screen-form" onSubmit={saveNewScreen}>
+            <label htmlFor="saved-screen-name">Name this screen</label>
+            <input id="saved-screen-name" value={screenName} onChange={(event) => setScreenName(event.target.value)} maxLength={48} autoFocus placeholder="e.g. AI infrastructure pullbacks" />
+            <button type="submit" disabled={screenSaving || !screenName.trim()}><Check size={14} /> Save screen</button>
+            <button type="button" aria-label="Cancel new saved screen" onClick={() => { setScreenEditor(null); setScreenName('') }}><X size={14} /></button>
+          </form>
+        )}
+
+        {activeScreen && screenEditor !== 'create' && (
+          <div className="market-saved-screen-context">
+            {screenEditor === 'rename' ? (
+              <form className="market-saved-screen-rename" onSubmit={renameScreen}>
+                <input aria-label="Saved screen name" value={screenName} onChange={(event) => setScreenName(event.target.value)} maxLength={48} autoFocus />
+                <button type="submit" aria-label="Save screen name" disabled={screenSaving || !screenName.trim()}><Check size={14} /></button>
+                <button type="button" aria-label="Cancel rename" onClick={() => { setScreenEditor(null); setScreenName('') }}><X size={14} /></button>
+              </form>
+            ) : (
+              <p><strong>{activeScreen.name}</strong>{screenDirty ? ' · Unsaved changes' : ' · Current screen'}</p>
+            )}
+            <div>
+              <button type="button" className="market-action-link" onClick={() => void saveCurrentScreen()} disabled={!screenDirty || screenSaving}>Save changes</button>
+              <button type="button" className="market-action-link" onClick={() => { setScreenEditor('rename'); setScreenName(activeScreen.name); setScreenDeleteArmed(false) }}><PencilSimple size={13} /> Rename</button>
+              <button type="button" className={screenDeleteArmed ? 'market-action-link market-action-danger' : 'market-action-link'} onClick={() => void deleteCurrentScreen()}><Trash size={13} /> {screenDeleteArmed ? 'Confirm delete' : 'Delete'}</button>
+            </div>
+          </div>
+        )}
+
+        {screenNotice && <p className="market-saved-screen-notice" aria-live="polite">{screenNotice}</p>}
+      </section>
 
       <div className="market-screen-summary">
         <span>{response.total} matches</span>

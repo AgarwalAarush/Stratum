@@ -688,6 +688,16 @@ export interface ScreenerQuery {
   pageSize: number
 }
 
+export type SavedScreenerQuery = Pick<ScreenerQuery, 'preset' | 'filters' | 'sort' | 'direction'>
+
+export interface SavedScreenerScreen {
+  id: string
+  name: string
+  query: SavedScreenerQuery
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ScreenerRow {
   symbol: string
   company: string
