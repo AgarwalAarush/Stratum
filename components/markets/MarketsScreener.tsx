@@ -265,6 +265,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
     setScreenDirty(false)
     setScreenDeleteArmed(false)
     setScreenEditor(null)
+    setScreenNotice('')
     void execute({ preset: nextPreset, filters: next.filters, sort: next.sort, direction: next.direction, page: 1 })
   }
 
@@ -283,6 +284,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
     setScreenDirty(false)
     setScreenDeleteArmed(false)
     setScreenEditor(null)
+    setScreenNotice('')
     void execute(DEFAULT_SCREENER_QUERY)
   }
 
@@ -311,7 +313,6 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
       setSavedScreens((current) => [screen, ...current])
       setActiveScreenId(screen.id)
       setScreenPersistence('server')
-      setScreenNotice(`${screen.name} saved privately.`)
       didSave = true
     } catch (error) {
       if (screenPersistence === 'server') {
@@ -327,7 +328,6 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
       })
       setActiveScreenId(screen.id)
       setScreenPersistence('local')
-      setScreenNotice(`${screen.name} is saved on this device until private sync is available.`)
       didSave = true
     } finally {
       setScreenSaving(false)
@@ -356,7 +356,6 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
       const updated = payload.screen as SavedScreenerScreen
       setSavedScreens((current) => current.map((screen) => screen.id === updated.id ? updated : screen))
       setScreenPersistence('server')
-      setScreenNotice(`${updated.name} updated.`)
       didSave = true
     } catch (error) {
       if (screenPersistence === 'server' && !activeScreen.id.startsWith('local-')) {
@@ -370,7 +369,6 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
         return next
       })
       setScreenPersistence('local')
-      setScreenNotice(`${updated.name} is updated on this device until private sync is available.`)
       didSave = true
     } finally {
       setScreenSaving(false)
@@ -395,7 +393,6 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
       const updated = payload.screen as SavedScreenerScreen
       setSavedScreens((current) => current.map((screen) => screen.id === updated.id ? updated : screen))
       setScreenPersistence('server')
-      setScreenNotice(`Renamed to ${updated.name}.`)
       didRename = true
     } catch (error) {
       if (screenPersistence === 'server' && !activeScreen.id.startsWith('local-')) {
@@ -409,7 +406,6 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
         return next
       })
       setScreenPersistence('local')
-      setScreenNotice(`Renamed on this device until private sync is available.`)
       didRename = true
     } finally {
       setScreenSaving(false)
@@ -429,7 +425,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
     setScreenDirty(false)
     setScreenDeleteArmed(false)
     setScreenEditor(null)
-    setScreenNotice(`${screen.name} loaded.`)
+    setScreenNotice('')
     void execute({ ...screen.query, page: 1 })
   }
 
@@ -472,7 +468,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
       })
       setActiveScreenId(null)
       setScreenDeleteArmed(false)
-      setScreenNotice(`${activeScreen.name} deleted.`)
+      setScreenNotice('')
     }
   }
 
@@ -531,6 +527,13 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
         </div>
         <div className="market-filter-actions">
           <button type="button" className="market-action-link" onClick={resetScreen}>Reset</button>
+          {activeScreen && (
+            <>
+              <button type="button" className="market-action-link" onClick={() => void saveCurrentScreen()} disabled={!screenDirty || screenSaving}>Save changes</button>
+              <button type="button" className="market-action-link" onClick={() => { setScreenEditor('rename'); setScreenName(activeScreen.name); setScreenDeleteArmed(false); setScreenNotice('') }}><PencilSimple size={13} /> Rename</button>
+              <button type="button" className={screenDeleteArmed ? 'market-action-link market-action-danger' : 'market-action-link'} onClick={() => void deleteCurrentScreen()}><Trash size={13} /> {screenDeleteArmed ? 'Confirm delete' : 'Delete'}</button>
+            </>
+          )}
           <span className="market-action-divider" aria-hidden="true" />
           <button type="button" className="market-action-link" onClick={() => { setScreenEditor('create'); setScreenName('') }}>
             <Plus size={13} aria-hidden="true" /> Save as new
@@ -579,23 +582,13 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
         </form>
       )}
 
-      {activeScreen && screenEditor !== 'create' && (
-        <div className="market-saved-screen-context">
-          {screenEditor === 'rename' ? (
-            <form className="market-saved-screen-rename" onSubmit={renameScreen}>
-              <input aria-label="Saved screen name" value={screenName} onChange={(event) => setScreenName(event.target.value)} maxLength={48} autoFocus />
-              <button type="submit" aria-label="Save screen name" disabled={screenSaving || !screenName.trim()}><Check size={14} /></button>
-              <button type="button" aria-label="Cancel rename" onClick={() => { setScreenEditor(null); setScreenName('') }}><X size={14} /></button>
-            </form>
-          ) : (
-            <p><strong>{activeScreen.name}</strong>{screenDirty ? ' · Unsaved changes' : ''}</p>
-          )}
-          <div>
-            <button type="button" className="market-action-link" onClick={() => void saveCurrentScreen()} disabled={!screenDirty || screenSaving}>Save changes</button>
-            <button type="button" className="market-action-link" onClick={() => { setScreenEditor('rename'); setScreenName(activeScreen.name); setScreenDeleteArmed(false) }}><PencilSimple size={13} /> Rename</button>
-            <button type="button" className={screenDeleteArmed ? 'market-action-link market-action-danger' : 'market-action-link'} onClick={() => void deleteCurrentScreen()}><Trash size={13} /> {screenDeleteArmed ? 'Confirm delete' : 'Delete'}</button>
-          </div>
-        </div>
+      {activeScreen && screenEditor === 'rename' && (
+        <form className="market-saved-screen-form market-saved-screen-rename" onSubmit={renameScreen}>
+          <label htmlFor="saved-screen-rename">Rename screen</label>
+          <input id="saved-screen-rename" value={screenName} onChange={(event) => setScreenName(event.target.value)} maxLength={48} autoFocus />
+          <button type="submit" aria-label="Save screen name" disabled={screenSaving || !screenName.trim()}><Check size={14} /> Save</button>
+          <button type="button" aria-label="Cancel rename" onClick={() => { setScreenEditor(null); setScreenName('') }}><X size={14} /></button>
+        </form>
       )}
 
       {screenNotice && <p className="market-saved-screen-notice" aria-live="polite">{screenNotice}</p>}
