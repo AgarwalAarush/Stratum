@@ -49,13 +49,13 @@ function strongestGroup(groups: MarketGroupMetric[]): MarketGroupMetric | null {
     .sort((left, right) => Math.abs(right.dayReturn ?? 0) - Math.abs(left.dayReturn ?? 0))[0] ?? null
 }
 
-function participationItem(leadership: MarketLeadershipSnapshot): MarketAttentionItem {
+function participationItem(leadership: MarketLeadershipSnapshot, sessionLabel: string): MarketAttentionItem {
   const broad = leadership.advancingPercent >= 55
   const trendHealthy = leadership.above50DayPercent >= 50
   const title = broad
     ? 'Participation is supporting the move'
     : trendHealthy
-      ? "Today's market is weaker than the intermediate trend"
+      ? `${sessionLabel}'s market is weaker than the intermediate trend`
       : 'Participation and trend health are both soft'
   return {
     id: 'participation',
@@ -81,9 +81,12 @@ function groupItem(group: MarketGroupMetric): MarketAttentionItem {
   }
 }
 
-export function buildMarketAttention(leadership: MarketLeadershipSnapshot | null | undefined): MarketAttentionItem[] {
+export function buildMarketAttention(
+  leadership: MarketLeadershipSnapshot | null | undefined,
+  sessionLabel = 'Latest session',
+): MarketAttentionItem[] {
   if (!leadership) return []
-  const items: MarketAttentionItem[] = [participationItem(leadership)]
+  const items: MarketAttentionItem[] = [participationItem(leadership, sessionLabel)]
   const leading = stockItem(leadership.leaders[0] ?? leadership.stocks[0], 'leading')
   const falling = stockItem(leadership.laggards[0] ?? leadership.stocks.at(-1), 'falling')
   const group = strongestGroup(leadership.sectors.length > 0 ? leadership.sectors : leadership.subIndustries)

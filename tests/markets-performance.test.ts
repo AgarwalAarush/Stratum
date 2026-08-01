@@ -28,6 +28,16 @@ test('Markets Overview has a durable read model with a live fallback', () => {
   assert.match(memo, /await materializeMarketHomeSnapshot\(snapshotId\)/)
 })
 
+test('Markets Overview rehydrates post-close action data and republishes it after leadership completes', () => {
+  const repository = source('lib/server/markets-repository.ts')
+  const jobs = source('lib/server/agent-jobs.ts')
+
+  assert.match(repository, /fetchLatestMarketLeadershipSummary\(\)/)
+  assert.match(repository, /leadership: leadership \?\? overview\.leadership/)
+  assert.match(repository, /candidateWeeklySummary: candidateWeeklySummary \?\? overview\.candidateWeeklySummary/)
+  assert.match(jobs, /if \(job\.job_type === 'materialize-market-leadership'\) \{[\s\S]*?await materializeMarketHomeSnapshot\(\)/)
+})
+
 test('Intelligence pages server-seed one scope payload and lazy-load optional UI', () => {
   const scopePage = source('app/(intelligence)/[scope]/page.tsx')
   const scopeFeed = source('components/sections/ScopeFeed.tsx')
