@@ -3,6 +3,7 @@ import { CapitalDecisionRail } from './CapitalDecisionRail'
 import { CandidateActions } from './CandidateActions'
 import { InteractivePriceChart } from './InteractivePriceChart'
 import { MarketsIntentLink } from './MarketsIntentLink'
+import { StockViewerHydration } from './StockViewerHydration'
 
 function money(value: number): string {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
@@ -33,8 +34,15 @@ export function StockViewer({ data }: { data: StockViewerData }) {
   const packet = data.companyPacket
   const latestFinancials = packet?.fundamentals[0]
   const latestEstimate = packet?.estimates[0]
+  const needsTechnicalHydration = data.dailyChange === null || data.fiftyDayAverage === null
+  const needsFundamentalsHydration = packet === null
   return (
     <article className="stock-viewer">
+      <StockViewerHydration
+        symbol={data.symbol}
+        technical={needsTechnicalHydration}
+        fundamentals={needsFundamentalsHydration}
+      />
       <header className="stock-viewer-hero" id="overview">
         <div>
           <p className="markets-eyebrow">{data.exchange} · {data.sector} · {data.subIndustry}</p>

@@ -13,6 +13,7 @@ import {
 
 test('agent job parser rejects unknown work', () => {
   assert.equal(parseAgentJobType('refresh-market-screener'), 'refresh-market-screener')
+  assert.equal(parseAgentJobType('refresh-company-packet'), 'refresh-company-packet')
   assert.throws(() => parseAgentJobType('place-order'), /Unsupported agent job type/)
 })
 
@@ -20,6 +21,18 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
   assert.equal(
     buildAgentJobDedupeKey('refresh-market-screener', new Date('2026-07-15T14:33:42Z')),
     'refresh-market-screener:2026-07-15T14:30:00.000Z',
+  )
+  assert.equal(
+    buildAgentJobDedupeKey('refresh-market-screener', new Date('2026-07-15T14:33:42Z'), {
+      mode: 'coverage', symbol: 'CBRS',
+    }),
+    'refresh-market-screener:coverage:CBRS:2026-07-15',
+  )
+  assert.equal(
+    buildAgentJobDedupeKey('refresh-company-packet', new Date('2026-07-15T14:33:42Z'), {
+      ownerId: 'owner-1', symbol: 'CBRS',
+    }),
+    'refresh-company-packet:owner-1:CBRS:2026-07-15',
   )
   assert.equal(
     buildAgentJobDedupeKey('refresh-cross-asset', new Date('2026-07-15T14:33:42Z')),
@@ -63,6 +76,7 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('sync-market-assets'), 'alpaca')
   assert.equal(agentJobProvider('sync-robinhood-portfolio'), 'robinhood')
   assert.equal(agentJobProvider('refresh-market-screener'), 'alpaca')
+  assert.equal(agentJobProvider('refresh-company-packet'), 'fmp')
   assert.equal(agentJobProvider('prune-market-data'), 'market-data')
   assert.equal(agentJobProvider('refresh-fmp-intelligence'), 'fmp')
   assert.equal(agentJobProvider('refresh-cross-asset'), 'market-data')
@@ -80,6 +94,21 @@ test('stock coverage requests refresh the materialized screener through the exis
   const source = await readFile(new URL('../app/api/markets/stocks/coverage/route.ts', import.meta.url), 'utf8')
   assert.match(source, /requestMarketCoverage\(symbol\)/)
   assert.match(source, /enqueueAgentJob\('refresh-market-screener'/)
+})
+
+test('stock-viewer hydration queues technical coverage and a CompanyPacket without synchronous page work', async () => {
+  const [route, viewer, jobs] = await Promise.all([
+    readFile(new URL('../app/api/markets/stocks/hydration/route.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../components/markets/StockViewerHydration.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8'),
+  ])
+  assert.match(route, /requestMarketCoverage\(symbol\)/)
+  assert.match(route, /hydratePacketOwnerId: user\.id/)
+  assert.match(route, /enqueueAgentJob\('refresh-company-packet'/)
+  assert.match(viewer, /fetch\('\/api\/markets\/stocks\/hydration'/)
+  assert.match(viewer, /router\.refresh\(\)/)
+  assert.match(jobs, /!clock\.isOpen && !coverageSymbol/)
+  assert.match(jobs, /materializeCompanyPacket\(symbol, ownerId\)/)
 })
 
 test('provider work respects slow off-hours dedupe buckets', () => {

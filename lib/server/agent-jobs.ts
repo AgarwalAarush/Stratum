@@ -9,7 +9,7 @@ import { materializeCandidateScout } from './candidate-scout.ts'
 import { materializeCandidateWeeklySummary } from './candidate-weekly-summary.ts'
 import { materializeMarketLeadership } from './market-leadership.ts'
 import { materializeMarketHomeSnapshot } from './market-home.ts'
-import { generateFullEquityResearch } from './company-research.ts'
+import { generateFullEquityResearch, materializeCompanyPacket } from './company-research.ts'
 import { scanResearchRefreshes } from './research-monitoring.ts'
 import { monitorInvestmentTheses } from './thesis-monitoring.ts'
 import { materializeMarketMemo } from './market-memo.ts'
@@ -34,6 +34,7 @@ export const AGENT_JOB_TYPES = [
   'materialize-market-leadership',
   'run-candidate-scout',
   'summarize-candidate-scout',
+  'refresh-company-packet',
   'generate-company-research',
   'event-refresh-company-research',
   'scan-research-refreshes',
@@ -99,6 +100,9 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
   }
   if (jobType === 'generate-market-memo' && typeof payload.snapshotId === 'string') return `${jobType}:${payload.snapshotId}`
   if (jobType === 'refresh-market-screener') {
+    if (payload.mode === 'coverage' && typeof payload.symbol === 'string') {
+      return `${jobType}:coverage:${payload.symbol.toUpperCase()}:${now.toISOString().slice(0, 10)}`
+    }
     if (payload.mode === 'daily') return `${jobType}:daily:${now.toISOString().slice(0, 10)}`
     const bucket = new Date(now)
     bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 5) * 5, 0, 0)
@@ -143,7 +147,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
   if (jobType === 'summarize-candidate-scout' && typeof payload.weekEnding === 'string') {
     return `${jobType}:${payload.weekEnding}`
   }
-  if ((jobType === 'generate-company-research' || jobType === 'event-refresh-company-research')
+  if ((jobType === 'refresh-company-packet' || jobType === 'generate-company-research' || jobType === 'event-refresh-company-research')
     && typeof payload.ownerId === 'string' && typeof payload.symbol === 'string') {
     const event = typeof payload.eventId === 'string' ? `:${payload.eventId}` : ''
     return `${jobType}:${payload.ownerId}:${payload.symbol}:${now.toISOString().slice(0, 10)}${event}`
@@ -154,7 +158,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
 export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-robinhood-portfolio') return 'robinhood'
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
-  if (jobType === 'refresh-fmp-intelligence' || jobType === 'run-candidate-scout') return 'fmp'
+  if (jobType === 'refresh-fmp-intelligence' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
   if (
     jobType === 'refresh-cross-asset'
     || jobType === 'materialize-market-leadership'
@@ -307,7 +311,10 @@ async function executeJob(
     const client = getAlpacaClient()
     if (!client) throw new Error('Alpaca credentials are not configured')
     const clock = await client.fetchClock()
-    if (!clock.isOpen) {
+    const coverageSymbol = job.payload.mode === 'coverage' && typeof job.payload.symbol === 'string'
+      ? job.payload.symbol.trim().toUpperCase()
+      : null
+    if (!clock.isOpen && !coverageSymbol) {
       const latest = await fetchLatestSnapshotMeta()
       if (!shouldRefreshClosedMarket(latest)) {
         return { skipped: 'market_closed_recent_snapshot', nextOpen: clock.nextOpen }
@@ -318,6 +325,16 @@ async function executeJob(
     if (assets.length === 0) assets = await syncAlpacaAssets(client)
     assets = await resolveMarketUniverse(assets)
     const snapshot = await materializeAlpacaScreener({ client, assets })
+    const hydratePacketOwnerId = typeof job.payload.hydratePacketOwnerId === 'string'
+      ? job.payload.hydratePacketOwnerId
+      : null
+    if (coverageSymbol && hydratePacketOwnerId) {
+      await enqueueAgentJob('refresh-company-packet', {
+        ownerId: hydratePacketOwnerId,
+        symbol: coverageSymbol,
+        reason: 'stock-open-hydration',
+      })
+    }
     const slot = marketMemoSlot(new Date())
     await enqueueAgentJob('generate-market-memo', {
       snapshotId: snapshot.snapshotId,
@@ -327,6 +344,16 @@ async function executeJob(
       ? `generate-market-memo:${slot.date}:${slot.slot}`
       : `generate-market-state:${snapshot.snapshotId}`)
     return snapshot
+  }
+
+  if (job.job_type === 'refresh-company-packet') {
+    const symbol = typeof job.payload.symbol === 'string' ? job.payload.symbol.trim().toUpperCase() : ''
+    const ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : ''
+    if (!/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol) || !ownerId) {
+      throw new Error('Company packet refresh requires an owner and valid stock symbol')
+    }
+    const packet = await materializeCompanyPacket(symbol, ownerId)
+    return { symbol, packetId: packet.id, dataAsOf: packet.dataAsOf }
   }
 
   if (job.job_type === 'refresh-fmp-intelligence') {
