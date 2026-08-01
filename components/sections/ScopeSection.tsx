@@ -1,12 +1,14 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useMemo } from 'react'
 import type { FeedItem, ItemTag } from '@/lib/types'
 import { formatFutureTime, formatRelativeTime } from '@/lib/utils'
 import { getTag } from '@/lib/tags'
 import { useHoverSummary } from '@/hooks/useHoverSummary'
-import { SummaryCard } from '@/components/SummaryCard'
 import { useThemeStore } from '@/store/theme'
+
+const SummaryCard = dynamic(() => import('@/components/SummaryCard').then((module) => module.SummaryCard), { ssr: false })
 
 interface ScopeSectionProps {
   label: string

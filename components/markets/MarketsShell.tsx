@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ArrowClockwise, List, X } from '@phosphor-icons/react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 const MARKET_NAV_ITEMS = [
   { href: '/markets', label: 'Overview' },
@@ -29,12 +29,28 @@ function formatMarketTime(value?: string): string {
   }).format(new Date(value))
 }
 
-export function MarketsShell({ children, dataAsOf }: { children: React.ReactNode; dataAsOf?: string }) {
+interface MarketStatusResponse {
+  dataAsOf?: string
+}
+
+export function MarketsShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [refreshing, setRefreshing] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [dataAsOf, setDataAsOf] = useState<string>()
   const prefetchedRoutes = useRef(new Set<string>())
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void fetch('/api/markets/status', { signal: controller.signal })
+      .then(async (response) => response.ok ? await response.json() as MarketStatusResponse : null)
+      .then((status) => {
+        if (status?.dataAsOf) setDataAsOf(status.dataAsOf)
+      })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [])
 
   const prefetchRoute = useCallback((href: string) => {
     if (prefetchedRoutes.current.has(href)) return
@@ -102,7 +118,7 @@ export function MarketsShell({ children, dataAsOf }: { children: React.ReactNode
             onMouseEnter={() => prefetchRoute('/markets/system')}
             onFocus={() => prefetchRoute('/markets/system')}
           >
-            Updated {formatMarketTime(dataAsOf)}
+            {dataAsOf ? `Updated ${formatMarketTime(dataAsOf)}` : 'Loading market status…'}
           </Link>
           <button
             type="button"

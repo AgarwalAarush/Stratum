@@ -4,8 +4,8 @@ import { useMemo } from 'react'
 import useSWR from 'swr'
 import dynamic from 'next/dynamic'
 import type { OverviewData, ScopeDef, SectionData } from '@/lib/types'
+import type { ScopeFeedPayload } from '@/lib/server/scope-feed'
 import { formatRelativeTime } from '@/lib/utils'
-import { useSettingsStore } from '@/store/settings'
 import { ScopeSection } from './ScopeSection'
 import { AIOverview } from './AIOverview'
 import { IntelligenceResearchDashboard } from '@/components/intelligence/IntelligenceResearchDashboard'
@@ -20,6 +20,7 @@ const GlobalNewsMap = dynamic(
 
 interface ScopeFeedProps {
   scope: ScopeDef
+  initialData?: ScopeFeedPayload
 }
 
 export const SCOPE_REFRESH_INTERVAL_MS = 3_600_000
@@ -33,56 +34,49 @@ interface SectionRenderOptions {
   viewportMode?: 'fixed' | 'fill' | 'natural'
 }
 
-async function fetchSection(apiPath: string): Promise<SectionData> {
+async function fetchScope(scopeId: string): Promise<ScopeFeedPayload> {
   try {
-    const response = await fetch(apiPath, {
+    const response = await fetch(`/api/scopes/${scopeId}`, {
       headers: { Accept: 'application/json' },
     })
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch ${apiPath} (${response.status})`)
+      throw new Error(`Failed to fetch scope ${scopeId} (${response.status})`)
     }
 
-    const data = (await response.json()) as SectionData
-    if (!data || !Array.isArray(data.items) || typeof data.fetchedAt !== 'string') {
-      throw new Error(`Invalid section payload for ${apiPath}`)
+    const data = (await response.json()) as ScopeFeedPayload
+    if (!data || typeof data !== 'object' || !data.sections || typeof data.sections !== 'object') {
+      throw new Error(`Invalid scope payload for ${scopeId}`)
     }
 
     return data
   } catch {
     return {
-      items: [],
-      fetchedAt: new Date().toISOString(),
+      sections: {},
+      overview: null,
     }
   }
 }
 
-export function ScopeFeed({ scope }: ScopeFeedProps) {
-  const devMode = useSettingsStore((s) => s.devMode)
-  const forceParam = devMode ? '?force=true' : ''
-
+export function ScopeFeed({ scope, initialData }: ScopeFeedProps) {
   const swrKey = useMemo(
-    () => `scope:${scope.id}:${scope.sections.map((section) => section.apiPath).join('|')}`,
-    [scope.id, scope.sections],
+    () => `scope:${scope.id}`,
+    [scope.id],
   )
 
-  const { data, isLoading } = useSWR<ScopeSectionsMap>(
+  const { data: scopeData, isLoading } = useSWR<ScopeFeedPayload>(
     swrKey,
-    async () => {
-      const sections = await Promise.all(
-        scope.sections.map(async (section) => {
-          const payload = await fetchSection(section.apiPath)
-          return [section.id, payload] as const
-        }),
-      )
-      return Object.fromEntries(sections)
-    },
+    () => fetchScope(scope.id),
     {
+      fallbackData: initialData,
       refreshInterval: SCOPE_REFRESH_INTERVAL_MS,
-      revalidateOnFocus: true,
+      revalidateOnFocus: !initialData,
+      revalidateOnMount: !initialData,
       dedupingInterval: 30_000,
     },
   )
+
+  const data: ScopeSectionsMap | undefined = scopeData?.sections
 
   const lastUpdatedLabel = useMemo(() => {
     const fetchedAt = scope.sections
@@ -97,37 +91,10 @@ export function ScopeFeed({ scope }: ScopeFeedProps) {
   const isAiResearchScope = scope.id === 'ai-research'
   const isGlobalNewsScope = scope.id === 'global-news'
 
-  const { data: overviewData, isLoading: overviewLoading } = useSWR<OverviewData>(
-    isAiResearchScope ? `overview:ai-research:dev=${devMode}` : null,
-    async () => {
-      const response = await fetch(`/api/ai-research/overview${forceParam}`, {
-        headers: { Accept: 'application/json' },
-      })
-      if (!response.ok) return { bullets: [], fetchedAt: new Date().toISOString() }
-      return (await response.json()) as OverviewData
-    },
-    {
-      refreshInterval: SCOPE_REFRESH_INTERVAL_MS,
-      revalidateOnFocus: false,
-      dedupingInterval: devMode ? 0 : 60_000,
-    },
-  )
-
-  const { data: globalNewsOverviewData, isLoading: globalNewsOverviewLoading } = useSWR<OverviewData>(
-    isGlobalNewsScope ? `overview:global-news:dev=${devMode}` : null,
-    async () => {
-      const response = await fetch(`/api/global-news/overview${forceParam}`, {
-        headers: { Accept: 'application/json' },
-      })
-      if (!response.ok) return { bullets: [], fetchedAt: new Date().toISOString() }
-      return (await response.json()) as OverviewData
-    },
-    {
-      refreshInterval: SCOPE_REFRESH_INTERVAL_MS,
-      revalidateOnFocus: false,
-      dedupingInterval: devMode ? 0 : 60_000,
-    },
-  )
+  const overviewData: OverviewData | undefined = isAiResearchScope ? scopeData?.overview ?? undefined : undefined
+  const globalNewsOverviewData: OverviewData | undefined = isGlobalNewsScope ? scopeData?.overview ?? undefined : undefined
+  const overviewLoading = isAiResearchScope && isLoading
+  const globalNewsOverviewLoading = isGlobalNewsScope && isLoading
 
   const sectionById = useMemo<Record<string, ScopeSectionDef>>(
     () =>

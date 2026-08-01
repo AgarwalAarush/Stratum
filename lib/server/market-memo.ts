@@ -1,6 +1,7 @@
 import type { MarketMemo, ScreenerRow } from '../markets/types.ts'
 import { calculateMarketState } from '../markets/state.ts'
 import { runCodexJson, type CodexExecResult } from './codex-exec.ts'
+import { materializeMarketHomeSnapshot } from './market-home.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 const ROW_PAGE_SIZE = 1_000
@@ -124,6 +125,7 @@ export async function materializeMarketMemo(
   if (stateError || !stateRecord) throw new Error(`Unable to persist market state: ${stateError?.message ?? 'unknown error'}`)
 
   if (options.synthesize === false || !shouldRunMarketSynthesis()) {
+    await materializeMarketHomeSnapshot(snapshotId)
     return { marketStateId: stateRecord.id, generatedAt: stateGeneratedAt, synthesized: false }
   }
 
@@ -143,6 +145,8 @@ export async function materializeMarketMemo(
     generated_at: generated.memo.generatedAt,
   }, { onConflict: 'market_state_id' })
   if (memoError) throw new Error(`Unable to persist market memo: ${memoError.message}`)
+
+  await materializeMarketHomeSnapshot(snapshotId)
 
   return { marketStateId: stateRecord.id, generatedAt: generated.memo.generatedAt, synthesized: true }
 }

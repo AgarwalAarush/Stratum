@@ -26,6 +26,8 @@ interface MarketsScreenerProps {
 }
 
 const RESULTS_PAGE_SIZE = 50
+const MAX_PREFETCHED_STOCKS = 3
+const STOCK_PREFETCH_DELAY_MS = 140
 
 interface SortableHeaderProps {
   direction: 'asc' | 'desc'
@@ -122,19 +124,20 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   const [sort, setSort] = useState<ScreenerSortField>(DEFAULT_SCREENER_QUERY.sort)
   const [direction, setDirection] = useState<'asc' | 'desc'>(DEFAULT_SCREENER_QUERY.direction)
   const [response, setResponse] = useState(initialResponse)
-  const [visibleRows, setVisibleRows] = useState(initialResponse.rows)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const requestRef = useRef<AbortController | null>(null)
-  const loadingRef = useRef(false)
-  const loadMoreRef = useRef<HTMLDivElement>(null)
+  const prefetchTimer = useRef<number | null>(null)
+  const prefetchedStocks = useRef(new Set<string>())
 
-  useEffect(() => () => requestRef.current?.abort(), [])
+  useEffect(() => () => {
+    requestRef.current?.abort()
+    if (prefetchTimer.current !== null) window.clearTimeout(prefetchTimer.current)
+  }, [])
 
-  const execute = useCallback(async (nextQuery?: Partial<ScreenerQuery>, append = false) => {
-    if (append && loadingRef.current) return
+  const execute = useCallback(async (nextQuery?: Partial<ScreenerQuery>) => {
     const query: ScreenerQuery = {
       preset: nextQuery?.preset ?? preset,
       filters: nextQuery?.filters ?? filters,
@@ -144,10 +147,9 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
       pageSize: RESULTS_PAGE_SIZE,
     }
 
-    if (!append) requestRef.current?.abort()
+    requestRef.current?.abort()
     const controller = new AbortController()
     requestRef.current = controller
-    loadingRef.current = true
     setLoading(true)
     setError('')
     try {
@@ -162,16 +164,12 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
       if (requestRef.current !== controller) return
       const nextResponse = payload as ScreenerResponse
       setResponse(nextResponse)
-      setVisibleRows((current) => append
-        ? [...current, ...nextResponse.rows.filter((row) => !current.some((existing) => existing.symbol === row.symbol))]
-        : nextResponse.rows)
     } catch (caught) {
       if (caught instanceof Error && caught.name === 'AbortError') return
       setError(caught instanceof Error ? caught.message : 'The screen could not be run')
     } finally {
       if (requestRef.current === controller) {
         requestRef.current = null
-        loadingRef.current = false
         setLoading(false)
       }
     }
@@ -215,25 +213,26 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
     void execute({ sort: next.sort, direction: next.direction, page: 1 })
   }
 
-  const hasMore = visibleRows.length < response.total
-  const endRow = Math.min(visibleRows.length, response.total)
-  const loadMore = useCallback(() => {
-    if (!hasMore) return
-    void execute({ page: response.page + 1 }, true)
-  }, [execute, hasMore, response.page])
-
-  useEffect(() => {
-    const sentinel = loadMoreRef.current
-    if (!sentinel || !hasMore) return
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) loadMore()
-    }, { rootMargin: '640px 0px' })
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [hasMore, loadMore])
-
   const openStock = (symbol: string) => router.push(`/markets/stocks/${symbol}`, { scroll: false })
-  const preloadStock = (symbol: string) => router.prefetch(`/markets/stocks/${symbol}`)
+  const preloadStock = useCallback((symbol: string) => {
+    if (prefetchedStocks.current.has(symbol) || prefetchedStocks.current.size >= MAX_PREFETCHED_STOCKS) return
+    if (prefetchTimer.current !== null) window.clearTimeout(prefetchTimer.current)
+    prefetchTimer.current = window.setTimeout(() => {
+      if (prefetchedStocks.current.size >= MAX_PREFETCHED_STOCKS) return
+      prefetchedStocks.current.add(symbol)
+      router.prefetch(`/markets/stocks/${symbol}`)
+    }, STOCK_PREFETCH_DELAY_MS)
+  }, [router])
+  const cancelPreload = () => {
+    if (prefetchTimer.current !== null) {
+      window.clearTimeout(prefetchTimer.current)
+      prefetchTimer.current = null
+    }
+  }
+  const hasPreviousPage = response.page > 1
+  const hasNextPage = response.page * response.pageSize < response.total
+  const startRow = response.total === 0 ? 0 : (response.page - 1) * response.pageSize + 1
+  const endRow = Math.min(response.page * response.pageSize, response.total)
   const selectedReturnField = (filters.find((filter) => isScreenerReturnField(filter.field))?.field ?? 'dailyChange') as ScreenerReturnField
   const selectedReturnPeriod = SCREENER_RETURN_PERIODS.find((period) => period.field === selectedReturnField)!
 
@@ -304,9 +303,9 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
             </tr>
           </thead>
           <tbody>
-            {visibleRows.length === 0 ? (
+            {response.rows.length === 0 ? (
               <tr><td colSpan={12} className="market-screen-empty">No equities match these conditions. Remove a filter or choose another preset.</td></tr>
-            ) : visibleRows.map((row) => {
+            ) : response.rows.map((row) => {
               return (
                 <tr
                   key={row.symbol}
@@ -315,7 +314,9 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
                   tabIndex={0}
                   aria-label={`Open ${row.company} (${row.symbol})`}
                   onMouseEnter={() => preloadStock(row.symbol)}
+                  onMouseLeave={cancelPreload}
                   onFocus={() => preloadStock(row.symbol)}
+                  onBlur={cancelPreload}
                   onClick={() => openStock(row.symbol)}
                   onKeyDown={(event) => {
                     if (event.key !== 'Enter' && event.key !== ' ') return
@@ -348,14 +349,11 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
       </div>
 
       <footer className="market-screen-footer">
-        <div className="market-pagination-summary">{response.total === 0 ? '0' : `1–${endRow}`} of {response.total}</div>
-        <div ref={loadMoreRef} className="market-screen-load-more" aria-live="polite">
-          {hasMore ? (
-            <>
-              <span>{loading ? 'Loading more…' : 'Keep scrolling to load more'}</span>
-              <button type="button" onClick={loadMore} disabled={loading}>Load more</button>
-            </>
-          ) : <span>{response.total > 0 ? 'All matching equities loaded' : ''}</span>}
+        <div className="market-pagination-summary">{response.total === 0 ? '0' : `${startRow}–${endRow}`} of {response.total}</div>
+        <div className="market-screen-load-more" aria-live="polite">
+          <button type="button" onClick={() => void execute({ page: response.page - 1 })} disabled={loading || !hasPreviousPage}>Previous</button>
+          <span>Page {response.page} of {Math.max(1, Math.ceil(response.total / response.pageSize))}</span>
+          <button type="button" onClick={() => void execute({ page: response.page + 1 })} disabled={loading || !hasNextPage}>Next</button>
         </div>
         <span>US equities · {response.feed} feed{response.stale ? ' · stale' : ''}</span>
         <span>Snapshot calculated from normalized market data</span>

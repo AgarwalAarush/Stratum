@@ -19,10 +19,19 @@ test('screener delegates filter editing to the condition builder', () => {
   assert.equal(screenerSource.includes('Run screen'), false)
   assert.match(screenerSource, /void execute\(\{ filters: nextFilters, page: 1 \}\)/)
   assert.match(screenerSource, /RESULTS_PAGE_SIZE = 50/)
-  assert.match(screenerSource, /new IntersectionObserver/)
-  assert.match(screenerSource, /Keep scrolling to load more/)
-  assert.equal(screenerSource.includes('Screener pages'), false)
+  assert.equal(screenerSource.includes('new IntersectionObserver'), false)
+  assert.match(screenerSource, /Page \{response\.page\} of/)
+  assert.match(screenerSource, /Previous/)
+  assert.match(screenerSource, /Next/)
+  assert.equal(screenerSource.includes('Keep scrolling to load more'), false)
   assert.equal(screenerSource.includes('ADDITIONAL_FILTERS'), false)
+})
+
+test('screener bounds hover prefetches instead of fetching every row crossed', () => {
+  assert.match(screenerSource, /MAX_PREFETCHED_STOCKS = 3/)
+  assert.match(screenerSource, /STOCK_PREFETCH_DELAY_MS = 140/)
+  assert.match(screenerSource, /prefetchedStocks\.current\.size >= MAX_PREFETCHED_STOCKS/)
+  assert.match(screenerSource, /onMouseLeave=\{cancelPreload\}/)
 })
 
 test('condition builder exposes only API-supported v1 fields', () => {

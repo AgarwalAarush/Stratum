@@ -1,7 +1,5 @@
 import type { Metadata } from 'next'
 import { MarketsShell } from '@/components/markets/MarketsShell'
-import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
-import { fetchLatestSnapshotMeta } from '@/lib/server/markets-repository'
 
 export const metadata: Metadata = {
   title: 'Markets — Stratum',
@@ -9,18 +7,16 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
-export const dynamic = 'force-dynamic'
-
-export default async function MarketsLayout({
+export default function MarketsLayout({
   children,
   modal,
 }: {
   children: React.ReactNode
   modal: React.ReactNode
 }) {
-  const [, snapshot] = await Promise.all([
-    requireAllowedMarketUser(),
-    fetchLatestSnapshotMeta(),
-  ])
-  return <MarketsShell dataAsOf={snapshot?.data_as_of}>{children}{modal}</MarketsShell>
+  // proxy.ts authenticates the whole Markets route tree before it reaches this
+  // layout. Keeping the shell free of request-bound reads lets loading.tsx
+  // stream immediately, while personalized pages still verify the user before
+  // fetching owner-specific data.
+  return <MarketsShell>{children}{modal}</MarketsShell>
 }

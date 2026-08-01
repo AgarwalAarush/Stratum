@@ -91,6 +91,12 @@ interface MemoRecord {
   generated_at: string
 }
 
+interface MarketHomeRecord {
+  content: unknown
+  data_as_of: string
+  generated_at: string
+}
+
 interface ScreenerRowRecord {
   symbol: string
   company: string
@@ -232,21 +238,23 @@ function normalizeScreenerRow(row: ScreenerRowRecord): ScreenerRow {
   }
 }
 
-export async function fetchLatestSnapshotMeta(): Promise<SnapshotRecord | null> {
+export async function fetchLatestSnapshotMeta(options: { bypassCache?: boolean } = {}): Promise<SnapshotRecord | null> {
   const supabase = getSupabaseClient()
   if (!supabase) return null
+  const load = async () => {
+    const { data, error } = await supabase
+      .from('market_snapshots')
+      .select('id,feed,data_as_of,published_at')
+      .eq('status', 'complete')
+      .eq('is_latest', true)
+      .maybeSingle()
+    return error || !data ? null : data as SnapshotRecord
+  }
+  if (options.bypassCache) return load()
   return fetchSharedArtifact(
     'stratum:markets:latest-snapshot-meta',
     SNAPSHOT_META_SHARED_CACHE_SECONDS,
-    () => snapshotMetaCache.get('latest', SNAPSHOT_META_CACHE_MS, async () => {
-      const { data, error } = await supabase
-        .from('market_snapshots')
-        .select('id,feed,data_as_of,published_at')
-        .eq('status', 'complete')
-        .eq('is_latest', true)
-        .maybeSingle()
-      return error || !data ? null : data as SnapshotRecord
-    }),
+    () => snapshotMetaCache.get('latest', SNAPSHOT_META_CACHE_MS, load),
   )
 }
 
@@ -308,9 +316,29 @@ export async function fetchLatestScreener(query: ScreenerQuery): Promise<Screene
   })
 }
 
-async function loadLatestMarketOverview(): Promise<MarketOverviewResponse | null> {
+function normalizeMarketOverview(value: unknown): MarketOverviewResponse | null {
+  if (!isRecord(value) || !isRecord(value.state) || !isRecord(value.memo)) return null
+  if (
+    typeof value.state.regime !== 'string'
+    || typeof value.state.confidence !== 'number'
+    || typeof value.state.dataAsOf !== 'string'
+    || !Array.isArray(value.instruments)
+    || !Array.isArray(value.evidence)
+    || typeof value.feed !== 'string'
+    || typeof value.dataAsOf !== 'string'
+    || typeof value.generatedAt !== 'string'
+    || typeof value.stale !== 'boolean'
+  ) return null
+  return value as unknown as MarketOverviewResponse
+}
+
+/**
+ * Builds the Overview read model from its normalized sources. This is used by
+ * the worker; visitors should normally read the persisted result below.
+ */
+export async function composeLatestMarketOverview(snapshotOverride?: SnapshotRecord): Promise<MarketOverviewResponse | null> {
   const supabase = getSupabaseClient()
-  const snapshot = await fetchLatestSnapshotMeta()
+  const snapshot = snapshotOverride ?? await fetchLatestSnapshotMeta()
   if (!supabase || !snapshot) return null
 
   const contextPromise = Promise.all([
@@ -380,14 +408,33 @@ async function loadLatestMarketOverview(): Promise<MarketOverviewResponse | null
   }
 }
 
+async function loadPersistedMarketOverview(): Promise<MarketOverviewResponse | null> {
+  const supabase = getSupabaseClient()
+  const snapshot = await fetchLatestSnapshotMeta()
+  if (!supabase || !snapshot) return null
+  const { data, error } = await supabase
+    .from('market_home_snapshots')
+    .select('content,data_as_of,generated_at')
+    .eq('snapshot_id', snapshot.id)
+    .maybeSingle()
+  if (error || !data) return null
+  const record = data as MarketHomeRecord
+  const overview = normalizeMarketOverview(record.content)
+  if (!overview || overview.dataAsOf !== snapshot.data_as_of) return null
+  return {
+    ...overview,
+    stale: isStale(record.data_as_of),
+  }
+}
+
 export async function fetchLatestMarketOverview(): Promise<MarketOverviewResponse | null> {
   return marketOverviewCache.get(
     'latest',
     MARKET_OVERVIEW_CACHE_MS,
     () => fetchSharedArtifact(
-      'stratum:markets:overview:v1',
+      'stratum:markets:overview:v2',
       MARKET_OVERVIEW_CACHE_MS / 1_000,
-      loadLatestMarketOverview,
+      async () => await loadPersistedMarketOverview() ?? await composeLatestMarketOverview(),
     ),
   )
 }

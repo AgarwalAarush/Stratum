@@ -2,13 +2,16 @@
 'use client'
 
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { usePathname, useRouter } from 'next/navigation'
 import { ArrowClockwise, Gear, List, X } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { useSWRConfig } from 'swr'
-import { SettingsModal } from './SettingsModal'
-import { MorningBriefModal, MORNING_BRIEF_SEEN_KEY } from '@/components/MorningBriefModal'
-import { IntelligenceBriefingsModal } from '@/components/IntelligenceBriefingsModal'
+import { MORNING_BRIEF_SEEN_KEY } from '@/components/MorningBriefModal'
+
+const SettingsModal = dynamic(() => import('./SettingsModal').then((module) => module.SettingsModal), { ssr: false })
+const MorningBriefModal = dynamic(() => import('@/components/MorningBriefModal').then((module) => module.MorningBriefModal), { ssr: false })
+const IntelligenceBriefingsModal = dynamic(() => import('@/components/IntelligenceBriefingsModal').then((module) => module.IntelligenceBriefingsModal), { ssr: false })
 
 // Brief is generated daily at 12:00 UTC. Returns that timestamp for today.
 function getTodayGenerationTime() {
@@ -121,18 +124,24 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
             </nav>
 
             <main className="intelligence-main">{children}</main>
-            <SettingsModal
-                open={isSettingsOpen}
-                onClose={() => setIsSettingsOpen(false)}
-            />
-            <MorningBriefModal
-                open={isBriefOpen}
-                onClose={() => setIsBriefOpen(false)}
-            />
-            <IntelligenceBriefingsModal
-                open={isIntelligenceBriefingsOpen}
-                onClose={() => setIsIntelligenceBriefingsOpen(false)}
-            />
+            {isSettingsOpen ? (
+                <SettingsModal
+                    open
+                    onClose={() => setIsSettingsOpen(false)}
+                />
+            ) : null}
+            {isBriefOpen ? (
+                <MorningBriefModal
+                    open
+                    onClose={() => setIsBriefOpen(false)}
+                />
+            ) : null}
+            {isIntelligenceBriefingsOpen ? (
+                <IntelligenceBriefingsModal
+                    open
+                    onClose={() => setIsIntelligenceBriefingsOpen(false)}
+                />
+            ) : null}
         </div>
     )
 }
