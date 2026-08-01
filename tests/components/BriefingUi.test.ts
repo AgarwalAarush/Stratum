@@ -33,7 +33,7 @@ test('ClientLayout manages the intelligence briefings modal globally', () => {
   assert.match(clientLayoutSource, /const \[isIntelligenceBriefingsOpen, setIsIntelligenceBriefingsOpen\] = useState\(false\)/)
   assert.match(clientLayoutSource, /setIsIntelligenceBriefingsOpen\(true\)/)
   assert.match(clientLayoutSource, />\s*Weekly Briefs\s*<\/button>/)
-  assert.match(clientLayoutSource, /<IntelligenceBriefingsModal[\s\S]*open=\{isIntelligenceBriefingsOpen\}[\s\S]*onClose=\{\(\) => setIsIntelligenceBriefingsOpen\(false\)\}/)
+  assert.match(clientLayoutSource, /\{isIntelligenceBriefingsOpen \? \([\s\S]*<IntelligenceBriefingsModal[\s\S]*open[\s\S]*onClose=\{\(\) => setIsIntelligenceBriefingsOpen\(false\)\}/)
 })
 
 test('IntelligenceBriefingsModal fetches both briefing payloads and defaults to weekly', () => {
