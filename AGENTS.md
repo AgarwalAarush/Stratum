@@ -157,7 +157,7 @@ Alpaca is the planned primary source for US equity assets, quotes, trades, snaps
 
 Robinhood is the broker-of-record only for the user’s private Personal portfolio. It is not a source for the general Markets screener, Explore, Watchlists, or any public/redistributed quote display.
 
-- The macserver worker connects to Robinhood through its read-only MCP endpoint with a server-only OAuth bearer token. Never copy a Codex desktop OAuth session, expose the token to Vercel/browser code, or use a broker connection for order placement.
+- The macserver worker connects to Robinhood through its read-only MCP endpoint with a server-only OAuth session. Bootstrap it with `scripts/robinhood-mcp-auth.ts` on macserver; it uses a loopback callback and persists the dynamic-client registration plus refresh token in a worker-local `0600` OAuth store. Never copy a Codex desktop OAuth session, expose OAuth credentials to Vercel/browser code, or use a broker connection for order placement.
 - Reconcile the matched brokerage account into immutable `brokerage_sync_runs`, `brokerage_account_snapshots`, and `brokerage_position_snapshots`. Keep that current-state evidence separate from the reviewable portfolio transaction ledger; do not turn each sync into duplicate synthetic trades.
 - A successful brokerage snapshot is authoritative for Personal cash, equity value, position quantity, and broker cost basis. Retain the ledger/market-data path as the fallback until a successful snapshot exists.
 - The worker’s normal cadence is 09:20 ET, 12:15 ET, 16:15 ET, and 20:00 ET on trading weekdays. Label the Portfolio UI with its private broker provenance and capture time; current/after-hours prices must retain their observed timestamp.
