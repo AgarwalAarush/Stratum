@@ -236,6 +236,8 @@ Every completed change must be committed as a coherent, reviewable unit. Do not 
 - Do not knowingly commit a new failing relevant check. If the repository has unrelated baseline failures, record them and prove the changed surface passes independently.
 - For visual changes, verify the affected routes in a browser at the reference desktop viewport and a mobile viewport. Check content, interactions, responsiveness, console errors, and framework error overlays.
 - Database migrations and the application behavior that depends on them belong in the same logical feature commit unless a backward-compatible preparatory migration must deploy first.
+- **Default completion rule:** When a change is intended for the product (rather than explicitly local-only, exploratory, or draft work), finish the full delivery path in the same task: apply every required Supabase migration, run the relevant worker/backfill if the schema change requires one, merge the verified feature branch into `main`, push `main`, deploy production, and verify the affected live route and data path. Report any step that cannot be completed as a concrete blocker; do not describe a local commit as delivered.
+- Before merging, confirm `main` has not advanced in a conflicting way. Keep migrations and the behavior that requires them together, and do not merge or deploy around a failed migration, missing production environment variable, or failed live verification.
 - Use imperative conventional commit subjects such as `feat:`, `fix:`, `test:`, `docs:`, `chore:`, and `infra:`.
 
 ### Markets reference implementation
