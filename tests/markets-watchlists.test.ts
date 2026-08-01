@@ -63,7 +63,7 @@ test('watchlists live inside Explore and the legacy route preserves the destinat
   assert.match(component, /createList/)
   assert.match(component, /removeSymbol/)
   assert.match(component, /Search symbol or company/)
-  assert.match(workspace, /Decision Inbox/)
+  assert.match(workspace, /portfolio-alert-list/)
   assert.match(workspace, /initialData\.decisionHistory\.map/)
 })
 

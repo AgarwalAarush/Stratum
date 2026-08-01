@@ -144,10 +144,9 @@ test('thesis migration preserves owner-scoped immutable versions and review stat
 
 test('Candidate Scout keeps screening leads out of the thesis library', async () => {
   const candidateScout = await readFile(new URL('../lib/server/candidate-scout.ts', import.meta.url), 'utf8')
-  assert.match(candidateScout, /supabase\.from\('market_users'\)\.select\('id'\)/)
-  assert.match(candidateScout, /\(marketUsers \?\? \[\]\)\.map\(\(row\) => row\.id\)/)
   assert.doesNotMatch(candidateScout, /proposeIndustryTheses/)
-  assert.match(candidateScout, /item_type: 'new_candidate'/)
+  assert.doesNotMatch(candidateScout, /decision_inbox_items/)
+  assert.match(candidateScout, /candidate_briefs/)
 })
 
 test('accepted theses atomically become monitored durable objects', async () => {

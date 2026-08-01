@@ -23,11 +23,11 @@ export function evaluateDecisionAlerts(
   occurredAt: string,
 ): Array<Omit<
   DecisionInboxItem,
-  'id' | 'createdAt' | 'status' | 'investmentThesisId' | 'thesisMonitorId' | 'entityKey' | 'severity'
+  'id' | 'portfolioId' | 'createdAt' | 'status' | 'investmentThesisId' | 'thesisMonitorId' | 'entityKey' | 'severity'
 >> {
   const alerts: Array<Omit<
     DecisionInboxItem,
-    'id' | 'createdAt' | 'status' | 'investmentThesisId' | 'thesisMonitorId' | 'entityKey' | 'severity'
+    'id' | 'portfolioId' | 'createdAt' | 'status' | 'investmentThesisId' | 'thesisMonitorId' | 'entityKey' | 'severity'
   >> = []
   if (
     decision.entryZoneLow !== null

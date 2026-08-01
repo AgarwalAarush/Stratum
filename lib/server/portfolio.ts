@@ -168,6 +168,7 @@ function calculatePortfolioSummary(
 function normalizeInbox(row: Record<string, unknown>): DecisionInboxItem {
   return {
     id: String(row.id),
+    portfolioId: row.portfolio_id === null ? null : String(row.portfolio_id ?? ''),
     type: row.item_type as DecisionInboxItem['type'],
     symbol: row.symbol === null ? null : String(row.symbol),
     title: String(row.title),
@@ -216,7 +217,7 @@ export async function fetchPortfolioWorkspace(
     supabase.from('manual_positions').select('*').eq('owner_id', ownerId).order('updated_at', { ascending: false }),
     supabase.from('thesis_decisions').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
     supabase.from('decision_reviews').select('*').eq('owner_id', ownerId).order('reviewed_at', { ascending: false }),
-    supabase.from('decision_inbox_items').select('*').eq('owner_id', ownerId).eq('status', 'open').order('occurred_at', { ascending: false }),
+    supabase.from('decision_inbox_items').select('*').eq('owner_id', ownerId).eq('status', 'open').not('portfolio_id', 'is', null).order('occurred_at', { ascending: false }),
     supabase.from('portfolios').select('*').eq('owner_id', ownerId).order('created_at'),
     supabase.from('portfolio_transactions').select('*').eq('owner_id', ownerId).order('occurred_at', { ascending: true }).order('created_at', { ascending: true }),
   ])

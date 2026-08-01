@@ -10,6 +10,7 @@ import { getSupabaseClient } from './supabase.ts'
 
 interface TrackedName {
   ownerId: string
+  portfolioId: string
   symbol: string
   thesisId?: string
   monitorId?: string
@@ -35,42 +36,49 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const [
-    { data: listItems },
-    { data: positions },
+    { data: transactions },
     { data: decisions },
     { data: latestSnapshot },
     { data: acceptedTheses },
     { data: activeMonitors },
   ] = await Promise.all([
-    supabase.from('market_watchlist_items').select('symbol,market_watchlists!inner(owner_id)').not('market_watchlists.owner_id', 'is', null),
-    supabase.from('manual_positions').select('owner_id,symbol'),
+    supabase.from('portfolio_transactions').select('owner_id,portfolio_id,symbol,action,quantity'),
     supabase.from('thesis_decisions').select('*').order('created_at', { ascending: false }),
     supabase.from('market_snapshots').select('id').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
     supabase.from('investment_theses').select('id,owner_id,symbol,entity_key')
       .eq('entity_type', 'stock').eq('status', 'accepted').not('symbol', 'is', null),
-    supabase.from('thesis_monitors').select('id,owner_id,thesis_id,entity_key').eq('status', 'active'),
+    supabase.from('thesis_monitors').select('id,thesis_id,entity_key').eq('status', 'active'),
   ])
-  const monitorByThesis = new Map((activeMonitors ?? []).map((row) => [row.thesis_id, row]))
-  const acceptedByOwnerSymbol = new Map<string, TrackedName>()
-  for (const row of acceptedTheses ?? []) {
-    if (!row.symbol) continue
-    const monitor = monitorByThesis.get(row.id)
-    acceptedByOwnerSymbol.set(`${row.owner_id}:${row.symbol}`, {
-      ownerId: row.owner_id,
-      symbol: row.symbol,
-      thesisId: row.id,
+  const monitorByThesis = new Map((activeMonitors ?? []).map((monitor) => [monitor.thesis_id, monitor]))
+  const thesisByOwnerSymbol = new Map<string, Omit<TrackedName, 'portfolioId' | 'symbol'>>()
+  for (const thesis of acceptedTheses ?? []) {
+    if (!thesis.owner_id || !thesis.symbol) continue
+    const monitor = monitorByThesis.get(thesis.id)
+    thesisByOwnerSymbol.set(`${thesis.owner_id}:${thesis.symbol}`, {
+      ownerId: thesis.owner_id,
+      thesisId: thesis.id,
       monitorId: monitor?.id,
-      entityKey: row.entity_key,
+      entityKey: thesis.entity_key,
     })
   }
-  const tracked = new Map<string, TrackedName>()
-  for (const row of listItems ?? []) {
-    const relation = Array.isArray(row.market_watchlists) ? row.market_watchlists[0] : row.market_watchlists
-    if (relation?.owner_id) tracked.set(`${relation.owner_id}:${row.symbol}`, { ownerId: relation.owner_id, symbol: row.symbol })
+  const quantities = new Map<string, number>()
+  for (const transaction of transactions ?? []) {
+    if (!transaction.symbol || !transaction.portfolio_id || !transaction.owner_id) continue
+    const key = `${transaction.owner_id}:${transaction.portfolio_id}:${transaction.symbol}`
+    const quantity = Number(transaction.quantity ?? 0)
+    const direction = transaction.action === 'sell' ? -1 : transaction.action === 'buy' || transaction.action === 'position_import' ? 1 : 0
+    quantities.set(key, (quantities.get(key) ?? 0) + direction * quantity)
   }
-  for (const row of positions ?? []) tracked.set(`${row.owner_id}:${row.symbol}`, { ownerId: row.owner_id, symbol: row.symbol })
-  for (const [key, thesis] of acceptedByOwnerSymbol) {
-    tracked.set(key, { ...tracked.get(key), ...thesis })
+  const tracked = new Map<string, TrackedName>()
+  for (const [key, quantity] of quantities) {
+    if (quantity <= 0.00000001) continue
+    const [ownerId, portfolioId, symbol] = key.split(':')
+    if (ownerId && portfolioId && symbol) tracked.set(key, {
+      ownerId,
+      portfolioId,
+      symbol,
+      ...thesisByOwnerSymbol.get(`${ownerId}:${symbol}`),
+    })
   }
   if (tracked.size === 0) return { eventAlerts: 0, decisionAlerts: 0, researchJobs: 0, touchedMonitorIds: [] }
 
@@ -94,9 +102,10 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
     if (!isMaterialResearchEvent(event.category, event.title)) continue
     for (const item of tracked.values()) {
       if (item.symbol !== symbol) continue
-      const dedupeKey = `event:${item.ownerId}:${event.id}`
+      const dedupeKey = `event:${item.ownerId}:${item.portfolioId}:${event.id}`
       const { data: insertedAlert, error } = await supabase.from('decision_inbox_items').upsert({
         owner_id: item.ownerId,
+        portfolio_id: item.portfolioId,
         item_type: 'catalyst',
         symbol,
         title: event.title,
@@ -131,15 +140,15 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
       const key = `${row.owner_id}:${row.symbol}`
       if (!latestByOwnerSymbol.has(key)) latestByOwnerSymbol.set(key, row)
     }
-    for (const [key, row] of latestByOwnerSymbol) {
-      if (!tracked.has(key)) continue
-      const trackedName = tracked.get(key)!
+    for (const trackedName of tracked.values()) {
+      const row = latestByOwnerSymbol.get(`${trackedName.ownerId}:${trackedName.symbol}`)
+      if (!row) continue
       const { data: screener } = await supabase.from('screener_rows').select('price').eq('snapshot_id', latestSnapshot.id)
-        .eq('symbol', row.symbol).maybeSingle()
+        .eq('symbol', trackedName.symbol).maybeSingle()
       if (!screener) continue
       const decision: ThesisDecision = {
         id: row.id as string,
-        symbol: row.symbol as string,
+        symbol: trackedName.symbol,
         version: Number(row.version ?? 1),
         disposition: row.disposition as ThesisDecision['disposition'],
         formalRating: row.formal_rating as ThesisDecision['formalRating'],
@@ -155,8 +164,10 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
         createdAt: row.created_at as string,
       }
       for (const alert of evaluateDecisionAlerts(decision, Number(screener.price), now.toISOString())) {
+        const dedupeKey = `portfolio:${trackedName.portfolioId}:${alert.dedupeKey}`
         const { data: insertedAlert, error } = await supabase.from('decision_inbox_items').upsert({
-          owner_id: row.owner_id,
+          owner_id: trackedName.ownerId,
+          portfolio_id: trackedName.portfolioId,
           item_type: alert.type,
           symbol: alert.symbol,
           title: alert.title,
@@ -166,7 +177,7 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
           thesis_monitor_id: trackedName.monitorId ?? null,
           entity_key: trackedName.entityKey ?? null,
           severity: alert.type === 'kill_criterion_breach' ? 'urgent' : 'attention',
-          dedupe_key: alert.dedupeKey,
+          dedupe_key: dedupeKey,
           occurred_at: alert.occurredAt,
         }, { onConflict: 'owner_id,dedupe_key', ignoreDuplicates: true }).select('id').maybeSingle()
         if (!error && insertedAlert) {
@@ -175,11 +186,11 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
         }
         if (alert.type === 'kill_criterion_breach') {
           const refresh = await enqueueAgentJob('event-refresh-company-research', {
-            ownerId: row.owner_id,
+            ownerId: trackedName.ownerId,
             symbol: alert.symbol,
             reason: 'kill-criterion-breach',
             eventId: alert.dedupeKey,
-          }, killCriterionResearchDedupeKey(String(row.owner_id), alert.dedupeKey))
+          }, killCriterionResearchDedupeKey(trackedName.ownerId, alert.dedupeKey))
           if (!refresh.deduplicated) researchJobs += 1
         }
       }

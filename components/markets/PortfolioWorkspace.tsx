@@ -9,7 +9,7 @@ import { MarketsIntentLink } from './MarketsIntentLink'
 import { MarketSparkline } from './MarketSparkline'
 import type { PortfolioHolding, PortfolioWorkspaceData, ScreenerResponse, ScreenerRow } from '@/lib/markets/types'
 
-type PortfolioView = 'ideas' | 'owned' | 'decision-inbox' | 'history'
+type PortfolioView = 'owned' | 'alerts' | 'history'
 
 function formatMoney(value: number | null): string {
   return value === null ? '—' : value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
@@ -161,8 +161,6 @@ export function PortfolioWorkspace({
     setNotice(`${symbol} decision review saved.`)
   }
 
-  const decisions = initialData.decisions
-  const ideas = decisions.filter((decision) => decision.disposition !== 'own')
   const priceBySymbol = new Map(universe.rows.map((row) => [row.symbol, row.price]))
   const rowBySymbol = new Map(universe.rows.map((row) => [row.symbol, row]))
   const reviewByDecision = new Map(reviews.map((review) => [review.decisionId, review]))
@@ -173,6 +171,9 @@ export function PortfolioWorkspace({
     ['YTD', weightedReturn(activePortfolio.holdings, rowBySymbol, 'returnYtd')],
     ['1Y', weightedReturn(activePortfolio.holdings, rowBySymbol, 'return1y')],
   ] as const : []
+  const activeAlerts = activePortfolio
+    ? inbox.filter((item) => item.portfolioId === activePortfolio.account.id)
+    : []
   return (
     <section className="portfolio-workspace">
       <header className="market-explore-heading">
@@ -198,22 +199,12 @@ export function PortfolioWorkspace({
       <nav className="market-portfolio-tabs" aria-label="Portfolio workflow">
         {([
           ['owned', 'Owned'],
-          ['ideas', 'Ideas'],
-          ['decision-inbox', 'Decision Inbox'],
+          ['alerts', 'Alerts'],
           ['history', 'History'],
         ] as const).map(([id, label]) => (
           <button key={id} type="button" aria-current={view === id ? 'page' : undefined} onClick={() => setView(id)}>{label}</button>
         ))}
       </nav>
-      {view === 'ideas' ? (
-        <div className="portfolio-record-list">
-          {ideas.length === 0 ? <p>No classified ideas yet. Save a Stock Viewer decision as Watch or Avoid.</p> : ideas.map((decision) => (
-            <MarketsIntentLink key={decision.id} href={`/markets/stocks/${decision.symbol}`}>
-              <strong>{decision.symbol}</strong><span>{decision.disposition} · {decision.formalRating} · {formatEntryAction(decision.entryAction)}</span>
-            </MarketsIntentLink>
-          ))}
-        </div>
-      ) : null}
       {view === 'owned' ? (
         <div className="portfolio-owned-workspace">
           {activePortfolio ? <>
@@ -270,9 +261,10 @@ export function PortfolioWorkspace({
           </> : <p className="portfolio-empty-state">Portfolio records will appear after the database migration is applied.</p>}
         </div>
       ) : null}
-      {view === 'decision-inbox' ? (
-        <div className="decision-inbox-list">
-          {inbox.length === 0 ? <p>Nothing requires a decision right now.</p> : inbox.map((item) => (
+      {view === 'alerts' ? (
+        <div className="decision-inbox-list portfolio-alert-list">
+          <header><div><p className="markets-eyebrow">Tracking</p><h2>{activePortfolio?.account.name ?? 'Portfolio'} alerts</h2></div><span>{activeAlerts.length} open</span></header>
+          {activeAlerts.length === 0 ? <p className="portfolio-alert-empty">No open alerts for this portfolio. Material company events and position-level thesis thresholds will appear here.</p> : activeAlerts.map((item) => (
             <article key={item.id}>
               <div><span>{item.type.replaceAll('_', ' ')}</span><time>{new Date(item.occurredAt).toLocaleString()}</time></div>
               <h2>{item.symbol

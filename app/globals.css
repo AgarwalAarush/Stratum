@@ -7625,6 +7625,32 @@ body:has(.markets-shell) {
   padding: 0 11px;
 }
 
+.portfolio-alert-list > header {
+  align-items: end;
+  border-bottom: 1px solid var(--market-border);
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 15px;
+}
+
+.portfolio-alert-list > header h2 {
+  margin: 4px 0 0;
+}
+
+.portfolio-alert-list > header > span {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.portfolio-alert-empty {
+  border-bottom: 1px solid var(--market-border);
+  margin: 0;
+  padding: 28px 0;
+}
+
 .portfolio-history-list article {
   border-top: 1px solid var(--market-border);
   contain-intrinsic-size: auto 280px;
