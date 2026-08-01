@@ -1,8 +1,13 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 
+import {
+  DEFAULT_ROBINHOOD_MCP_URL,
+  DEFAULT_ROBINHOOD_OAUTH_REDIRECT_PORT,
+  FileRobinhoodOAuthProvider,
+  getRobinhoodOAuthStorePath,
+  hasRobinhoodOAuthCredentials,
+} from './robinhood-mcp-oauth.ts'
 import { getSupabaseClient } from './supabase.ts'
-
-const DEFAULT_ROBINHOOD_MCP_URL = 'https://agent.robinhood.com/mcp/trading'
 
 export type RobinhoodSyncSlot = 'open' | 'midday' | 'close' | 'final'
 
@@ -10,7 +15,8 @@ export interface RobinhoodPortfolioSyncConfig {
   ownerId: string
   portfolioName: string
   accountNumber: string
-  accessToken: string
+  oauthStorePath: string
+  oauthRedirectUrl: string
   mcpUrl: string
 }
 
@@ -116,25 +122,32 @@ export function getRobinhoodPortfolioSyncConfig(env: NodeJS.ProcessEnv = process
   if (env.ROBINHOOD_SYNC_ENABLED !== 'true') return null
   const ownerId = env.ROBINHOOD_PORTFOLIO_OWNER_ID?.trim() ?? ''
   const accountNumber = env.ROBINHOOD_ACCOUNT_NUMBER?.trim() ?? ''
-  const accessToken = env.ROBINHOOD_MCP_ACCESS_TOKEN?.trim() ?? ''
-  if (!ownerId || !accountNumber || !accessToken) return null
+  if (!ownerId || !accountNumber) return null
+  const oauthStorePath = getRobinhoodOAuthStorePath(env)
+  const oauthPort = Number(env.ROBINHOOD_MCP_OAUTH_PORT ?? DEFAULT_ROBINHOOD_OAUTH_REDIRECT_PORT)
+  if (!Number.isInteger(oauthPort) || oauthPort < 1024 || oauthPort > 65535) return null
   return {
     ownerId,
     portfolioName: env.ROBINHOOD_PORTFOLIO_NAME?.trim() || 'Personal',
     accountNumber,
-    accessToken,
+    oauthStorePath,
+    oauthRedirectUrl: `http://127.0.0.1:${oauthPort}/callback`,
     mcpUrl: env.ROBINHOOD_MCP_URL?.trim() || DEFAULT_ROBINHOOD_MCP_URL,
   }
 }
 
 export function isRobinhoodPortfolioSyncConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
-  return getRobinhoodPortfolioSyncConfig(env) !== null
+  const config = getRobinhoodPortfolioSyncConfig(env)
+  return config !== null && hasRobinhoodOAuthCredentials(config.oauthStorePath)
 }
 
 async function loadRobinhoodSnapshot(config: RobinhoodPortfolioSyncConfig): Promise<RobinhoodPortfolioSnapshot> {
   const client = new Client({ name: 'stratum-private-portfolio-sync', version: '1.0.0' })
   const transport = new StreamableHTTPClientTransport(new URL(config.mcpUrl), {
-    authProvider: { token: async () => config.accessToken },
+    authProvider: new FileRobinhoodOAuthProvider({
+      storePath: config.oauthStorePath,
+      redirectUrl: config.oauthRedirectUrl,
+    }),
     requestInit: { signal: AbortSignal.timeout(30_000) },
   })
   try {

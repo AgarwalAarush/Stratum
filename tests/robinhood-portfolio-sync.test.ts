@@ -45,12 +45,13 @@ test('Robinhood worker configuration remains server-only and opt-in', () => {
     ROBINHOOD_SYNC_ENABLED: 'true',
     ROBINHOOD_PORTFOLIO_OWNER_ID: 'owner-1',
     ROBINHOOD_ACCOUNT_NUMBER: '123456789',
-    ROBINHOOD_MCP_ACCESS_TOKEN: 'private-token',
+    ROBINHOOD_MCP_OAUTH_STORE: '/var/private/stratum/robinhood-oauth.json',
   }), {
     ownerId: 'owner-1',
     portfolioName: 'Personal',
     accountNumber: '123456789',
-    accessToken: 'private-token',
+    oauthStorePath: '/var/private/stratum/robinhood-oauth.json',
+    oauthRedirectUrl: 'http://127.0.0.1:1456/callback',
     mcpUrl: 'https://agent.robinhood.com/mcp/trading',
   })
 })
