@@ -79,7 +79,7 @@ export async function materializeMarketMemo(
   for (let from = 0; ; from += ROW_PAGE_SIZE) {
     const { data, error } = await supabase
       .from('screener_rows')
-      .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,tradable,data_as_of')
+      .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,sector,sub_industry,tradable,data_as_of')
       .eq('snapshot_id', snapshotId)
       .range(from, from + ROW_PAGE_SIZE - 1)
     if (error) throw new Error(`Unable to load screener rows: ${error.message}`)
@@ -101,6 +101,8 @@ export async function materializeMarketMemo(
       fiftyDayAverage: Number(row.fifty_day_average),
       fiftyTwoWeekPosition: Number(row.fifty_two_week_position),
       exchange: row.exchange,
+      sector: row.sector ?? 'Unclassified',
+      subIndustry: row.sub_industry ?? 'Unclassified',
       tradable: row.tradable,
       asOf: row.data_as_of,
     }))

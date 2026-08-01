@@ -26,6 +26,8 @@ function row(symbol: string, dailyChange: number, price = 110, fiftyDayAverage =
     fiftyDayAverage,
     fiftyTwoWeekPosition: 75,
     exchange: 'NASDAQ',
+    sector: 'Information Technology',
+    subIndustry: 'Systems Software',
     tradable: true,
     asOf: '2026-07-15T20:00:00Z',
   }

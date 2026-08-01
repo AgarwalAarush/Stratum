@@ -14,7 +14,7 @@ import { getSupabaseClient } from './supabase.ts'
 
 const DATABASE_PAGE_SIZE = 1_000
 const DATABASE_BATCH_SIZE = 500
-const GICS_CONSTITUENTS_URL = 'https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv'
+export const GICS_CONSTITUENTS_URL = 'https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv'
 
 function batches<T>(items: T[], size = DATABASE_BATCH_SIZE): T[][] {
   const result: T[][] = []

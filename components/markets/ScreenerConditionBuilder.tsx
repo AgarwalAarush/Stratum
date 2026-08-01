@@ -13,11 +13,13 @@ import type {
   ScreenerFilterField,
   ScreenerFilterOperator,
   ScreenerReturnField,
+  ScreenerTaxonomy,
 } from '@/lib/markets/types'
 import { isScreenerReturnField, SCREENER_RETURN_PERIODS } from '@/lib/markets/screener'
 
 interface ScreenerConditionBuilderProps {
   filters: ScreenerFilter[]
+  taxonomy: ScreenerTaxonomy
   onChange: (filters: ScreenerFilter[]) => void
 }
 
@@ -26,6 +28,7 @@ type ConditionCategory =
   | 'volume-liquidity'
   | 'trend'
   | '52-week'
+  | 'classification'
   | 'listing'
 
 interface ConditionDefinition {
@@ -33,10 +36,10 @@ interface ConditionDefinition {
   title: string
   description: string
   category: ConditionCategory
-  kind: 'number' | 'boolean' | 'exchange'
+  kind: 'number' | 'boolean' | 'exchange' | 'taxonomy'
   unit?: string
   defaultOperator: ScreenerFilterOperator
-  defaultValue: number | string | boolean
+  defaultValue: number | string | string[] | boolean
 }
 
 const CONDITION_DEFINITIONS: ConditionDefinition[] = [
@@ -47,6 +50,8 @@ const CONDITION_DEFINITIONS: ConditionDefinition[] = [
   { field: 'relativeVolume', title: 'Relative volume', description: 'Volume compared with the 20-day average', category: 'volume-liquidity', kind: 'number', unit: '×', defaultOperator: 'gt', defaultValue: 1.5 },
   { field: 'above50DayAverage', title: 'Trend', description: 'Price position relative to the 50-day average', category: 'trend', kind: 'boolean', defaultOperator: 'eq', defaultValue: true },
   { field: 'fiftyTwoWeekPosition', title: '52-week position', description: 'Current price position inside the 52-week range', category: '52-week', kind: 'number', unit: '%', defaultOperator: 'gte', defaultValue: 85 },
+  { field: 'sector', title: 'Sector', description: 'GICS sector membership', category: 'classification', kind: 'taxonomy', defaultOperator: 'notIn', defaultValue: [] },
+  { field: 'subIndustry', title: 'Sub-industry', description: 'GICS sub-industry membership', category: 'classification', kind: 'taxonomy', defaultOperator: 'notIn', defaultValue: [] },
   { field: 'exchange', title: 'Exchange', description: 'Primary US listing venue', category: 'listing', kind: 'exchange', defaultOperator: 'eq', defaultValue: 'NASDAQ' },
   { field: 'tradable', title: 'Tradable', description: 'Eligible for trading through the connected market feed', category: 'listing', kind: 'boolean', defaultOperator: 'eq', defaultValue: true },
 ]
@@ -57,6 +62,7 @@ const CATEGORIES: Array<{ id: 'all' | ConditionCategory; label: string }> = [
   { id: 'volume-liquidity', label: 'Volume & liquidity' },
   { id: 'trend', label: 'Trend & moving averages' },
   { id: '52-week', label: '52-week context' },
+  { id: 'classification', label: 'Classification' },
   { id: 'listing', label: 'Listing & trading' },
 ]
 
@@ -66,6 +72,8 @@ const OPERATOR_LABELS: Record<ScreenerFilterOperator, string> = {
   lt: 'Less than',
   lte: 'At most',
   eq: 'Equal to',
+  in: 'Include selected',
+  notIn: 'Exclude selected',
 }
 
 const OPERATOR_SYMBOLS: Record<ScreenerFilterOperator, string> = {
@@ -74,6 +82,8 @@ const OPERATOR_SYMBOLS: Record<ScreenerFilterOperator, string> = {
   lt: '<',
   lte: '≤',
   eq: '=',
+  in: 'is any of',
+  notIn: 'is not any of',
 }
 
 function definitionFor(field: ScreenerFilterField): ConditionDefinition {
@@ -170,6 +180,12 @@ export function formatScreenerFilter(filter: ScreenerFilter): string {
   if (filter.field === 'above50DayAverage') return filter.value ? 'Above 50D MA' : 'Below 50D MA'
   if (filter.field === 'tradable') return `Tradable ${filter.value ? 'Yes' : 'No'}`
   if (filter.field === 'exchange') return `Exchange ${String(filter.value)}`
+  if (filter.field === 'sector' || filter.field === 'subIndustry') {
+    const values = Array.isArray(filter.value) ? filter.value : []
+    const shown = values.slice(0, 2).join(', ')
+    const remainder = values.length > 2 ? ` +${values.length - 2}` : ''
+    return `${definition.title} ${filter.operator === 'in' ? 'is any of' : 'is not any of'} ${shown}${remainder}`
+  }
   const value = numberLabel(filter.field, Number(filter.value), definition.unit)
   const title = isScreenerReturnField(filter.field)
     ? `${definition.title} · ${returnPeriodFor(filter.field).shortLabel}`
@@ -193,10 +209,11 @@ function withLabel(filter: ScreenerFilter): ScreenerFilter {
 
 interface ConditionFormProps {
   draft: ScreenerFilter
+  taxonomy: ScreenerTaxonomy
   onChange: (draft: ScreenerFilter) => void
 }
 
-function ConditionForm({ draft, onChange }: ConditionFormProps) {
+function ConditionForm({ draft, taxonomy, onChange }: ConditionFormProps) {
   const definition = definitionFor(draft.field)
   const isDirectional = directionalField(draft.field)
   const direction = draft.operator === 'lt' || draft.operator === 'lte' || Number(draft.value) < 0 ? 'down' : 'up'
@@ -293,6 +310,30 @@ function ConditionForm({ draft, onChange }: ConditionFormProps) {
         </label>
       )}
 
+      {definition.kind === 'taxonomy' && (
+        <>
+          <label className="market-condition-control">
+            <span>Match</span>
+            <select value={draft.operator} onChange={(event) => onChange({ ...draft, operator: event.target.value as ScreenerFilterOperator })}>
+              <option value="in">Include selected</option>
+              <option value="notIn">Exclude selected</option>
+            </select>
+          </label>
+          <label className="market-condition-control">
+            <span>{definition.title}s</span>
+            <select
+              multiple
+              size={Math.min(8, Math.max(4, (draft.field === 'sector' ? taxonomy.sectors : taxonomy.subIndustries).length))}
+              value={Array.isArray(draft.value) ? draft.value : []}
+              onChange={(event) => onChange({ ...draft, value: Array.from(event.currentTarget.selectedOptions, (option) => option.value) })}
+            >
+              {(draft.field === 'sector' ? taxonomy.sectors : taxonomy.subIndustries).map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+            <small>Choose one or more. Hold Command or Control to select multiple.</small>
+          </label>
+        </>
+      )}
+
       <div className="market-condition-preview">
         <span>Condition preview</span>
         <output>{formatScreenerFilter(withLabel(draft))}</output>
@@ -301,7 +342,7 @@ function ConditionForm({ draft, onChange }: ConditionFormProps) {
   )
 }
 
-export function ScreenerConditionBuilder({ filters, onChange }: ScreenerConditionBuilderProps) {
+export function ScreenerConditionBuilder({ filters, taxonomy, onChange }: ScreenerConditionBuilderProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState<'all' | ConditionCategory>('all')
@@ -398,6 +439,7 @@ export function ScreenerConditionBuilder({ filters, onChange }: ScreenerConditio
   }
 
   const addCondition = () => {
+    if ((draft.field === 'sector' || draft.field === 'subIndustry') && (!Array.isArray(draft.value) || draft.value.length === 0)) return
     const existing = filters.find((filter) => filter.field === draft.field)
     if (existing) {
       onChange(filters.map((filter) => filter.id === existing.id ? withLabel({ ...draft, id: existing.id }) : filter))
@@ -411,6 +453,9 @@ export function ScreenerConditionBuilder({ filters, onChange }: ScreenerConditio
     onChange(filters.filter((filter) => filter.id !== id))
     if (editingId === id) setEditingId(null)
   }
+
+  const taxonomyDraftNeedsSelection = (draft.field === 'sector' || draft.field === 'subIndustry')
+    && (!Array.isArray(draft.value) || draft.value.length === 0)
 
   return (
     <>
@@ -436,10 +481,10 @@ export function ScreenerConditionBuilder({ filters, onChange }: ScreenerConditio
                       <button type="button" aria-label="Delete condition" onClick={() => removeCondition(filter.id)}><Trash size={15} /></button>
                     </div>
                   </header>
-                  <ConditionForm draft={draft} onChange={setDraft} />
+                  <ConditionForm draft={draft} taxonomy={taxonomy} onChange={setDraft} />
                   <footer>
                     <button type="button" className="market-condition-secondary" onClick={() => setEditingId(null)}>Cancel</button>
-                    <button type="button" className="markets-primary-button" onClick={applyEdit}>Apply changes</button>
+                    <button type="button" className="markets-primary-button" onClick={applyEdit} disabled={taxonomyDraftNeedsSelection}>Apply changes</button>
                   </footer>
                 </section>
               </>
@@ -489,14 +534,14 @@ export function ScreenerConditionBuilder({ filters, onChange }: ScreenerConditio
                 })}
               </div>
               <aside className="market-condition-config">
-                <ConditionForm draft={draft} onChange={setDraft} />
+                <ConditionForm draft={draft} taxonomy={taxonomy} onChange={setDraft} />
               </aside>
             </div>
             <footer className="market-condition-modal-footer">
               <span>{filters.some((filter) => filter.field === draft.field) ? 'This will update the existing condition.' : 'The condition will be added to the current screen.'}</span>
               <div>
                 <button type="button" className="market-condition-secondary" onClick={() => setAddOpen(false)}>Cancel</button>
-                <button type="button" className="markets-primary-button" onClick={addCondition}>{filters.some((filter) => filter.field === draft.field) ? 'Update condition' : 'Add condition'}</button>
+                <button type="button" className="markets-primary-button" onClick={addCondition} disabled={taxonomyDraftNeedsSelection}>{filters.some((filter) => filter.field === draft.field) ? 'Update condition' : 'Add condition'}</button>
               </div>
             </footer>
           </section>

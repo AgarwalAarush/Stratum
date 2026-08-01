@@ -22,7 +22,7 @@ import {
   applyCurrentDayReturns,
   rankDailySubIndustries,
 } from '../markets/leadership.ts'
-import { runScreener } from '../markets/screener.ts'
+import { runScreener, screenerTaxonomy } from '../markets/screener.ts'
 import { buildDeterministicMarketMemo, type MarketStateInputs } from '../markets/state.ts'
 import { crossAssetMarketInstrument } from './cross-asset.ts'
 import { normalizeStockLeadershipRow } from './market-leadership.ts'
@@ -115,6 +115,8 @@ interface ScreenerRowRecord {
   fifty_day_average: number | string
   fifty_two_week_position: number | string
   exchange: string
+  sector: string | null
+  sub_industry: string | null
   tradable: boolean
   data_as_of: string
 }
@@ -233,6 +235,8 @@ function normalizeScreenerRow(row: ScreenerRowRecord): ScreenerRow {
     fiftyDayAverage: Number(row.fifty_day_average),
     fiftyTwoWeekPosition: Number(row.fifty_two_week_position),
     exchange: row.exchange,
+    sector: row.sector?.trim() || 'Unclassified',
+    subIndustry: row.sub_industry?.trim() || 'Unclassified',
     tradable: row.tradable,
     asOf: row.data_as_of,
   }
@@ -296,7 +300,7 @@ export async function fetchLatestScreener(query: ScreenerQuery): Promise<Screene
     for (let from = 0; ; from += DATABASE_PAGE_SIZE) {
       const { data, error } = await supabase
         .from('screener_rows')
-        .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,tradable,data_as_of')
+        .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,sector,sub_industry,tradable,data_as_of')
         .eq('snapshot_id', snapshot.id)
         .range(from, from + DATABASE_PAGE_SIZE - 1)
       if (error) return null
@@ -329,7 +333,7 @@ export async function fetchLatestScreenerSymbols(symbols: string[]): Promise<Scr
 
   const { data, error } = await supabase
     .from('screener_rows')
-    .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,tradable,data_as_of')
+    .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,sector,sub_industry,tradable,data_as_of')
     .eq('snapshot_id', snapshot.id)
     .in('symbol', requested)
   if (error) return null
@@ -344,6 +348,7 @@ export async function fetchLatestScreenerSymbols(symbols: string[]): Promise<Scr
     dataAsOf: snapshot.data_as_of,
     snapshotId: snapshot.id,
     stale: isStale(snapshot.data_as_of),
+    taxonomy: screenerTaxonomy(rows),
   }
 }
 

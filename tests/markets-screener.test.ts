@@ -36,8 +36,27 @@ test('screener supports filtering and sorting by a selected fixed return period'
   assert.ok((response.rows[0]?.return30d ?? -Infinity) >= (response.rows[1]?.return30d ?? -Infinity))
 })
 
+test('screener filters by one or more sectors and sub-industries', () => {
+  const included = runIllustrativeScreener({
+    ...DEFAULT_SCREENER_QUERY,
+    filters: [{ id: 'technology', field: 'sector', operator: 'in', value: ['Information Technology'], label: 'Sector is any of Information Technology' }],
+  })
+  assert.ok(included.total > 0)
+  assert.ok(included.rows.every((row) => row.sector === 'Information Technology'))
+
+  const excluded = runIllustrativeScreener({
+    ...DEFAULT_SCREENER_QUERY,
+    filters: [{ id: 'gaming', field: 'subIndustry', operator: 'notIn', value: ['Casinos & Gaming'], label: 'Sub-industry is not any of Casinos & Gaming' }],
+  })
+  assert.ok(excluded.rows.every((row) => row.subIndustry !== 'Casinos & Gaming'))
+  assert.ok(included.taxonomy.sectors.includes('Information Technology'))
+  assert.ok(included.taxonomy.subIndustries.includes('Semiconductors'))
+})
+
 test('screener parser rejects unsupported fields and oversized pages', () => {
   assert.throws(() => parseScreenerQuery({ ...DEFAULT_SCREENER_QUERY, filters: [{ id: 'bad', field: 'marketCap', operator: 'gt', value: 1, label: 'Bad' }] }), /field is not supported/)
+  assert.throws(() => parseScreenerQuery({ ...DEFAULT_SCREENER_QUERY, filters: [{ id: 'bad-sector', field: 'sector', operator: 'eq', value: 'Energy', label: 'Bad sector' }] }), /operator is invalid for taxonomy/)
+  assert.throws(() => parseScreenerQuery({ ...DEFAULT_SCREENER_QUERY, filters: [{ id: 'bad-sector', field: 'sector', operator: 'in', value: 'Energy', label: 'Bad sector' }] }), /taxonomy list/)
   assert.throws(() => parseScreenerQuery({ ...DEFAULT_SCREENER_QUERY, pageSize: 51 }), /pageSize must be between 1 and 50/)
 })
 

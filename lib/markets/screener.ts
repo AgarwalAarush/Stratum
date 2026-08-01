@@ -12,8 +12,8 @@ import type {
 } from './types.ts'
 
 const PRESETS: ScreenerPreset[] = ['momentum', 'unusual-volume', 'near-highs', 'gap-movers']
-const FILTER_FIELDS: ScreenerFilterField[] = ['price', 'dailyChange', 'return5d', 'return30d', 'return90d', 'return180d', 'returnYtd', 'return1y', 'gap', 'volume', 'relativeVolume', 'above50DayAverage', 'fiftyTwoWeekPosition', 'exchange', 'tradable']
-const FILTER_OPERATORS: ScreenerFilterOperator[] = ['gt', 'gte', 'lt', 'lte', 'eq']
+const FILTER_FIELDS: ScreenerFilterField[] = ['price', 'dailyChange', 'return5d', 'return30d', 'return90d', 'return180d', 'returnYtd', 'return1y', 'gap', 'volume', 'relativeVolume', 'above50DayAverage', 'fiftyTwoWeekPosition', 'exchange', 'sector', 'subIndustry', 'tradable']
+const FILTER_OPERATORS: ScreenerFilterOperator[] = ['gt', 'gte', 'lt', 'lte', 'eq', 'in', 'notIn']
 const SORT_FIELDS: ScreenerSortField[] = ['symbol', 'price', 'dailyChange', 'return5d', 'return30d', 'return90d', 'return180d', 'returnYtd', 'return1y', 'gap', 'volume', 'relativeVolume', 'fiftyDayAverage', 'fiftyTwoWeekPosition']
 
 export const SCREENER_RETURN_PERIODS: Array<{ field: ScreenerReturnField; label: string; shortLabel: string }> = [
@@ -75,7 +75,15 @@ function parseFilter(value: unknown, index: number): ScreenerFilter {
   if (typeof value.id !== 'string' || value.id.length === 0) throw new ScreenerValidationError(`filters[${index}].id is required`)
   if (!FILTER_FIELDS.includes(value.field as ScreenerFilterField)) throw new ScreenerValidationError(`filters[${index}].field is not supported`)
   if (!FILTER_OPERATORS.includes(value.operator as ScreenerFilterOperator)) throw new ScreenerValidationError(`filters[${index}].operator is not supported`)
-  if (!['number', 'string', 'boolean'].includes(typeof value.value)) throw new ScreenerValidationError(`filters[${index}].value is invalid`)
+  const taxonomyField = value.field === 'sector' || value.field === 'subIndustry'
+  if (taxonomyField) {
+    if (!['in', 'notIn'].includes(value.operator as ScreenerFilterOperator)) throw new ScreenerValidationError(`filters[${index}].operator is invalid for taxonomy`)
+    if (!Array.isArray(value.value) || value.value.length === 0 || value.value.length > 40 || value.value.some((item) => typeof item !== 'string' || item.length === 0 || item.length > 120)) {
+      throw new ScreenerValidationError(`filters[${index}].value must be a non-empty taxonomy list`)
+    }
+  } else if (!['number', 'string', 'boolean'].includes(typeof value.value)) {
+    throw new ScreenerValidationError(`filters[${index}].value is invalid`)
+  }
   if (typeof value.label !== 'string' || value.label.length === 0) throw new ScreenerValidationError(`filters[${index}].label is required`)
 
   return value as unknown as ScreenerFilter
@@ -110,6 +118,11 @@ function matchesFilter(row: ScreenerRow, filter: ScreenerFilter): boolean {
   const actual = comparableValue(row, filter.field)
   const expected = filter.value
 
+  if (filter.operator === 'in' || filter.operator === 'notIn') {
+    if (!Array.isArray(expected) || typeof actual !== 'string') return false
+    const found = expected.includes(actual)
+    return filter.operator === 'in' ? found : !found
+  }
   if (filter.operator === 'eq') return actual === expected
   if (typeof actual !== 'number' || typeof expected !== 'number') return false
   if (filter.operator === 'gt') return actual > expected
@@ -132,6 +145,13 @@ export function runIllustrativeScreener(query: ScreenerQuery): ScreenerResponse 
   })
 }
 
+export function screenerTaxonomy(rows: ScreenerRow[]): ScreenerResponse['taxonomy'] {
+  return {
+    sectors: [...new Set(rows.map((row) => row.sector))].sort((left, right) => left.localeCompare(right)),
+    subIndustries: [...new Set(rows.map((row) => row.subIndustry))].sort((left, right) => left.localeCompare(right)),
+  }
+}
+
 export function runScreener(
   query: ScreenerQuery,
   rows: ScreenerRow[],
@@ -152,5 +172,6 @@ export function runScreener(
     page: query.page,
     pageSize: query.pageSize,
     ...metadata,
+    taxonomy: screenerTaxonomy(rows),
   }
 }

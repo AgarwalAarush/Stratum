@@ -16,7 +16,7 @@ const conditionBuilderSource = readFileSync(
 const marketStyles = readFileSync(join(process.cwd(), 'app/globals.css'), 'utf8')
 
 test('screener delegates filter editing to the condition builder', () => {
-  assert.match(screenerSource, /<ScreenerConditionBuilder filters=\{filters\} onChange=\{changeFilters\}/)
+  assert.match(screenerSource, /<ScreenerConditionBuilder filters=\{filters\} taxonomy=\{response\.taxonomy\} onChange=\{changeFilters\}/)
   assert.match(screenerSource, /market-screen-table-wrap scrollbar-none/)
   assert.equal(screenerSource.includes('Run screen'), false)
   assert.match(screenerSource, /void execute\(\{ filters: nextFilters, page: 1 \}\)/)
@@ -51,6 +51,10 @@ test('condition builder exposes only API-supported v1 fields', () => {
     assert.match(conditionBuilderSource, new RegExp(`field: '${field}'`))
   }
   assert.match(conditionBuilderSource, /SCREENER_RETURN_PERIODS/)
+  assert.match(conditionBuilderSource, /field: 'sector'/)
+  assert.match(conditionBuilderSource, /field: 'subIndustry'/)
+  assert.match(conditionBuilderSource, /Include selected/)
+  assert.match(conditionBuilderSource, /Exclude selected/)
   assert.equal(conditionBuilderSource.includes("field: 'marketCap'"), false)
 })
 

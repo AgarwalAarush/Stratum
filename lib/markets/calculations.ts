@@ -109,6 +109,8 @@ export function calculateScreenerRow(
     fiftyDayAverage: round(fiftyDayAverage),
     fiftyTwoWeekPosition: round(Math.max(0, Math.min(100, fiftyTwoWeekPosition))),
     exchange: asset.exchange,
+    sector: 'Unclassified',
+    subIndustry: 'Unclassified',
     tradable: asset.tradable && asset.active,
     asOf: snapshot.asOf,
   }

@@ -60,6 +60,28 @@ function makeRange(seed: number): number[] {
   return values
 }
 
+const TAXONOMY_BY_SYMBOL: Record<string, { sector: string; subIndustry: string }> = {
+  NVDA: { sector: 'Information Technology', subIndustry: 'Semiconductors' },
+  AVGO: { sector: 'Information Technology', subIndustry: 'Semiconductors' },
+  AMD: { sector: 'Information Technology', subIndustry: 'Semiconductors' },
+  MU: { sector: 'Information Technology', subIndustry: 'Semiconductors' },
+  ARM: { sector: 'Information Technology', subIndustry: 'Semiconductors' },
+  ANET: { sector: 'Information Technology', subIndustry: 'Communications Equipment' },
+  PANW: { sector: 'Information Technology', subIndustry: 'Systems Software' },
+  CRWD: { sector: 'Information Technology', subIndustry: 'Systems Software' },
+  MSFT: { sector: 'Information Technology', subIndustry: 'Systems Software' },
+  AAPL: { sector: 'Information Technology', subIndustry: 'Technology Hardware, Storage & Peripherals' },
+  META: { sector: 'Communication Services', subIndustry: 'Interactive Media & Services' },
+  GOOGL: { sector: 'Communication Services', subIndustry: 'Interactive Media & Services' },
+  NFLX: { sector: 'Communication Services', subIndustry: 'Movies & Entertainment' },
+  AMZN: { sector: 'Consumer Discretionary', subIndustry: 'Broadline Retail' },
+  TSLA: { sector: 'Consumer Discretionary', subIndustry: 'Automobile Manufacturers' },
+  CAVA: { sector: 'Consumer Discretionary', subIndustry: 'Restaurants' },
+  DKNG: { sector: 'Consumer Discretionary', subIndustry: 'Casinos & Gaming' },
+  COIN: { sector: 'Financials', subIndustry: 'Financial Exchanges & Data' },
+  HOOD: { sector: 'Financials', subIndustry: 'Investment Banking & Brokerage' },
+}
+
 export const ILLUSTRATIVE_SCREENER_ROWS: ScreenerRow[] = BASE_ROWS.map((row, index) => ({
   ...row,
   return5d: row.dailyChange * 1.8,
@@ -70,6 +92,8 @@ export const ILLUSTRATIVE_SCREENER_ROWS: ScreenerRow[] = BASE_ROWS.map((row, ind
   return1y: row.dailyChange * 17.2,
   volume: row.volume * 1_000_000,
   range: makeRange(index + 3),
+  sector: TAXONOMY_BY_SYMBOL[row.symbol]?.sector ?? 'Unclassified',
+  subIndustry: TAXONOMY_BY_SYMBOL[row.symbol]?.subIndustry ?? 'Unclassified',
   tradable: true,
   asOf: '2026-07-15T20:00:00.000Z',
 }))

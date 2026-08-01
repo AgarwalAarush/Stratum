@@ -527,7 +527,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
         </button>
         <div className={`market-filter-conditions ${filtersOpen ? 'market-filter-conditions-open' : ''}`}>
           <span className="market-filter-prefix">Show US equities where</span>
-          <ScreenerConditionBuilder filters={filters} onChange={changeFilters} />
+          <ScreenerConditionBuilder filters={filters} taxonomy={response.taxonomy} onChange={changeFilters} />
         </div>
         <div className="market-filter-actions">
           <button type="button" className="market-action-link" onClick={resetScreen}>Reset</button>

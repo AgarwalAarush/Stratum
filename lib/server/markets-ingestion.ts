@@ -1,6 +1,7 @@
 import { calculateScreenerRow } from '../markets/calculations.ts'
 import type { MarketAsset, MarketDailyBar, MarketFeed, ScreenerRow } from '../markets/types.ts'
 import { getAlpacaClient, type AlpacaClient } from './alpaca.ts'
+import { GICS_CONSTITUENTS_URL, parseGicsConstituents } from './market-leadership.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 const DATABASE_BATCH_SIZE = 500
@@ -232,6 +233,23 @@ export interface MaterializeMarketsOptions {
   now?: Date
   symbols?: string[]
   assets?: MarketAsset[]
+  fetchImpl?: typeof fetch
+}
+
+async function loadGicsTaxonomy(symbols: string[], fetchImpl: typeof fetch = fetch): Promise<Map<string, { sector: string; subIndustry: string }>> {
+  try {
+    const response = await fetchImpl(GICS_CONSTITUENTS_URL, {
+      headers: { 'User-Agent': 'Stratum/0.4 (+market-structure-worker)' },
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (!response.ok) return new Map()
+    const requested = new Set(symbols)
+    return new Map(parseGicsConstituents(await response.text())
+      .filter((company) => requested.has(company.symbol))
+      .map((company) => [company.symbol, { sector: company.sector, subIndustry: company.subIndustry }]))
+  } catch {
+    return new Map()
+  }
 }
 
 export async function syncAlpacaAssets(client: AlpacaClient = getAlpacaClient()!, now = new Date()): Promise<MarketAsset[]> {
@@ -318,6 +336,7 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
   if (assets.length === 0) throw new Error('No eligible US equity assets are available')
 
   const symbols = assets.map((asset) => asset.symbol)
+  const taxonomyBySymbol = await loadGicsTaxonomy(symbols, options.fetchImpl)
   let snapshotsResult = await client.fetchSnapshots(symbols)
   let feed = snapshotsResult.feed
   let historyResult = await loadScreenerHistory(client, supabase, symbols, feed, now)
@@ -345,7 +364,13 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
       const asset = assetsBySymbol.get(snapshot.symbol)
       if (!asset) return []
       const row = calculateScreenerRow(asset, snapshot, barsBySymbol.get(snapshot.symbol) ?? [])
-      return row ? [row] : []
+      if (!row) return []
+      const classification = taxonomyBySymbol.get(row.symbol)
+      return [{
+        ...row,
+        sector: classification?.sector ?? 'Unclassified',
+        subIndustry: classification?.subIndustry ?? 'Unclassified',
+      }]
     })
     if (rows.length === 0) throw new Error('No screener rows had sufficient market history')
 
@@ -369,6 +394,8 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
         fifty_day_average: row.fiftyDayAverage,
         fifty_two_week_position: row.fiftyTwoWeekPosition,
         exchange: row.exchange,
+        sector: row.sector,
+        sub_industry: row.subIndustry,
         tradable: row.tradable,
         data_as_of: row.asOf,
       })))

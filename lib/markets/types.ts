@@ -707,15 +707,17 @@ export type ScreenerFilterField =
   | 'above50DayAverage'
   | 'fiftyTwoWeekPosition'
   | 'exchange'
+  | 'sector'
+  | 'subIndustry'
   | 'tradable'
 
-export type ScreenerFilterOperator = 'gt' | 'gte' | 'lt' | 'lte' | 'eq'
+export type ScreenerFilterOperator = 'gt' | 'gte' | 'lt' | 'lte' | 'eq' | 'in' | 'notIn'
 
 export interface ScreenerFilter {
   id: string
   field: ScreenerFilterField
   operator: ScreenerFilterOperator
-  value: number | string | boolean
+  value: number | string | string[] | boolean
   label: string
 }
 
@@ -766,8 +768,15 @@ export interface ScreenerRow {
   fiftyDayAverage: number
   fiftyTwoWeekPosition: number
   exchange: string
+  sector: string
+  subIndustry: string
   tradable: boolean
   asOf: string
+}
+
+export interface ScreenerTaxonomy {
+  sectors: string[]
+  subIndustries: string[]
 }
 
 export interface ScreenerResponse {
@@ -779,4 +788,5 @@ export interface ScreenerResponse {
   dataAsOf: string
   snapshotId: string
   stale: boolean
+  taxonomy: ScreenerTaxonomy
 }
