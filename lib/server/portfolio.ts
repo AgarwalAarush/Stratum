@@ -189,8 +189,10 @@ function calculatePortfolioSummary(
   }
 }
 
-function normalizeBrokerageSnapshot(row: Record<string, unknown>): BrokerageSnapshot | null {
-  const accountRows = Array.isArray(row.brokerage_account_snapshots) ? row.brokerage_account_snapshots : []
+export function normalizeBrokerageSnapshot(row: Record<string, unknown>): BrokerageSnapshot | null {
+  const accountRows = Array.isArray(row.brokerage_account_snapshots)
+    ? row.brokerage_account_snapshots
+    : [row.brokerage_account_snapshots]
   const account = record(accountRows[0])
   const capturedAt = typeof row.captured_at === 'string' ? row.captured_at : null
   const cashBalance = numberOrNull(account?.cash_balance)
