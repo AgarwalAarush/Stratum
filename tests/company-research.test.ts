@@ -123,7 +123,12 @@ test('research persistence migration creates immutable owned versions and source
 })
 
 test('research revision migration links each refresh to its prior immutable version', async () => {
-  const sql = await readFile(new URL('../supabase/migrations/202607300006_research_revision_lineage.sql', import.meta.url), 'utf8')
-  assert.match(sql, /previous_research_note_id/i)
-  assert.match(sql, /references public\.equity_research_notes\(id\)/i)
+  const migrations = await Promise.all([
+    readFile(new URL('../supabase/migrations/202607300006_research_revision_lineage.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/202607310004_reconcile_research_revision_lineage.sql', import.meta.url), 'utf8'),
+  ])
+  for (const sql of migrations) {
+    assert.match(sql, /previous_research_note_id/i)
+    assert.match(sql, /references public\.equity_research_notes\(id\)/i)
+  }
 })
