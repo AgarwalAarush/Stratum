@@ -38,6 +38,7 @@ function safeSearchTerm(input: string): string {
  */
 export async function searchLatestStocks(input: string, limit = 8): Promise<StockSearchResponse | null> {
   const query = safeSearchTerm(input)
+  const exactTicker = /^[A-Z][A-Z0-9.-]{0,11}$/.test(query.toUpperCase()) ? query.toUpperCase() : null
   const supabase = getSupabaseClient()
   const snapshot = await fetchLatestSnapshotMeta()
   if (!query || !supabase) return null
@@ -57,14 +58,35 @@ export async function searchLatestStocks(input: string, limit = 8): Promise<Stoc
       .or(`symbol.ilike.%${query}%,company.ilike.%${query}%`)
       .limit(MAX_CANDIDATES)
     : Promise.resolve({ data: [], error: null })
-  const [{ data: assetData, error: assetError }, { data: screenerData, error: screenerError }] = await Promise.all([
+  const exactAssetPromise = exactTicker
+    ? supabase.from('market_assets').select('symbol,name,exchange').eq('symbol', exactTicker).maybeSingle()
+    : Promise.resolve({ data: null, error: null })
+  const exactScreenerPromise = snapshot && exactTicker
+    ? supabase.from('screener_rows').select('symbol,company,exchange,price,daily_change,data_as_of')
+      .eq('snapshot_id', snapshot.id).eq('symbol', exactTicker).maybeSingle()
+    : Promise.resolve({ data: null, error: null })
+  const [
+    { data: assetData, error: assetError },
+    { data: screenerData, error: screenerError },
+    { data: exactAsset, error: exactAssetError },
+    { data: exactScreener, error: exactScreenerError },
+  ] = await Promise.all([
     assetsPromise,
     screenerPromise,
+    exactAssetPromise,
+    exactScreenerPromise,
   ])
-  if (assetError || screenerError) return null
+  if (assetError || screenerError || exactAssetError || exactScreenerError) return null
 
-  const screenerBySymbol = new Map(((screenerData ?? []) as StockSearchRecord[]).map((row) => [row.symbol, row]))
-  const candidates = ((assetData ?? []) as MarketAssetSearchRecord[]).map((asset) => {
+  const screenerBySymbol = new Map([
+    ...((screenerData ?? []) as StockSearchRecord[]),
+    ...((exactScreener ? [exactScreener] : []) as StockSearchRecord[]),
+  ].map((row) => [row.symbol, row]))
+  const assetsBySymbol = new Map([
+    ...((assetData ?? []) as MarketAssetSearchRecord[]),
+    ...((exactAsset ? [exactAsset] : []) as MarketAssetSearchRecord[]),
+  ].map((asset) => [asset.symbol, asset]))
+  const candidates = [...assetsBySymbol.values()].map((asset) => {
     const screener = screenerBySymbol.get(asset.symbol)
     return {
       symbol: asset.symbol,

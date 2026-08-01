@@ -23,6 +23,7 @@ test('stock search applies a result limit and returns no result for blank input'
 test('stock search source reads the complete active asset catalog before screener rows', async () => {
   const source = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../lib/server/stock-search.ts', import.meta.url), 'utf8'))
   assert.match(source, /from\('market_assets'\)/)
+  assert.match(source, /eq\('symbol', exactTicker\)/)
   assert.match(source, /screenable: Boolean\(screener\)/)
   assert.match(source, /price: screener \? Number\(screener\.price\) : null/)
   assert.equal(typeof searchLatestStocks, 'function')
