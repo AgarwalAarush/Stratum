@@ -385,6 +385,8 @@ export interface StockViewerData {
   subIndustry: string
   price: number
   dailyChange: number | null
+  return30d: number | null
+  return1y: number | null
   relativeVolume: number | null
   fiftyDayAverage: number | null
   fiftyTwoWeekPosition: number | null

@@ -43,7 +43,7 @@ function buildBars(count: number): MarketDailyBar[] {
 }
 
 test('market calculations derive price, gap, relative volume, moving average, and range position', () => {
-  const row = calculateScreenerRow(asset, snapshot, buildBars(252))
+  const row = calculateScreenerRow(asset, snapshot, buildBars(400))
 
   assert.ok(row)
   assert.equal(row?.dailyChange, 10)
@@ -72,6 +72,15 @@ test('market calculations anchor multi-period returns to daily history, not page
 test('market calculations reject mismatched symbols and incomplete history', () => {
   assert.equal(calculateScreenerRow(asset, { ...snapshot, symbol: 'OTHER' }, buildBars(252)), null)
   assert.equal(calculateScreenerRow(asset, snapshot, buildBars(49)), null)
+})
+
+test('market calculations leave longer returns unavailable when a recent listing lacks the required lookback', () => {
+  const row = calculateScreenerRow(asset, snapshot, buildBars(53))
+  assert.ok(row)
+  assert.notEqual(row?.return30d, null)
+  assert.equal(row?.return90d, null)
+  assert.equal(row?.return180d, null)
+  assert.equal(row?.return1y, null)
 })
 
 test('market calculations exclude the partial current-day bar from historical averages', () => {

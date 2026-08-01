@@ -28,7 +28,14 @@ function multiple(value: number | null | undefined): string {
 }
 
 export function StockViewer({ data }: { data: StockViewerData }) {
-  const metric = data.leadership
+  const metric = {
+    return30d: data.return30d ?? data.leadership?.return30d ?? null,
+    return1y: data.return1y ?? data.leadership?.return1y ?? null,
+    vs50DayAverage: data.fiftyDayAverage === null || data.fiftyDayAverage === 0
+      ? data.leadership?.vs50DayAverage ?? null
+      : (data.price / data.fiftyDayAverage - 1) * 100,
+    vs200DayAverage: data.leadership?.vs200DayAverage ?? null,
+  }
   const candidate = data.candidate
   const thesis = data.thesis
   const packet = data.companyPacket
@@ -84,10 +91,10 @@ export function StockViewer({ data }: { data: StockViewerData }) {
           <section className="stock-viewer-chart-section">
             <InteractivePriceChart history={data.history} symbol={data.symbol} />
             <div className="stock-viewer-stat-grid">
-              <div><span>30d return</span><strong>{percent(metric?.return30d ?? null)}</strong></div>
-              <div><span>1yr return</span><strong>{percent(metric?.return1y ?? null)}</strong></div>
-              <div><span>vs 50d</span><strong>{percent(metric?.vs50DayAverage ?? null)}</strong></div>
-              <div><span>vs 200d</span><strong>{percent(metric?.vs200DayAverage ?? null)}</strong></div>
+              <div><span>30d return</span><strong>{percent(metric.return30d)}</strong></div>
+              <div><span>1yr return</span><strong>{percent(metric.return1y)}</strong></div>
+              <div><span>vs 50d</span><strong>{percent(metric.vs50DayAverage)}</strong></div>
+              <div><span>vs 200d</span><strong>{percent(metric.vs200DayAverage)}</strong></div>
               <div><span>Relative volume</span><strong>{data.relativeVolume === null ? '—' : `${data.relativeVolume.toFixed(1)}×`}</strong></div>
               <div><span>52-week position</span><strong>{data.fiftyTwoWeekPosition === null ? '—' : `${data.fiftyTwoWeekPosition.toFixed(0)}%`}</strong></div>
             </div>

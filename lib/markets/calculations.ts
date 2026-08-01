@@ -3,6 +3,7 @@ import type { MarketAsset, MarketDailyBar, MarketSnapshot, ScreenerRow } from '.
 const MINIMUM_DAILY_BARS = 50
 const RELATIVE_VOLUME_WINDOW = 20
 const YEAR_WINDOW = 252
+const RETURN_LOOKBACK_TOLERANCE_DAYS = 7
 
 function average(values: number[]): number {
   if (values.length === 0) return 0
@@ -55,6 +56,15 @@ function historicalReturn(currentPrice: number, baseline: number | null | undefi
   return round(percentChange(currentPrice, baseline))
 }
 
+function returnAtLookback(currentPrice: number, bars: MarketDailyBar[], target: Date): number | null {
+  const oldest = bars.at(-1)
+  if (!oldest) return null
+  const oldestTime = Date.parse(`${oldest.tradingDate}T00:00:00.000Z`)
+  const latestEligibleBaseline = target.getTime() + RETURN_LOOKBACK_TOLERANCE_DAYS * 24 * 60 * 60 * 1_000
+  if (!Number.isFinite(oldestTime) || oldestTime > latestEligibleBaseline) return null
+  return historicalReturn(currentPrice, nearestClose(bars, target))
+}
+
 function daysBefore(tradingDate: string, days: number): Date {
   const target = new Date(`${tradingDate}T00:00:00.000Z`)
   target.setUTCDate(target.getUTCDate() - days)
@@ -95,13 +105,13 @@ export function calculateScreenerRow(
     price: round(snapshot.price),
     dailyChange: round(percentChange(snapshot.price, snapshot.previousClose)),
     return5d: historicalReturn(snapshot.price, sorted[4]?.close),
-    return30d: historicalReturn(snapshot.price, nearestClose(sorted, daysBefore(asOfDate, 30))),
-    return90d: historicalReturn(snapshot.price, nearestClose(sorted, daysBefore(asOfDate, 90))),
-    return180d: historicalReturn(snapshot.price, nearestClose(sorted, daysBefore(asOfDate, 180))),
+    return30d: returnAtLookback(snapshot.price, sorted, daysBefore(asOfDate, 30)),
+    return90d: returnAtLookback(snapshot.price, sorted, daysBefore(asOfDate, 90)),
+    return180d: returnAtLookback(snapshot.price, sorted, daysBefore(asOfDate, 180)),
     returnYtd: Number.isFinite(asOfYear)
-      ? historicalReturn(snapshot.price, nearestClose(sorted, new Date(Date.UTC(asOfYear, 0, 1))))
+      ? returnAtLookback(snapshot.price, sorted, new Date(Date.UTC(asOfYear, 0, 1)))
       : null,
-    return1y: historicalReturn(snapshot.price, nearestClose(sorted, daysBefore(asOfDate, 365))),
+    return1y: returnAtLookback(snapshot.price, sorted, daysBefore(asOfDate, 365)),
     gap: round(percentChange(snapshot.open, snapshot.previousClose)),
     volume: snapshot.volume,
     relativeVolume: round(averageVolume > 0 ? snapshot.volume / averageVolume : 0),

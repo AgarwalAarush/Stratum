@@ -777,7 +777,7 @@ async function loadSharedStockViewerData(symbol: string): Promise<StockViewerDat
   ])
   if (!latestMarket) return null
   const [{ data: screener }, { data: asset }, { data: bars }, leadershipResult] = await Promise.all([
-    supabase.from('screener_rows').select('symbol,company,price,daily_change,relative_volume,fifty_day_average,fifty_two_week_position,exchange,data_as_of')
+    supabase.from('screener_rows').select('symbol,company,price,daily_change,return_30d,return_1y,relative_volume,fifty_day_average,fifty_two_week_position,exchange,data_as_of')
       .eq('snapshot_id', latestMarket.id).eq('symbol', symbol).maybeSingle(),
     supabase.from('market_assets').select('name,exchange').eq('symbol', symbol).maybeSingle(),
     supabase.from('market_bars_daily').select('trading_date,close,volume').eq('symbol', symbol).eq('feed', latestMarket.feed)
@@ -796,6 +796,8 @@ async function loadSharedStockViewerData(symbol: string): Promise<StockViewerDat
     subIndustry: leadership?.subIndustry ?? 'Classification pending',
     price: Number(screener?.price ?? leadership?.price ?? 0),
     dailyChange: screener ? Number(screener.daily_change) : leadership?.dayReturn ?? null,
+    return30d: screener?.return_30d == null ? leadership?.return30d ?? null : Number(screener.return_30d),
+    return1y: screener?.return_1y == null ? leadership?.return1y ?? null : Number(screener.return_1y),
     relativeVolume: screener ? Number(screener.relative_volume) : leadership?.relativeVolume ?? null,
     fiftyDayAverage: screener ? Number(screener.fifty_day_average) : null,
     fiftyTwoWeekPosition: screener ? Number(screener.fifty_two_week_position) : null,
