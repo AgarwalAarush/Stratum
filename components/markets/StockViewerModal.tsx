@@ -9,6 +9,7 @@ export function StockViewerModal({ children, symbol }: { children: React.ReactNo
 
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
       if (event.key === 'Escape') router.back()
     }
     window.addEventListener('keydown', close)

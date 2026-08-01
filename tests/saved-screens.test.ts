@@ -38,7 +38,7 @@ test('saved screens sanitize stale browser entries and screen names', () => {
   assert.throws(() => parseSavedScreenName('A'.repeat(49)), /48 characters or fewer/)
 })
 
-test('saved screens use one account-backed picker alongside presets and explicit management controls', () => {
+test('saved screens use one account-backed picker with management actions in the filter bar', () => {
   const component = readFileSync(join(process.cwd(), 'components/markets/MarketsScreener.tsx'), 'utf8')
   const route = readFileSync(join(process.cwd(), 'app/api/markets/saved-screens/route.ts'), 'utf8')
   const persistence = readFileSync(join(process.cwd(), 'lib/server/saved-screens.ts'), 'utf8')
@@ -53,6 +53,8 @@ test('saved screens use one account-backed picker alongside presets and explicit
   assert.match(component, /Save changes/)
   assert.match(component, /Rename/)
   assert.match(component, /Confirm delete/)
+  assert.doesNotMatch(component, /market-saved-screen-context/)
+  assert.doesNotMatch(component, /loaded\.`\)/)
   assert.match(component, /api\/markets\/saved-screens/)
   assert.match(route, /getAllowedMarketUser/)
   assert.match(route, /body\.action === 'create'/)

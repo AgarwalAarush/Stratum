@@ -6,6 +6,7 @@ import {
   getRobinhoodPortfolioSyncConfig,
   normalizeRobinhoodPortfolioSnapshot,
 } from '../lib/server/robinhood-portfolio-sync.ts'
+import { normalizeBrokerageSnapshot } from '../lib/server/portfolio.ts'
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
 
 test('Robinhood normalization uses the newest available price and preserves private account values', () => {
@@ -53,6 +54,27 @@ test('Robinhood worker configuration remains server-only and opt-in', () => {
     oauthStorePath: '/var/private/stratum/robinhood-oauth.json',
     oauthRedirectUrl: 'http://127.0.0.1:1456/callback',
     mcpUrl: 'https://agent.robinhood.com/mcp/trading',
+  })
+})
+
+test('Portfolio hydration accepts the singular account snapshot shape returned by PostgREST', () => {
+  const snapshot = normalizeBrokerageSnapshot({
+    captured_at: '2026-08-01T22:00:24.235Z',
+    brokerage_account_snapshots: { cash_balance: 200, equity_value: 800, total_value: 1000 },
+    brokerage_position_snapshots: [{
+      symbol: 'NVDA', quantity: 2, cost_basis_per_share: 300,
+      current_price: 400, quote_as_of: '2026-08-01T22:00:00.000Z',
+    }],
+  })
+  assert.deepEqual(snapshot, {
+    capturedAt: '2026-08-01T22:00:24.235Z',
+    cashBalance: 200,
+    equityValue: 800,
+    totalValue: 1000,
+    positions: [{
+      symbol: 'NVDA', quantity: 2, costBasisPerShare: 300,
+      currentPrice: 400, quoteAsOf: '2026-08-01T22:00:00.000Z',
+    }],
   })
 })
 
