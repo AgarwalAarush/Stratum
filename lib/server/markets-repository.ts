@@ -833,6 +833,7 @@ async function loadSharedStockViewerData(symbol: string): Promise<StockViewerDat
     symbol,
     company: screener?.company ?? asset?.name ?? symbol,
     exchange: screener?.exchange ?? asset?.exchange ?? 'US',
+    instrumentType: /\b(?:ETF|index fund|exchange[- ]traded fund)\b/i.test(asset?.name ?? screener?.company ?? '') ? 'etf' : 'equity',
     sector: leadership?.sector ?? 'Classification pending',
     subIndustry: leadership?.subIndustry ?? 'Classification pending',
     price: quote.price,
@@ -849,6 +850,7 @@ async function loadSharedStockViewerData(symbol: string): Promise<StockViewerDat
     candidate: null,
     companyPacket: null,
     researchNote: null,
+    etfResearchNote: null,
     decision: null,
     position: null,
     thesis: null,
@@ -873,8 +875,9 @@ export async function fetchStockViewerData(symbolInput: string, ownerId?: string
         import('./portfolio.ts').then((module) => module.fetchLatestDecision(ownerId, symbol)),
         import('./portfolio.ts').then((module) => module.fetchManualPosition(ownerId, symbol)),
         import('./theses.ts').then((module) => module.fetchLatestStockThesis(ownerId, symbol)),
+        import('./etf-research.ts').then((module) => module.fetchLatestEtfResearch(ownerId, symbol)),
       ])
-    : Promise.resolve([null, null, null, null, null] as const)
+    : Promise.resolve([null, null, null, null, null, null] as const)
   const candidatePromise = supabase
     .from('candidate_briefs')
     .select('content,status')
@@ -882,7 +885,7 @@ export async function fetchStockViewerData(symbolInput: string, ownerId?: string
     .order('trading_date', { ascending: false })
     .limit(1)
     .maybeSingle()
-  const [shared, [companyPacket, researchNote, decision, position, thesis], candidateResult] = await Promise.all([
+  const [shared, [companyPacket, researchNote, decision, position, thesis, etfResearchNote], candidateResult] = await Promise.all([
     sharedPromise,
     ownerDataPromise,
     candidatePromise,
@@ -896,6 +899,7 @@ export async function fetchStockViewerData(symbolInput: string, ownerId?: string
     candidate,
     companyPacket,
     researchNote,
+    etfResearchNote,
     decision,
     position,
     thesis,

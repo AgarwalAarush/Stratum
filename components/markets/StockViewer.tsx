@@ -49,11 +49,12 @@ export function StockViewer({ data }: { data: StockViewerData }) {
   }
   const candidate = data.candidate
   const thesis = data.thesis
+  const isEtf = data.instrumentType === 'etf'
   const packet = data.companyPacket
   const latestFinancials = packet?.fundamentals[0]
   const latestEstimate = packet?.estimates[0]
   const needsTechnicalHydration = data.dailyChange === null || data.fiftyDayAverage === null
-  const needsFundamentalsHydration = packet === null
+  const needsFundamentalsHydration = !isEtf && packet === null
   return (
     <article className="stock-viewer">
       <StockViewerHydration
@@ -76,7 +77,7 @@ export function StockViewer({ data }: { data: StockViewerData }) {
             className="stock-viewer-research-button"
             href={`/markets/stocks/${data.symbol}/research`}
           >
-            Full equity research
+            {isEtf ? 'Full ETF research' : 'Full equity research'}
           </a>
         </div>
         <div className="stock-viewer-provenance">
@@ -89,10 +90,9 @@ export function StockViewer({ data }: { data: StockViewerData }) {
         {[
           'Overview',
           ...(candidate ? ['Candidate Brief'] : []),
-          'Financials',
-          'Valuation',
-          'Industry Context',
-          'Earnings',
+          ...(isEtf
+            ? ['Fund Structure', 'Portfolio Exposure', 'ETF Research']
+            : ['Financials', 'Valuation', 'Industry Context', 'Earnings']),
           'Events',
         ].map((section) => (
           <a key={section} href={`#${section.toLowerCase().replaceAll(' ', '-')}`}>{section}</a>
@@ -172,7 +172,16 @@ export function StockViewer({ data }: { data: StockViewerData }) {
           </section>
 
           <div className="stock-viewer-insight-grid">
-            <section className="stock-viewer-section stock-viewer-section-compact" id="financials">
+            {isEtf ? (
+              <section className="stock-viewer-section stock-viewer-section-compact" id="fund-structure">
+                <p className="markets-eyebrow">Fund vehicle, benchmark, and rules</p>
+                <h2>Fund structure</h2>
+                <p>{data.etfResearchNote?.sections.find((section) => section.id === 'fund_snapshot')?.content
+                  ?? 'Issuer-verified holdings, benchmark, fees, and rebalancing rules are collected before ETF research runs.'}</p>
+              </section>
+            ) : null}
+
+            {!isEtf ? <section className="stock-viewer-section stock-viewer-section-compact" id="financials">
               <p className="markets-eyebrow">{packet ? `CompanyPacket v${packet.version} · ${new Date(packet.dataAsOf).toLocaleDateString()}` : 'Deterministic packet'}</p>
               <h2>Financials</h2>
               {latestFinancials ? (
@@ -183,9 +192,9 @@ export function StockViewer({ data }: { data: StockViewerData }) {
                   <div><span>Reported period</span><strong>{String(latestFinancials.calendarYear ?? latestFinancials.date ?? '—')}</strong></div>
                 </div>
               ) : <p>Revenue, margins, cash flow, balance-sheet trends, and estimate history are assembled into the versioned CompanyPacket before full research runs.</p>}
-            </section>
+            </section> : null}
 
-            <section className="stock-viewer-section stock-viewer-section-compact" id="valuation">
+            {!isEtf ? <section className="stock-viewer-section stock-viewer-section-compact" id="valuation">
               <p className="markets-eyebrow">Price versus expectations</p>
               <h2>Valuation</h2>
               {packet ? (
@@ -205,13 +214,23 @@ export function StockViewer({ data }: { data: StockViewerData }) {
                   <p>{candidate.valuationSnapshot}</p>
                 </>
               ) : <p>Current and historical valuation context will appear after the CompanyPacket is materialized.</p>}
-            </section>
+            </section> : null}
 
-            <section className="stock-viewer-section stock-viewer-section-compact" id="industry-context">
+            {isEtf ? (
+              <section className="stock-viewer-section stock-viewer-section-compact" id="portfolio-exposure">
+                <p className="markets-eyebrow">Look-through portfolio analysis</p>
+                <h2>Portfolio exposure</h2>
+                <p>{data.etfResearchNote?.sections.find((section) => section.id === 'portfolio_exposure')?.content
+                  ?? 'The ETF report will show the top holdings, concentration, classification exposure, and changes from the issuer’s previous holdings snapshot.'}</p>
+                <a href={`/markets/stocks/${data.symbol}/research`}>Open the holdings table →</a>
+              </section>
+            ) : null}
+
+            <section className="stock-viewer-section stock-viewer-section-compact" id={isEtf ? 'etf-research' : 'industry-context'}>
               <p className="markets-eyebrow">{candidate?.primaryLane
                 ? candidate.primaryLane.replaceAll('_', ' ')
                 : data.subIndustry}</p>
-              <h2>Industry Context</h2>
+              <h2>{isEtf ? 'ETF research' : 'Industry Context'}</h2>
               {candidate?.entryContext ? <p><strong>Entry question:</strong> {candidate.entryContext}</p> : null}
               {candidate?.selloff ? (
                 <div className="stock-viewer-stat-grid">
@@ -220,7 +239,9 @@ export function StockViewer({ data }: { data: StockViewerData }) {
                   <div><span>One month</span><strong>{percent(candidate.selloff.thirtyDay)}</strong></div>
                 </div>
               ) : null}
-              <p>{candidate?.industryContext ?? `${data.symbol} is compared against equal-weight ${data.subIndustry} leadership, breadth, and constituent performance.`}</p>
+              <p>{candidate?.industryContext ?? (isEtf
+                ? 'Corporate financial statements, earnings calls, and a company forward P/E are intentionally excluded. The research evaluates the fund’s actual portfolio and exposure.'
+                : `${data.symbol} is compared against equal-weight ${data.subIndustry} leadership, breadth, and constituent performance.`)}</p>
               {candidate ? (
                 <div className="stock-viewer-dimensions">
                   {candidate.dimensions.map((dimension) => (
@@ -235,7 +256,7 @@ export function StockViewer({ data }: { data: StockViewerData }) {
               {candidate?.status === 'new' ? <CandidateActions candidateId={candidate.id} /> : null}
             </section>
 
-            <section className="stock-viewer-section stock-viewer-section-compact" id="earnings">
+            {!isEtf ? <section className="stock-viewer-section stock-viewer-section-compact" id="earnings">
               <p className="markets-eyebrow">Expectations and inflections</p>
               <h2>Earnings</h2>
               {latestEstimate ? (
@@ -246,7 +267,7 @@ export function StockViewer({ data }: { data: StockViewerData }) {
                   <div><span>Next catalyst</span><strong>{data.decision?.nextCatalyst ?? candidate?.catalyst ?? '—'}</strong></div>
                 </div>
               ) : <p>{candidate?.catalyst ?? 'The next earnings event and estimate revisions will be shown from the normalized company packet.'}</p>}
-            </section>
+            </section> : null}
 
             <section className="stock-viewer-section stock-viewer-section-compact stock-viewer-events" id="events">
               <p className="markets-eyebrow">Filings, news, and catalysts</p>
@@ -262,8 +283,9 @@ export function StockViewer({ data }: { data: StockViewerData }) {
         <CapitalDecisionRail
           symbol={data.symbol}
           initial={data.decision}
-          research={data.researchNote}
+          research={isEtf ? data.etfResearchNote : data.researchNote}
           candidate={data.candidate}
+          instrumentType={data.instrumentType}
         />
       </div>
     </article>

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formalRating", "entryAction", "investmentThesis", "keyDebate", "fastestKillSignal", "confidence", "revision", "sections", "sourceIds"],
+  "properties": {
+    "formalRating": { "enum": ["BUY", "HOLD", "SELL", "NOT_RATED"] },
+    "entryAction": { "enum": ["buy_now", "nibble", "wait", "add_on_weakness", "avoid"] },
+    "investmentThesis": { "type": "string", "minLength": 1 },
+    "keyDebate": { "type": "string", "minLength": 1 },
+    "fastestKillSignal": { "type": "string", "minLength": 1 },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 100 },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["priorVersion", "opinionChange", "summary", "changes"],
+      "properties": {
+        "priorVersion": { "type": ["integer", "null"], "minimum": 1 },
+        "opinionChange": { "enum": ["initial", "more_constructive", "less_constructive", "unchanged"] },
+        "summary": { "type": "string", "minLength": 1 },
+        "changes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["field", "previous", "current", "explanation"],
+            "properties": {
+              "field": { "enum": ["formal_rating", "entry_action", "investment_thesis", "key_debate", "kill_criteria", "evidence"] },
+              "previous": { "type": "string" },
+              "current": { "type": "string" },
+              "explanation": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "content", "sourceIds"],
+        "properties": {
+          "id": { "enum": ["fund_snapshot", "portfolio_exposure", "top_holdings", "index_and_rebalance", "fundamentals_look_through", "valuation_and_setup", "catalysts", "bull_case", "base_case", "bear_case", "risk_factors", "verdict"] },
+          "title": { "type": "string", "minLength": 1 },
+          "content": { "type": "string", "minLength": 1 },
+          "sourceIds": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "sourceIds": { "type": "array", "items": { "type": "string" } }
+  }
+}

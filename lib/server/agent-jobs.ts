@@ -10,6 +10,7 @@ import { materializeCandidateWeeklySummary } from './candidate-weekly-summary.ts
 import { materializeMarketLeadership } from './market-leadership.ts'
 import { materializeMarketHomeSnapshot } from './market-home.ts'
 import { generateFullEquityResearch, materializeCompanyPacket } from './company-research.ts'
+import { generateEtfResearch } from './etf-research.ts'
 import { scanResearchRefreshes } from './research-monitoring.ts'
 import { monitorInvestmentTheses } from './thesis-monitoring.ts'
 import { materializeMarketMemo } from './market-memo.ts'
@@ -37,6 +38,7 @@ export const AGENT_JOB_TYPES = [
   'summarize-candidate-scout',
   'refresh-company-packet',
   'generate-company-research',
+  'generate-etf-research',
   'event-refresh-company-research',
   'scan-research-refreshes',
   'monitor-investment-theses',
@@ -154,7 +156,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
   if (jobType === 'summarize-candidate-scout' && typeof payload.weekEnding === 'string') {
     return `${jobType}:${payload.weekEnding}`
   }
-  if ((jobType === 'refresh-company-packet' || jobType === 'generate-company-research' || jobType === 'event-refresh-company-research')
+  if ((jobType === 'refresh-company-packet' || jobType === 'generate-company-research' || jobType === 'generate-etf-research' || jobType === 'event-refresh-company-research')
     && typeof payload.ownerId === 'string' && typeof payload.symbol === 'string') {
     const event = typeof payload.eventId === 'string' ? `:${payload.eventId}` : ''
     return `${jobType}:${payload.ownerId}:${payload.symbol}:${now.toISOString().slice(0, 10)}${event}`
@@ -436,6 +438,19 @@ async function executeJob(
       reportProgress,
     )
     return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf }
+  }
+
+  if (job.job_type === 'generate-etf-research') {
+    const ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : ''
+    const symbol = typeof job.payload.symbol === 'string' ? job.payload.symbol.toUpperCase() : ''
+    if (!ownerId || !symbol) throw new Error('ETF research jobs require ownerId and symbol')
+    const note = await generateEtfResearch(
+      symbol,
+      ownerId,
+      String(job.payload.reason ?? 'manual'),
+      reportProgress,
+    )
+    return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf, instrumentType: 'etf' }
   }
 
   if (job.job_type === 'scan-research-refreshes') {

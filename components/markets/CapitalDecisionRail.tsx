@@ -6,16 +6,21 @@ import type { CandidateBrief, EquityResearchNote, ThesisDecision } from '@/lib/m
 import { MarketSelect } from './MarketSelect'
 import { ResearchActionButton } from './ResearchActionButton'
 
+type DecisionResearch = Pick<EquityResearchNote, 'formalRating' | 'entryAction' | 'fastestKillSignal' | 'version'>
+  & Partial<Pick<EquityResearchNote, 'fairValue' | 'entryZoneLow' | 'entryZoneHigh'>>
+
 export function CapitalDecisionRail({
   symbol,
   initial,
   research,
   candidate,
+  instrumentType = 'equity',
 }: {
   symbol: string
   initial: ThesisDecision | null
-  research: EquityResearchNote | null
+  research: DecisionResearch | null
   candidate: CandidateBrief | null
+  instrumentType?: 'equity' | 'etf'
 }) {
   const [editing, setEditing] = useState(false)
   const [notice, setNotice] = useState('')
@@ -109,7 +114,7 @@ export function CapitalDecisionRail({
       </dl>
       <button type="button" onClick={() => setEditing(true)}>Edit decision</button>
       <button type="button" className="capital-watchlist-button" onClick={addToWatchlist}>Add to watchlist</button>
-      <ResearchActionButton symbol={symbol} hasResearch={Boolean(research)} currentVersion={research?.version} />
+      <ResearchActionButton symbol={symbol} hasResearch={Boolean(research)} currentVersion={research?.version} instrumentType={instrumentType} />
       {notice ? <small>{notice}</small> : null}
     </aside>
   )

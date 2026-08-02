@@ -720,6 +720,122 @@
   }
 }
 
+.etf-research-note .equity-research-executive-strip {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.etf-research-overview,
+.etf-research-holdings,
+.etf-research-sections,
+.etf-research-executive-copy {
+  border-top: 1px solid var(--market-border);
+  margin-top: 56px;
+  padding-top: 24px;
+}
+
+.etf-research-overview > header,
+.etf-research-holdings > header {
+  align-items: end;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+
+.etf-research-overview h2,
+.etf-research-holdings h2 {
+  font-size: clamp(24px, 3vw, 38px);
+  letter-spacing: -0.045em;
+  margin: 4px 0 0;
+}
+
+.etf-research-overview > dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 28px 0 0;
+}
+
+.etf-research-overview > dl > div {
+  border-bottom: 1px solid var(--market-border);
+  padding: 14px 18px 14px 0;
+}
+
+.etf-research-overview dt,
+.etf-research-holdings th,
+.etf-research-executive-copy > div > span {
+  color: var(--muted);
+  font-family: var(--font-plex-mono);
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.etf-research-overview dd {
+  font-size: 15px;
+  line-height: 1.45;
+  margin: 6px 0 0;
+}
+
+.etf-research-holdings table {
+  border-collapse: collapse;
+  margin-top: 28px;
+  width: 100%;
+}
+
+.etf-research-holdings th,
+.etf-research-holdings td {
+  border-bottom: 1px solid var(--market-border);
+  padding: 12px 10px;
+  text-align: left;
+}
+
+.etf-research-holdings th:first-child,
+.etf-research-holdings td:first-child { padding-left: 0; }
+
+.etf-research-holdings th:last-child,
+.etf-research-holdings td:last-child { padding-right: 0; text-align: right; }
+
+.etf-research-executive-copy {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.etf-research-executive-copy > div {
+  border-right: 1px solid var(--market-border);
+  min-height: 170px;
+  padding: 0 24px;
+}
+
+.etf-research-executive-copy > div:first-child { padding-left: 0; }
+.etf-research-executive-copy > div:last-child { border-right: 0; }
+
+.etf-research-sections .research-report-section {
+  border-top: 1px solid var(--market-border);
+  padding: 30px 0;
+}
+
+.etf-research-sections .research-report-section:first-child { border-top: 0; }
+
+@media (max-width: 900px) {
+  .etf-research-note .equity-research-executive-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 767px) {
+  .etf-research-overview > header,
+  .etf-research-holdings > header { align-items: start; flex-direction: column; }
+  .etf-research-overview > dl { grid-template-columns: 1fr 1fr; }
+  .etf-research-holdings { overflow-x: auto; }
+  .etf-research-holdings table { min-width: 680px; }
+  .etf-research-executive-copy { display: block; }
+  .etf-research-executive-copy > div,
+  .etf-research-executive-copy > div:first-child {
+    border-bottom: 1px solid var(--market-border);
+    border-right: 0;
+    min-height: 0;
+    padding: 18px 0;
+  }
+  .etf-research-note .equity-research-executive-strip { grid-template-columns: 1fr 1fr; }
+}
+
 /* ─── Design tokens — LIGHT MODE IS DEFAULT ─── */
 :root {
   --top-header-height: 56px;

@@ -10,10 +10,12 @@ export function ResearchActionButton({
   symbol,
   hasResearch,
   currentVersion,
+  instrumentType = 'equity',
 }: {
   symbol: string
   hasResearch: boolean
   currentVersion?: number
+  instrumentType?: 'equity' | 'etf'
 }) {
   const router = useRouter()
   const [status, setStatus] = useState<'idle' | 'submitting' | 'error'>('idle')
@@ -88,7 +90,7 @@ export function ResearchActionButton({
       <div className="research-action">
         <ResearchProgressRing job={job} />
         {job.status === 'succeeded'
-          ? <a href={`/markets/stocks/${symbol}/research`}>Open full research →</a>
+          ? <a href={`/markets/stocks/${symbol}/research`}>Open {instrumentType === 'etf' ? 'ETF' : 'full'} research →</a>
           : job.status === 'failed'
             ? <button type="button" onClick={() => setJob(null)}>Try again</button>
             : <Link href="/markets/research">View research queue →</Link>}
@@ -101,7 +103,7 @@ export function ResearchActionButton({
       <button type="button" onClick={submit} disabled={status === 'submitting'}>
         {status === 'submitting'
           ? 'Queueing…'
-          : hasResearch ? 'Refresh research' : 'Generate research'}
+          : hasResearch ? 'Refresh research' : instrumentType === 'etf' ? 'Generate ETF research' : 'Generate research'}
       </button>
       {status === 'error' ? <span aria-live="polite">The job could not be queued.</span> : null}
     </div>

@@ -19,6 +19,7 @@ import { getSupabaseClient } from './supabase.ts'
 import { proposeStockThesis } from './theses.ts'
 import { collectCompanyResearchEvidence } from './company-research-evidence.ts'
 import { fetchSecLiquidityFacts } from './sec-financials.ts'
+import { isEtfInstrument } from './etf-research.ts'
 
 const RESEARCH_SECTION_IDS: EquityResearchSectionId[] = [
   'snapshot',
@@ -604,6 +605,9 @@ export async function generateFullEquityResearch(
   onProgress?: (progress: number, phase: string) => Promise<void>,
 ): Promise<EquityResearchNote> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required for research ownership')
+  if (await isEtfInstrument(symbol)) {
+    throw new Error(`${symbol} is an ETF and must use the ETF research pipeline`)
+  }
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const priorResearch = await fetchLatestCompletedEquityResearch(ownerId, symbol)

@@ -394,14 +394,88 @@ export interface StockViewerData {
   fiftyTwoWeekPosition: number | null
   dataAsOf: string
   feed: MarketFeed
+  instrumentType: 'equity' | 'etf'
   leadership: StockLeadershipMetric | null
   candidate: CandidateBrief | null
   companyPacket: CompanyPacket | null
   researchNote: EquityResearchNote | null
+  etfResearchNote: EtfResearchNote | null
   decision: ThesisDecision | null
   position: ManualPosition | null
   thesis: InvestmentThesis | null
   history: StockPricePoint[]
+}
+
+export interface EtfHolding {
+  symbol: string | null
+  name: string
+  identifier: string | null
+  classification: string | null
+  shares: number | null
+  marketValue: number | null
+  weight: number
+}
+
+export interface EtfResearchPacket {
+  id: string
+  symbol: string
+  version: number
+  dataAsOf: string
+  generatedAt: string
+  issuer: string
+  fundName: string
+  benchmark: string | null
+  strategy: string | null
+  expenseRatio: number | null
+  assetsUnderManagement: number | null
+  rebalanceFrequency: string | null
+  holdings: EtfHolding[]
+  holdingsCount: number
+  topTenWeight: number
+  priceHistory: CompanyPacket['priceHistory']
+  sources: CompanyPacketSource[]
+}
+
+export type EtfResearchSectionId =
+  | 'fund_snapshot'
+  | 'portfolio_exposure'
+  | 'top_holdings'
+  | 'index_and_rebalance'
+  | 'fundamentals_look_through'
+  | 'valuation_and_setup'
+  | 'catalysts'
+  | 'bull_case'
+  | 'base_case'
+  | 'bear_case'
+  | 'risk_factors'
+  | 'verdict'
+
+export interface EtfResearchSection {
+  id: EtfResearchSectionId
+  title: string
+  content: string
+  sourceIds: string[]
+}
+
+export interface EtfResearchNote {
+  id: string
+  symbol: string
+  version: number
+  status: 'queued' | 'running' | 'complete' | 'failed'
+  formalRating: EquityResearchNote['formalRating']
+  entryAction: EquityResearchNote['entryAction']
+  investmentThesis: string
+  keyDebate: string
+  fastestKillSignal: string
+  confidence: number
+  revision: EquityResearchRevision
+  sections: EtfResearchSection[]
+  sourceIds: string[]
+  provider: string
+  model: string
+  dataAsOf: string
+  generatedAt: string
+  error: string | null
 }
 
 export interface CompanyPacketSource {

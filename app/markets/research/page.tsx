@@ -8,16 +8,19 @@ import { formatMarketDate } from '@/lib/markets/format-date'
 import { mergeMarketNews } from '@/lib/markets/news'
 import { formatEntryAction } from '@/lib/markets/research-presentation'
 import { fetchEquityResearchLibrary } from '@/lib/server/company-research'
+import { fetchEtfResearchLibrary } from '@/lib/server/etf-research'
 import { fetchResearchJobs } from '@/lib/server/research-jobs'
 
 export default async function MarketsResearchPage() {
   const userPromise = requireAllowedMarketUser()
-  const [notes, jobs, reports, filings] = await Promise.all([
+  const [equityNotes, etfNotes, jobs, reports, filings] = await Promise.all([
     userPromise.then((user) => fetchEquityResearchLibrary(user.id)),
+    userPromise.then((user) => fetchEtfResearchLibrary(user.id)),
     userPromise.then((user) => fetchResearchJobs(user.id)),
     fetchFinanceReports(30).catch(() => []),
     fetchPersistedFmpMarketItems(['fmp-sec-filings'], 30).catch(() => []),
   ])
+  const notes = [...equityNotes, ...etfNotes].sort((left, right) => right.generatedAt.localeCompare(left.generatedAt))
   const items = mergeMarketNews([filings, reports], 40)
   return (
     <div className="markets-research-library">

@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm'
 import { InteractivePriceChart } from '@/components/markets/InteractivePriceChart'
 import { ResearchActionButton } from '@/components/markets/ResearchActionButton'
 import { ResearchEvidenceToggle } from '@/components/markets/ResearchEvidenceToggle'
+import { EtfResearchReport } from '@/components/markets/EtfResearchReport'
 import {
   ResearchFinancialChart,
   type ResearchFinancialPoint,
@@ -24,6 +25,7 @@ import type {
   EquityResearchSection,
 } from '@/lib/markets/types'
 import { fetchStockViewerData } from '@/lib/server/markets-repository'
+import { fetchLatestEtfResearch, fetchLatestEtfResearchPacket } from '@/lib/server/etf-research'
 
 const SCENARIO_SECTION_IDS = new Set(['bull_case', 'base_case', 'bear_case'])
 
@@ -343,6 +345,13 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
   const symbol = rawSymbol.toUpperCase()
   const stock = await fetchStockViewerData(symbol, user.id)
   if (!stock) notFound()
+  if (stock.instrumentType === 'etf') {
+    const [packet, research] = await Promise.all([
+      fetchLatestEtfResearchPacket(user.id, symbol),
+      fetchLatestEtfResearch(user.id, symbol),
+    ])
+    return <EtfResearchReport stock={stock} packet={packet} research={research} />
+  }
   const research = stock.researchNote
   const packet = stock.companyPacket
   const chartPoints = financialPoints(packet)

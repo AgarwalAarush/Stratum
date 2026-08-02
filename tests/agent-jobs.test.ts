@@ -14,6 +14,7 @@ import {
 test('agent job parser rejects unknown work', () => {
   assert.equal(parseAgentJobType('refresh-market-screener'), 'refresh-market-screener')
   assert.equal(parseAgentJobType('refresh-company-packet'), 'refresh-company-packet')
+  assert.equal(parseAgentJobType('generate-etf-research'), 'generate-etf-research')
   assert.equal(parseAgentJobType('fetch-stock-price-history'), 'fetch-stock-price-history')
   assert.throws(() => parseAgentJobType('place-order'), /Unsupported agent job type/)
 })
@@ -91,6 +92,7 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('summarize-candidate-scout'), 'market-data')
   assert.equal(agentJobProvider('generate-market-memo'), 'codex')
   assert.equal(agentJobProvider('generate-company-research'), 'codex')
+  assert.equal(agentJobProvider('generate-etf-research'), 'codex')
   assert.equal(agentJobProvider('event-refresh-company-research'), 'codex')
   assert.equal(agentJobProvider('scan-research-refreshes'), 'market-data')
   assert.equal(agentJobProvider('monitor-investment-theses'), 'market-data')

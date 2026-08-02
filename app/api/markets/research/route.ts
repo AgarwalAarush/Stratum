@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getAllowedMarketUser } from '@/lib/auth/markets-session'
 import { enqueueAgentJob } from '@/lib/server/agent-jobs'
 import { fetchResearchJobs } from '@/lib/server/research-jobs'
+import { isEtfInstrument } from '@/lib/server/etf-research'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
     const baseVersion = Number.isInteger(parsedBaseVersion) && parsedBaseVersion > 0
       ? parsedBaseVersion
       : null
-    const jobType = 'generate-company-research' as const
+    const jobType = await isEtfInstrument(symbol) ? 'generate-etf-research' as const : 'generate-company-research' as const
     const dedupeKey = `${jobType}:${user.id}:${symbol}:${new Date().toISOString().slice(0, 10)}${refresh ? `:refresh:v${baseVersion ?? 'latest'}` : ''}`
     if (user.id === 'local-development-user') {
       return NextResponse.json({ accepted: true, id: dedupeKey, deduplicated: false }, { status: 202 })

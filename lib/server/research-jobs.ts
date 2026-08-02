@@ -1,7 +1,7 @@
 import type { ResearchJobStatus } from '../markets/types.ts'
 import { getSupabaseClient } from './supabase.ts'
 
-const RESEARCH_JOB_TYPES = ['generate-company-research', 'event-refresh-company-research']
+const RESEARCH_JOB_TYPES = ['generate-company-research', 'generate-etf-research', 'event-refresh-company-research']
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -95,4 +95,3 @@ export async function fetchResearchJobs(
   }
   return jobs.map((job) => normalizeResearchJob(job, latestRunByJob.get(job.id)))
 }
-
