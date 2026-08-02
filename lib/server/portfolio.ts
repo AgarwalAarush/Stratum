@@ -50,8 +50,12 @@ async function ensureWatchlistAssets(symbols: string[]): Promise<void> {
   if (missing.length === 0) return
 
   const client = getAlpacaClient()
-  if (!client) throw new Error(`Market coverage is unavailable for ${missing.join(', ')}`)
-  const assets = await Promise.all(missing.map((symbol) => client.fetchAsset(symbol)))
+  // The public Vercel read/write surface intentionally does not require the
+  // worker's Alpaca credentials. When they are absent, retain a pending asset
+  // record instead; the private worker will replace it during its next sync.
+  const assets = client
+    ? await Promise.all(missing.map((symbol) => client.fetchAsset(symbol)))
+    : missing.map(() => null)
   const now = new Date().toISOString()
   const records = missing.map((symbol, index) => {
     const asset = assets[index]
