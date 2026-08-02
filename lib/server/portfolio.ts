@@ -52,26 +52,42 @@ async function ensureWatchlistAssets(symbols: string[]): Promise<void> {
   const client = getAlpacaClient()
   if (!client) throw new Error(`Market coverage is unavailable for ${missing.join(', ')}`)
   const assets = await Promise.all(missing.map((symbol) => client.fetchAsset(symbol)))
-  const unavailable = missing.filter((symbol, index) => {
-    const asset = assets[index]
-    return !asset || !asset.active || !asset.tradable
-  })
-  if (unavailable.length > 0) throw new Error(`Market coverage is unavailable for ${unavailable.join(', ')}`)
-
   const now = new Date().toISOString()
-  const { error } = await supabase.from('market_assets').upsert(assets.flatMap((asset) => asset ? [{
-    symbol: asset.symbol,
-    name: asset.name,
-    exchange: asset.exchange,
-    asset_class: asset.assetClass,
-    status: 'active',
-    tradable: asset.tradable,
-    active: asset.active,
-    source: 'alpaca-watchlist',
-    source_as_of: now,
-    raw: {},
-    updated_at: now,
-  }] : []), { onConflict: 'symbol' })
+  const records = missing.map((symbol, index) => {
+    const asset = assets[index]
+    if (asset?.active && asset.tradable) {
+      return {
+        symbol: asset.symbol,
+        name: asset.name,
+        exchange: asset.exchange,
+        asset_class: asset.assetClass,
+        status: 'active',
+        tradable: asset.tradable,
+        active: asset.active,
+        source: 'alpaca-watchlist',
+        source_as_of: now,
+        raw: {},
+        updated_at: now,
+      }
+    }
+    // Keep a valid requested ticker durable without presenting it as a
+    // tradable Alpaca asset or inventing quote data. A future asset sync can
+    // replace this record with verified catalog metadata.
+    return {
+      symbol,
+      name: `Watchlist coverage requested for ${symbol}`,
+      exchange: 'unresolved',
+      asset_class: 'us_equity',
+      status: 'unresolved',
+      tradable: false,
+      active: false,
+      source: 'watchlist-request',
+      source_as_of: now,
+      raw: { requestedBy: 'watchlist' },
+      updated_at: now,
+    }
+  })
+  const { error } = await supabase.from('market_assets').upsert(records, { onConflict: 'symbol' })
   if (error) throw new Error(`Unable to add watchlist market coverage: ${error.message}`)
 }
 

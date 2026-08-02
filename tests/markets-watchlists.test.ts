@@ -104,4 +104,6 @@ test('server watchlist persistence remains owner-scoped without relying on a par
   assert.doesNotMatch(replacement, /onConflict:\s*'owner_id,client_id'/)
   assert.match(replacement, /ensureWatchlistAssets/)
   assert.match(source, /fetchAsset\(symbol\)/)
+  assert.match(source, /watchlist-request/)
+  assert.match(source, /tradable:\s*false/)
 })
