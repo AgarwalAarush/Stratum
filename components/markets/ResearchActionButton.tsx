@@ -103,13 +103,7 @@ export function ResearchActionButton({
           ? 'Queueing…'
           : hasResearch ? 'Refresh research' : 'Generate research'}
       </button>
-      <span aria-live="polite">
-        {status === 'error'
-          ? 'The job could not be queued.'
-          : hasResearch && currentVersion
-            ? `Uses version ${currentVersion} as the baseline and publishes a new version with an opinion-change log.`
-            : ''}
-      </span>
+      {status === 'error' ? <span aria-live="polite">The job could not be queued.</span> : null}
     </div>
   )
 }
