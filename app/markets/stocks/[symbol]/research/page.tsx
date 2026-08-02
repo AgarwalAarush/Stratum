@@ -146,6 +146,11 @@ function multiple(value: number | null | undefined): string {
   return value === null || value === undefined ? '—' : `${value.toFixed(1)}×`
 }
 
+function netCashOrDebt(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—'
+  return value >= 0 ? `${compactMoney(value)} net cash` : `${compactMoney(Math.abs(value))} net debt`
+}
+
 function opinionChangeLabel(value: string): string {
   return ({
     initial: 'Initial view',
@@ -170,7 +175,7 @@ function financialPoints(packet: CompanyPacket | null): ResearchFinancialPoint[]
     : packet.fundamentals.filter((row) => numeric(row, 'revenue') !== null).slice(0, 8)
   const cash = packet.financialStatements?.cashFlowQuarterly.length
     ? packet.financialStatements.cashFlowQuarterly
-    : packet.fundamentals.filter((row) => numeric(row, 'freeCashFlow') !== null).slice(0, 8)
+    : packet.fundamentals.filter((row) => numeric(row, 'operatingCashFlow') !== null).slice(0, 8)
   const cashByDate = new Map(cash.map((row) => [statementDate(row), row]))
   return income
     .slice(0, 8)
@@ -182,7 +187,14 @@ function financialPoints(packet: CompanyPacket | null): ResearchFinancialPoint[]
         label: `${year}${period && period !== year ? ` ${period}` : ''}`,
         revenue: numeric(row, 'revenue'),
         operatingIncome: numeric(row, 'operatingIncome'),
-        freeCashFlow: numeric(cashByDate.get(date) ?? {}, 'freeCashFlow'),
+        freeCashFlow: (() => {
+          const cashFlow = cashByDate.get(date) ?? {}
+          const operatingCashFlow = numeric(cashFlow, 'operatingCashFlow')
+          const capitalExpenditure = numeric(cashFlow, 'capitalExpenditure')
+          return operatingCashFlow !== null && capitalExpenditure !== null
+            ? operatingCashFlow - Math.abs(capitalExpenditure)
+            : null
+        })(),
       }
     })
     .reverse()
@@ -449,9 +461,12 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
                     <div><dt>Next FY P / E</dt><dd>{multiple(packet?.forwardEstimate?.forwardPe ?? packet?.ratios.forwardPe)}</dd></div>
                     <div><dt>Price / sales</dt><dd>{multiple(packet?.ratios.priceToSales)}</dd></div>
                     <div><dt>EV / EBITDA</dt><dd>{multiple(packet?.ratios.enterpriseValueToEbitda)}</dd></div>
-                    <div><dt>FCF yield</dt><dd>{percent(packet?.ratios.freeCashFlowYield, true)}</dd></div>
+                    <div><dt>FCF yield (provider)</dt><dd>{percent(packet?.ratios.freeCashFlowYield, true)}</dd></div>
                     <div><dt>Net margin</dt><dd>{percent(packet?.ratios.netMargin, true)}</dd></div>
                     <div><dt>Debt / equity</dt><dd>{multiple(packet?.ratios.debtToEquity)}</dd></div>
+                    <div><dt>Cash + short investments</dt><dd>{compactMoney(packet?.financialReconciliation?.totalLiquidity)}</dd></div>
+                    <div><dt>Gross debt</dt><dd>{compactMoney(packet?.financialReconciliation?.grossDebt)}</dd></div>
+                    <div><dt>Reconciled position</dt><dd>{netCashOrDebt(packet?.financialReconciliation?.netCash)}</dd></div>
                   </dl>
                 </div>
               </article>

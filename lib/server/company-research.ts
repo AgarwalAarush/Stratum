@@ -9,6 +9,7 @@ import type {
   EquityResearchSectionId,
 } from '../markets/types.ts'
 import { normalizeCompanySegmentPeriods } from '../markets/company-segments.ts'
+import { reconcileFinancials } from '../markets/financial-reconciliation.ts'
 import { forwardPriceToEarnings, selectForwardAnnualEstimate } from '../markets/valuation.ts'
 import { fetchFmpStableJson } from './fmp.ts'
 import { fetchLatestDecision } from './portfolio.ts'
@@ -17,6 +18,7 @@ import { fetchLatestMarketLeadership, fetchStockViewerData } from './markets-rep
 import { getSupabaseClient } from './supabase.ts'
 import { proposeStockThesis } from './theses.ts'
 import { collectCompanyResearchEvidence } from './company-research-evidence.ts'
+import { fetchSecLiquidityFacts } from './sec-financials.ts'
 
 const RESEARCH_SECTION_IDS: EquityResearchSectionId[] = [
   'snapshot',
@@ -220,6 +222,7 @@ export async function materializeCompanyPacket(
   const ratiosRaw = records(ratiosResult)[0] ?? record(ratiosResult)
   const [
     incomeQuarterlyResult,
+    balanceQuarterlyResult,
     cashQuarterlyResult,
     keyMetricsResult,
     gradesResult,
@@ -227,8 +230,10 @@ export async function materializeCompanyPacket(
     geographicSegmentsResult,
     secFilings,
     transcripts,
+    secLiquidityResult,
   ] = await Promise.all([
     request<unknown>('income-statement', { period: 'quarter', limit: 8 }).catch(() => []),
+    request<unknown>('balance-sheet-statement', { period: 'quarter', limit: 8 }).catch(() => []),
     request<unknown>('cash-flow-statement', { period: 'quarter', limit: 8 }).catch(() => []),
     request<unknown>('key-metrics-ttm').catch(() => []),
     request<unknown>('grades-consensus').catch(() => []),
@@ -236,12 +241,15 @@ export async function materializeCompanyPacket(
     request<unknown>('revenue-geographic-segmentation', { period: 'annual', limit: 6 }).catch(() => []),
     fetchRecentSecFilings(profile.cik).catch(() => []),
     fetchRecentEarningsTranscripts(request).catch(() => []),
+    fetchSecLiquidityFacts(profile.cik).catch(() => []),
   ])
   const incomeAnnual = records(incomeResult).map(serializableRecord)
   const balanceAnnual = records(balanceResult).map(serializableRecord)
   const cashFlowAnnual = records(cashResult).map(serializableRecord)
   const incomeQuarterly = records(incomeQuarterlyResult).map(serializableRecord)
+  const balanceQuarterly = records(balanceQuarterlyResult).map(serializableRecord)
   const cashFlowQuarterly = records(cashQuarterlyResult).map(serializableRecord)
+  const financialReconciliation = reconcileFinancials(balanceQuarterly, cashFlowQuarterly, secLiquidityResult)
   const keyMetrics = serializableRecord(records(keyMetricsResult)[0] ?? record(keyMetricsResult))
   const gradesConsensus = serializableRecord(records(gradesResult)[0] ?? record(gradesResult))
   const productSegments = normalizeCompanySegmentPeriods(productSegmentsResult)
@@ -272,6 +280,14 @@ export async function materializeCompanyPacket(
     { id: 'fmp-financials', label: 'FMP financial statements', url: `https://financialmodelingprep.com/stable/income-statement?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
     { id: 'fmp-ratios', label: 'FMP trailing ratios', url: `https://financialmodelingprep.com/stable/ratios-ttm?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
     { id: 'fmp-estimates', label: 'FMP analyst estimates', url: `https://financialmodelingprep.com/stable/analyst-estimates?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
+    ...(financialReconciliation ? [{
+      id: 'financial-reconciliation',
+      label: 'Reconciled liquidity and debt bridge',
+      url: secFilings.find((filing) => filing.title.startsWith('10-Q') || filing.title.startsWith('10-K'))?.url
+        ?? 'https://data.sec.gov',
+      source: financialReconciliation.liquiditySource === 'sec_edgar' ? 'SEC EDGAR + FMP' : 'FMP',
+      asOf: financialReconciliation.asOf,
+    }] : []),
     ...transcripts.map((transcript) => ({
       id: transcript.sourceId,
       label: `${symbol} ${transcript.year} Q${transcript.quarter} earnings-call transcript`,
@@ -332,7 +348,8 @@ export async function materializeCompanyPacket(
       ...secFilings.map((item) => item.publishedAt),
       ...transcripts.map((item) => item.date),
       ...researchEvidence.map((item) => item.publishedAt),
-    ].sort().at(-1) ?? stock.asOf,
+      financialReconciliation?.asOf,
+    ].filter((value): value is string => Boolean(value)).sort().at(-1) ?? stock.asOf,
     generatedAt,
     priceHistory: {
       latestPrice: stock.price,
@@ -347,9 +364,11 @@ export async function materializeCompanyPacket(
       incomeAnnual,
       incomeQuarterly,
       balanceAnnual,
+      balanceQuarterly,
       cashFlowAnnual,
       cashFlowQuarterly,
     },
+    financialReconciliation,
     ratios: {
       peRatio: number(ratiosRaw.priceToEarningsRatioTTM ?? ratiosRaw.peRatioTTM),
       priceToSales: number(ratiosRaw.priceToSalesRatioTTM),
@@ -549,7 +568,8 @@ function researchPrompt(
     'Write an investor memo, not an audit workpaper: favor clear analytical prose and short connective paragraphs over a stream of labeled bullets. Use bullets only for catalysts, scenario assumptions, risks, and concrete decision rules.',
     'Keep factual, consensus, and analyst thinking distinct through natural attribution: write “reported data show” or “the latest filing shows” for facts, “consensus expects” for market expectations, “our view” for analysis, and “in our base case” for assumptions. For auditability, prefix each distinct claim paragraph with **FACT:**, **CONSENSUS:**, **VIEW:** or **ESTIMATE:**. The application strips these internal markers in its default memo view and exposes them only in Evidence mode.',
     'Attach supporting CompanyPacket source IDs only through each section sourceIds array and the report sourceIds array. Never print bracketed source IDs inside prose. Never imply a claim is sourced if the supporting source is absent.',
-    'Financial Profile must analyze the available 6-8 quarter history and call out growth, margin, cash-flow, balance-sheet, and share-count inflections.',
+    'Financial Profile must analyze the available 6-8 quarter history and call out growth, margin, cash-flow, balance-sheet, and share-count inflections. CompanyPacket.financialReconciliation is the authoritative same-period bridge for liquidity, debt, and net cash/debt: never recompute it from raw statement fields. Call it net cash only when netCash is positive and net debt only when netCash is negative. If the bridge has a warning, state it and do not use the affected number for valuation.',
+    'Keep provider-derived free cash flow distinct from company-defined free cash flow. Do not call a GAAP loss, warrant-fair-value remeasurement, or non-GAAP reconciliation an accounting inconsistency without a primary-filing contradiction. Do not call employee withholding or warrant exercises a share repurchase unless a primary filing explicitly identifies an open-market buyback.',
     'Earnings-call transcripts are management commentary, not audited fact. When transcripts are present, compare guidance, operating priorities, demand commentary, and changed language across the two most recent calls; attribute claims to management.',
     'Business Model & Moat must cover revenue mechanics, customer value, geographic/FX exposure, concentration, switching costs, and a none/narrow/wide moat judgment. Identify the actual moat mechanisms (for example data, workflow embedding, switching costs, scale, regulatory approvals, distribution, or IP), the evidence for each, and the specific gaps that could erode the moat.',
     'When segmentRevenue is present, Business Model & Moat must identify which product or service lines drive revenue, growth, and mix shifts. Do not confuse product revenue categories with reportable operating segments or imply segment profit data that the packet does not contain.',

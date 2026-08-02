@@ -14,7 +14,7 @@ type Metric = 'revenue' | 'operatingIncome' | 'freeCashFlow'
 const METRICS: Array<{ id: Metric; label: string }> = [
   { id: 'revenue', label: 'Revenue' },
   { id: 'operatingIncome', label: 'Operating income' },
-  { id: 'freeCashFlow', label: 'Free cash flow' },
+  { id: 'freeCashFlow', label: 'Cash flow after capex' },
 ]
 
 function compactMoney(value: number): string {

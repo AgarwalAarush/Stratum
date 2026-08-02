@@ -457,6 +457,22 @@ export interface CompanySegmentPeriod {
   values: CompanySegmentValue[]
 }
 
+export interface CompanyFinancialReconciliation {
+  asOf: string
+  cashAndCashEquivalents: number | null
+  shortTermInvestments: number | null
+  totalLiquidity: number | null
+  grossDebt: number | null
+  /** Positive is net cash; negative is net debt. */
+  netCash: number | null
+  operatingCashFlow: number | null
+  capitalExpenditure: number | null
+  providerFreeCashFlow: number | null
+  calculatedFreeCashFlow: number | null
+  liquiditySource: 'sec_edgar' | 'fmp'
+  warnings: string[]
+}
+
 export interface CompanyPacket {
   id: string
   symbol: string
@@ -476,9 +492,11 @@ export interface CompanyPacket {
     incomeAnnual: Array<Record<string, string | number | boolean | null>>
     incomeQuarterly: Array<Record<string, string | number | boolean | null>>
     balanceAnnual: Array<Record<string, string | number | boolean | null>>
+    balanceQuarterly: Array<Record<string, string | number | boolean | null>>
     cashFlowAnnual: Array<Record<string, string | number | boolean | null>>
     cashFlowQuarterly: Array<Record<string, string | number | boolean | null>>
   }
+  financialReconciliation?: CompanyFinancialReconciliation | null
   ratios: Record<string, number | null>
   forwardEstimate?: {
     date: string
