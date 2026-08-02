@@ -13,6 +13,7 @@ export interface MarketWatchlistState {
 }
 
 const DEFAULT_SYMBOLS = ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL']
+export const ENERGY_WATCHLIST_SYMBOLS = ['GRID', 'MLPX', 'NLR', 'PAVE', 'PIKA', 'RACK', 'URA', 'UTES', 'XLU']
 const MAX_LISTS = 12
 const MAX_SYMBOLS_PER_LIST = 100
 const SYMBOL_PATTERN = /^[A-Z0-9.-]{1,10}$/
@@ -36,9 +37,22 @@ export function createDefaultWatchlistState(availableSymbols: string[]): MarketW
 
   return {
     version: 1,
-    activeListId: 'core',
-    lists: [{ id: 'core', name: 'Core', symbols: preferred }],
+    activeListId: 'energy',
+    lists: [
+      { id: 'energy', name: 'Energy', symbols: ENERGY_WATCHLIST_SYMBOLS },
+      { id: 'core', name: 'Core', symbols: preferred },
+    ],
   }
+}
+
+/**
+ * A user-requested starter list should be added to existing workspaces too,
+ * without overwriting the lists or the symbols that they have already saved.
+ */
+export function ensureEnergyWatchlist(state: MarketWatchlistState): MarketWatchlistState {
+  if (state.lists.some((list) => list.id === 'energy' || list.name.trim().toLocaleLowerCase() === 'energy')) return state
+  const energy = { id: 'energy', name: 'Energy', symbols: ENERGY_WATCHLIST_SYMBOLS }
+  return { ...state, activeListId: energy.id, lists: [energy, ...state.lists].slice(0, MAX_LISTS) }
 }
 
 export function parseWatchlistState(value: unknown, fallback: MarketWatchlistState): MarketWatchlistState {

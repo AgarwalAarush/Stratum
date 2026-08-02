@@ -131,6 +131,8 @@ test('expanded universe selects liquid non-index names and always retains themes
   assert.deepEqual(new Set(selected.map((item) => item.symbol)), new Set(['AAPL', 'ARM', 'CRDO']))
   assert.ok(MARKET_THEME_SYMBOLS.includes('ARM'))
   assert.ok(MARKET_THEME_SYMBOLS.includes('TSM'))
+  assert.ok(MARKET_THEME_SYMBOLS.includes('GRID'))
+  assert.ok(MARKET_THEME_SYMBOLS.includes('XLU'))
 })
 
 test('resolved universe loads both watchlisted and manually owned symbols', () => {

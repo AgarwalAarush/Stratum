@@ -14,6 +14,15 @@ interface BaseScreenerRow {
 }
 
 const BASE_ROWS: BaseScreenerRow[] = [
+  { symbol: 'GRID', company: 'First Trust NASDAQ Clean Edge Smart Grid Infrastructure Index Fund', price: 179.35, dailyChange: 1.53, gap: 0.78, volume: 0.65621, relativeVolume: 0.94, fiftyDayAverage: 173.84, fiftyTwoWeekPosition: 82, exchange: 'NASDAQ' },
+  { symbol: 'MLPX', company: 'Global X MLP & Energy Infrastructure ETF', price: 75.08, dailyChange: 0.31, gap: 0.02, volume: 0.12006, relativeVolume: 0.72, fiftyDayAverage: 73.91, fiftyTwoWeekPosition: 76, exchange: 'NYSE Arca' },
+  { symbol: 'NLR', company: 'VanEck Uranium and Nuclear Energy ETF', price: 106.83, dailyChange: -1.41, gap: 0.87, volume: 0.07318, relativeVolume: 0.81, fiftyDayAverage: 102.46, fiftyTwoWeekPosition: 64, exchange: 'NYSE Arca' },
+  { symbol: 'PAVE', company: 'Global X U.S. Infrastructure Development ETF', price: 56.36, dailyChange: 0.46, gap: 0.20, volume: 0.15142, relativeVolume: 0.88, fiftyDayAverage: 54.77, fiftyTwoWeekPosition: 79, exchange: 'Cboe BZX' },
+  { symbol: 'PIKA', company: 'VanEck Electrification ETF', price: 17.45, dailyChange: 1.25, gap: 1.16, volume: 0.01476, relativeVolume: 0.64, fiftyDayAverage: 16.98, fiftyTwoWeekPosition: 70, exchange: 'NYSE Arca' },
+  { symbol: 'RACK', company: 'VanEck Data Center and Digital Infrastructure ETF', price: 45.88, dailyChange: 0.31, gap: 0.10, volume: 0.01157, relativeVolume: 0.68, fiftyDayAverage: 44.51, fiftyTwoWeekPosition: 73, exchange: 'NYSE Arca' },
+  { symbol: 'URA', company: 'Global X Uranium ETF', price: 39.07, dailyChange: -1.64, gap: 1.81, volume: 0.71625, relativeVolume: 1.08, fiftyDayAverage: 37.66, fiftyTwoWeekPosition: 61, exchange: 'NYSE Arca' },
+  { symbol: 'UTES', company: 'Virtus Reaves Utilities ETF', price: 77.57, dailyChange: -0.03, gap: 0.65, volume: 0.02686, relativeVolume: 0.76, fiftyDayAverage: 76.38, fiftyTwoWeekPosition: 66, exchange: 'NYSE Arca' },
+  { symbol: 'XLU', company: 'State Street Utilities Select Sector SPDR Fund', price: 44.35, dailyChange: -0.69, gap: -0.11, volume: 5.64, relativeVolume: 0.91, fiftyDayAverage: 43.72, fiftyTwoWeekPosition: 68, exchange: 'NYSE Arca' },
   { symbol: 'NVDA', company: 'NVIDIA Corporation', price: 1124.35, dailyChange: 4.62, gap: 3.21, volume: 68.4, relativeVolume: 2.68, fiftyDayAverage: 987.41, fiftyTwoWeekPosition: 88, exchange: 'NASDAQ' },
   { symbol: 'PLTR', company: 'Palantir Technologies Inc.', price: 28.71, dailyChange: 6.83, gap: 4.12, volume: 155.2, relativeVolume: 3.42, fiftyDayAverage: 24.13, fiftyTwoWeekPosition: 76, exchange: 'NYSE' },
   { symbol: 'AVGO', company: 'Broadcom Inc.', price: 1643.12, dailyChange: 3.26, gap: 2.08, volume: 18.6, relativeVolume: 2.11, fiftyDayAverage: 1498.77, fiftyTwoWeekPosition: 81, exchange: 'NASDAQ' },
@@ -61,6 +70,15 @@ function makeRange(seed: number): number[] {
 }
 
 const TAXONOMY_BY_SYMBOL: Record<string, { sector: string; subIndustry: string }> = {
+  GRID: { sector: 'Utilities', subIndustry: 'Smart Grid Infrastructure' },
+  MLPX: { sector: 'Energy', subIndustry: 'Energy Infrastructure' },
+  NLR: { sector: 'Energy', subIndustry: 'Nuclear Energy' },
+  PAVE: { sector: 'Industrials', subIndustry: 'Infrastructure' },
+  PIKA: { sector: 'Industrials', subIndustry: 'Electrification' },
+  RACK: { sector: 'Information Technology', subIndustry: 'Data Center Infrastructure' },
+  URA: { sector: 'Energy', subIndustry: 'Uranium' },
+  UTES: { sector: 'Utilities', subIndustry: 'Utilities' },
+  XLU: { sector: 'Utilities', subIndustry: 'Utilities' },
   NVDA: { sector: 'Information Technology', subIndustry: 'Semiconductors' },
   AVGO: { sector: 'Information Technology', subIndustry: 'Semiconductors' },
   AMD: { sector: 'Information Technology', subIndustry: 'Semiconductors' },

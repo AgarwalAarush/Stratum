@@ -22,6 +22,8 @@ export const MARKET_THEME_SYMBOLS = [
   // Power, nuclear, and compute infrastructure.
   'CEG', 'VST', 'NRG', 'GEV', 'BWXT', 'LEU', 'CCJ', 'SMR', 'OKLO', 'NNE',
   'IREN', 'CORZ', 'CLSK', 'WULF', 'CIFR',
+  // Energy transition, grid, nuclear, and utilities watchlist coverage.
+  'GRID', 'MLPX', 'NLR', 'PAVE', 'PIKA', 'RACK', 'URA', 'UTES', 'XLU',
   // Automation, autonomy, and space infrastructure.
   'TSLA', 'ISRG', 'SYM', 'ROK', 'MBLY', 'SERV', 'ASTS', 'RKLB',
 ] as const

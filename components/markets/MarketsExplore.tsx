@@ -138,12 +138,14 @@ function GroupTable({
 export function MarketsExplore({
   initialView,
   screener,
+  watchlistUniverse,
   leadership,
   watchlists,
   watchlistsPersisted,
 }: {
   initialView: ExploreView
   screener: ScreenerResponse
+  watchlistUniverse: ScreenerResponse
   leadership: MarketLeadershipSnapshot | null
   watchlists?: MarketWatchlistState
   watchlistsPersisted?: boolean
@@ -170,7 +172,7 @@ export function MarketsExplore({
       {initialView === 'stocks' ? <MarketsScreener initialResponse={screener} /> : initialView === 'watchlists' ? (
         <MarketsWatchlists
           embedded
-          universe={screener}
+          universe={watchlistUniverse}
           initialState={watchlists}
           migrateLocalOnMount={!watchlistsPersisted}
         />

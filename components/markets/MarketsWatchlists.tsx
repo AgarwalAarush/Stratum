@@ -1,6 +1,8 @@
 'use client'
 
 import {
+  ArrowCircleDown,
+  ArrowCircleUp,
   Check,
   MagnifyingGlass,
   PencilSimple,
@@ -13,6 +15,7 @@ import { MarketSparkline } from './MarketSparkline'
 import { MarketsIntentLink } from './MarketsIntentLink'
 import {
   createDefaultWatchlistState,
+  ensureEnergyWatchlist,
   isValidWatchlistSymbol,
   parseWatchlistState,
   updateWatchlist,
@@ -40,6 +43,10 @@ function formatVolume(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
   return value.toLocaleString('en-US')
+}
+
+function priceChange(value: number, percentChange: number): number {
+  return value - (value / (1 + (percentChange / 100)))
 }
 
 function feedLabel(feed: ScreenerResponse['feed']): string {
@@ -83,10 +90,10 @@ export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount 
   useEffect(() => {
     let active = true
     const migrate = async () => {
-      let nextState = initialState ?? fallbackState
+      let nextState = ensureEnergyWatchlist(initialState ?? fallbackState)
       try {
         const saved = localStorage.getItem(WATCHLIST_STORAGE_KEY)
-        if (migrateLocalOnMount && saved) nextState = parseWatchlistState(JSON.parse(saved), nextState)
+        if (migrateLocalOnMount && saved) nextState = ensureEnergyWatchlist(parseWatchlistState(JSON.parse(saved), nextState))
       } catch {
         setNotice('Saved lists could not be read. A fresh list is ready instead.')
       }
@@ -99,12 +106,12 @@ export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount 
         const payload = await response.json()
         if (!response.ok) throw new Error()
         if (active) {
-          setState(payload.watchlists)
+          setState(ensureEnergyWatchlist(payload.watchlists))
           setPersistence('server')
         }
       } catch {
         if (active) {
-          setState(nextState)
+          setState(ensureEnergyWatchlist(nextState))
           setPersistence('local')
         }
       } finally {
@@ -254,7 +261,7 @@ export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount 
         )}
       </div>
 
-      <div className="market-watchlist-commandbar">
+      <div className={`market-watchlist-commandbar${activeList.id === 'energy' ? ' market-watchlist-commandbar-energy' : ''}`}>
         <div className="market-watchlist-context">
           {renamingList ? (
             <form className="market-watchlist-rename" onSubmit={renameList}>
@@ -263,10 +270,9 @@ export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount 
               <button type="button" aria-label="Cancel rename" onClick={() => setRenamingList(false)}><X size={14} /></button>
             </form>
           ) : (
-            <div>
-              <span>Tracking</span>
-              <strong>{activeList.symbols.length} {activeList.symbols.length === 1 ? 'equity' : 'equities'}</strong>
-              <span>in {activeList.name}</span>
+            <div className="market-watchlist-title-row">
+              <h2>{activeList.name}</h2>
+              <span>{activeList.symbols.length} {activeList.symbols.length === 1 ? 'symbol' : 'symbols'} · {feedLabel(universe.feed)} data</span>
             </div>
           )}
           <div className="market-watchlist-list-actions">
@@ -328,12 +334,12 @@ export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount 
         {notice || (hydrated ? (persistence === 'server' ? 'Changes save to your private workspace.' : 'Changes are using the local fallback.') : 'Loading saved lists…')}
       </p>
 
-      <div className="market-watchlist-metrics" aria-label={`${activeList.name} summary`}>
+      {activeList.id !== 'energy' && <div className="market-watchlist-metrics" aria-label={`${activeList.name} summary`}>
         <div><span>Names</span><strong>{activeList.symbols.length}</strong></div>
         <div><span>Gainers</span><strong>{gainers}</strong></div>
         <div><span>Average move</span><strong className={averageMove >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(averageMove)}</strong></div>
         <div><span>Above 50D MA</span><strong>{aboveAverage}<small> / {knownRows.length}</small></strong></div>
-      </div>
+      </div>}
 
       <div className="market-screen-summary">
         <span>{activeList.symbols.length} tracked {activeList.symbols.length === 1 ? 'name' : 'names'}</span>
@@ -345,9 +351,10 @@ export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount 
           <thead>
             <tr>
               <th>Symbol</th>
-              <th>Company</th>
+              <th>Trend</th>
               <th>Price</th>
               <th>Change</th>
+              <th>% Change</th>
               <th>Volume</th>
               <th>Rel. volume</th>
               <th>Range</th>
@@ -390,15 +397,20 @@ export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount 
 }
 
 function WatchlistRow({ row, onRemove }: { row: ScreenerRow; onRemove: (symbol: string) => void }) {
+  const change = priceChange(row.price, row.dailyChange)
+  const positive = row.dailyChange >= 0
   return (
     <tr>
-      <td><MarketsIntentLink className="market-symbol-button" href={`/markets/stocks/${row.symbol}`} scroll={false}>{row.symbol}</MarketsIntentLink></td>
-      <td>{row.company}</td>
+      <td>
+        <MarketsIntentLink className="market-symbol-button" href={`/markets/stocks/${row.symbol}`} scroll={false}>{row.symbol}</MarketsIntentLink>
+        <span className="market-watchlist-company">{row.company}</span>
+      </td>
+      <td><MarketSparkline values={row.range} label={`${row.symbol} intraday range`} /></td>
       <td>{formatPrice(row.price)}</td>
-      <td className={row.dailyChange >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(row.dailyChange)}</td>
+      <td className={positive ? 'market-positive' : 'market-negative'}><span className="market-watchlist-change">{change >= 0 ? '+' : ''}{formatPrice(change)}{positive ? <ArrowCircleUp size={15} weight="fill" /> : <ArrowCircleDown size={15} weight="fill" />}</span></td>
+      <td className={positive ? 'market-positive' : 'market-negative'}><span className="market-watchlist-change">{formatPercent(row.dailyChange)}{positive ? <ArrowCircleUp size={15} weight="fill" /> : <ArrowCircleDown size={15} weight="fill" />}</span></td>
       <td>{formatVolume(row.volume)}</td>
       <td className={row.relativeVolume >= 1 ? 'market-positive' : ''}>{row.relativeVolume.toFixed(2)}×</td>
-      <td><MarketSparkline values={row.range} label={`${row.symbol} intraday range`} /></td>
       <td>{formatPrice(row.fiftyDayAverage)}</td>
       <td>
         <div className="market-52-week-cell">

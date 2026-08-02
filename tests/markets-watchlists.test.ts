@@ -4,17 +4,30 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   createDefaultWatchlistState,
+  ensureEnergyWatchlist,
   isValidWatchlistSymbol,
   parseWatchlistState,
   updateWatchlist,
   WATCHLIST_STORAGE_KEY,
 } from '../lib/markets/watchlists.ts'
 
-test('watchlists default to a useful local core list', () => {
+test('watchlists default to an Energy starter list alongside a useful core list', () => {
   const state = createDefaultWatchlistState(['MSFT', 'AAPL', 'NVDA', 'TSLA', 'AMZN', 'GOOGL'])
   assert.equal(WATCHLIST_STORAGE_KEY, 'stratum:markets:watchlists:v1')
-  assert.equal(state.activeListId, 'core')
-  assert.deepEqual(state.lists[0]?.symbols, ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL'])
+  assert.equal(state.activeListId, 'energy')
+  assert.deepEqual(state.lists[0], { id: 'energy', name: 'Energy', symbols: ['GRID', 'MLPX', 'NLR', 'PAVE', 'PIKA', 'RACK', 'URA', 'UTES', 'XLU'] })
+  assert.deepEqual(state.lists[1]?.symbols, ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL'])
+})
+
+test('Energy is added to existing workspaces without replacing saved lists', () => {
+  const state = ensureEnergyWatchlist({
+    version: 1,
+    activeListId: 'core',
+    lists: [{ id: 'core', name: 'Core', symbols: ['AAPL'] }],
+  })
+  assert.equal(state.activeListId, 'energy')
+  assert.equal(state.lists[0]?.name, 'Energy')
+  assert.deepEqual(state.lists[1], { id: 'core', name: 'Core', symbols: ['AAPL'] })
 })
 
 test('watchlist parser sanitizes stored browser state', () => {
