@@ -30,6 +30,19 @@ test('Energy is added to existing workspaces without replacing saved lists', () 
   assert.deepEqual(state.lists[1], { id: 'core', name: 'Core', symbols: ['AAPL'] })
 })
 
+test('Energy repairs the empty record left by an interrupted initial save', () => {
+  const state = ensureEnergyWatchlist({
+    version: 1,
+    activeListId: 'core',
+    lists: [
+      { id: 'core', name: 'Core', symbols: ['AAPL'] },
+      { id: 'energy', name: 'Energy', symbols: [] },
+    ],
+  })
+  assert.equal(state.activeListId, 'energy')
+  assert.deepEqual(state.lists[1]?.symbols, ['GRID', 'MLPX', 'NLR', 'PAVE', 'PIKA', 'RACK', 'URA', 'UTES', 'XLU'])
+})
+
 test('watchlist parser sanitizes stored browser state', () => {
   const fallback = createDefaultWatchlistState(['AAPL'])
   const parsed = parseWatchlistState({

@@ -50,7 +50,19 @@ export function createDefaultWatchlistState(availableSymbols: string[]): MarketW
  * without overwriting the lists or the symbols that they have already saved.
  */
 export function ensureEnergyWatchlist(state: MarketWatchlistState): MarketWatchlistState {
-  if (state.lists.some((list) => list.id === 'energy' || list.name.trim().toLocaleLowerCase() === 'energy')) return state
+  const existingEnergy = state.lists.find((list) => list.id === 'energy' || list.name.trim().toLocaleLowerCase() === 'energy')
+  // Repair the empty Energy record left behind if an earlier write created the
+  // list before the asset catalog had its constituent ETFs.
+  if (existingEnergy && existingEnergy.symbols.length === 0) {
+    return {
+      ...state,
+      activeListId: existingEnergy.id,
+      lists: state.lists.map((list) => list.id === existingEnergy.id
+        ? { ...list, symbols: ENERGY_WATCHLIST_SYMBOLS }
+        : list),
+    }
+  }
+  if (existingEnergy) return state
   const energy = { id: 'energy', name: 'Energy', symbols: ENERGY_WATCHLIST_SYMBOLS }
   return { ...state, activeListId: energy.id, lists: [energy, ...state.lists].slice(0, MAX_LISTS) }
 }
