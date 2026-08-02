@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react'
 import { formatEntryAction } from '@/lib/markets/research-presentation'
 import type { CandidateBrief, EquityResearchNote, ThesisDecision } from '@/lib/markets/types'
+import { MarketSelect } from './MarketSelect'
 import { ResearchActionButton } from './ResearchActionButton'
 
 export function CapitalDecisionRail({
@@ -72,16 +73,16 @@ export function CapitalDecisionRail({
         <p className="markets-eyebrow">Decision editor</p>
         <h2>Capital allocation</h2>
         <form className="capital-decision-form" onSubmit={save}>
-          <label>Disposition<select name="disposition" defaultValue={decision?.disposition ?? 'watch'}><option value="own">Own</option><option value="watch">Watch</option><option value="avoid">Avoid</option></select></label>
-          <label>Formal rating<select name="formalRating" defaultValue={decision?.formalRating ?? research?.formalRating ?? 'NOT_RATED'}><option>BUY</option><option>HOLD</option><option>SELL</option><option>NOT_RATED</option></select></label>
-          <label>Entry action<select name="entryAction" defaultValue={decision?.entryAction ?? research?.entryAction ?? 'wait'}><option value="buy_now">Buy now</option><option value="nibble">Start with a small position</option><option value="wait">Wait for a better setup</option><option value="add_on_weakness">Add on weakness</option><option value="avoid">Avoid</option></select></label>
+          <div className="market-form-field"><span>Disposition</span><MarketSelect name="disposition" defaultValue={decision?.disposition ?? 'watch'} ariaLabel="Disposition" options={[{ value: 'own', label: 'Own' }, { value: 'watch', label: 'Watch' }, { value: 'avoid', label: 'Avoid' }]} /></div>
+          <div className="market-form-field"><span>Formal rating</span><MarketSelect name="formalRating" defaultValue={decision?.formalRating ?? research?.formalRating ?? 'NOT_RATED'} ariaLabel="Formal rating" options={['BUY', 'HOLD', 'SELL', 'NOT_RATED'].map((value) => ({ value, label: value }))} /></div>
+          <div className="market-form-field"><span>Entry action</span><MarketSelect name="entryAction" defaultValue={decision?.entryAction ?? research?.entryAction ?? 'wait'} ariaLabel="Entry action" options={[{ value: 'buy_now', label: 'Buy now' }, { value: 'nibble', label: 'Start with a small position' }, { value: 'wait', label: 'Wait for a better setup' }, { value: 'add_on_weakness', label: 'Add on weakness' }, { value: 'avoid', label: 'Avoid' }]} /></div>
           <label>Fair value<input name="fairValue" type="number" step="0.01" defaultValue={decision?.fairValue ?? research?.fairValue ?? ''} /></label>
           <div><label>Entry low<input name="entryZoneLow" type="number" step="0.01" defaultValue={decision?.entryZoneLow ?? research?.entryZoneLow ?? ''} /></label><label>Entry high<input name="entryZoneHigh" type="number" step="0.01" defaultValue={decision?.entryZoneHigh ?? research?.entryZoneHigh ?? ''} /></label></div>
-          <label>Conviction<select name="conviction" defaultValue={decision?.conviction ?? ''}><option value="">—</option>{[1, 2, 3, 4, 5].map((value) => <option key={value}>{value}</option>)}</select></label>
+          <div className="market-form-field"><span>Conviction</span><MarketSelect name="conviction" defaultValue={decision?.conviction?.toString() ?? ''} ariaLabel="Conviction" options={[{ value: '', label: '—' }, ...[1, 2, 3, 4, 5].map((value) => ({ value: String(value), label: String(value) }))]} /></div>
           <label>Next catalyst<input name="nextCatalyst" defaultValue={decision?.nextCatalyst ?? candidate?.catalyst ?? ''} /></label>
           <label>Kill criteria<textarea name="killCriteria" defaultValue={decision?.killCriteria[0]?.description ?? research?.fastestKillSignal ?? ''} /></label>
           <div>
-            <label>Trigger<select name="killOperator" defaultValue={decision?.killCriteria[0]?.operator ?? 'lt'}><option value="lt">Price below</option><option value="gt">Price above</option></select></label>
+            <div className="market-form-field"><span>Trigger</span><MarketSelect name="killOperator" defaultValue={decision?.killCriteria[0]?.operator ?? 'lt'} ariaLabel="Kill criteria trigger" options={[{ value: 'lt', label: 'Price below' }, { value: 'gt', label: 'Price above' }]} /></div>
             <label>Threshold<input name="killValue" type="number" step="0.01" defaultValue={decision?.killCriteria[0]?.value ?? ''} /></label>
           </div>
           <label>Rationale<textarea name="rationale" defaultValue={decision?.rationale ?? ''} /></label>

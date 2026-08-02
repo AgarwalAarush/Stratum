@@ -16,6 +16,7 @@ import type {
   ScreenerTaxonomy,
 } from '@/lib/markets/types'
 import { isScreenerReturnField, SCREENER_RETURN_PERIODS } from '@/lib/markets/screener'
+import { MarketMultiSelect, MarketSelect } from './MarketSelect'
 
 interface ScreenerConditionBuilderProps {
   filters: ScreenerFilter[]
@@ -239,13 +240,13 @@ function ConditionForm({ draft, taxonomy, onChange }: ConditionFormProps) {
       </div>
 
       {isScreenerReturnField(draft.field) && (
-        <label className="market-condition-control">
+        <div className="market-condition-control">
           <span>Period</span>
           <ReturnPeriodPicker
             value={draft.field}
             onChange={(field) => onChange({ ...draft, field })}
           />
-        </label>
+        </div>
       )}
 
       {isDirectional && (
@@ -260,12 +261,15 @@ function ConditionForm({ draft, taxonomy, onChange }: ConditionFormProps) {
 
       {definition.kind === 'number' && (
         <>
-          <label className="market-condition-control">
+          <div className="market-condition-control">
             <span>Operator</span>
-            <select value={draft.operator} onChange={(event) => onChange({ ...draft, operator: event.target.value as ScreenerFilterOperator })}>
-              {numericOperators.map((operator) => <option key={operator} value={operator}>{OPERATOR_LABELS[operator]}</option>)}
-            </select>
-          </label>
+            <MarketSelect
+              value={draft.operator}
+              ariaLabel="Condition operator"
+              onChange={(operator) => onChange({ ...draft, operator: operator as ScreenerFilterOperator })}
+              options={numericOperators.map((operator) => ({ value: operator, label: OPERATOR_LABELS[operator] }))}
+            />
+          </div>
           <label className="market-condition-control">
             <span>Threshold</span>
             <span className="market-condition-input-shell">
@@ -287,50 +291,52 @@ function ConditionForm({ draft, taxonomy, onChange }: ConditionFormProps) {
       )}
 
       {definition.kind === 'boolean' && (
-        <label className="market-condition-control">
+        <div className="market-condition-control">
           <span>{draft.field === 'above50DayAverage' ? 'Position' : 'Value'}</span>
-          <select value={String(draft.value)} onChange={(event) => onChange({ ...draft, value: event.target.value === 'true' })}>
-            {draft.field === 'above50DayAverage' ? (
-              <><option value="true">Above 50D MA</option><option value="false">Below 50D MA</option></>
-            ) : (
-              <><option value="true">Yes</option><option value="false">No</option></>
-            )}
-          </select>
-        </label>
+          <MarketSelect
+            value={String(draft.value)}
+            ariaLabel={draft.field === 'above50DayAverage' ? 'Trend position' : 'Condition value'}
+            onChange={(value) => onChange({ ...draft, value: value === 'true' })}
+            options={draft.field === 'above50DayAverage'
+              ? [{ value: 'true', label: 'Above 50D MA' }, { value: 'false', label: 'Below 50D MA' }]
+              : [{ value: 'true', label: 'Yes' }, { value: 'false', label: 'No' }]}
+          />
+        </div>
       )}
 
       {definition.kind === 'exchange' && (
-        <label className="market-condition-control">
+        <div className="market-condition-control">
           <span>Exchange</span>
-          <select value={String(draft.value)} onChange={(event) => onChange({ ...draft, value: event.target.value })}>
-            <option value="NASDAQ">NASDAQ</option>
-            <option value="NYSE">NYSE</option>
-            <option value="AMEX">AMEX</option>
-          </select>
-        </label>
+          <MarketSelect
+            value={String(draft.value)}
+            ariaLabel="Exchange"
+            onChange={(value) => onChange({ ...draft, value })}
+            options={['NASDAQ', 'NYSE', 'AMEX'].map((value) => ({ value, label: value }))}
+          />
+        </div>
       )}
 
       {definition.kind === 'taxonomy' && (
         <>
-          <label className="market-condition-control">
+          <div className="market-condition-control">
             <span>Match</span>
-            <select value={draft.operator} onChange={(event) => onChange({ ...draft, operator: event.target.value as ScreenerFilterOperator })}>
-              <option value="in">Include selected</option>
-              <option value="notIn">Exclude selected</option>
-            </select>
-          </label>
-          <label className="market-condition-control">
+            <MarketSelect
+              value={draft.operator}
+              ariaLabel="Taxonomy matching"
+              onChange={(operator) => onChange({ ...draft, operator: operator as ScreenerFilterOperator })}
+              options={[{ value: 'in', label: 'Include selected' }, { value: 'notIn', label: 'Exclude selected' }]}
+            />
+          </div>
+          <div className="market-condition-control">
             <span>{definition.title}s</span>
-            <select
-              multiple
-              size={Math.min(8, Math.max(4, (draft.field === 'sector' ? taxonomy.sectors : taxonomy.subIndustries).length))}
+            <MarketMultiSelect
               value={Array.isArray(draft.value) ? draft.value : []}
-              onChange={(event) => onChange({ ...draft, value: Array.from(event.currentTarget.selectedOptions, (option) => option.value) })}
-            >
-              {(draft.field === 'sector' ? taxonomy.sectors : taxonomy.subIndustries).map((value) => <option key={value} value={value}>{value}</option>)}
-            </select>
-            <small>Choose one or more. Hold Command or Control to select multiple.</small>
-          </label>
+              ariaLabel={`${definition.title}s`}
+              onChange={(value) => onChange({ ...draft, value })}
+              options={(draft.field === 'sector' ? taxonomy.sectors : taxonomy.subIndustries).map((value) => ({ value, label: value }))}
+            />
+            <small>Choose one or more.</small>
+          </div>
         </>
       )}
 

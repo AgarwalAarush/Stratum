@@ -7,6 +7,7 @@ import { formatEntryAction } from '@/lib/markets/research-presentation'
 import { parsePortfolioUpdate, type ParsedPortfolioUpdate } from '@/lib/markets/portfolio-updates'
 import { MarketsIntentLink } from './MarketsIntentLink'
 import { MarketSparkline } from './MarketSparkline'
+import { MarketSelect } from './MarketSelect'
 import type { PortfolioHolding, PortfolioWorkspaceData, ScreenerResponse, ScreenerRow } from '@/lib/markets/types'
 
 type PortfolioView = 'owned' | 'alerts' | 'history'
@@ -192,7 +193,7 @@ export function PortfolioWorkspace({
   useEffect(() => {
     if (!recordingOpen) return
     const dialog = updateDialogRef.current
-    dialog?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)')?.focus()
+    dialog?.querySelector<HTMLElement>('button:not(:disabled), input:not([type="hidden"]):not(:disabled), textarea:not(:disabled)')?.focus()
     const keepFocusInDialog = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setPreview(null)
@@ -201,7 +202,7 @@ export function PortfolioWorkspace({
         return
       }
       if (event.key !== 'Tab' || !dialog) return
-      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)'))
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not([type="hidden"]):not(:disabled), textarea:not(:disabled)'))
       const first = focusable[0]
       const last = focusable.at(-1)
       if (!first || !last) return
@@ -321,7 +322,7 @@ export function PortfolioWorkspace({
               ) : null}
               {reviewingDecisionId === decision.id ? (
                 <form className="decision-review-form" onSubmit={(event) => saveReview(event, decision.id, decision.symbol)}>
-                  <label>Outcome<select name="outcome" required><option value="working">Working</option><option value="not_working">Not working</option><option value="invalidated">Invalidated</option><option value="closed">Closed</option></select></label>
+                  <div className="market-form-field"><span>Outcome</span><MarketSelect name="outcome" ariaLabel="Decision outcome" options={[{ value: 'working', label: 'Working' }, { value: 'not_working', label: 'Not working' }, { value: 'invalidated', label: 'Invalidated' }, { value: 'closed', label: 'Closed' }]} /></div>
                   <label>Expectation vs outcome<textarea name="expectationAssessment" required /></label>
                   <label>Lessons<textarea name="lessons" required /></label>
                   <label>Postmortem<textarea name="postmortem" /></label>
@@ -345,7 +346,7 @@ export function PortfolioWorkspace({
             <button type="button" aria-pressed={updateMode === 'language'} onClick={() => setUpdateMode('language')}>Use natural language</button>
           </div>
           {updateMode === 'form' ? <form className="manual-position-form" onSubmit={submitStructuredUpdate}>
-            <label>Action<select name="transactionAction" required value={structuredAction} onChange={(event) => setStructuredAction(event.target.value as ParsedPortfolioUpdate['action'])}><option value="buy">Buy</option><option value="sell">Sell</option><option value="cash_deposit">Add cash</option><option value="cash_withdrawal">Withdraw cash</option></select></label>
+            <div className="market-form-field"><span>Action</span><MarketSelect name="transactionAction" value={structuredAction} ariaLabel="Transaction action" onChange={(value) => setStructuredAction(value as ParsedPortfolioUpdate['action'])} options={[{ value: 'buy', label: 'Buy' }, { value: 'sell', label: 'Sell' }, { value: 'cash_deposit', label: 'Add cash' }, { value: 'cash_withdrawal', label: 'Withdraw cash' }]} /></div>
             {structuredActionIsCash ? <label>Cash amount<input name="cashAmount" type="number" step="0.01" min="0.01" required /></label> : <>
               <label>Symbol<input name="symbol" maxLength={12} placeholder="NVDA" required /></label>
               <label>Shares<input name="quantity" type="number" step="any" min="0.000001" required /></label>
