@@ -3,7 +3,8 @@
 import { CaretDown, Check } from '@phosphor-icons/react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { historyForPeriod, priceHistoryPeriod, PRICE_HISTORY_PERIODS } from '@/lib/markets/price-history'
-import type { ScreenerReturnField, StockPricePoint } from '@/lib/markets/types'
+import type { PriceHistoryPeriod } from '@/lib/markets/price-history'
+import type { StockPricePoint } from '@/lib/markets/types'
 
 interface ChartPoint extends StockPricePoint {
   x: number
@@ -42,11 +43,32 @@ function buildPoints(history: StockPricePoint[]): ChartPoint[] {
 
 export function InteractivePriceChart({ history, symbol }: { history: StockPricePoint[]; symbol: string }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
-  const [period, setPeriod] = useState<ScreenerReturnField>('return1y')
+  const [period, setPeriod] = useState<PriceHistoryPeriod>('return1y')
   const [periodPickerOpen, setPeriodPickerOpen] = useState(false)
+  const [fiveYearHistory, setFiveYearHistory] = useState<StockPricePoint[] | null>(null)
+  const [fiveYearStatus, setFiveYearStatus] = useState<'idle' | 'loading' | 'failed'>('idle')
   const periodPickerRef = useRef<HTMLDivElement>(null)
-  const displayedHistory = useMemo(() => historyForPeriod(history, period), [history, period])
+  const displayedHistory = useMemo(
+    () => historyForPeriod(period === 'fiveYears' ? fiveYearHistory ?? [] : history, period),
+    [fiveYearHistory, history, period],
+  )
   const selectedPeriod = priceHistoryPeriod(period)
+
+  const loadFiveYearHistory = async () => {
+    if (fiveYearHistory || fiveYearStatus === 'loading') return
+    setFiveYearStatus('loading')
+    try {
+      const response = await fetch(`/api/markets/stocks/${encodeURIComponent(symbol)}/history?period=5y`)
+      const payload = await response.json() as { history?: StockPricePoint[] }
+      if (!response.ok || !Array.isArray(payload.history) || payload.history.length < 2) {
+        throw new Error('Five-year price history is unavailable')
+      }
+      setFiveYearHistory(payload.history)
+      setFiveYearStatus('idle')
+    } catch {
+      setFiveYearStatus('failed')
+    }
+  }
 
   useEffect(() => {
     if (!periodPickerOpen) return
@@ -64,17 +86,16 @@ export function InteractivePriceChart({ history, symbol }: { history: StockPrice
     }
   }, [periodPickerOpen])
 
-  if (displayedHistory.length < 2) {
-    return <div className="stock-viewer-chart-empty">Price history is not available in the current snapshot.</div>
-  }
-
-  const points = buildPoints(displayedHistory)
-  const active = activeIndex === null ? null : points[activeIndex]
-  const midpoint = displayedHistory[Math.floor((displayedHistory.length - 1) / 2)]
+  const isLoading = period === 'fiveYears' && fiveYearStatus === 'loading'
+  const historyUnavailable = displayedHistory.length < 2
+  const points = historyUnavailable ? [] : buildPoints(displayedHistory)
+  const active = activeIndex === null ? null : points[activeIndex] ?? null
+  const midpoint = historyUnavailable ? null : displayedHistory[Math.floor((displayedHistory.length - 1) / 2)]
 
   const selectFromPointer = (event: PointerEvent<SVGSVGElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect()
     const fraction = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width))
+    if (points.length < 2) return
     const nextIndex = Math.round(fraction * (points.length - 1))
     setActiveIndex((current) => current === nextIndex ? current : nextIndex)
   }
@@ -82,6 +103,7 @@ export function InteractivePriceChart({ history, symbol }: { history: StockPrice
   const selectFromKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
     event.preventDefault()
+    if (points.length < 2) return
     const current = activeIndex ?? points.length - 1
     setActiveIndex(event.key === 'ArrowLeft'
       ? Math.max(0, current - 1)
@@ -92,7 +114,7 @@ export function InteractivePriceChart({ history, symbol }: { history: StockPrice
     <div
       className="stock-price-chart"
       tabIndex={0}
-      onFocus={() => setActiveIndex((current) => current ?? points.length - 1)}
+      onFocus={() => points.length > 1 && setActiveIndex((current) => current ?? points.length - 1)}
       onBlur={() => setActiveIndex(null)}
       onKeyDown={selectFromKeyboard}
       aria-label={`${symbol} ${selectedPeriod.chartLabel}. Use left and right arrow keys to inspect daily closes.`}
@@ -125,6 +147,7 @@ export function InteractivePriceChart({ history, symbol }: { history: StockPrice
                       setPeriod(candidate.id)
                       setActiveIndex(null)
                       setPeriodPickerOpen(false)
+                      if (candidate.id === 'fiveYears') void loadFiveYearHistory()
                     }}
                   >
                     <Check size={14} aria-hidden="true" />
@@ -138,7 +161,13 @@ export function InteractivePriceChart({ history, symbol }: { history: StockPrice
         <strong>{active ? `${formatDate(active.tradingDate, true)} · ${formatPrice(active.close)}` : 'Hover to inspect'}</strong>
       </div>
       <div className="stock-price-chart-plot">
-        <svg
+        {isLoading ? <div className="stock-viewer-chart-empty">Loading five-year price history…</div> : null}
+        {!isLoading && historyUnavailable ? (
+          <div className="stock-viewer-chart-empty">
+            {fiveYearStatus === 'failed' ? 'Five-year price history could not be loaded. Select 5 years to try again.' : 'Price history is not available in the current snapshot.'}
+          </div>
+        ) : null}
+        {!isLoading && !historyUnavailable ? <svg
           className="stock-viewer-chart"
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
@@ -150,13 +179,9 @@ export function InteractivePriceChart({ history, symbol }: { history: StockPrice
         >
           <line className="stock-chart-baseline" x1="0" x2="100" y1="92" y2="92" />
           <polyline points={points.map((point) => `${point.x},${point.y}`).join(' ')} vectorEffect="non-scaling-stroke" />
-          {active ? (
-            <>
-              <line className="stock-chart-crosshair" x1={active.x} x2={active.x} y1="5" y2="92" vectorEffect="non-scaling-stroke" />
-            </>
-          ) : null}
-        </svg>
-        {active ? (
+          {active ? <line className="stock-chart-crosshair" x1={active.x} x2={active.x} y1="5" y2="92" vectorEffect="non-scaling-stroke" /> : null}
+        </svg> : null}
+        {!isLoading && !historyUnavailable && active ? (
           <>
             <i className="stock-price-chart-point" style={{ left: `${active.x}%`, top: `${active.y}%` }} aria-hidden="true" />
             <div
@@ -170,11 +195,11 @@ export function InteractivePriceChart({ history, symbol }: { history: StockPrice
           </>
         ) : null}
       </div>
-      <div className="stock-price-chart-axis" aria-hidden="true">
-        <time>{formatDate(displayedHistory[0].tradingDate, true)}</time>
+      {!isLoading && !historyUnavailable && midpoint ? <div className="stock-price-chart-axis" aria-hidden="true">
+        <time>{formatDate(displayedHistory[0]!.tradingDate, true)}</time>
         <time>{formatDate(midpoint.tradingDate)}</time>
         <time>{formatDate(displayedHistory.at(-1)!.tradingDate, true)}</time>
-      </div>
+      </div> : null}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-type CacheSource = 'memory' | 'redis' | 'fresh' | 'stale' | 'none'
+export type CacheSource = 'memory' | 'redis' | 'fresh' | 'stale' | 'none'
 
 const REDIS_OP_TIMEOUT_MS = 1_500
 const NEG_SENTINEL = '__STRATUM_NEG__'

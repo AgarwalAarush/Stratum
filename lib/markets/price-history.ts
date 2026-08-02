@@ -1,7 +1,9 @@
 import type { ScreenerReturnField, StockPricePoint } from './types.ts'
 
+export type PriceHistoryPeriod = ScreenerReturnField | 'fiveYears'
+
 export const PRICE_HISTORY_PERIODS: Array<{
-  id: ScreenerReturnField
+  id: PriceHistoryPeriod
   label: string
   chartLabel: string
 }> = [
@@ -12,9 +14,10 @@ export const PRICE_HISTORY_PERIODS: Array<{
   { id: 'return180d', label: '6 months', chartLabel: '6-month price history' },
   { id: 'returnYtd', label: 'Year to date', chartLabel: 'Year-to-date price history' },
   { id: 'return1y', label: '1 year', chartLabel: '1-year price history' },
+  { id: 'fiveYears', label: '5 years', chartLabel: '5-year price history' },
 ]
 
-const SESSION_COUNTS: Partial<Record<ScreenerReturnField, number>> = {
+const SESSION_COUNTS: Partial<Record<PriceHistoryPeriod, number>> = {
   dailyChange: 2,
   return5d: 6,
   return30d: 31,
@@ -22,12 +25,12 @@ const SESSION_COUNTS: Partial<Record<ScreenerReturnField, number>> = {
   return180d: 181,
 }
 
-export function priceHistoryPeriod(period: ScreenerReturnField) {
+export function priceHistoryPeriod(period: PriceHistoryPeriod) {
   return PRICE_HISTORY_PERIODS.find((candidate) => candidate.id === period)!
 }
 
-export function historyForPeriod(history: StockPricePoint[], period: ScreenerReturnField): StockPricePoint[] {
-  if (period === 'return1y') return history
+export function historyForPeriod(history: StockPricePoint[], period: PriceHistoryPeriod): StockPricePoint[] {
+  if (period === 'return1y' || period === 'fiveYears') return history
   if (period === 'returnYtd') {
     const latest = history.at(-1)
     if (!latest) return history

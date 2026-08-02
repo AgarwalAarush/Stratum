@@ -12,6 +12,7 @@ test('price history periods map to concise, user-facing labels', () => {
   assert.equal(priceHistoryPeriod('dailyChange').chartLabel, '1-day price history')
   assert.equal(priceHistoryPeriod('return30d').label, '1 month')
   assert.equal(priceHistoryPeriod('return1y').chartLabel, '1-year price history')
+  assert.equal(priceHistoryPeriod('fiveYears').chartLabel, '5-year price history')
 })
 
 test('price history switches use the corresponding number of daily closes', () => {
@@ -21,6 +22,7 @@ test('price history switches use the corresponding number of daily closes', () =
   assert.equal(historyForPeriod(history, 'return90d').length, 91)
   assert.equal(historyForPeriod(history, 'return180d').length, 181)
   assert.equal(historyForPeriod(history, 'return1y').length, history.length)
+  assert.equal(historyForPeriod(history, 'fiveYears').length, history.length)
 })
 
 test('year-to-date price history starts at the current calendar year', () => {
