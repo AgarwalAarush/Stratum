@@ -7779,7 +7779,7 @@ body:has(.markets-shell) {
   min-height: 38px;
 }
 
-.manual-position-form button {
+.manual-position-form > button {
   background: var(--market-text);
   color: var(--market-bg);
   min-height: 42px;
