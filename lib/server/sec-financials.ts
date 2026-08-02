@@ -36,6 +36,8 @@ export function parseSecLiquidityFacts(payload: unknown, sourceUrl: string): Sec
   const cash = latestUsdFact(facts, ['CashAndCashEquivalentsAtCarryingValue'])
   const investments = latestUsdFact(facts, ['ShortTermInvestments'])
   const longTermDebt = latestUsdFact(facts, [
+    'ConvertibleNotesPayable',
+    'ConvertibleLongTermNotesPayable',
     'A2030ConvertibleNotes',
     'ConvertibleDebtNoncurrent',
     'LongTermDebtAndFinanceLeaseObligationsNoncurrent',

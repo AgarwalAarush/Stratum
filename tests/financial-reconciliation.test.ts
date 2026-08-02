@@ -94,9 +94,7 @@ test('SEC companyfacts parser retains same-period cash and short-term investment
             { end: '2026-01-31', filed: '2026-03-23', form: '10-K', val: 410_649_000 },
           ] },
         },
-      },
-      pl: {
-        A2030ConvertibleNotes: {
+        ConvertibleNotesPayable: {
           units: { USD: [
             { end: '2026-04-30', filed: '2026-06-05', form: '10-Q', val: 447_569_000 },
             { end: '2026-01-31', filed: '2026-03-23', form: '10-K', val: 446_884_000 },
