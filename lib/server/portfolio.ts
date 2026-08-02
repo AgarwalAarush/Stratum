@@ -17,6 +17,7 @@ import type {
   ThesisKillCriterion,
 } from '../markets/types.ts'
 import { validatePortfolioUpdate, type ParsedPortfolioUpdate } from '../markets/portfolio-updates.ts'
+import { getAlpacaClient } from './alpaca.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 function validOwnerId(ownerId: string): boolean {
@@ -33,6 +34,45 @@ function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null
+}
+
+async function ensureWatchlistAssets(symbols: string[]): Promise<void> {
+  if (symbols.length === 0) return
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data: existing, error: existingError } = await supabase
+    .from('market_assets')
+    .select('symbol')
+    .in('symbol', symbols)
+  if (existingError) throw new Error(`Unable to check watchlist coverage: ${existingError.message}`)
+  const covered = new Set((existing ?? []).map((row: { symbol: string }) => row.symbol))
+  const missing = symbols.filter((symbol) => !covered.has(symbol))
+  if (missing.length === 0) return
+
+  const client = getAlpacaClient()
+  if (!client) throw new Error(`Market coverage is unavailable for ${missing.join(', ')}`)
+  const assets = await Promise.all(missing.map((symbol) => client.fetchAsset(symbol)))
+  const unavailable = missing.filter((symbol, index) => {
+    const asset = assets[index]
+    return !asset || !asset.active || !asset.tradable
+  })
+  if (unavailable.length > 0) throw new Error(`Market coverage is unavailable for ${unavailable.join(', ')}`)
+
+  const now = new Date().toISOString()
+  const { error } = await supabase.from('market_assets').upsert(assets.flatMap((asset) => asset ? [{
+    symbol: asset.symbol,
+    name: asset.name,
+    exchange: asset.exchange,
+    asset_class: asset.assetClass,
+    status: 'active',
+    tradable: asset.tradable,
+    active: asset.active,
+    source: 'alpaca-watchlist',
+    source_as_of: now,
+    raw: {},
+    updated_at: now,
+  }] : []), { onConflict: 'symbol' })
+  if (error) throw new Error(`Unable to add watchlist market coverage: ${error.message}`)
 }
 
 function normalizeDecision(row: Record<string, unknown>): ThesisDecision {
@@ -478,6 +518,7 @@ export async function replaceUserWatchlists(ownerId: string, input: unknown): Pr
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const state = parseWatchlistState(input, createDefaultWatchlistState([]))
+  await ensureWatchlistAssets([...new Set(state.lists.flatMap((list) => list.symbols))])
   const retainedIds: string[] = []
   for (const list of state.lists) {
     const { data: existingList, error: lookupError } = await supabase

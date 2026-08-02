@@ -126,6 +126,29 @@ test('AlpacaClient normalizes the market clock', async () => {
   assert.equal(clock.nextClose, '2026-07-15T20:00:00Z')
 })
 
+test('AlpacaClient resolves a requested active watchlist asset without loading the full catalog', async () => {
+  let requestedUrl = ''
+  const client = new AlpacaClient({
+    keyId: 'key',
+    secretKey: 'secret',
+    fetchImpl: async (input) => {
+      requestedUrl = String(input)
+      return jsonResponse({ symbol: 'GRID', name: 'First Trust NASDAQ Clean Edge Smart Grid Infrastructure Index Fund', exchange: 'NASDAQ', class: 'us_equity', status: 'active', tradable: true })
+    },
+  })
+
+  const asset = await client.fetchAsset('grid')
+  assert.equal(new URL(requestedUrl).pathname, '/v2/assets/GRID')
+  assert.deepEqual(asset, {
+    symbol: 'GRID',
+    name: 'First Trust NASDAQ Clean Edge Smart Grid Infrastructure Index Fund',
+    exchange: 'NASDAQ',
+    assetClass: 'us_equity',
+    active: true,
+    tradable: true,
+  })
+})
+
 test('getAlpacaClient honors configured API hosts', async () => {
   let requestedUrl = ''
   const client = getAlpacaClient({

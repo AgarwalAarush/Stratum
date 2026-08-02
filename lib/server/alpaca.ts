@@ -50,6 +50,18 @@ interface AlpacaClockResponse {
   next_close?: string
 }
 
+function normalizeAsset(asset: AlpacaAssetPayload): MarketAsset | null {
+  if (!asset.symbol || !asset.name || !asset.exchange || asset.class !== 'us_equity') return null
+  return {
+    symbol: asset.symbol,
+    name: asset.name,
+    exchange: asset.exchange,
+    assetClass: 'us_equity',
+    tradable: asset.tradable === true,
+    active: asset.status === 'active',
+  }
+}
+
 export interface AlpacaMarketClock {
   timestamp: string
   isOpen: boolean
@@ -194,16 +206,22 @@ export class AlpacaClient {
     const payload = await this.requestJson<AlpacaAssetPayload[]>(this.tradingUrl, '/v2/assets', parameters)
 
     return payload.flatMap((asset) => {
-      if (!asset.symbol || !asset.name || !asset.exchange || asset.class !== 'us_equity') return []
-      return [{
-        symbol: asset.symbol,
-        name: asset.name,
-        exchange: asset.exchange,
-        assetClass: 'us_equity' as const,
-        tradable: asset.tradable === true,
-        active: asset.status === 'active',
-      }]
+      const normalized = normalizeAsset(asset)
+      return normalized ? [normalized] : []
     })
+  }
+
+  /** Fetches one requested US equity for watchlist coverage without a full asset-catalog sync. */
+  async fetchAsset(symbolInput: string): Promise<MarketAsset | null> {
+    const symbol = symbolInput.trim().toUpperCase()
+    if (!/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol)) return null
+    try {
+      const payload = await this.requestJson<AlpacaAssetPayload>(this.tradingUrl, `/v2/assets/${encodeURIComponent(symbol)}`)
+      return normalizeAsset(payload)
+    } catch (error) {
+      if (error instanceof AlpacaRequestError && error.status === 404) return null
+      throw error
+    }
   }
 
   async fetchClock(): Promise<AlpacaMarketClock> {
