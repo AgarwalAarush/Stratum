@@ -380,8 +380,8 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
           <section className="equity-research-executive-strip" aria-label="Research decision summary">
             <div><span>Formal rating</span><strong data-rating={research.formalRating}>{research.formalRating}</strong><small>12-month view</small></div>
             <div><span>Entry decision</span><strong>{formatEntryAction(research.entryAction)}</strong><small>What to do today</small></div>
-            <div><span>Current price</span><strong>{money(stock.price)}</strong><small>{percent(stock.dailyChange)} today</small></div>
-            <div><span>Base fair value</span><strong>{money(research.fairValue)}</strong><small>{research.fairValue ? `${percent((research.fairValue / stock.price - 1) * 100)} implied` : 'Not established'}</small></div>
+            <div><span>{stock.priceSource === 'daily_close' ? 'Most recent close' : 'Current price'}</span><strong>{money(stock.price)}</strong><small>{stock.priceSource === 'unavailable' ? 'Quote unavailable' : `${percent(stock.dailyChange)} today`}</small></div>
+            <div><span>Base fair value</span><strong>{money(research.fairValue)}</strong><small>{research.fairValue !== null && stock.price !== null && stock.price > 0 ? `${percent((research.fairValue / stock.price - 1) * 100)} implied` : 'Not established'}</small></div>
             <div><span>Entry zone</span><strong>{research.entryZoneLow === null ? '—' : `${money(research.entryZoneLow)}–${money(research.entryZoneHigh)}`}</strong><small>Risk/reward threshold</small></div>
             <div><span>Conviction</span><strong>{confidence?.toFixed(0)}%</strong><small>Evidence confidence</small></div>
           </section>

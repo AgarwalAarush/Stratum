@@ -82,6 +82,10 @@ test('equity research validator requires the fixed 15-section contract', () => {
   const rating = validResearch()
   rating.investmentThesis = 'HOLD; wait for a better price.'
   assert.throws(() => validateEquityResearch(rating), /state the belief/)
+
+  const notRated = validResearch()
+  notRated.formalRating = 'NOT_RATED'
+  assert.throws(() => validateEquityResearch(notRated), /Invalid formal rating/)
 })
 
 test('research packet includes quarterly evidence, SEC filings, and skill-aligned generation rules', async () => {

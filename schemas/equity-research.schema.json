@@ -18,7 +18,7 @@
     "sourceIds"
   ],
   "properties": {
-    "formalRating": { "enum": ["BUY", "HOLD", "SELL", "NOT_RATED"] },
+    "formalRating": { "enum": ["BUY", "HOLD", "SELL"] },
     "entryAction": { "enum": ["buy_now", "nibble", "wait", "add_on_weakness", "avoid"] },
     "investmentThesis": { "type": "string", "minLength": 1 },
     "keyDebate": { "type": "string", "minLength": 1 },

@@ -761,6 +761,37 @@ export async function fetchLatestCandidateWeeklySummary(): Promise<CandidateWeek
   )
 }
 
+export function selectStockViewerQuote(
+  screener: Pick<ScreenerRow, 'price' | 'dailyChange'> | null,
+  leadership: Pick<StockLeadershipMetric, 'price' | 'dayReturn'> | null,
+  history: StockViewerData['history'],
+): Pick<StockViewerData, 'price' | 'dailyChange' | 'priceSource'> {
+  if (screener) {
+    return {
+      price: screener.price,
+      dailyChange: screener.dailyChange,
+      priceSource: 'market_snapshot',
+    }
+  }
+  if (leadership) {
+    return {
+      price: leadership.price,
+      dailyChange: leadership.dayReturn,
+      priceSource: 'market_snapshot',
+    }
+  }
+  const latest = history.at(-1)
+  const previous = history.at(-2)
+  if (!latest) return { price: null, dailyChange: null, priceSource: 'unavailable' }
+  return {
+    price: latest.close,
+    dailyChange: previous && previous.close !== 0
+      ? Math.round(((latest.close / previous.close - 1) * 100) * 100) / 100
+      : null,
+    priceSource: 'daily_close',
+  }
+}
+
 async function loadSharedStockViewerData(symbol: string): Promise<StockViewerData | null> {
   const supabase = getSupabaseClient()
   if (!supabase) return null
@@ -780,7 +811,7 @@ async function loadSharedStockViewerData(symbol: string): Promise<StockViewerDat
     supabase.from('screener_rows').select('symbol,company,price,daily_change,return_30d,return_1y,relative_volume,fifty_day_average,fifty_two_week_position,exchange,data_as_of')
       .eq('snapshot_id', latestMarket.id).eq('symbol', symbol).maybeSingle(),
     supabase.from('market_assets').select('name,exchange').eq('symbol', symbol).maybeSingle(),
-    supabase.from('market_bars_daily').select('trading_date,close,volume').eq('symbol', symbol).eq('feed', latestMarket.feed)
+    supabase.from('market_bars_daily').select('trading_date,close,volume,source_as_of').eq('symbol', symbol).eq('feed', latestMarket.feed)
       .order('trading_date', { ascending: false }).limit(260),
     latestLeadership
       ? supabase.from('market_stock_metrics').select('*').eq('snapshot_id', latestLeadership.id).eq('symbol', symbol).maybeSingle()
@@ -788,20 +819,31 @@ async function loadSharedStockViewerData(symbol: string): Promise<StockViewerDat
   ])
   if (!screener && !asset) return null
   const leadership = leadershipResult.data ? normalizeStockLeadershipRow(leadershipResult.data) : null
+  const history = (bars ?? []).map((bar) => ({
+    tradingDate: bar.trading_date,
+    close: Number(bar.close),
+    volume: Number(bar.volume),
+  })).reverse()
+  const quote = selectStockViewerQuote(screener ? {
+    price: Number(screener.price),
+    dailyChange: Number(screener.daily_change),
+  } : null, leadership, history)
+  const latestBarAsOf = bars?.[0]?.source_as_of
   return {
     symbol,
     company: screener?.company ?? asset?.name ?? symbol,
     exchange: screener?.exchange ?? asset?.exchange ?? 'US',
     sector: leadership?.sector ?? 'Classification pending',
     subIndustry: leadership?.subIndustry ?? 'Classification pending',
-    price: Number(screener?.price ?? leadership?.price ?? 0),
-    dailyChange: screener ? Number(screener.daily_change) : leadership?.dayReturn ?? null,
+    price: quote.price,
+    dailyChange: quote.dailyChange,
+    priceSource: quote.priceSource,
     return30d: screener?.return_30d == null ? leadership?.return30d ?? null : Number(screener.return_30d),
     return1y: screener?.return_1y == null ? leadership?.return1y ?? null : Number(screener.return_1y),
     relativeVolume: screener ? Number(screener.relative_volume) : leadership?.relativeVolume ?? null,
     fiftyDayAverage: screener ? Number(screener.fifty_day_average) : null,
     fiftyTwoWeekPosition: screener ? Number(screener.fifty_two_week_position) : null,
-    dataAsOf: screener?.data_as_of ?? leadership?.asOf ?? latestMarket.data_as_of,
+    dataAsOf: screener?.data_as_of ?? leadership?.asOf ?? latestBarAsOf ?? latestMarket.data_as_of,
     feed: latestMarket.feed,
     leadership,
     candidate: null,
@@ -810,11 +852,7 @@ async function loadSharedStockViewerData(symbol: string): Promise<StockViewerDat
     decision: null,
     position: null,
     thesis: null,
-    history: (bars ?? []).map((bar) => ({
-      tradingDate: bar.trading_date,
-      close: Number(bar.close),
-      volume: Number(bar.volume),
-    })).reverse(),
+    history,
   }
 }
 

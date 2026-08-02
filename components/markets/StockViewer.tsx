@@ -5,7 +5,8 @@ import { InteractivePriceChart } from './InteractivePriceChart'
 import { MarketsIntentLink } from './MarketsIntentLink'
 import { StockViewerHydration } from './StockViewerHydration'
 
-function money(value: number): string {
+function money(value: number | null): string {
+  if (value === null) return '—'
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
 }
 
@@ -41,7 +42,7 @@ export function StockViewer({ data }: { data: StockViewerData }) {
   const metric = {
     return30d: hasHistoryFor(data, 30) ? data.return30d ?? data.leadership?.return30d ?? null : null,
     return1y: hasHistoryFor(data, 365) ? data.return1y ?? data.leadership?.return1y ?? null : null,
-    vs50DayAverage: data.fiftyDayAverage === null || data.fiftyDayAverage === 0
+    vs50DayAverage: data.price === null || data.fiftyDayAverage === null || data.fiftyDayAverage === 0
       ? data.leadership?.vs50DayAverage ?? null
       : (data.price / data.fiftyDayAverage - 1) * 100,
     vs200DayAverage: data.leadership?.vs200DayAverage ?? null,
@@ -67,6 +68,8 @@ export function StockViewer({ data }: { data: StockViewerData }) {
           <div className="stock-viewer-quote">
             <strong>{data.symbol}</strong>
             <span>{money(data.price)}</span>
+            {data.priceSource === 'daily_close' ? <small>Most recent close</small> : null}
+            {data.priceSource === 'unavailable' ? <small>Quote unavailable</small> : null}
             <span className={(data.dailyChange ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{percent(data.dailyChange)}</span>
           </div>
           <a

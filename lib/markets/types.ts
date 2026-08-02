@@ -383,7 +383,9 @@ export interface StockViewerData {
   exchange: string
   sector: string
   subIndustry: string
-  price: number
+  /** Null when neither a materialized quote nor a persisted close is available. */
+  price: number | null
+  priceSource: 'market_snapshot' | 'daily_close' | 'unavailable'
   dailyChange: number | null
   return30d: number | null
   return1y: number | null
@@ -480,7 +482,7 @@ export interface CompanyPacket {
   dataAsOf: string
   generatedAt: string
   priceHistory: {
-    latestPrice: number
+    latestPrice: number | null
     return30d: number | null
     return1y: number | null
     vs50DayAverage: number | null
