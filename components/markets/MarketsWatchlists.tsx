@@ -357,7 +357,6 @@ export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount 
               <th>% Change</th>
               <th>Volume</th>
               <th>Rel. volume</th>
-              <th>Range</th>
               <th>50D MA</th>
               <th>52W position</th>
               <th>As of</th>
