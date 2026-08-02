@@ -1,13 +1,13 @@
-import type { MarketFeed, StockPricePoint } from '../markets/types.ts'
-import { cachedFetchWithFallback, type CacheSource } from './cache.ts'
-import { getAlpacaClient } from './alpaca.ts'
+import type { StockPricePoint } from '../markets/types.ts'
+import { readSharedCache, writeSharedCache, type CacheSource } from './cache.ts'
+import { fetchFmpStableJson } from './fmp.ts'
 
-const FIVE_YEARS_CACHE_SECONDS = 15 * 60
+export const FIVE_YEARS_CACHE_SECONDS = 60 * 60
 
 export interface OnDemandStockPriceHistory {
   symbol: string
   history: StockPricePoint[]
-  feed: Exclude<MarketFeed, 'illustrative'>
+  provider: 'fmp'
   dataAsOf: string
 }
 
@@ -26,37 +26,59 @@ export function fiveYearPriceHistoryRange(now = new Date()): { start: string; en
   return { start: isoDate(start), end: isoDate(now) }
 }
 
-export async function fetchOnDemandFiveYearPriceHistory(
+export function fiveYearPriceHistoryCacheKey(symbol: string, now = new Date()): string {
+  const { start, end } = fiveYearPriceHistoryRange(now)
+  return `stratum:markets:stock-history:fmp:${symbol}:${start}:${end}`
+}
+
+interface FmpHistoricalPriceRow {
+  date?: string
+  close?: number
+  volume?: number
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+export function normalizeFmpPriceHistory(rows: FmpHistoricalPriceRow[]): StockPricePoint[] {
+  return rows.flatMap((row) => {
+    const close = finiteNumber(row.close)
+    const volume = finiteNumber(row.volume)
+    if (!row.date || close === null || volume === null) return []
+    return [{ tradingDate: row.date.slice(0, 10), close, volume }]
+  }).sort((left, right) => left.tradingDate.localeCompare(right.tradingDate))
+}
+
+export async function loadOnDemandFiveYearPriceHistory(
   symbol: string,
-  preferredFeed: Exclude<MarketFeed, 'illustrative'>,
   now = new Date(),
 ): Promise<OnDemandStockPriceHistoryResult> {
-  const client = getAlpacaClient()
-  if (!client) throw new Error('Alpaca credentials are not configured')
+  return readSharedCache<OnDemandStockPriceHistory>(fiveYearPriceHistoryCacheKey(symbol, now))
+}
 
+/** Runs only on the private worker. The resulting price history is temporary
+ * cache data, never a market_bars_daily/Supabase write. */
+export async function cacheFmpFiveYearPriceHistory(
+  symbol: string,
+  now = new Date(),
+): Promise<OnDemandStockPriceHistory> {
+  const apiKey = process.env.FMP_API_KEY?.trim()
+  if (!apiKey) throw new Error('FMP_API_KEY is not configured')
   const { start, end } = fiveYearPriceHistoryRange(now)
-  const result = await cachedFetchWithFallback({
-    key: `stratum:markets:stock-history:${symbol}:${preferredFeed}:${start}:${end}`,
-    ttlSeconds: FIVE_YEARS_CACHE_SECONDS,
-    negativeTtlSeconds: 60,
-    fetcher: async () => {
-      const bars = await client.fetchDailyBars([symbol], start, end, preferredFeed)
-      const history = bars.data
-        .filter((bar) => bar.symbol === symbol)
-        .sort((left, right) => left.tradingDate.localeCompare(right.tradingDate))
-        .map((bar) => ({
-          tradingDate: bar.tradingDate,
-          close: bar.close,
-          volume: bar.volume,
-        }))
-      if (history.length < 2) return null
-      return {
-        symbol,
-        history,
-        feed: bars.feed,
-        dataAsOf: bars.data.at(-1)?.asOf ?? `${history.at(-1)!.tradingDate}T00:00:00.000Z`,
-      }
-    },
-  })
+  const rows = await fetchFmpStableJson<FmpHistoricalPriceRow[]>(
+    'historical-price-eod/full',
+    { symbol, from: start, to: end },
+    { apiKey },
+  )
+  const history = normalizeFmpPriceHistory(rows)
+  if (history.length < 2) throw new Error(`FMP returned insufficient five-year price history for ${symbol}`)
+  const result: OnDemandStockPriceHistory = {
+    symbol,
+    history,
+    provider: 'fmp',
+    dataAsOf: `${history.at(-1)!.tradingDate}T00:00:00.000Z`,
+  }
+  await writeSharedCache(fiveYearPriceHistoryCacheKey(symbol, now), result, FIVE_YEARS_CACHE_SECONDS)
   return result
 }

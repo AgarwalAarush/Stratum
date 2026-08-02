@@ -14,6 +14,7 @@ import {
 test('agent job parser rejects unknown work', () => {
   assert.equal(parseAgentJobType('refresh-market-screener'), 'refresh-market-screener')
   assert.equal(parseAgentJobType('refresh-company-packet'), 'refresh-company-packet')
+  assert.equal(parseAgentJobType('fetch-stock-price-history'), 'fetch-stock-price-history')
   assert.throws(() => parseAgentJobType('place-order'), /Unsupported agent job type/)
 })
 
@@ -45,6 +46,10 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
   assert.equal(
     buildAgentJobDedupeKey('refresh-fmp-intelligence', new Date('2026-07-15T14:33:42Z')),
     'refresh-fmp-intelligence:2026-07-15T14:30:00.000Z',
+  )
+  assert.equal(
+    buildAgentJobDedupeKey('fetch-stock-price-history', new Date('2026-07-15T14:33:42Z'), { symbol: 'cohr' }),
+    'fetch-stock-price-history:COHR:2026-07-15T14:30:00.000Z',
   )
   assert.equal(
     buildAgentJobDedupeKey('scan-research-refreshes', new Date('2026-07-15T14:33:42Z')),
@@ -79,6 +84,7 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('refresh-company-packet'), 'fmp')
   assert.equal(agentJobProvider('prune-market-data'), 'market-data')
   assert.equal(agentJobProvider('refresh-fmp-intelligence'), 'fmp')
+  assert.equal(agentJobProvider('fetch-stock-price-history'), 'fmp')
   assert.equal(agentJobProvider('refresh-cross-asset'), 'market-data')
   assert.equal(agentJobProvider('materialize-market-leadership'), 'market-data')
   assert.equal(agentJobProvider('run-candidate-scout'), 'fmp')

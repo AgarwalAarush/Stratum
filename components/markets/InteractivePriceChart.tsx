@@ -58,13 +58,21 @@ export function InteractivePriceChart({ history, symbol }: { history: StockPrice
     if (fiveYearHistory || fiveYearStatus === 'loading') return
     setFiveYearStatus('loading')
     try {
-      const response = await fetch(`/api/markets/stocks/${encodeURIComponent(symbol)}/history?period=5y`)
-      const payload = await response.json() as { history?: StockPricePoint[] }
-      if (!response.ok || !Array.isArray(payload.history) || payload.history.length < 2) {
-        throw new Error('Five-year price history is unavailable')
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const response = await fetch(`/api/markets/stocks/${encodeURIComponent(symbol)}/history?period=5y`, { cache: 'no-store' })
+        const payload = await response.json() as { history?: StockPricePoint[]; retryAfterMs?: number }
+        if (response.status === 202) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, payload.retryAfterMs ?? 1_500))
+          continue
+        }
+        if (!response.ok || !Array.isArray(payload.history) || payload.history.length < 2) {
+          throw new Error('Five-year price history is unavailable')
+        }
+        setFiveYearHistory(payload.history)
+        setFiveYearStatus('idle')
+        return
       }
-      setFiveYearHistory(payload.history)
-      setFiveYearStatus('idle')
+      throw new Error('Five-year price history timed out')
     } catch {
       setFiveYearStatus('failed')
     }
@@ -129,7 +137,7 @@ export function InteractivePriceChart({ history, symbol }: { history: StockPrice
             aria-label="Price history period"
             onClick={() => setPeriodPickerOpen((current) => !current)}
           >
-            <span>{selectedPeriod.chartLabel}</span>
+            <span>{period === 'fiveYears' ? `${selectedPeriod.chartLabel} · FMP EOD` : selectedPeriod.chartLabel}</span>
             <CaretDown size={13} aria-hidden="true" />
           </button>
           {periodPickerOpen ? (
@@ -172,7 +180,7 @@ export function InteractivePriceChart({ history, symbol }: { history: StockPrice
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
           role="img"
-          aria-label={`${symbol} ${selectedPeriod.chartLabel} closing-price chart`}
+          aria-label={`${symbol} ${selectedPeriod.chartLabel}${period === 'fiveYears' ? ' from FMP end-of-day data' : ''} closing-price chart`}
           onPointerMove={selectFromPointer}
           onPointerEnter={selectFromPointer}
           onPointerLeave={() => setActiveIndex(null)}

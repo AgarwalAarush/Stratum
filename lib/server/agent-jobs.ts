@@ -16,6 +16,7 @@ import { materializeMarketMemo } from './market-memo.ts'
 import { pruneMarketData } from './market-retention.ts'
 import { refreshExpandedMarketUniverse, resolveMarketUniverse } from './market-universe.ts'
 import { getFmpUsageSnapshot, type FmpUsageSnapshot } from './fmp.ts'
+import { cacheFmpFiveYearPriceHistory } from './stock-price-history.ts'
 import { syncRobinhoodPortfolio, type RobinhoodSyncSlot } from './robinhood-portfolio-sync.ts'
 import {
   fetchPersistedMarketAssets,
@@ -40,6 +41,7 @@ export const AGENT_JOB_TYPES = [
   'scan-research-refreshes',
   'monitor-investment-theses',
   'refresh-fmp-intelligence',
+  'fetch-stock-price-history',
   'generate-market-memo',
   'generate-morning-brief',
   'generate-weekly-overview',
@@ -123,6 +125,11 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     bucket.setTime(Math.floor(bucket.getTime() / bucketMs) * bucketMs)
     return `${jobType}:${bucket.toISOString()}`
   }
+  if (jobType === 'fetch-stock-price-history' && typeof payload.symbol === 'string') {
+    const bucket = new Date(now)
+    bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 5) * 5, 0, 0)
+    return `${jobType}:${payload.symbol.trim().toUpperCase()}:${bucket.toISOString()}`
+  }
   if (jobType === 'scan-research-refreshes') {
     const cadence = typeof payload.cadenceMinutes === 'number'
       ? Math.max(15, Math.min(240, Math.round(payload.cadenceMinutes)))
@@ -158,7 +165,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
 export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-robinhood-portfolio') return 'robinhood'
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
-  if (jobType === 'refresh-fmp-intelligence' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
+  if (jobType === 'refresh-fmp-intelligence' || jobType === 'fetch-stock-price-history' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
   if (
     jobType === 'refresh-cross-asset'
     || jobType === 'materialize-market-leadership'
@@ -358,6 +365,15 @@ async function executeJob(
 
   if (job.job_type === 'refresh-fmp-intelligence') {
     return syncFmpMarketIntelligence()
+  }
+
+  if (job.job_type === 'fetch-stock-price-history') {
+    const symbol = typeof job.payload.symbol === 'string' ? job.payload.symbol.trim().toUpperCase() : ''
+    if (!/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol)) throw new Error('Stock price history requires a valid symbol')
+    await reportProgress(20, 'fetching FMP daily prices')
+    const history = await cacheFmpFiveYearPriceHistory(symbol)
+    await reportProgress(100, 'cached')
+    return { symbol, provider: history.provider, dataAsOf: history.dataAsOf, pointCount: history.history.length }
   }
 
   if (job.job_type === 'refresh-cross-asset') {

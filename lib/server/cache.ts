@@ -130,6 +130,27 @@ async function readCache(key: string): Promise<CacheRead | null> {
   return null
 }
 
+/**
+ * Reads a shared value without populating a negative cache entry. This is for
+ * worker-produced, short-lived artifacts that Vercel may poll while pending.
+ */
+export async function readSharedCache<T>(key: string): Promise<CachedFetchResult<T>> {
+  const cached = await readCache(key)
+  if (!cached || cached.value === NEG_SENTINEL) return { data: null, source: cached?.source ?? 'none' }
+  setStaleValue(key, cached.value)
+  return { data: cached.value as T, source: cached.source }
+}
+
+/**
+ * Publishes a transient server-side value to memory and, when configured,
+ * Upstash. It is deliberately not a durable database write.
+ */
+export async function writeSharedCache<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
+  setMemoryValue(key, value, ttlSeconds)
+  setStaleValue(key, value)
+  await setRedisValue(key, value, ttlSeconds)
+}
+
 function getStaleValue<T>(key: string, staleMaxAgeMs: number): T | null {
   const entry = staleCache.get(key)
   if (!entry) return null

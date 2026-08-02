@@ -1,17 +1,13 @@
 import { NextResponse } from 'next/server'
 import { getAllowedMarketUser } from '@/lib/auth/markets-session'
-import { fetchLatestSnapshotMeta } from '@/lib/server/markets-repository'
-import { fetchOnDemandFiveYearPriceHistory } from '@/lib/server/stock-price-history'
+import { enqueueAgentJob } from '@/lib/server/agent-jobs'
+import { loadOnDemandFiveYearPriceHistory } from '@/lib/server/stock-price-history'
 import { buildCacheHeaders } from '@/lib/server/http-cache'
 
 export const dynamic = 'force-dynamic'
 
 function validSymbol(value: string): boolean {
   return /^[A-Z][A-Z0-9.-]{0,11}$/.test(value)
-}
-
-function usableAlpacaFeed(value: string | undefined): 'delayed_sip' | 'iex' | 'sip' {
-  return value === 'delayed_sip' || value === 'iex' || value === 'sip' ? value : 'delayed_sip'
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ symbol: string }> }) {
@@ -26,9 +22,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ symb
   }
 
   try {
-    const latestSnapshot = await fetchLatestSnapshotMeta()
-    const result = await fetchOnDemandFiveYearPriceHistory(symbol, usableAlpacaFeed(latestSnapshot?.feed))
-    if (!result.data) return NextResponse.json({ error: `Five-year price history is unavailable for ${symbol}` }, { status: 404 })
+    const result = await loadOnDemandFiveYearPriceHistory(symbol)
+    if (!result.data) {
+      const job = await enqueueAgentJob('fetch-stock-price-history', { symbol })
+      return NextResponse.json({
+        status: 'queued',
+        symbol,
+        jobId: job.id,
+        retryAfterMs: 1_500,
+      }, { status: 202, headers: { 'Cache-Control': 'no-store' } })
+    }
     return NextResponse.json(result.data, { headers: buildCacheHeaders('medium', result.source) })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to load five-year price history' }, { status: 502 })
