@@ -103,6 +103,9 @@ function normalizePortfolioTransaction(row: Record<string, unknown>): PortfolioT
     occurredAt: String(row.occurred_at),
     notes: String(row.notes ?? ''),
     source: row.source as PortfolioTransaction['source'],
+    voidedAt: row.voided_at === null ? null : String(row.voided_at ?? ''),
+    voidReason: row.void_reason === null ? null : String(row.void_reason ?? ''),
+    replacedById: row.replaced_by_id === null ? null : String(row.replaced_by_id ?? ''),
     createdAt: String(row.created_at),
   }
 }
@@ -338,7 +341,7 @@ export async function fetchPortfolioWorkspace(
     if (brokerageSnapshot) return calculateBrokeragePortfolioSummary(account, brokerageSnapshot, quotes)
     return calculatePortfolioSummary(
       account,
-      portfolioTransactions.filter((transaction) => transaction.portfolioId === account.id),
+      portfolioTransactions.filter((transaction) => transaction.portfolioId === account.id && transaction.voidedAt === null),
       quotes,
     )
   })
@@ -360,6 +363,7 @@ export async function recordPortfolioTransaction(
   portfolioId: string,
   input: ParsedPortfolioUpdate,
   source: PortfolioTransaction['source'],
+  replacingId?: string,
 ): Promise<PortfolioTransaction> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required')
   const validationError = validatePortfolioUpdate(input)
@@ -368,16 +372,7 @@ export async function recordPortfolioTransaction(
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const { data: portfolio } = await supabase.from('portfolios').select('id').eq('id', portfolioId).eq('owner_id', ownerId).maybeSingle()
   if (!portfolio) throw new Error('Choose one of your portfolios')
-  if (input.action === 'sell') {
-    const { data: rows } = await supabase.from('portfolio_transactions').select('*')
-      .eq('portfolio_id', portfolioId).eq('owner_id', ownerId).eq('symbol', input.symbol!)
-      .order('occurred_at', { ascending: true }).order('created_at', { ascending: true })
-    const available = (rows ?? []).map((row) => normalizePortfolioTransaction(row)).reduce((shares, transaction) => {
-      if (transaction.action === 'buy' || transaction.action === 'position_import') return shares + (transaction.quantity ?? 0)
-      return transaction.action === 'sell' ? shares - (transaction.quantity ?? 0) : shares
-    }, 0)
-    if (available + 0.00000001 < (input.quantity ?? 0)) throw new Error(`Cannot sell ${input.quantity} shares; this portfolio has ${available.toFixed(6)} ${input.symbol} shares`)
-  }
+  await assertPortfolioUpdateCanSettle(ownerId, portfolioId, input, replacingId)
   const { data, error } = await supabase.from('portfolio_transactions').insert({
     owner_id: ownerId,
     portfolio_id: portfolioId,
@@ -392,6 +387,90 @@ export async function recordPortfolioTransaction(
   }).select('*').single()
   if (error || !data) throw new Error(`Unable to record portfolio update: ${error?.message ?? 'unknown error'}`)
   return normalizePortfolioTransaction(data)
+}
+
+async function activePortfolioTransactions(ownerId: string, portfolioId: string): Promise<PortfolioTransaction[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data, error } = await supabase.from('portfolio_transactions').select('*')
+    .eq('portfolio_id', portfolioId).eq('owner_id', ownerId).is('voided_at', null)
+    .order('occurred_at', { ascending: true }).order('created_at', { ascending: true })
+  if (error) throw new Error(`Unable to load portfolio entries: ${error.message}`)
+  return (data ?? []).map((row) => normalizePortfolioTransaction(row))
+}
+
+function assertTransactionsCanSettle(transactions: PortfolioTransaction[]) {
+  const available = new Map<string, number>()
+  for (const transaction of transactions) {
+    if (!transaction.symbol) continue
+    if (transaction.action === 'buy' || transaction.action === 'position_import') {
+      available.set(transaction.symbol, (available.get(transaction.symbol) ?? 0) + (transaction.quantity ?? 0))
+      continue
+    }
+    if (transaction.action === 'sell') {
+      const shares = available.get(transaction.symbol) ?? 0
+      if (shares + 0.00000001 < (transaction.quantity ?? 0)) {
+        throw new Error(`Cannot sell ${transaction.quantity} ${transaction.symbol} shares; this correction would exceed the portfolio balance`)
+      }
+      available.set(transaction.symbol, shares - (transaction.quantity ?? 0))
+    }
+  }
+}
+
+function transactionFromUpdate(update: ParsedPortfolioUpdate, portfolioId: string): PortfolioTransaction {
+  return {
+    id: 'pending-correction', portfolioId, action: update.action, symbol: update.symbol,
+    quantity: update.quantity, pricePerShare: update.pricePerShare, fees: update.fees,
+    occurredAt: update.occurredAt, notes: update.notes, source: 'manual',
+    voidedAt: null, voidReason: null, replacedById: null, createdAt: new Date().toISOString(),
+  }
+}
+
+async function assertPortfolioUpdateCanSettle(ownerId: string, portfolioId: string, update: ParsedPortfolioUpdate, replacingId?: string) {
+  const transactions = await activePortfolioTransactions(ownerId, portfolioId)
+  assertTransactionsCanSettle([
+    ...transactions.filter((transaction) => transaction.id !== replacingId),
+    transactionFromUpdate(update, portfolioId),
+  ].sort((left, right) => left.occurredAt.localeCompare(right.occurredAt) || left.createdAt.localeCompare(right.createdAt)))
+}
+
+export async function correctPortfolioTransaction(ownerId: string, transactionId: string, input: ParsedPortfolioUpdate): Promise<PortfolioTransaction> {
+  if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required')
+  const validationError = validatePortfolioUpdate(input)
+  if (validationError) throw new Error(validationError)
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data: original } = await supabase.from('portfolio_transactions').select('*')
+    .eq('id', transactionId).eq('owner_id', ownerId).is('voided_at', null).maybeSingle()
+  if (!original) throw new Error('That ledger entry is no longer available')
+  const normalizedOriginal = normalizePortfolioTransaction(original)
+  if (normalizedOriginal.source === 'import' || normalizedOriginal.action === 'position_import') {
+    throw new Error('Imported or brokerage entries cannot be changed here')
+  }
+  await assertPortfolioUpdateCanSettle(ownerId, normalizedOriginal.portfolioId, input, transactionId)
+  const replacement = await recordPortfolioTransaction(ownerId, normalizedOriginal.portfolioId, input, 'manual', transactionId)
+  const { error } = await supabase.from('portfolio_transactions').update({
+    voided_at: new Date().toISOString(), void_reason: 'corrected', replaced_by_id: replacement.id,
+  }).eq('id', transactionId).eq('owner_id', ownerId).is('voided_at', null)
+  if (error) throw new Error(`Unable to finalize correction: ${error.message}`)
+  return replacement
+}
+
+export async function voidPortfolioTransaction(ownerId: string, transactionId: string): Promise<void> {
+  if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required')
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data } = await supabase.from('portfolio_transactions').select('*')
+    .eq('id', transactionId).eq('owner_id', ownerId).is('voided_at', null).maybeSingle()
+  if (!data) throw new Error('That ledger entry is no longer available')
+  const original = normalizePortfolioTransaction(data)
+  if (original.source === 'import' || original.action === 'position_import') throw new Error('Imported or brokerage entries cannot be removed here')
+  const active = await activePortfolioTransactions(ownerId, original.portfolioId)
+  assertTransactionsCanSettle(active.filter((transaction) => transaction.id !== transactionId))
+  const { error } = await supabase.from('portfolio_transactions').update({
+    voided_at: new Date().toISOString(), void_reason: 'removed',
+  }).eq('id', transactionId).eq('owner_id', ownerId).is('voided_at', null)
+  if (error) throw new Error(`Unable to remove ledger entry: ${error.message}`)
 }
 
 export async function replaceUserWatchlists(ownerId: string, input: unknown): Promise<MarketWatchlistState> {

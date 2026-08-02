@@ -676,6 +676,9 @@ export interface PortfolioTransaction {
   occurredAt: string
   notes: string
   source: 'manual' | 'natural_language' | 'import'
+  voidedAt: string | null
+  voidReason: string | null
+  replacedById: string | null
   createdAt: string
 }
 

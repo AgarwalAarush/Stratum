@@ -1,14 +1,14 @@
 'use client'
 
 import { FormEvent, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { CaretDown, Check, Plus, X } from '@phosphor-icons/react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { CaretDown, Check, PencilSimple, Plus, Trash, X } from '@phosphor-icons/react'
 import { formatEntryAction } from '@/lib/markets/research-presentation'
 import { parsePortfolioUpdate, type ParsedPortfolioUpdate } from '@/lib/markets/portfolio-updates'
 import { MarketsIntentLink } from './MarketsIntentLink'
 import { MarketSparkline } from './MarketSparkline'
 import { MarketSelect } from './MarketSelect'
-import type { PortfolioHolding, PortfolioWorkspaceData, ScreenerResponse, ScreenerRow } from '@/lib/markets/types'
+import type { PortfolioHolding, PortfolioTransaction, PortfolioWorkspaceData, ScreenerResponse, ScreenerRow } from '@/lib/markets/types'
 
 type PortfolioView = 'owned' | 'alerts' | 'history'
 
@@ -48,6 +48,8 @@ export function PortfolioWorkspace({
   universe: ScreenerResponse
 }) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [view, setView] = useState<PortfolioView>('owned')
   const portfolios = initialData.portfolios
   const [activePortfolioId, setActivePortfolioId] = useState(initialData.portfolios[0]?.account.id ?? '')
@@ -61,10 +63,13 @@ export function PortfolioWorkspace({
   const [reviews, setReviews] = useState(initialData.reviews)
   const [reviewingDecisionId, setReviewingDecisionId] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
+  const [editingTransaction, setEditingTransaction] = useState<PortfolioTransaction | null>(null)
+  const [removeArmedId, setRemoveArmedId] = useState<string | null>(null)
   const recordTriggerRef = useRef<HTMLButtonElement>(null)
   const updateDialogRef = useRef<HTMLElement>(null)
 
-  const activePortfolio = portfolios.find((portfolio) => portfolio.account.id === activePortfolioId) ?? null
+  const requestedPortfolioId = searchParams.get('portfolio')
+  const activePortfolio = portfolios.find((portfolio) => portfolio.account.id === (requestedPortfolioId ?? activePortfolioId)) ?? portfolios[0] ?? null
   const structuredActionIsCash = structuredAction === 'cash_deposit' || structuredAction === 'cash_withdrawal'
 
   const recordPortfolioUpdate = async (update: ParsedPortfolioUpdate, source: 'manual' | 'natural_language') => {
@@ -106,7 +111,7 @@ export function PortfolioWorkspace({
     const form = new FormData(event.currentTarget)
     const action = String(form.get('transactionAction')) as ParsedPortfolioUpdate['action']
     const isCash = action === 'cash_deposit' || action === 'cash_withdrawal'
-    void recordPortfolioUpdate({
+    const update = {
       action,
       symbol: isCash ? null : String(form.get('symbol') ?? '').trim().toUpperCase() || null,
       quantity: isCash ? null : Number(form.get('quantity')),
@@ -114,7 +119,25 @@ export function PortfolioWorkspace({
       fees: isCash ? 0 : Number(form.get('fees') || 0),
       occurredAt: String(form.get('occurredAt') ?? ''),
       notes: String(form.get('notes') ?? '').trim(),
-    }, 'manual')
+    } as ParsedPortfolioUpdate
+    if (editingTransaction) {
+      void (async () => {
+        const response = await fetch('/api/markets/portfolio', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'correct-portfolio-transaction', transactionId: editingTransaction.id, transactionAction: update.action, symbol: update.symbol, quantity: update.quantity, pricePerShare: update.pricePerShare, fees: update.fees, occurredAt: update.occurredAt, notes: update.notes }),
+        })
+        const payload = await response.json()
+        if (!response.ok) {
+          setNotice(payload.error ?? 'The ledger entry could not be corrected')
+          return
+        }
+        setNotice('Ledger entry corrected. The original remains in the audit trail.')
+        closeRecording()
+        router.refresh()
+      })()
+    } else {
+      void recordPortfolioUpdate(update, 'manual')
+    }
     event.currentTarget.reset()
   }
 
@@ -181,11 +204,13 @@ export function PortfolioWorkspace({
   const openRecording = () => {
     setNotice('')
     setPreview(null)
+    setEditingTransaction(null)
     setRecordingOpen(true)
   }
 
   const closeRecording = () => {
     setPreview(null)
+    setEditingTransaction(null)
     setRecordingOpen(false)
     recordTriggerRef.current?.focus()
   }
@@ -218,6 +243,41 @@ export function PortfolioWorkspace({
     return () => window.removeEventListener('keydown', keepFocusInDialog)
   }, [recordingOpen])
 
+  const selectPortfolio = (portfolioId: string) => {
+    setActivePortfolioId(portfolioId)
+    setPortfolioPickerOpen(false)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('portfolio', portfolioId)
+    router.replace(`${pathname}?${params.toString()}`)
+  }
+
+  const openTransactionCorrection = (transaction: PortfolioTransaction) => {
+    setStructuredAction(transaction.action as ParsedPortfolioUpdate['action'])
+    setEditingTransaction(transaction)
+    setUpdateMode('form')
+    setNotice('')
+    setRecordingOpen(true)
+  }
+
+  const removeTransaction = async (transactionId: string) => {
+    if (removeArmedId !== transactionId) {
+      setRemoveArmedId(transactionId)
+      return
+    }
+    const response = await fetch('/api/markets/portfolio', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'void-portfolio-transaction', transactionId }),
+    })
+    const payload = await response.json()
+    if (!response.ok) {
+      setNotice(payload.error ?? 'The ledger entry could not be removed')
+      return
+    }
+    setRemoveArmedId(null)
+    setNotice('Ledger entry removed. The original stays in the audit trail.')
+    router.refresh()
+  }
+
   return (
     <section className="portfolio-workspace">
       <header className="market-explore-heading">
@@ -229,11 +289,8 @@ export function PortfolioWorkspace({
               <strong>{activePortfolio?.account.name ?? 'Choose a portfolio'}</strong><CaretDown size={15} weight="bold" />
             </button>
             {portfolioPickerOpen ? <div className="portfolio-picker-menu" role="listbox" aria-label="Active portfolio">
-              {portfolios.map((portfolio) => <button key={portfolio.account.id} type="button" role="option" aria-selected={portfolio.account.id === activePortfolioId} onClick={() => {
-                setActivePortfolioId(portfolio.account.id)
-                setPortfolioPickerOpen(false)
-              }}>
-                <span>{portfolio.account.name}</span>{portfolio.account.id === activePortfolioId ? <Check size={15} weight="bold" /> : null}
+              {portfolios.map((portfolio) => <button key={portfolio.account.id} type="button" role="option" aria-selected={portfolio.account.id === activePortfolio?.account.id} onClick={() => selectPortfolio(portfolio.account.id)}>
+                <span>{portfolio.account.name}</span>{portfolio.account.id === activePortfolio?.account.id ? <Check size={15} weight="bold" /> : null}
               </button>)}
             </div> : null}
           </div>
@@ -295,6 +352,20 @@ export function PortfolioWorkspace({
       ) : null}
       {view === 'history' ? (
         <div className="portfolio-history-list">
+          <section className="portfolio-ledger" aria-label="Portfolio ledger">
+            <header><div><p className="markets-eyebrow">Quick corrections</p><h2>{activePortfolio?.account.name ?? 'Portfolio'} ledger</h2></div><span>Correct a manual entry or remove it from balances.</span></header>
+            {(activePortfolio ? initialData.portfolioTransactions.filter((transaction) => transaction.portfolioId === activePortfolio.account.id && transaction.voidedAt === null).toReversed() : []).length === 0
+              ? <p className="portfolio-ledger-empty">No ledger entries yet. Record an update to begin.</p>
+              : (activePortfolio ? initialData.portfolioTransactions.filter((transaction) => transaction.portfolioId === activePortfolio.account.id && transaction.voidedAt === null).toReversed() : []).map((transaction) => {
+                const editable = transaction.source !== 'import' && transaction.action !== 'position_import'
+                const title = transaction.action === 'cash_deposit' ? 'Add cash' : transaction.action === 'cash_withdrawal' ? 'Withdraw cash' : transaction.action
+                return <article key={transaction.id} className="portfolio-ledger-entry">
+                  <div><strong>{title}</strong><span>{transaction.symbol ? `${transaction.quantity} ${transaction.symbol} at ${formatMoney(transaction.pricePerShare)}` : formatMoney(transaction.pricePerShare)}</span><time>{transaction.occurredAt}</time></div>
+                  <p>{transaction.notes || 'No note'}</p>
+                  {editable ? <footer><button type="button" onClick={() => openTransactionCorrection(transaction)}><PencilSimple size={13} /> Edit</button><button type="button" className={removeArmedId === transaction.id ? 'portfolio-ledger-remove-armed' : ''} onClick={() => void removeTransaction(transaction.id)}><Trash size={13} />{removeArmedId === transaction.id ? 'Confirm remove' : 'Remove'}</button></footer> : <small>Imported entry · managed outside this ledger</small>}
+                </article>
+              })}
+          </section>
           {initialData.decisionHistory.length === 0 ? <p>No decision versions yet.</p> : initialData.decisionHistory.map((decision) => (
             <article key={decision.id}>
               <header>
@@ -338,24 +409,24 @@ export function PortfolioWorkspace({
         <button type="button" className="portfolio-update-modal-backdrop" aria-label="Close record update dialog" onClick={closeRecording} />
         <section ref={updateDialogRef} className="portfolio-update-panel" role="dialog" aria-modal="true" aria-labelledby="portfolio-update-title">
           <header className="portfolio-update-heading">
-            <div><p className="markets-eyebrow">Record an update</p><h2 id="portfolio-update-title">{activePortfolio?.account.name ?? 'Portfolio'}</h2></div>
+            <div><p className="markets-eyebrow">{editingTransaction ? 'Correct ledger entry' : 'Record an update'}</p><h2 id="portfolio-update-title">{activePortfolio?.account.name ?? 'Portfolio'}</h2></div>
             <button type="button" className="portfolio-update-close" aria-label="Close record update dialog" onClick={closeRecording}><X size={17} /></button>
           </header>
           <div className="portfolio-update-mode" role="group" aria-label="Update method">
             <button type="button" aria-pressed={updateMode === 'form'} onClick={() => setUpdateMode('form')}>Enter transaction</button>
-            <button type="button" aria-pressed={updateMode === 'language'} onClick={() => setUpdateMode('language')}>Use natural language</button>
+            {!editingTransaction ? <button type="button" aria-pressed={updateMode === 'language'} onClick={() => setUpdateMode('language')}>Use natural language</button> : null}
           </div>
           {updateMode === 'form' ? <form className="manual-position-form" onSubmit={submitStructuredUpdate}>
             <div className="market-form-field"><span>Action</span><MarketSelect name="transactionAction" value={structuredAction} ariaLabel="Transaction action" onChange={(value) => setStructuredAction(value as ParsedPortfolioUpdate['action'])} options={[{ value: 'buy', label: 'Buy' }, { value: 'sell', label: 'Sell' }, { value: 'cash_deposit', label: 'Add cash' }, { value: 'cash_withdrawal', label: 'Withdraw cash' }]} /></div>
-            {structuredActionIsCash ? <label>Cash amount<input name="cashAmount" type="number" step="0.01" min="0.01" required /></label> : <>
-              <label>Symbol<input name="symbol" maxLength={12} placeholder="NVDA" required /></label>
-              <label>Shares<input name="quantity" type="number" step="any" min="0.000001" required /></label>
-              <label>Price / share<input name="pricePerShare" type="number" step="0.0001" min="0.0001" required /></label>
-              <label>Fees<input name="fees" type="number" step="0.01" min="0" defaultValue="0" /></label>
+            {structuredActionIsCash ? <label>Cash amount<input name="cashAmount" type="number" step="0.01" min="0.01" required defaultValue={editingTransaction?.pricePerShare ?? ''} /></label> : <>
+              <label>Symbol<input name="symbol" maxLength={12} placeholder="NVDA" required defaultValue={editingTransaction?.symbol ?? ''} /></label>
+              <label>Shares<input name="quantity" type="number" step="any" min="0.000001" required defaultValue={editingTransaction?.quantity ?? ''} /></label>
+              <label>Price / share<input name="pricePerShare" type="number" step="0.0001" min="0.0001" required defaultValue={editingTransaction?.pricePerShare ?? ''} /></label>
+              <label>Fees<input name="fees" type="number" step="0.01" min="0" defaultValue={editingTransaction?.fees ?? '0'} /></label>
             </>}
-            <label>Date<input name="occurredAt" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} /></label>
-            <label className="portfolio-update-notes">Notes<textarea name="notes" placeholder="Optional reason or context" /></label>
-            <button type="submit" disabled={!activePortfolio}>Record transaction</button>
+            <label>Date<input name="occurredAt" type="date" required defaultValue={editingTransaction?.occurredAt ?? new Date().toISOString().slice(0, 10)} /></label>
+            <label className="portfolio-update-notes">Notes<textarea name="notes" placeholder="Optional reason or context" defaultValue={editingTransaction?.notes ?? ''} /></label>
+            <button type="submit" disabled={!activePortfolio}>{editingTransaction ? 'Save correction' : 'Record transaction'}</button>
           </form> : <form className="natural-language-update" onSubmit={previewNaturalLanguageUpdate}>
             <label>Describe the update<textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="Buy 10 shares of NVDA at $200" required /></label>
             <p>Also works for: “Sell 2 AMD at $490” or “Deposit $5,000 cash”.</p>

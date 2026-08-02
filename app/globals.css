@@ -7993,6 +7993,84 @@ body:has(.markets-shell) {
   padding: 0 14px;
 }
 
+.portfolio-ledger {
+  border-top: 1px solid var(--market-border);
+  margin-bottom: 36px;
+  padding-top: 18px;
+}
+
+.portfolio-ledger > header {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.portfolio-ledger h2 {
+  font-size: 18px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.portfolio-ledger > header > span,
+.portfolio-ledger-empty,
+.portfolio-ledger-entry p,
+.portfolio-ledger-entry small {
+  color: var(--market-text-muted);
+  font-size: 10px;
+}
+
+.portfolio-ledger-entry {
+  align-items: center;
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(230px, 1fr) minmax(160px, 1.4fr) auto;
+  padding: 12px 0;
+}
+
+.portfolio-ledger-entry > div {
+  display: grid;
+  gap: 3px;
+}
+
+.portfolio-ledger-entry strong {
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.portfolio-ledger-entry span,
+.portfolio-ledger-entry time {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.portfolio-ledger-entry footer {
+  display: flex;
+  gap: 6px;
+}
+
+.portfolio-ledger-entry footer button {
+  align-items: center;
+  border: 1px solid var(--market-border);
+  display: inline-flex;
+  font-size: 10px;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 9px;
+}
+
+.portfolio-ledger-entry footer button:hover {
+  background: var(--market-surface-soft);
+}
+
+.portfolio-ledger-entry footer .portfolio-ledger-remove-armed {
+  background: var(--market-text);
+  border-color: var(--market-text);
+  color: var(--market-bg);
+}
+
 .portfolio-review-summary {
   border-left: 2px solid var(--market-accent);
   margin-top: 15px;

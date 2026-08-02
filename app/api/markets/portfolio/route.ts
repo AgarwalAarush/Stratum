@@ -7,7 +7,9 @@ import {
   updateInboxStatus,
   upsertManualPosition,
   addSymbolToPrimaryWatchlist,
+  correctPortfolioTransaction,
   recordPortfolioTransaction,
+  voidPortfolioTransaction,
 } from '@/lib/server/portfolio'
 import { createDefaultWatchlistState, parseWatchlistState } from '@/lib/markets/watchlists'
 import { parsePortfolioUpdate, validatePortfolioUpdate, type ParsedPortfolioUpdate } from '@/lib/markets/portfolio-updates'
@@ -89,6 +91,28 @@ export async function POST(request: Request) {
         } })
       }
       return NextResponse.json({ transaction: await recordPortfolioTransaction(user.id, portfolioId, parsed, source) })
+    }
+    if (body.action === 'correct-portfolio-transaction') {
+      const transactionId = text(body.transactionId, 80)
+      const parsed = {
+        action: body.transactionAction,
+        symbol: text(body.symbol, 12).toUpperCase() || null,
+        quantity: nullableNumber(body.quantity),
+        pricePerShare: nullableNumber(body.pricePerShare),
+        fees: nullableNumber(body.fees) ?? 0,
+        occurredAt: text(body.occurredAt, 10),
+        notes: text(body.notes, 1_000),
+      } as ParsedPortfolioUpdate
+      const validationError = validatePortfolioUpdate(parsed)
+      if (!transactionId || validationError) throw new Error(validationError ?? 'Choose the ledger entry to correct')
+      if (localDevelopment) return NextResponse.json({ transaction: { id: `local-correction-${Date.now()}`, ...parsed } })
+      return NextResponse.json({ transaction: await correctPortfolioTransaction(user.id, transactionId, parsed) })
+    }
+    if (body.action === 'void-portfolio-transaction') {
+      const transactionId = text(body.transactionId, 80)
+      if (!transactionId) throw new Error('Choose the ledger entry to remove')
+      if (!localDevelopment) await voidPortfolioTransaction(user.id, transactionId)
+      return NextResponse.json({ removed: true })
     }
     if (body.action === 'add-watchlist-symbol') {
       const symbol = text(body.symbol, 12).toUpperCase()

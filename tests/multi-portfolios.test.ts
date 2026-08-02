@@ -56,10 +56,27 @@ test('portfolio UI defaults to owned holdings and scopes alerts to the active po
   assert.match(component, /portfolio-alert-list/)
   assert.match(component, /Use natural language/)
   assert.match(component, /Confirm and record/)
+  assert.match(component, /params\.set\('portfolio', portfolioId\)/)
+  assert.match(component, /Correct ledger entry/)
+  assert.match(component, /Confirm remove/)
   assert.match(route, /record-portfolio-update/)
+  assert.match(route, /correct-portfolio-transaction/)
+  assert.match(route, /void-portfolio-transaction/)
   assert.match(route, /parsePortfolioUpdate/)
   assert.match(repository, /recordPortfolioTransaction/)
   assert.match(repository, /Cannot sell/)
+})
+
+test('portfolio corrections preserve the original ledger event instead of overwriting it', async () => {
+  const [migration, repository] = await Promise.all([
+    readFile(new URL('../supabase/migrations/202608010001_portfolio_transaction_corrections.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/server/portfolio.ts', import.meta.url), 'utf8'),
+  ])
+  assert.match(migration, /voided_at/i)
+  assert.match(migration, /replaced_by_id/i)
+  assert.match(repository, /correctPortfolioTransaction/)
+  assert.match(repository, /voidPortfolioTransaction/)
+  assert.match(repository, /Imported or brokerage entries cannot be changed here/)
 })
 
 test('portfolio alert migration excludes ideation and scopes retained alerts to a portfolio', async () => {
