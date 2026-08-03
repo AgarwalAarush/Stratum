@@ -167,6 +167,13 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     return `${jobType}:${bucket.toISOString()}`
   }
   if (jobType === 'compile-world-baseline' || jobType === 'correlate-market-signals' || jobType === 'synthesize-market-hypotheses' || jobType === 'monitor-market-theses') {
+    const evidenceFingerprint = typeof payload.evidenceFingerprint === 'string' ? payload.evidenceFingerprint.trim() : ''
+    if (evidenceFingerprint && (jobType === 'compile-world-baseline' || jobType === 'synthesize-market-hypotheses')) {
+      const scope = jobType === 'compile-world-baseline'
+        ? `${payload.scopeType === 'domain' ? 'domain' : 'global'}:${typeof payload.scopeKey === 'string' ? payload.scopeKey : 'global'}`
+        : ''
+      return `${jobType}:${scope}:evidence:${evidenceFingerprint}`
+    }
     const bucket = new Date(now)
     const cadence = jobType === 'monitor-market-theses' ? 60 : jobType === 'compile-world-baseline' ? 60 : 24 * 60
     bucket.setTime(Math.floor(bucket.getTime() / (cadence * 60_000)) * cadence * 60_000)
@@ -507,9 +514,13 @@ async function executeJob(
       for (const observation of observations) stored.push(await ingestWorldObservation(observation))
       await reportProgress(100, 'ingested')
       if (isMarketWorldModelEnabled() && stored.some((item) => item.materiality >= 55)) {
-        await enqueueAgentJob('compile-world-baseline', { scopeType: 'domain', scopeKey: adapter.domain })
-        await enqueueAgentJob('compile-world-baseline', { scopeType: 'global', scopeKey: 'global' })
-        await enqueueAgentJob('synthesize-market-hypotheses', { reason: `source:${adapterId}` })
+        // A source can partially succeed and then later supply the decisive
+        // document. Tie downstream work to the observation set, not merely the
+        // calendar day, so that recovery is visible in the next baseline.
+        const evidenceFingerprint = stored.map((item) => item.id).sort().join('-')
+        await enqueueAgentJob('compile-world-baseline', { scopeType: 'domain', scopeKey: adapter.domain, evidenceFingerprint })
+        await enqueueAgentJob('compile-world-baseline', { scopeType: 'global', scopeKey: 'global', evidenceFingerprint })
+        await enqueueAgentJob('synthesize-market-hypotheses', { reason: `source:${adapterId}`, evidenceFingerprint })
       }
       return {
         adapterId,

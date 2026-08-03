@@ -82,6 +82,18 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
     }),
     'compile-world-baseline:domain:ai-power:2026-08-03T21:00:00.000Z',
   )
+  assert.equal(
+    buildAgentJobDedupeKey('compile-world-baseline', new Date('2026-08-03T21:03:00Z'), {
+      scopeType: 'domain', scopeKey: 'ai-power', evidenceFingerprint: 'observation-a-observation-b',
+    }),
+    'compile-world-baseline:domain:ai-power:evidence:observation-a-observation-b',
+  )
+  assert.equal(
+    buildAgentJobDedupeKey('synthesize-market-hypotheses', new Date('2026-08-03T21:03:00Z'), {
+      evidenceFingerprint: 'observation-a-observation-b',
+    }),
+    'synthesize-market-hypotheses::evidence:observation-a-observation-b',
+  )
 })
 
 test('market memo jobs deduplicate by immutable screener snapshot', async () => {
