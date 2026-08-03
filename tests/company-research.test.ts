@@ -139,6 +139,7 @@ test('research packet includes quarterly evidence, SEC filings, and skill-aligne
   assert.match(source, /COMPANY MARKET MODEL VERSION/)
   assert.match(source, /Financial statements are one important proof and risk input/)
   assert.match(source, /Do not repeat the same revenue, cash-flow, or multiple discussion/)
+  assert.match(source, /Name material supported operating assets and capabilities/)
   assert.match(schema, /"business_model_and_moat"/)
   assert.match(schema, /"sentiment_and_positioning"/)
   assert.match(schema, /"opinionChange"/)
