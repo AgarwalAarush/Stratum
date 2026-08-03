@@ -184,4 +184,5 @@ test('company market model is durable and linked to the downstream research note
   assert.match(generator, /Build a causal CompanyMarketModel before any equity rating/)
   assert.match(generator, /external demand or environmental change -> constraint or enabling capability/)
   assert.match(generator, /Financial evidence is one layer/)
+  assert.match(generator, /ALLOWED SOURCE IDS \(use only these exact strings\)/)
 })

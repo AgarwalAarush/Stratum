@@ -115,6 +115,7 @@ test('research packet includes quarterly evidence, SEC filings, and skill-aligne
   assert.match(source, /prefix each distinct claim paragraph with \*\*FACT:\*\*/)
   assert.match(source, /Business Model & Moat/)
   assert.match(source, /collectCompanyResearchEvidence/)
+  assert.match(source, /filter\(\(item\) => item\.url && item\.publishedAt\)\.slice\(0, 20\)/)
   assert.match(source, /CompanyPacket\.researchEvidence/)
   assert.match(source, /products and services, the customer problem/)
   assert.match(source, /market\/value-chain bottleneck/)

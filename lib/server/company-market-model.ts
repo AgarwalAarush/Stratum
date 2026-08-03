@@ -262,6 +262,7 @@ function companyMarketModelPrompt(
     priorModel
       ? `This is a refresh triggered by "${reason}". Use prior model version ${priorModel.version} as a baseline, retain still-supported mechanisms, and replace conclusions when the new packet changes the evidence.`
       : `This is the initial market model, triggered by "${reason}".`,
+    `ALLOWED SOURCE IDS (use only these exact strings):\n${packet.sources.map((source) => source.id).join('\n')}`,
     priorModel ? `PRIOR COMPANY MARKET MODEL:\n${JSON.stringify(priorModel)}` : 'PRIOR COMPANY MARKET MODEL: none',
     `COMPANY PACKET:\n${JSON.stringify(packet)}`,
   ].join('\n\n')

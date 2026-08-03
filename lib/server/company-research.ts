@@ -282,7 +282,7 @@ export async function materializeCompanyPacket(
     url: item.url,
     publishedAt: item.published_at,
     category: typeof item.metadata?.category === 'string' ? item.metadata.category : item.section,
-  })).filter((item) => item.url && item.publishedAt)
+  })).filter((item) => item.url && item.publishedAt).slice(0, 20)
   const researchEvidence = await researchEvidencePromise
   const sources: CompanyPacketSource[] = [
     { id: 'alpaca-price-history', label: 'Alpaca price history', url: 'https://alpaca.markets/data', source: 'Alpaca', asOf: stock.asOf },
@@ -326,7 +326,7 @@ export async function materializeCompanyPacket(
       source: 'SEC EDGAR',
       asOf: filing.publishedAt,
     })),
-    ...items.slice(0, 20).map((item, index) => ({
+    ...items.map((item, index) => ({
       id: `event-${index + 1}`,
       label: item.title,
       url: item.url,
