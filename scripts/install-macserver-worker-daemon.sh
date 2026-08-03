@@ -5,6 +5,7 @@ set -euo pipefail
 
 repo_dir="${1:?Usage: sudo ./scripts/install-macserver-worker-daemon.sh /path/to/production-checkout-or-active-symlink [mac-user]}"
 worker_user="${2:-$(stat -f '%Su' /dev/console)}"
+worker_uid="$(id -u "$worker_user")"
 worker_env="$repo_dir/.env.worker"
 runtime_root="/Users/Shared/StratumData/runtime"
 wrapper="$runtime_root/stratum-worker"
@@ -57,6 +58,9 @@ EOF
 chown root:wheel "$plist"
 chmod 644 "$plist"
 plutil -lint "$plist"
+# The old per-user worker must not run alongside the daemon. This is harmless
+# when the legacy LaunchAgent was already removed.
+launchctl bootout "gui/$worker_uid/$label" 2>/dev/null || true
 launchctl bootout "system/$label" 2>/dev/null || true
 launchctl bootstrap system "$plist"
 launchctl enable "system/$label"
