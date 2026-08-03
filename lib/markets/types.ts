@@ -606,6 +606,147 @@ export interface CompanyPacket {
   sources: CompanyPacketSource[]
 }
 
+export type CompanyMarketEvidenceStatus =
+  | 'observed'
+  | 'company_claim'
+  | 'analyst_inference'
+  | 'unverified'
+
+export interface CompanyMarketBusinessLine {
+  name: string
+  offering: string
+  customers: string
+  jobToBeDone: string
+  monetization: string
+  maturity: 'proven' | 'scaling' | 'emerging' | 'optionality'
+  evidenceStatus: CompanyMarketEvidenceStatus
+  sourceIds: string[]
+}
+
+export interface CompanyMarketValueChainLayer {
+  layer: string
+  role: string
+  companyPosition: string
+  economics: string
+  participants: string[]
+  sourceIds: string[]
+}
+
+export interface CompanyMarketForce {
+  name: string
+  direction: 'tailwind' | 'headwind' | 'mixed'
+  mechanism: string
+  horizon: string
+  evidenceStatus: CompanyMarketEvidenceStatus
+  sourceIds: string[]
+}
+
+export interface CompanyMarketConstraint {
+  name: string
+  severity: 'binding' | 'important' | 'watch' | 'not_established'
+  mechanism: string
+  scarcityRentCapture: string
+  resolutionSignals: string[]
+  sourceIds: string[]
+}
+
+export interface CompanyMarketCausalLink {
+  from: string
+  to: string
+  mechanism: string
+  evidenceStatus: CompanyMarketEvidenceStatus
+  sourceIds: string[]
+}
+
+export interface CompanyMarketCompetitor {
+  name: string
+  customerOverlap: string
+  capability: string
+  companyAdvantage: string
+  companyGap: string
+  implication: string
+  sourceIds: string[]
+}
+
+export interface CompanyMarketStrategicRelationship {
+  entity: string
+  relationship: string
+  status: 'verified' | 'company_claim' | 'analyst_inference' | 'unverified'
+  economicMechanism: string
+  thesisTreatment: string
+  sourceIds: string[]
+}
+
+export interface CompanyMarketCrossCheck {
+  method: string
+  result: string
+  implication: string
+  sourceIds: string[]
+}
+
+export interface CompanyMarketPrediction {
+  prediction: string
+  horizon: string
+  leadingIndicator: string
+  confirmation: string
+  disconfirmation: string
+  sourceIds: string[]
+}
+
+export interface CompanyMarketFalsifier {
+  condition: string
+  observable: string
+  thesisImpact: string
+  sourceIds: string[]
+}
+
+export interface CompanyMarketModel {
+  id: string
+  symbol: string
+  version: number
+  status: 'running' | 'complete' | 'failed'
+  businessSummary: string
+  centralMarketQuestion: string
+  marketThesis: string
+  businessLines: CompanyMarketBusinessLine[]
+  valueChain: CompanyMarketValueChainLayer[]
+  demandDrivers: CompanyMarketForce[]
+  supplyConstraints: CompanyMarketConstraint[]
+  causalChain: CompanyMarketCausalLink[]
+  marketStructure: {
+    marketDefinition: string
+    pricingPower: string
+    scarcityRentCapture: string
+    cyclicality: string
+    regulationAndPolicy: string
+  }
+  competitors: CompanyMarketCompetitor[]
+  strategicRelationships: CompanyMarketStrategicRelationship[]
+  crossChecks: CompanyMarketCrossCheck[]
+  expectations: {
+    currentNarrative: string
+    whatAppearsPriced: string
+    variantView: string
+    sourceIds: string[]
+  }
+  predictions: CompanyMarketPrediction[]
+  falsifiers: CompanyMarketFalsifier[]
+  financialRole: {
+    fundingCapacity: string
+    monetizationProof: string
+    valuationConstraint: string
+    sourceIds: string[]
+  }
+  evidenceGaps: string[]
+  confidence: number
+  sourceIds: string[]
+  provider: string
+  model: string
+  dataAsOf: string
+  generatedAt: string
+  error: string | null
+}
+
 export type EquityResearchSectionId =
   | 'snapshot'
   | 'business_model_and_moat'
@@ -652,6 +793,7 @@ export interface EquityResearchRevision {
 
 export interface EquityResearchNote {
   id: string
+  companyMarketModelId?: string | null
   symbol: string
   version: number
   status: 'queued' | 'running' | 'complete' | 'failed'

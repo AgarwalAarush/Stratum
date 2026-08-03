@@ -1,6 +1,7 @@
 import type {
   CompanyPacket,
   CompanyPacketSource,
+  CompanyMarketModel,
   CompanyTranscript,
   EquityResearchNote,
   EquityResearchRevision,
@@ -20,6 +21,7 @@ import { proposeStockThesis } from './theses.ts'
 import { collectCompanyResearchEvidence } from './company-research-evidence.ts'
 import { fetchSecLiquidityFacts } from './sec-financials.ts'
 import { isEtfInstrument } from './etf-research.ts'
+import { materializeCompanyMarketModel } from './company-market-model.ts'
 
 const RESEARCH_SECTION_IDS: EquityResearchSectionId[] = [
   'snapshot',
@@ -547,6 +549,7 @@ export function validateEquityResearch(value: unknown): ResearchGeneration {
 
 function researchPrompt(
   packet: CompanyPacket,
+  marketModel: CompanyMarketModel,
   priorResearch: EquityResearchNote | null,
   reason: string,
 ): string {
@@ -561,8 +564,10 @@ function researchPrompt(
         'This is the initial report. Set revision.priorVersion to null, revision.opinionChange to initial, and include one evidence change explaining the initial evidence baseline.',
       ]
   return [
-    'Act as a senior company and market research analyst. Create an institutional-quality equity research note for a 12-month decision and 1-2 year ownership lens. Begin with what the company actually sells, who needs it, the market/value-chain bottleneck it serves, and the change that can expand or erode its opportunity. Financial statements are one important proof and risk input, not the report’s organizing principle.',
+    'Act as a senior company and market research analyst. Create an institutional-quality equity research note for a 12-month decision and 1-2 year ownership lens. The supplied CompanyMarketModel is the required causal foundation for the report: begin with what the company actually sells, who needs it, the market/value-chain bottleneck it serves, and the change that can expand or erode its opportunity. Financial statements are one important proof and risk input, not the report’s organizing principle.',
     'Use only facts and source IDs present in the CompanyPacket. Never invent a current price, estimate, event, source, or citation.',
+    'Use the CompanyMarketModel as an analytical scaffold, not as a new source. Its factual claims remain supported only by the underlying CompanyPacket source IDs attached to them. Preserve its evidence-status distinctions and explicitly identify unsupported inference or unresolved evidence gaps.',
+    'The report must explain the model’s causal chain from external change through the binding constraint or enabling capability, customer behavior, company volume/pricing/mix, monetization, and shareholder outcome. If a link is weak or unverified, make that weakness decision-relevant rather than silently closing the gap.',
     'CompanyPacket.researchEvidence is a bounded company-and-industry research pack. It is useful for framing product, AI, market, competition, and moat—but a discovery item is only a lead, independent reporting needs attribution, and primary or regulatory evidence is preferred for company claims and numbers. Do not elevate an article excerpt into an unsupported fact.',
     ...revisionInstructions,
     'Take a position, defend it with structured evidence, and state exactly what would prove it wrong. Commit or omit; do not use empty hedging language.',
@@ -576,23 +581,25 @@ function researchPrompt(
     'Write an investor memo, not an audit workpaper: favor clear analytical prose and short connective paragraphs over a stream of labeled bullets. Use bullets only for catalysts, scenario assumptions, risks, and concrete decision rules.',
     'Keep factual, consensus, and analyst thinking distinct through natural attribution: write “reported data show” or “the latest filing shows” for facts, “consensus expects” for market expectations, “our view” for analysis, and “in our base case” for assumptions. For auditability, prefix each distinct claim paragraph with **FACT:**, **CONSENSUS:**, **VIEW:** or **ESTIMATE:**. The application strips these internal markers in its default memo view and exposes them only in Evidence mode.',
     'Attach supporting CompanyPacket source IDs only through each section sourceIds array and the report sourceIds array. Never print bracketed source IDs inside prose. Never imply a claim is sourced if the supporting source is absent.',
-    'Financial Profile must analyze the available 6-8 quarter history when present and call out growth, margin, cash-flow, balance-sheet, and share-count inflections. Treat this section as a test of funding capacity, dilution, operating leverage, and duration—not as a substitute for the company, product, market, and competitive analysis. CompanyPacket.financialReconciliation is the authoritative same-period bridge for liquidity, debt, and net cash/debt: never recompute it from raw statement fields. Call it net cash only when netCash is positive and net debt only when netCash is negative. If the bridge has a warning, state it and do not use the affected number for valuation.',
+    'Financial Profile must analyze the available 6-8 quarter history when present and call out growth, margin, cash-flow, balance-sheet, and share-count inflections. Treat this section as a compact test of the CompanyMarketModel.financialRole: funding capacity, monetization proof, dilution, operating leverage, duration, and valuation constraint. Do not repeat the same revenue, cash-flow, or multiple discussion in Snapshot, Business Model & Moat, Market & Competition, Growth Drivers, Risk Factors, and Verdict. CompanyPacket.financialReconciliation is the authoritative same-period bridge for liquidity, debt, and net cash/debt: never recompute it from raw statement fields. Call it net cash only when netCash is positive and net debt only when netCash is negative. If the bridge has a warning, state it and do not use the affected number for valuation.',
     'Keep provider-derived free cash flow distinct from company-defined free cash flow. Do not call a GAAP loss, warrant-fair-value remeasurement, or non-GAAP reconciliation an accounting inconsistency without a primary-filing contradiction. Do not call employee withholding or warrant exercises a share repurchase unless a primary filing explicitly identifies an open-market buyback.',
     'Earnings-call transcripts are management commentary, not audited fact. When transcripts are present, compare guidance, operating priorities, demand commentary, and changed language across the two most recent calls; attribute claims to management.',
-    'Business Model & Moat is the report’s foundation. Explain the products and services, the customer problem, how the company fits in its value chain, the real-world operating assets/capabilities that matter, revenue mechanics, geographic/FX exposure, concentration, switching costs, and a none/narrow/wide moat judgment. Identify the actual moat mechanisms (for example data, workflow embedding, switching costs, scale, regulatory approvals, distribution, or IP), the evidence for each, and the specific gaps that could erode the moat.',
+    'Business Model & Moat is the report’s foundation. Cover every material CompanyMarketModel.businessLines item and distinguish proven, scaling, emerging, and optionality businesses. Explain the products and services, the customer problem, how the company fits in its value chain, the real-world operating assets/capabilities that matter, revenue mechanics, geographic/FX exposure, concentration, switching costs, and a none/narrow/wide moat judgment. Identify the actual moat mechanisms (for example data, workflow embedding, switching costs, scale, regulatory approvals, distribution, or IP), the evidence for each, and the specific gaps that could erode the moat.',
     'When segmentRevenue is present, Business Model & Moat must identify which product or service lines drive revenue, growth, and mix shifts. Do not confuse product revenue categories with reportable operating segments or imply segment profit data that the packet does not contain.',
     'Market & Competition must start with two compact Markdown tables, followed by brief analytical prose. Table one is “TAM & market frame” with columns: market / value-chain layer; TAM or addressable-spend estimate; methodology and date; source; and limitation. Table two is “Competitive landscape” with columns: competitor or alternative; customer overlap; positioning / capability; company advantage or gap; and investment implication. Use 3-5 direct competitors or credible alternatives when supported. Do not make a generic peer table from ticker peers that have not been established as direct competitors.',
-    'Market & Competition must name the relevant market or value-chain layer, show the demand, policy, macro, supply-chain, or technology environment that matters, present TAM as a sourced estimate or a transparent bottom-up framework (with date, methodology, and limitations), and compare 3-5 direct competitors or credible alternatives by customer, capability, economics, and competitive implication. If the packet cannot support a TAM number or peer comparison, put “Not available in the current packet” in the relevant table cells, identify the needed source, and then explain the decision consequence in prose rather than supplying a generic market claim.',
-    'Growth Drivers must rank 3-5 drivers by importance and include a compact Markdown table with: Driver; mechanism; horizon; supporting source; what proves it; and what breaks it. Prioritize concrete product adoption, capacity build-out, customer behavior, market bottlenecks, policy/regulatory shifts, and competitive changes before financial-model outputs. Separate funded/contracted or already-shipping drivers from management aspiration and optionality. Cover AI explicitly when evidence supports it: state whether it changes customer value, monetization, cost, or only narrative—and what would demonstrate adoption. Do not call AI a growth driver solely because it is mentioned in coverage.',
+    'Market & Competition must synthesize CompanyMarketModel.valueChain, demandDrivers, supplyConstraints, marketStructure, competitors, strategicRelationships, and crossChecks. Name the relevant market or value-chain layer, show the demand, policy, macro, supply-chain, geopolitical, customer, or technology environment that matters, explain who captures scarcity rent, present TAM as a sourced estimate or a transparent bottom-up framework (with date, methodology, and limitations), and compare 3-5 direct competitors or credible alternatives by customer, capability, economics, and competitive implication. If the packet cannot support a TAM number, state that limitation in the table but still explain market structure and the decision consequence from the supported causal model; absence of a TAM number is not absence of market analysis.',
+    'Growth Drivers must rank 3-5 CompanyMarketModel demand drivers and predictions by importance and include a compact Markdown table with: Driver; mechanism; horizon; supporting source; what proves it; and what breaks it. Prioritize concrete product adoption, capacity build-out, customer behavior, market bottlenecks, policy/regulatory shifts, and competitive changes before financial-model outputs. Separate funded/contracted or already-shipping drivers from management aspiration and optionality. Cover AI explicitly when evidence supports it: state whether it changes customer value, monetization, cost, or only narrative—and what would demonstrate adoption. Do not call AI a growth driver solely because it is mentioned in coverage.',
     'Treat strategic relationships and ecosystem links as evidence to investigate, not free options. Name a relationship only if the packet supports it; label whether it is a verified fact, management claim, or analyst inference, and explain the direct economic mechanism required before it changes the thesis.',
     'Valuation must reconcile growth assumptions with the current multiple and test what the price requires. Use a reverse-DCF-style implied-expectations analysis when inputs support it; otherwise use a transparent scenario or state that no defensible fair value can be calculated. Never let absent financial detail displace the product, market, and execution analysis or force false precision.',
-    'Bull, Base, and Bear must be three genuinely comparable mini-cases: lead each with the outcome, then use the same four compact bullets—operating assumptions, proof point, fair value / implied return, and what breaks the case. Do not repeat the general business description across scenarios.',
+    'Bull, Base, and Bear must be three genuinely comparable mini-cases driven first by different CompanyMarketModel predictions, constraint resolutions, competitive outcomes, and falsifiers—not merely by different revenue-growth and multiple assumptions. Lead each with the outcome, then use the same four compact bullets—operating assumptions, proof point, fair value / implied return, and what breaks the case. Do not repeat the general business description across scenarios.',
     'Verdict must first state the company-and-market thesis in plain English, then cover ownership fit, current setup, behavior near highs and on weakness, entry action, better trigger, sizing, liquidity, and horizon. For a high-optionality or thin-data name, make clear that sizing and milestone evidence—not a fabricated valuation model—control the decision.',
     'Kill Criteria must contain 3-5 specific numeric thresholds or observable events—not vibes.',
     'When evidence is unavailable (TAM, 13F, short interest, options, geographic mix, unit economics, etc.), say “Not available in the current packet” and explain what source would be required.',
     'Always return a directional formal rating of BUY, HOLD, or SELL for an identified tradable equity with a CompanyPacket; do not use NOT_RATED merely because the packet is incomplete or a fair value cannot be calculated. When the evidence is thin, make the best directional judgment from the available facts, keep unsupported valuation fields null, use wait or avoid for the practical action as appropriate, and set confidence to 15-40%. State the missing evidence and what would change the call. Reserve NOT_RATED only for an invalid identity, no credible company evidence, or a non-tradable instrument.',
     '',
     priorResearch ? `PRIOR RESEARCH VERSION ${priorResearch.version}:\n${JSON.stringify(priorResearch)}` : 'PRIOR RESEARCH: none',
+    '',
+    `COMPANY MARKET MODEL VERSION ${marketModel.version}:\n${JSON.stringify(marketModel)}`,
     '',
     JSON.stringify(packet),
   ].join('\n')
@@ -614,11 +621,15 @@ export async function generateFullEquityResearch(
   await onProgress?.(15, priorResearch ? `Refreshing version ${priorResearch.version} evidence` : 'Collecting company evidence')
   const packet = await materializeCompanyPacket(symbol, ownerId)
   await onProgress?.(45, 'Company packet assembled')
+  await onProgress?.(50, 'Building company market model')
+  const marketModel = await materializeCompanyMarketModel(packet, ownerId, reason)
+  await onProgress?.(65, 'Company market model assembled')
   const version = await nextVersion('equity_research_notes', ownerId, symbol)
   const notePayload = {
     symbol,
     owner_id: ownerId,
     company_packet_id: packet.id,
+    company_market_model_id: marketModel.id,
     version,
     status: 'running',
     data_as_of: packet.dataAsOf,
@@ -633,9 +644,9 @@ export async function generateFullEquityResearch(
   const { data: noteRecord, error: createError } = createResult
   if (createError || !noteRecord) throw new Error(`Unable to create research version: ${createError?.message ?? 'unknown error'}`)
   try {
-    await onProgress?.(55, 'Synthesizing 15-section analysis')
+    await onProgress?.(72, 'Synthesizing 15-section analysis')
     const result = await runCodexJson({
-      prompt: researchPrompt(packet, priorResearch, reason),
+      prompt: researchPrompt(packet, marketModel, priorResearch, reason),
       schemaPath: 'schemas/equity-research.schema.json',
       validate: validateEquityResearch,
       timeoutMs: 20 * 60 * 1_000,
@@ -671,6 +682,7 @@ export async function generateFullEquityResearch(
     await onProgress?.(100, 'Research complete')
     const note: EquityResearchNote = {
       id: noteRecord.id,
+      companyMarketModelId: marketModel.id,
       symbol,
       version,
       status: 'complete',
@@ -694,6 +706,9 @@ function normalizeResearch(row: Record<string, unknown>): EquityResearchNote {
   const content = record(row.content)
   return {
     id: String(row.id),
+    companyMarketModelId: row.company_market_model_id === null || row.company_market_model_id === undefined
+      ? null
+      : String(row.company_market_model_id),
     symbol: String(row.symbol),
     version: Number(row.version),
     status: row.status as EquityResearchNote['status'],
