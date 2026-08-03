@@ -14,7 +14,8 @@ revision="$(git -C "$source_checkout" rev-parse origin/main)"
 release_dir="$release_root/$revision"
 mkdir -p "$release_root"
 
-if [[ ! -d "$release_dir/.git" ]]; then
+# A linked Git worktree stores .git as a file, not a directory.
+if [[ ! -e "$release_dir/.git" ]]; then
   git -C "$source_checkout" worktree add --detach "$release_dir" "$revision"
 fi
 
