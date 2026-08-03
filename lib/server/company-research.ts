@@ -163,7 +163,8 @@ export function compactSecFilingText(value: string, maximumLength = 45_000): str
   const normalized = value.replace(/\s+/g, ' ').trim()
   if (normalized.length < 200) return null
   if (normalized.length <= maximumLength) return normalized
-  const windows: Array<{ start: number; end: number }> = [{ start: 0, end: 12_000 }]
+  const frontLength = Math.min(30_000, Math.floor(maximumLength * (2 / 3)))
+  const windows: Array<{ start: number; end: number }> = [{ start: 0, end: frontLength }]
   const lower = normalized.toLowerCase()
   for (const target of SEC_EXCERPT_TARGETS) {
     const index = lower.indexOf(target)
