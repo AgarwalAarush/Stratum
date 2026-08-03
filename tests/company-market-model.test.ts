@@ -165,9 +165,10 @@ test('company market model validator enforces a causal, falsifiable contract', (
 })
 
 test('company market model is durable and linked to the downstream research note', async () => {
-  const [schema, migration, generator] = await Promise.all([
+  const [schema, migration, ownerMigration, generator] = await Promise.all([
     readFile(new URL('../schemas/company-market-model.schema.json', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/202608020002_company_market_models.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/202608020003_reconcile_company_market_model_owner.sql', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/company-market-model.ts', import.meta.url), 'utf8'),
   ])
   assert.match(schema, /"causalChain"/)
@@ -178,6 +179,8 @@ test('company market model is durable and linked to the downstream research note
   assert.match(migration, /company_packet_id uuid not null/i)
   assert.match(migration, /company_market_model_id uuid/i)
   assert.match(migration, /unique \(owner_id, symbol, version\)/i)
+  assert.match(ownerMigration, /drop constraint if exists company_market_models_owner_id_fkey/i)
+  assert.match(ownerMigration, /references public\.market_users\(id\)/i)
   assert.match(generator, /Build a causal CompanyMarketModel before any equity rating/)
   assert.match(generator, /external demand or environmental change -> constraint or enabling capability/)
   assert.match(generator, /Financial evidence is one layer/)
