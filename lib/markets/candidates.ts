@@ -60,9 +60,11 @@ const EMPTY_TRACKING: CandidateTrackingContext = {
   acceptedThesis: false,
   watched: false,
   owned: false,
+  marketTheses: [],
 }
 
 const LANE_ORDER: CandidateLane[] = [
+  'market_thesis',
   'thesis_led',
   'dislocation',
   'fundamental_inflection',
@@ -70,6 +72,7 @@ const LANE_ORDER: CandidateLane[] = [
 ]
 
 const LANE_TARGETS: Record<CandidateLane, number> = {
+  market_thesis: 2,
   thesis_led: 2,
   dislocation: 3,
   fundamental_inflection: 2,
@@ -319,6 +322,7 @@ function candidateLanes(
   const estimateInflection = (fundamentals.estimateGrowth ?? fundamentals.earningsGrowth ?? 0) >= 10
     && (fundamentals.revenueGrowth ?? 0) >= 0
   const lanes: CandidateLane[] = []
+  if ((tracking.marketTheses?.length ?? 0) > 0 && signals.length > 0) lanes.push('market_thesis')
   if (tracked && hasSelloff) lanes.push('thesis_led')
   if (hasSelloff && ownershipSupport >= 2 && risk !== 'caution') lanes.push('dislocation')
   if (hasSelloff && estimateInflection) lanes.push('fundamental_inflection')
@@ -335,6 +339,7 @@ function priority(
 ): number {
   const dimensionValue = { strong: 3, positive: 2, mixed: 1, caution: 0 }
   const laneBonus = lanes.reduce((sum, lane) => sum + ({
+    market_thesis: 7,
     thesis_led: 8,
     dislocation: 6,
     fundamental_inflection: 4,
@@ -441,6 +446,7 @@ export function selectCandidateBriefs(
   return selected.map(({ stock, fundamentals, group, signals, dimensions, lanes, tracking }) => {
     const primaryLane = LANE_ORDER.find((lane) => lanes.includes(lane)) ?? lanes[0]!
     const primaryKinds: Record<CandidateLane, CandidateSignal['kind'][]> = {
+      market_thesis: ['leadership_transition', 'company_group_divergence', 'price_volume_confirmation', 'selloff_dislocation', 'fundamental_resilience'],
       thesis_led: ['tracked_thesis_dislocation'],
       dislocation: ['selloff_dislocation', 'fundamental_resilience'],
       fundamental_inflection: ['fundamental_resilience', 'earnings_or_estimate_catalyst'],
@@ -468,19 +474,28 @@ export function selectCandidateBriefs(
       primaryLane,
       lanes,
       tracking,
+      marketThesis: tracking.marketTheses?.sort((left, right) => right.materiality - left.materiality)[0] ?? null,
       selloff: {
         day: stock.dayReturn,
         fiveDay: stock.return5d,
         thirtyDay: stock.return30d,
       },
       entryContext: ({
+        market_thesis: 'Validate whether this company captures the parent market thesis through a material, defensible value-chain role before treating the exposure as investable.',
         thesis_led: 'Review whether the selloff changed the accepted or user-tracked thesis; if not, reassess the entry zone.',
         dislocation: 'Test whether recent weakness is fundamentals-driven or an overreaction before considering an entry.',
         fundamental_inflection: 'Verify that improving estimates or operating evidence can outlast the current price weakness.',
         leadership: 'Establish ownership quality and valuation before treating technical leadership as an entry.',
       })[primaryLane],
-      whySurfaced: primary.summary,
-      whatChanged: signals.map((signal) => signal.summary),
+      whySurfaced: primaryLane === 'market_thesis' && tracking.marketTheses?.[0]
+        ? `${tracking.marketTheses[0].title}: ${primary.summary}`
+        : primary.summary,
+      whatChanged: [
+        ...(primaryLane === 'market_thesis' && tracking.marketTheses?.[0]
+          ? [`Market thesis linkage: ${tracking.marketTheses[0].mechanism} (${tracking.marketTheses[0].role}; ${tracking.marketTheses[0].verificationStatus}).`]
+          : []),
+        ...signals.map((signal) => signal.summary),
+      ],
       industryContext: group
         ? `${stock.subIndustry} returned ${formatPercent(group.return30d)} over 30 days and ${formatPercent(group.return1y)} over one year.`
         : `${stock.subIndustry} context is still being established.`,
@@ -506,7 +521,9 @@ export function selectCandidateBriefs(
       catalyst: fundamentals.nextEarningsDate
         ? `Earnings expected ${fundamentals.nextEarningsDate}.`
         : signals.find((signal) => signal.kind === 'earnings_or_estimate_catalyst')?.summary ?? 'Watch for the next estimate revision or company filing.',
-      nextResearchQuestion: primaryLane === 'leadership'
+      nextResearchQuestion: primaryLane === 'market_thesis' && tracking.marketTheses?.[0]
+        ? `Does ${stock.symbol} materially capture ${tracking.marketTheses[0].title}, or will substitutes and competitors capture more of the economics?`
+        : primaryLane === 'leadership'
         ? `Is ${stock.symbol}'s improvement durable enough to justify its valuation relative to ${stock.subIndustry} peers?`
         : `Did the selloff change ${stock.symbol}'s 1–2 year ownership case, or did it only improve the entry price?`,
       status: 'new',

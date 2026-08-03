@@ -1570,6 +1570,151 @@
   transform: translateY(1px);
 }
 
+.thesis-library-switch {
+  border-bottom: 1px solid var(--market-border);
+  display: flex;
+  margin: 20px 0 28px;
+}
+
+.thesis-library-switch button {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--market-text-muted);
+  cursor: pointer;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .06em;
+  margin-bottom: -1px;
+  padding: 11px 15px 10px;
+  text-transform: uppercase;
+}
+
+.thesis-library-switch button[data-active="true"] {
+  border-bottom-color: var(--market-accent);
+  color: var(--market-text);
+}
+
+.market-thesis-workspace {
+  display: grid;
+  gap: 30px;
+}
+
+.market-baseline-card,
+.market-thesis-section {
+  border-top: 1px solid var(--market-border);
+  padding-top: 22px;
+}
+
+.market-baseline-card {
+  background: var(--market-surface);
+  border: 1px solid var(--market-border);
+  padding: 20px;
+}
+
+.market-baseline-card > header,
+.market-thesis-section > header,
+.market-hypothesis-card > header,
+.market-thesis-card > header,
+.market-hypothesis-card footer {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.market-baseline-card h2,
+.market-thesis-section h2 {
+  font-size: 22px;
+  line-height: 1.05;
+  margin-top: 6px;
+}
+
+.market-baseline-card > header > span,
+.market-thesis-section > header > span,
+.market-hypothesis-card header > span,
+.market-thesis-card header > div > span,
+.market-baseline-columns span,
+.market-thesis-copy span,
+.market-exposure-list > span {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.market-baseline-card > header > span[data-freshness="fresh"] { color: var(--market-accent); }
+.market-baseline-card > header > span[data-freshness="stale"] { color: #b44; }
+
+.market-baseline-card > p,
+.market-hypothesis-card > p,
+.market-thesis-card > p {
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 14px 0;
+}
+
+.market-baseline-columns,
+.market-thesis-copy {
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 16px;
+  padding-top: 13px;
+}
+
+.market-thesis-copy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.market-baseline-columns p,
+.market-thesis-copy p,
+.market-exposure-list p,
+.market-hypothesis-card > div p {
+  color: var(--market-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin-top: 6px;
+}
+
+.market-baseline-card footer,
+.market-thesis-card footer,
+.market-hypothesis-card footer > span {
+  color: var(--market-text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.market-baseline-card footer { border-top: 1px solid var(--market-border); margin-top: 16px; padding-top: 11px; }
+
+.market-hypothesis-grid,
+.market-thesis-grid {
+  background: var(--market-border);
+  border: 1px solid var(--market-border);
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.market-thesis-grid { grid-template-columns: minmax(0, 1fr); }
+
+.market-hypothesis-card,
+.market-thesis-card { background: var(--market-bg); padding: 18px 20px; }
+.market-hypothesis-card h3,
+.market-thesis-card h3 { font-size: 17px; line-height: 1.25; margin-top: 7px; }
+.market-hypothesis-card > div { border-top: 1px solid var(--market-border); margin-top: 14px; padding-top: 12px; }
+.market-hypothesis-card > div > span { color: var(--market-text-muted); font-size: 10px; text-transform: uppercase; }
+.market-hypothesis-card footer { border-top: 1px solid var(--market-border); margin-top: 15px; padding-top: 11px; }
+.market-hypothesis-card footer > div { border: 0; display: flex; gap: 7px; margin: 0; padding: 0; }
+.market-hypothesis-card button { background: transparent; border: 1px solid var(--market-border); color: var(--market-text); cursor: pointer; font-size: 10px; padding: 7px 8px; }
+.market-hypothesis-card button:disabled { cursor: wait; opacity: .55; }
+
+.market-thesis-card header > strong { font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 16px; text-align: right; }
+.market-thesis-card header > strong small { color: var(--market-text-muted); display: block; font-family: var(--font-ibm-plex-sans), sans-serif; font-size: 9px; font-weight: 400; margin-top: 3px; text-transform: uppercase; }
+.market-exposure-list { border-top: 1px solid var(--market-border); margin-top: 16px; padding-top: 12px; }
+.market-exposure-list small { color: var(--market-text-muted); font-size: 10px; }
+.market-thesis-card footer { border-top: 1px solid var(--market-border); margin-top: 16px; padding-top: 11px; }
+.market-thesis-card[data-state="weakened"] { background: color-mix(in srgb, #c89e3c 7%, var(--market-bg)); }
+
 .thesis-intake {
   background: var(--market-surface);
   border: 1px solid var(--market-border);
@@ -2085,6 +2230,12 @@
 
 @media (max-width: 700px) {
   .thesis-workspace { padding: 28px 16px 48px; }
+  .thesis-library-switch { margin-bottom: 22px; }
+  .thesis-library-switch button { padding-left: 10px; padding-right: 10px; }
+  .market-baseline-columns,
+  .market-thesis-copy,
+  .market-hypothesis-grid { grid-template-columns: minmax(0, 1fr); }
+  .market-hypothesis-card footer { align-items: flex-start; flex-direction: column; }
   .thesis-intro { margin-bottom: 28px; }
   .thesis-heading-actions { align-items: flex-start; flex-direction: column; }
   .thesis-intake > header,

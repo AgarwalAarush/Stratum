@@ -67,6 +67,49 @@ function validOwnerId(ownerId: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ownerId)
 }
 
+async function loadCompanyMarketTheses(ownerId: string, symbol: string): Promise<NonNullable<CompanyPacket['marketTheses']>> {
+  const supabase = getSupabaseClient()
+  if (!supabase || !validOwnerId(ownerId)) return []
+  const { data: hypotheses, error: hypothesisError } = await supabase.from('market_hypotheses')
+    .select('id,title').eq('owner_id', ownerId).eq('status', 'active')
+  if (hypothesisError || !hypotheses?.length) return []
+  const hypothesisIds = hypotheses.map((item) => item.id)
+  const { data: versions, error: versionError } = await supabase.from('market_thesis_versions')
+    .select('id,hypothesis_id,version,state,content').in('hypothesis_id', hypothesisIds).in('state', ['active', 'weakened'])
+  if (versionError || !versions?.length) return []
+  const latestByHypothesis = new Map<string, typeof versions[number]>()
+  for (const version of versions) {
+    const current = latestByHypothesis.get(version.hypothesis_id)
+    if (!current || Number(version.version) > Number(current.version)) latestByHypothesis.set(version.hypothesis_id, version)
+  }
+  const latestVersions = [...latestByHypothesis.values()]
+  const { data: exposures, error: exposureError } = await supabase.from('market_thesis_exposures')
+    .select('market_thesis_version_id,role,mechanism,materiality,verification_status')
+    .eq('symbol', symbol).in('market_thesis_version_id', latestVersions.map((item) => item.id))
+  if (exposureError) return []
+  const hypothesisById = new Map(hypotheses.map((item) => [item.id, item.title]))
+  const versionById = new Map(latestVersions.map((item) => [item.id, item]))
+  return (exposures ?? []).flatMap((exposure) => {
+    const version = versionById.get(exposure.market_thesis_version_id)
+    if (!version) return []
+    const content = record(version.content)
+    return [{
+      hypothesisId: version.hypothesis_id,
+      title: hypothesisById.get(version.hypothesis_id) ?? 'Market thesis',
+      version: Number(version.version), state: version.state as 'active' | 'weakened' | 'invalidated' | 'archived',
+      whyNow: String(content.whyNow ?? ''), economics: String(content.economics ?? ''),
+      falsifiers: Array.isArray(content.falsifiers) ? content.falsifiers.filter((item): item is string => typeof item === 'string') : [],
+      exposure: {
+        hypothesisId: version.hypothesis_id,
+        title: hypothesisById.get(version.hypothesis_id) ?? 'Market thesis',
+        version: Number(version.version), mechanism: String(exposure.mechanism), materiality: Number(exposure.materiality),
+        role: exposure.role as 'beneficiary' | 'loser' | 'substitute',
+        verificationStatus: exposure.verification_status as 'verified' | 'needs_company_research' | 'unverified',
+      },
+    }]
+  })
+}
+
 interface SecSubmissionRecent {
   accessionNumber?: string[]
   filingDate?: string[]
@@ -367,7 +410,10 @@ export async function materializeCompanyPacket(
     publishedAt: item.published_at,
     category: typeof item.metadata?.category === 'string' ? item.metadata.category : item.section,
   })).filter((item) => item.url && item.publishedAt).slice(0, 20)
-  const researchEvidence = await researchEvidencePromise
+  const [researchEvidence, marketTheses] = await Promise.all([
+    researchEvidencePromise,
+    loadCompanyMarketTheses(ownerId, symbol),
+  ])
   const sources: CompanyPacketSource[] = [
     { id: 'alpaca-price-history', label: 'Alpaca price history', url: 'https://alpaca.markets/data', source: 'Alpaca', asOf: stock.asOf },
     { id: 'fmp-profile', label: 'FMP company profile', url: `https://financialmodelingprep.com/stable/profile?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
@@ -491,6 +537,7 @@ export async function materializeCompanyPacket(
     ].slice(0, 20),
     events: items,
     researchEvidence,
+    marketTheses,
     industryContext: {
       sector,
       subIndustry,

@@ -8,8 +8,10 @@ import type {
   ThesisMonitor,
   ThesisMonitorStatus,
   ThesisWorkspaceData,
+  MarketThesisWorkspaceData,
 } from '@/lib/markets/types'
 import { MarketsIntentLink } from './MarketsIntentLink'
+import { MarketThesisWorkspace } from './MarketThesisWorkspace'
 
 const emptyDraft: ThesisIntakeDraft = {
   entityType: 'stock',
@@ -88,7 +90,7 @@ function StockDestinationMenu({ symbol }: { symbol: string }) {
   )
 }
 
-export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceData }) {
+export function ThesisWorkspace({ initialData, initialMarketData }: { initialData: ThesisWorkspaceData; initialMarketData?: MarketThesisWorkspaceData }) {
   const [proposals, setProposals] = useState(initialData.proposals)
   const [accepted, setAccepted] = useState(initialData.accepted)
   const [monitors, setMonitors] = useState(initialData.monitors)
@@ -96,6 +98,7 @@ export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceD
   const [notice, setNotice] = useState('')
   const [showIntake, setShowIntake] = useState(false)
   const [draft, setDraft] = useState<ThesisIntakeDraft>(emptyDraft)
+  const [library, setLibrary] = useState<'market' | 'company'>(initialMarketData ? 'market' : 'company')
 
   const updateDraft = (field: keyof ThesisIntakeDraft, value: string) => {
     setDraft((current) => ({ ...current, [field]: value }))
@@ -211,11 +214,18 @@ export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceD
         </div>
         <div className="thesis-heading-actions">
           <span>{proposals.length} awaiting review · {activeMonitorCount} monitored</span>
-          <button type="button" onClick={() => setShowIntake((current) => !current)}>
+          <button type="button" onClick={() => { setLibrary('company'); setShowIntake((current) => !current) }}>
             {showIntake ? 'Close intake' : 'New thesis'}
           </button>
         </div>
       </header>
+      <nav className="thesis-library-switch" aria-label="Thesis library">
+        <button type="button" data-active={library === 'market'} onClick={() => setLibrary('market')}>Market theses</button>
+        <button type="button" data-active={library === 'company'} onClick={() => setLibrary('company')}>Company theses</button>
+      </nav>
+      {library === 'market' ? <MarketThesisWorkspace initialData={initialMarketData ?? { baseline: null, hypotheses: [], theses: [] }} /> : null}
+
+      <div hidden={library !== 'company'}>
       <p className="thesis-intro">A screen can surface a name; a thesis states the belief, what changed, and what would prove it wrong. New evidence creates a proposal—never a silent rewrite.</p>
 
       {showIntake ? (
@@ -373,6 +383,7 @@ export function ThesisWorkspace({ initialData }: { initialData: ThesisWorkspaceD
         )}
       </section>
       {notice ? <p className="thesis-notice" role="status">{notice}</p> : null}
+      </div>
     </section>
   )
 }

@@ -184,6 +184,13 @@ export function multiLanePrefilter(
         && selloffScore(stock, true) >= 1
     })
     .sort((left, right) => selloffScore(right, true) - selloffScore(left, true))
+  const marketThesisExposures = eligibleStocks
+    .filter((stock) => (trackingBySymbol.get(stock.symbol)?.marketTheses?.length ?? 0) > 0)
+    .sort((left, right) => {
+      const rightMateriality = Math.max(...(trackingBySymbol.get(right.symbol)?.marketTheses ?? []).map((item) => item.materiality), 0)
+      const leftMateriality = Math.max(...(trackingBySymbol.get(left.symbol)?.marketTheses ?? []).map((item) => item.materiality), 0)
+      return rightMateriality - leftMateriality
+    })
   const dislocations = eligibleStocks
     .filter((stock) => stock.observationCount >= 5 && selloffScore(stock, false) >= 1)
     .sort((left, right) =>
@@ -194,6 +201,7 @@ export function multiLanePrefilter(
     .sort((left, right) => leadershipScore(right) - leadershipScore(left))
 
   tracked.slice(0, 16).forEach(add)
+  marketThesisExposures.slice(0, 16).forEach(add)
   dislocations.slice(0, 28).forEach(add)
   leaders.slice(0, 24).forEach(add)
   for (const stock of [...dislocations, ...leaders]) add(stock)
@@ -311,6 +319,7 @@ async function loadCandidateTracking(): Promise<Map<string, CandidateTrackingCon
       acceptedThesis: false,
       watched: false,
       owned: false,
+      marketTheses: [],
       ...result.get(symbol),
       ...patch,
     })
@@ -326,6 +335,47 @@ async function loadCandidateTracking(): Promise<Map<string, CandidateTrackingCon
   }
   for (const [symbol, shares] of portfolioShares) if (shares > 0.00000001) update(symbol, { owned: true })
   for (const row of theses ?? []) if (typeof row.symbol === 'string') update(row.symbol, { acceptedThesis: true })
+  // Market theses are an additional discovery lane, not a capital decision.
+  // We only attach a security after an explicit value-chain exposure record
+  // exists, preserving the company-level verification requirement.
+  const { data: hypotheses, error: hypothesisError } = await supabase.from('market_hypotheses')
+    .select('id,title').eq('status', 'active')
+  if (hypothesisError) throw new Error(`Unable to load market thesis hypotheses: ${hypothesisError.message}`)
+  const hypothesisById = new Map((hypotheses ?? []).map((item) => [item.id, item.title]))
+  const hypothesisIds = [...hypothesisById.keys()]
+  if (hypothesisIds.length === 0) return result
+  const { data: versions, error: versionError } = await supabase.from('market_thesis_versions')
+    .select('id,hypothesis_id,version,state').in('hypothesis_id', hypothesisIds).in('state', ['active', 'weakened'])
+  if (versionError) throw new Error(`Unable to load market thesis versions: ${versionError.message}`)
+  const latestByHypothesis = new Map<string, { id: string; version: number }>()
+  for (const row of versions ?? []) {
+    const current = latestByHypothesis.get(row.hypothesis_id)
+    if (!current || Number(row.version) > current.version) latestByHypothesis.set(row.hypothesis_id, { id: row.id, version: Number(row.version) })
+  }
+  const versionToHypothesis = new Map([...latestByHypothesis.entries()].map(([hypothesisId, value]) => [value.id, { hypothesisId, version: value.version }]))
+  if (versionToHypothesis.size === 0) return result
+  const { data: exposures, error: exposureError } = await supabase.from('market_thesis_exposures')
+    .select('market_thesis_version_id,symbol,role,mechanism,materiality,verification_status')
+    .in('market_thesis_version_id', [...versionToHypothesis.keys()]).not('symbol', 'is', null)
+  if (exposureError) throw new Error(`Unable to load market thesis exposures: ${exposureError.message}`)
+  for (const exposure of exposures ?? []) {
+    if (typeof exposure.symbol !== 'string') continue
+    const thesis = versionToHypothesis.get(exposure.market_thesis_version_id)
+    if (!thesis) continue
+    const existing = result.get(exposure.symbol) ?? { acceptedThesis: false, watched: false, owned: false, marketTheses: [] }
+    result.set(exposure.symbol, {
+      ...existing,
+      marketTheses: [...(existing.marketTheses ?? []), {
+        hypothesisId: thesis.hypothesisId,
+        title: hypothesisById.get(thesis.hypothesisId) ?? 'Market thesis',
+        version: thesis.version,
+        mechanism: String(exposure.mechanism),
+        materiality: Number(exposure.materiality),
+        role: exposure.role as 'beneficiary' | 'loser' | 'substitute',
+        verificationStatus: exposure.verification_status as 'verified' | 'needs_company_research' | 'unverified',
+      }],
+    })
+  }
   return result
 }
 
