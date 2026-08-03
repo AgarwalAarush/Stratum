@@ -1,6 +1,4 @@
 import { parseHTML } from 'linkedom'
-import { spawn } from 'node:child_process'
-import { once } from 'node:events'
 import type { WorldObservationInput } from './world-memory.ts'
 
 export interface WorldSourceAdapter {
@@ -109,15 +107,18 @@ function readableText(raw: string, contentType: string): string {
 }
 
 async function extractPdfText(raw: Buffer): Promise<string> {
-  const process = spawn('pdftotext', ['-', '-'], { stdio: ['pipe', 'pipe', 'pipe'] })
-  const stdout: Buffer[] = []
-  const stderr: Buffer[] = []
-  process.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
-  process.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
-  process.stdin.end(raw)
-  const [code] = await once(process, 'close') as [number | null]
-  if (code !== 0) throw new Error(`pdftotext failed: ${Buffer.concat(stderr).toString('utf8').trim() || `exit ${code}`}`)
-  return Buffer.concat(stdout).toString('utf8').replace(/\s+/g, ' ').trim()
+  // This is a worker-only dynamic import. Unlike spawning `pdftotext`, it keeps
+  // the source adapter portable across a fresh macserver or future Linux host.
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs') as {
+    getDocument: (options: { data: Uint8Array }) => { promise: Promise<{ numPages: number; getPage: (page: number) => Promise<{ getTextContent: () => Promise<{ items: Array<{ str?: string }> }> }> }> }
+  }
+  const document = await pdfjs.getDocument({ data: new Uint8Array(raw) }).promise
+  const pages = await Promise.all(Array.from({ length: document.numPages }, async (_, index) => {
+    const page = await document.getPage(index + 1)
+    const content = await page.getTextContent()
+    return content.items.map((item) => item.str ?? '').join(' ')
+  }))
+  return pages.join('\n').replace(/\s+/g, ' ').trim()
 }
 
 function mimeType(response: Response): string {
