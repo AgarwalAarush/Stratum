@@ -11,7 +11,7 @@ The worker is not an HTTP backend and opens no inbound application port. It sche
 
 ## macserver
 
-The active host is the private Intel MacBook reachable through Tailscale as `ssh macserver`. Its Stratum checkout is `~/Projects/Stratum`, and a per-user `launchd` service keeps the worker running while the user session is logged in.
+The active host is the private Intel MacBook reachable through Tailscale as `ssh macserver`. It is a private data plane: it opens no application port and remains reachable only through Tailscale. Vercel serves persisted Supabase artifacts; it never reads the local corpus.
 
 Prerequisites:
 
@@ -21,32 +21,42 @@ Prerequisites:
 - Codex authenticated with a scoped `CODEX_API_KEY` (recommended) or a persisted `codex login --device-auth` session on this trusted host.
 - The repository dependencies installed with `npm ci`.
 
-Install or refresh the service:
+### Production worker and local corpus
+
+The worker must run from an immutable release checkout, not a development checkout. `scripts/deploy-macserver-release.sh` fetches `origin/main`, creates a detached worktree, runs installation/tests/build, then atomically repoints `~/Projects/Stratum-production-current`. Retain old release worktrees for rollback.
+
+The corpus root is `STRATUM_DATA_ROOT=/Users/Shared/StratumData`. It contains content-addressed raw/extracted evidence, DuckDB, Parquet observations, and rendered artifacts. The worker reserves 60 GiB free disk, caps its own managed corpus at 120 GiB, pauses optional downloads below 50 GiB free, and pauses non-critical ingestion below 40 GiB. DuckDB is private-worker-only; Vercel consumes normalized Supabase artifacts.
+
+For boot persistence, replace the login-dependent LaunchAgent with the LaunchDaemon installer. Pass the stable production symlink rather than a release path:
 
 ```bash
 cd ~/Projects/Stratum
-npm ci
-./scripts/install-macserver-worker.sh
+./scripts/deploy-macserver-release.sh
+sudo ./scripts/install-macserver-worker-daemon.sh ~/Projects/Stratum-production-current macserver-user
 ```
 
-The installer creates:
+The daemon installer creates:
 
-- `~/bin/stratum-worker`
-- `~/Library/LaunchAgents/com.aarush.stratum-markets-worker.plist`
-- `~/Library/Logs/Stratum/worker.stdout.log`
-- `~/Library/Logs/Stratum/worker.stderr.log`
+- `/Library/LaunchDaemons/com.aarush.stratum-markets-worker.plist`
+- `/Users/Shared/StratumData/runtime/stratum-worker`
+- `/Users/Shared/StratumData/logs/worker.stdout.log`
+- `/Users/Shared/StratumData/logs/worker.stderr.log`
 
 Useful operations:
 
 ```bash
-launchctl print "gui/$UID/com.aarush.stratum-markets-worker"
-launchctl kickstart -k "gui/$UID/com.aarush.stratum-markets-worker"
-tail -f ~/Library/Logs/Stratum/worker.stderr.log
-cd ~/Projects/Stratum
+sudo launchctl print "system/com.aarush.stratum-markets-worker"
+sudo launchctl kickstart -k "system/com.aarush.stratum-markets-worker"
+tail -f /Users/Shared/StratumData/logs/worker.stderr.log
+cd ~/Projects/Stratum-production-current
 node --experimental-strip-types scripts/markets-worker.ts --once
 ```
 
-Because this is a per-user LaunchAgent, FileVault or a reboot can require a local login before the service returns. Tailscale and SSH should be checked after any reboot.
+The worker environment file is mode `0600`, owned by the existing macserver user; only the service wrapper sources it. The daemon runs under that user after boot, so it survives logout. Tailscale and SSH should still be checked after a reboot.
+
+### Backups
+
+When `RESTIC_REPOSITORY` and `RESTIC_PASSWORD_FILE` are configured, the worker runs an encrypted nightly Restic backup at 02:30 ET and a sampled repository verification each Sunday. Configure retention externally or with `restic forget --keep-daily 30 --keep-weekly 12 --keep-monthly 12 --prune`; never prune while the latest successful backup is over 48 hours old. Record a quarterly full restore drill in `market_corpus_backup_runs` before relying on automatic corpus eviction.
 
 ## Credential boundary
 

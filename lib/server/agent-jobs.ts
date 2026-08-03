@@ -20,6 +20,14 @@ import { getFmpUsageSnapshot, type FmpUsageSnapshot } from './fmp.ts'
 import { cacheFmpFiveYearPriceHistory } from './stock-price-history.ts'
 import { syncRobinhoodPortfolio, type RobinhoodSyncSlot } from './robinhood-portfolio-sync.ts'
 import {
+  compileWorldBaseline,
+  ingestWorldObservation,
+  isMarketAutoThesisEnabled,
+  isMarketWorldModelEnabled,
+  runMarketWorldCycle,
+} from './world-memory.ts'
+import { backupMarketCorpus, verifyMarketCorpusBackup } from './world-backup.ts'
+import {
   fetchPersistedMarketAssets,
   materializeAlpacaScreener,
   syncAlpacaAssets,
@@ -48,6 +56,13 @@ export const AGENT_JOB_TYPES = [
   'generate-morning-brief',
   'generate-weekly-overview',
   'generate-monthly-overview',
+  'ingest-world-source',
+  'compile-world-baseline',
+  'correlate-market-signals',
+  'synthesize-market-hypotheses',
+  'monitor-market-theses',
+  'backup-market-corpus',
+  'verify-market-corpus',
 ] as const
 
 export type AgentJobType = typeof AGENT_JOB_TYPES[number]
@@ -150,6 +165,14 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     bucket.setTime(Math.floor(bucket.getTime() / bucketMs) * bucketMs)
     return `${jobType}:${bucket.toISOString()}`
   }
+  if (jobType === 'compile-world-baseline' || jobType === 'correlate-market-signals' || jobType === 'synthesize-market-hypotheses' || jobType === 'monitor-market-theses') {
+    const bucket = new Date(now)
+    const cadence = jobType === 'monitor-market-theses' ? 60 : jobType === 'compile-world-baseline' ? 60 : 24 * 60
+    bucket.setTime(Math.floor(bucket.getTime() / (cadence * 60_000)) * cadence * 60_000)
+    return `${jobType}:${bucket.toISOString()}`
+  }
+  if (jobType === 'backup-market-corpus' || jobType === 'verify-market-corpus') return `${jobType}:${now.toISOString().slice(0, 10)}`
+  if (jobType === 'ingest-world-source' && typeof payload.fingerprint === 'string') return `${jobType}:${payload.fingerprint}`
   if ((jobType === 'materialize-market-leadership' || jobType === 'run-candidate-scout') && typeof payload.tradingDate === 'string') {
     return `${jobType}:${payload.tradingDate}`
   }
@@ -168,14 +191,19 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-robinhood-portfolio') return 'robinhood'
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'fetch-stock-price-history' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
+  if (jobType === 'ingest-world-source') return 'market-data'
   if (
     jobType === 'refresh-cross-asset'
     || jobType === 'materialize-market-leadership'
     || jobType === 'scan-research-refreshes'
     || jobType === 'monitor-investment-theses'
     || jobType === 'summarize-candidate-scout'
+    || jobType === 'compile-world-baseline'
+    || jobType === 'correlate-market-signals'
+    || jobType === 'monitor-market-theses'
     || jobType === 'prune-market-data'
   ) return 'market-data'
+  if (jobType === 'backup-market-corpus' || jobType === 'verify-market-corpus') return 'market-data'
   return 'codex'
 }
 
@@ -460,6 +488,37 @@ async function executeJob(
   if (job.job_type === 'monitor-investment-theses') {
     return monitorInvestmentTheses()
   }
+
+  if (job.job_type === 'ingest-world-source') {
+    const payload = job.payload.observation
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('World-source ingestion requires an observation payload')
+    return ingestWorldObservation(payload as Parameters<typeof ingestWorldObservation>[0])
+  }
+
+  if (job.job_type === 'compile-world-baseline') {
+    const scopeType = job.payload.scopeType === 'domain' ? 'domain' : 'global'
+    const scopeKey = typeof job.payload.scopeKey === 'string' ? job.payload.scopeKey : 'global'
+    return compileWorldBaseline(scopeType, scopeKey)
+  }
+
+  if (job.job_type === 'correlate-market-signals') {
+    if (!isMarketWorldModelEnabled()) return { skipped: 'MARKET_WORLD_MODEL_ENABLED is false' }
+    const result = await runMarketWorldCycle()
+    return { ...result, automaticPromotionEnabled: isMarketAutoThesisEnabled() }
+  }
+
+  if (job.job_type === 'synthesize-market-hypotheses') {
+    if (!isMarketWorldModelEnabled()) return { skipped: 'MARKET_WORLD_MODEL_ENABLED is false' }
+    return runMarketWorldCycle()
+  }
+
+  if (job.job_type === 'monitor-market-theses') {
+    if (!isMarketWorldModelEnabled()) return { skipped: 'MARKET_WORLD_MODEL_ENABLED is false' }
+    return runMarketWorldCycle()
+  }
+
+  if (job.job_type === 'backup-market-corpus') return backupMarketCorpus()
+  if (job.job_type === 'verify-market-corpus') return verifyMarketCorpusBackup()
 
   if (job.job_type === 'generate-market-memo') {
     const snapshotId = typeof job.payload.snapshotId === 'string'

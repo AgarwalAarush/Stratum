@@ -232,15 +232,27 @@ export interface CandidateSignal {
 }
 
 export type CandidateLane =
+  | 'market_thesis'
   | 'thesis_led'
   | 'dislocation'
   | 'fundamental_inflection'
   | 'leadership'
 
+export interface MarketThesisCandidateLink {
+  hypothesisId: string
+  title: string
+  version: number
+  mechanism: string
+  materiality: number
+  role: 'beneficiary' | 'loser' | 'substitute'
+  verificationStatus: 'verified' | 'needs_company_research' | 'unverified'
+}
+
 export interface CandidateTrackingContext {
   acceptedThesis: boolean
   watched: boolean
   owned: boolean
+  marketTheses?: MarketThesisCandidateLink[]
 }
 
 export interface CandidateBrief {
@@ -253,6 +265,7 @@ export interface CandidateBrief {
   primaryLane: CandidateLane
   lanes: CandidateLane[]
   tracking: CandidateTrackingContext
+  marketThesis?: MarketThesisCandidateLink | null
   selloff: {
     day: number | null
     fiveDay: number | null
@@ -602,6 +615,17 @@ export interface CompanyPacket {
   }>
   events: Array<{ title: string; url: string; publishedAt: string; category: string }>
   researchEvidence?: CompanyResearchEvidence[]
+  /** Parent market models are context only; company research must independently verify exposure. */
+  marketTheses?: Array<{
+    hypothesisId: string
+    title: string
+    version: number
+    state: MarketThesisState
+    whyNow: string
+    economics: string
+    falsifiers: string[]
+    exposure: MarketThesisCandidateLink
+  }>
   industryContext: {
     sector: string
     subIndustry: string
@@ -1066,4 +1090,153 @@ export interface ScreenerResponse {
   snapshotId: string
   stale: boolean
   taxonomy: ScreenerTaxonomy
+}
+
+// World-memory artifacts intentionally sit above company research. They retain
+// sourced market context even before there is a security-level conclusion.
+export type WorldSourceTier = 'primary' | 'regulatory' | 'independent' | 'discovery'
+export type WorldObservationKind = 'fact' | 'estimate' | 'claim' | 'inference'
+export type WorldEntityKind = 'company' | 'technology' | 'facility' | 'commodity' | 'jurisdiction' | 'regulator' | 'industry' | 'dataset'
+export type WorldRelationshipType = 'requires' | 'supplies' | 'constrains' | 'substitutes_for' | 'benefits_from' | 'operates'
+export type MarketHypothesisStatus = 'dormant' | 'forming' | 'proposed' | 'active' | 'rejected' | 'archived'
+export type MarketThesisState = 'active' | 'weakened' | 'invalidated' | 'archived'
+
+export interface WorldDocument {
+  id: string
+  contentHash: string
+  canonicalUrl: string
+  title: string
+  publisher: string
+  sourceTier: WorldSourceTier
+  mimeType: string
+  archiveKey: string | null
+  extractedKey: string | null
+  extractionStatus: 'pending' | 'complete' | 'failed'
+  publishedAt: string | null
+  ingestedAt: string
+  backupState: 'pending' | 'verified' | 'failed' | 'not_configured'
+  metadata: Record<string, unknown>
+}
+
+export interface WorldObservation {
+  id: string
+  documentId: string
+  assertion: string
+  kind: WorldObservationKind
+  domain: string
+  mechanism: string
+  entityIds: string[]
+  geography: string | null
+  numericValue: number | null
+  numericUnit: string | null
+  validFrom: string | null
+  validTo: string | null
+  observedAt: string | null
+  publishedAt: string | null
+  ingestedAt: string
+  confidence: number
+  materiality: number
+  novelty: number
+  decayHours: number | null
+  supersedesId: string | null
+  source: Pick<WorldDocument, 'title' | 'canonicalUrl' | 'publisher' | 'sourceTier'>
+}
+
+export interface WorldBaseline {
+  id: string
+  scopeType: 'global' | 'domain' | 'industry' | 'entity'
+  scopeKey: string
+  version: number
+  content: {
+    state: string
+    changes: string[]
+    constraints: string[]
+    openQuestions: string[]
+    contradictions: string[]
+    dormantSignals: string[]
+    activeHypotheses: string[]
+  }
+  markdown: string
+  observationIds: string[]
+  sourceIds: string[]
+  dataAsOf: string
+  generatedAt: string
+  diff: string[]
+  freshness: 'fresh' | 'aging' | 'stale'
+}
+
+export interface MarketHypothesisEvidence {
+  observationId: string
+  role: 'supporting' | 'contradicting'
+  causalNode: string
+  weight: number
+  explanation: string
+}
+
+export interface MarketHypothesis {
+  id: string
+  ownerId: string
+  title: string
+  status: MarketHypothesisStatus
+  scope: string
+  horizon: string
+  coreMechanism: string
+  causalGraph: Array<{ from: string; to: string; mechanism: string; core: boolean }>
+  confidence: number
+  unresolvedNodes: string[]
+  counterThesis: string
+  evidence: MarketHypothesisEvidence[]
+  parentHypothesisId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ThesisPrediction {
+  id: string
+  prediction: string
+  expectedDirection: string
+  deadline: string | null
+  evidenceNeeded: string
+  result: 'pending' | 'confirmed' | 'disconfirmed' | 'expired'
+  evaluatedAt: string | null
+}
+
+export interface MarketThesisExposure {
+  id: string
+  valueChainLayer: string
+  entityName: string
+  symbol: string | null
+  role: 'beneficiary' | 'loser' | 'substitute'
+  mechanism: string
+  materiality: number
+  confidence: number
+  verificationStatus: 'verified' | 'needs_company_research' | 'unverified'
+}
+
+export interface MarketThesisVersion {
+  id: string
+  hypothesisId: string
+  version: number
+  state: MarketThesisState
+  title: string
+  content: {
+    whyNow: string
+    economics: string
+    expectations: string
+    falsifiers: string[]
+    counterThesis: string
+    sourceLedger: Array<{ documentId: string; label: string; url: string; tier: WorldSourceTier }>
+  }
+  confidence: number
+  dataAsOf: string
+  generatedAt: string
+  revisionDiff: string[]
+  predictions: ThesisPrediction[]
+  exposures: MarketThesisExposure[]
+}
+
+export interface MarketThesisWorkspaceData {
+  baseline: WorldBaseline | null
+  hypotheses: MarketHypothesis[]
+  theses: MarketThesisVersion[]
 }

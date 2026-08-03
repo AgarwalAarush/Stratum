@@ -9,6 +9,7 @@ import {
   isWeekdayAfterMarketClose,
   newYorkClockParts,
 } from '../markets/market-clock.ts'
+import { isMarketWorldModelEnabled } from './world-memory.ts'
 
 export interface ScheduledAgentJob {
   jobType: AgentJobType
@@ -79,6 +80,24 @@ export function buildDueAgentJobs(
     }
   }
   jobs.push(scheduledJob('monitor-investment-theses', now, { cadenceMinutes: monitorCadence }))
+  const newYork = newYorkClockParts(now)
+  if (isMarketWorldModelEnabled()) {
+    if (newYork.hour === 18 && newYork.minute < 10) {
+      jobs.push(scheduledJob('compile-world-baseline', now, { scopeType: 'global', scopeKey: 'global' }))
+    }
+    if (newYork.hour === 20 && newYork.minute < 10) {
+      jobs.push(scheduledJob('synthesize-market-hypotheses', now))
+    }
+    if (newYork.weekday === 'Sun' && newYork.hour === 18 && newYork.minute < 10) {
+      jobs.push(scheduledJob('correlate-market-signals', now, { mode: 'weekly' }))
+    }
+  }
+  if (newYork.hour === 2 && newYork.minute >= 30 && newYork.minute < 40) {
+    jobs.push(scheduledJob('backup-market-corpus', now))
+  }
+  if (newYork.weekday === 'Sun' && newYork.hour === 3 && newYork.minute >= 30 && newYork.minute < 40) {
+    jobs.push(scheduledJob('verify-market-corpus', now))
+  }
   const utcHour = now.getUTCHours()
 
   if (options.includeCodex !== false) {
