@@ -7,14 +7,21 @@ import type {
   CompanyResearchEvidenceQuality,
 } from '../markets/types.ts'
 
-const MAX_RESEARCH_EVIDENCE = 12
-const MAX_SCRAPED_ARTICLES = 8
+const MAX_RESEARCH_EVIDENCE = 24
+const MAX_SCRAPED_ARTICLES = 16
 
 export interface CompanyResearchEvidenceOptions {
+  context?: CompanyResearchContext
   collect?: (feeds: Array<{ name: string; url: string }>) => Promise<ParsedFeedItem[]>
   resolveGoogleNewsUrl?: (url: string) => Promise<string | null>
   scrape?: (url: string) => Promise<{ title: string; content: string; url: string } | null>
   now?: Date
+}
+
+export interface CompanyResearchContext {
+  sector?: string | null
+  subIndustry?: string | null
+  description?: string | null
 }
 
 function normalizedCompanyName(companyName: string, symbol: string): string {
@@ -25,13 +32,21 @@ function normalizedCompanyName(companyName: string, symbol: string): string {
   return normalized || symbol
 }
 
-export function companyResearchQueries(companyName: string, symbol: string): string[] {
+export function companyResearchQueries(
+  companyName: string,
+  symbol: string,
+  context: CompanyResearchContext = {},
+): string[] {
   const company = normalizedCompanyName(companyName, symbol)
+  const market = [context.sector, context.subIndustry].filter(Boolean).join(' ')
+  const marketContext = market ? ` ${market}` : ''
   return [
-    `"${company}" ${symbol} growth contracts backlog`,
-    `"${company}" ${symbol} AI product partnership`,
-    `"${company}" ${symbol} market competition TAM`,
-    `"${company}" ${symbol} data platform moat strategy`,
+    `"${company}" ${symbol} products customers adoption business model`,
+    `"${company}" ${symbol} growth contracts backlog partnerships`,
+    `"${company}" ${symbol} technology product strategy competitive advantage`,
+    `"${company}" ${symbol}${marketContext} market demand competition TAM`,
+    `"${company}" ${symbol}${marketContext} policy regulation macro environment`,
+    `"${company}" ${symbol} strategic relationship ecosystem platform`,
   ]
 }
 
@@ -61,8 +76,14 @@ function evidenceQuality(url: string, companyWebsite: string | null): CompanyRes
 
 function evidenceKind(title: string, excerpt: string): CompanyResearchEvidenceKind {
   const haystack = `${title} ${excerpt}`.toLowerCase()
+  if (/\b(acquisition|acquires|partnership|partner|ecosystem|joint venture|related party|affiliate|subsidiary)\b/.test(haystack)) {
+    return 'strategic_relationship'
+  }
   if (/\b(ai|artificial intelligence|machine learning|generative|foundation model|large language)\b/.test(haystack)) {
     return 'ai_and_product'
+  }
+  if (/\b(regulation|regulatory|policy|tariff|rate|interest rate|inflation|recession|macro|demand cycle|supply chain|interconnection|spectrum|procurement)\b/.test(haystack)) {
+    return 'market_environment'
   }
   if (/\b(competitor|competition|market share|tam|total addressable|industry)\b/.test(haystack)) {
     return 'market_and_competition'
@@ -72,6 +93,9 @@ function evidenceKind(title: string, excerpt: string): CompanyResearchEvidenceKi
   }
   if (/\b(growth|contract|backlog|guidance|launch|revenue|customer)\b/.test(haystack)) {
     return 'growth_driver'
+  }
+  if (/\b(product|service|platform|deployment|subscriber|user|workflow|customer adoption)\b/.test(haystack)) {
+    return 'product_and_customer'
   }
   return 'company_strategy'
 }
@@ -92,11 +116,31 @@ function dedupe(items: ParsedFeedItem[]): ParsedFeedItem[] {
   })
 }
 
+function diversifyByResearchLane(items: ParsedFeedItem[]): ParsedFeedItem[] {
+  const sorted = [...items].sort((left, right) => right.publishedAt - left.publishedAt)
+  const selected: ParsedFeedItem[] = []
+  const usedLanes = new Set<string>()
+  for (const item of sorted) {
+    if (usedLanes.has(item.source)) continue
+    usedLanes.add(item.source)
+    selected.push(item)
+  }
+  for (const item of sorted) {
+    if (selected.length >= MAX_RESEARCH_EVIDENCE) break
+    if (!selected.includes(item)) selected.push(item)
+  }
+  return selected.slice(0, MAX_RESEARCH_EVIDENCE)
+}
+
 /**
- * Collects a bounded, company-specific research pack on the worker. Search
- * results are source material, never facts by themselves: the report prompt
- * requires attribution and distinguishes primary/regulatory evidence from
- * independent reporting and unresolved discovery links.
+ * Collects a bounded but broad company-specific research pack on the worker.
+ * The six lanes deliberately cover product/customer value, commercial proof,
+ * technology, market structure, macro/policy environment, and strategic
+ * relationships.  The cap protects worker latency and packet size; it is not
+ * a claim that twelve headlines are sufficient diligence. Search results are
+ * source material, never facts by themselves: the report prompt requires
+ * attribution and distinguishes primary/regulatory evidence from independent
+ * reporting and unresolved discovery links.
  */
 export async function collectCompanyResearchEvidence(
   companyName: string,
@@ -104,21 +148,20 @@ export async function collectCompanyResearchEvidence(
   companyWebsite: string | null,
   options: CompanyResearchEvidenceOptions = {},
 ): Promise<CompanyResearchEvidence[]> {
+  const context = options.context ?? {}
   const collect = options.collect ?? (async (feeds) => collectFinanceFeedItems(feeds, {
-    limit: 24,
-    overallDeadlineMs: 30_000,
-    feedTimeoutMs: 9_000,
+    limit: 60,
+    overallDeadlineMs: 45_000,
+    feedTimeoutMs: 12_000,
     batchConcurrency: 3,
   }))
   const resolveGoogleNewsUrl = options.resolveGoogleNewsUrl ?? cachedDecodeGoogleNewsUrl
   const scrape = options.scrape ?? scrapeArticle
-  const feeds = companyResearchQueries(companyName, symbol).map((query, index) => ({
+  const feeds = companyResearchQueries(companyName, symbol, context).map((query, index) => ({
     name: `Company research ${index + 1}`,
     url: financeGoogleNewsRss(query),
   }))
-  const discovered = dedupe(await collect(feeds))
-    .sort((left, right) => right.publishedAt - left.publishedAt)
-    .slice(0, MAX_RESEARCH_EVIDENCE)
+  const discovered = diversifyByResearchLane(dedupe(await collect(feeds)))
 
   const resolved = await Promise.all(discovered.map(async (item) => {
     try {

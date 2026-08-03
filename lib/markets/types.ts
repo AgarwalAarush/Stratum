@@ -420,9 +420,12 @@ export interface CompanyPacketSource {
  */
 export type CompanyResearchEvidenceKind =
   | 'company_strategy'
+  | 'product_and_customer'
   | 'growth_driver'
   | 'ai_and_product'
   | 'market_and_competition'
+  | 'market_environment'
+  | 'strategic_relationship'
   | 'moat'
 
 export type CompanyResearchEvidenceQuality = 'primary' | 'regulatory' | 'independent' | 'discovery'

@@ -34,20 +34,22 @@ const items: ParsedFeedItem[] = [
   },
 ]
 
-test('company research queries deliberately cover growth, AI, and market structure', () => {
+test('company research queries deliberately cover product, market environment, and strategic relationships', () => {
   assert.deepEqual(companyResearchQueries('Planet Labs PBC', 'PL'), [
-    '"Planet Labs" PL growth contracts backlog',
-    '"Planet Labs" PL AI product partnership',
-    '"Planet Labs" PL market competition TAM',
-    '"Planet Labs" PL data platform moat strategy',
+    '"Planet Labs" PL products customers adoption business model',
+    '"Planet Labs" PL growth contracts backlog partnerships',
+    '"Planet Labs" PL technology product strategy competitive advantage',
+    '"Planet Labs" PL market demand competition TAM',
+    '"Planet Labs" PL policy regulation macro environment',
+    '"Planet Labs" PL strategic relationship ecosystem platform',
   ])
 })
 
 test('research evidence keeps source provenance and remains resilient to an individual scrape failure', async () => {
   const evidence = await collectCompanyResearchEvidence('Planet Labs PBC', 'PL', 'https://www.planet.com', {
     collect: async (feeds) => {
-      assert.equal(feeds.length, 4)
-      assert.match(feeds[1]!.url, /AI%20product%20partnership/)
+      assert.equal(feeds.length, 6)
+      assert.match(feeds[3]!.url, /market%20demand%20competition%20TAM/)
       return items
     },
     resolveGoogleNewsUrl: async (url) => url.replace('https://news.google.com/rss/articles/', 'https://www.planet.com/research/'),
