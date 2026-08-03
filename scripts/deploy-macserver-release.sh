@@ -28,5 +28,13 @@ next_link="${active_link}.next"
 rm -f "$next_link"
 ln -s "$release_dir" "$next_link"
 mv -f "$next_link" "$active_link"
-launchctl kickstart -k "system/$label" 2>/dev/null || launchctl kickstart -k "gui/$UID/$label"
+daemon_pid="$(launchctl print "system/$label" 2>/dev/null | awk '/pid =/{print $3; exit}')"
+if [[ "$daemon_pid" == <-> ]]; then
+  # The daemon deliberately runs as the macserver user. Terminating that
+  # process is enough for KeepAlive to relaunch the stable wrapper and follow
+  # the new production symlink—without requiring sudo for each release.
+  kill -TERM "$daemon_pid"
+else
+  echo "Release is staged, but no running system worker was found to restart." >&2
+fi
 echo "Deployed $revision at $active_link. The prior release worktree is retained for rollback."
