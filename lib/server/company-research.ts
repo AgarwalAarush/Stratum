@@ -154,6 +154,8 @@ const SEC_EXCERPT_TARGETS = [
   'affiliates',
   'acquisition',
   'artificial intelligence',
+  'data center',
+  'social media',
 ]
 
 export function compactSecFilingText(value: string, maximumLength = 45_000): string | null {
@@ -187,7 +189,13 @@ async function fetchSecFilingExcerpt(url: string): Promise<string | null> {
     },
   })
   if (!response.ok) return null
-  const { document } = parseHTML(await response.text())
+  const raw = await response.text()
+  const htmlStart = raw.search(/<!doctype html|<html/i)
+  const htmlEnd = raw.toLowerCase().lastIndexOf('</html>')
+  const html = htmlStart >= 0
+    ? raw.slice(htmlStart, htmlEnd >= htmlStart ? htmlEnd + '</html>'.length : undefined)
+    : raw
+  const { document } = parseHTML(html)
   for (const element of Array.from(document.querySelectorAll('script, style, noscript, svg'))) element.remove()
   return compactSecFilingText(document.body?.textContent ?? '')
 }

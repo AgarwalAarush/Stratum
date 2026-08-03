@@ -160,6 +160,12 @@ test('SEC filing excerpts retain targeted business and related-party evidence be
   assert.ok((excerpt?.length ?? 0) <= 20_000)
 })
 
+test('SEC filing ingestion extracts HTML embedded in an EDGAR document wrapper', async () => {
+  const source = await readFile(new URL('../lib/server/company-research.ts', import.meta.url), 'utf8')
+  assert.match(source, /raw\.search\(\/<!doctype html\|<html\/i\)/)
+  assert.match(source, /lastIndexOf\('\<\/html\>'\)/)
+})
+
 test('research revision migration links each refresh to its prior immutable version', async () => {
   const migrations = await Promise.all([
     readFile(new URL('../supabase/migrations/202607300006_research_revision_lineage.sql', import.meta.url), 'utf8'),
