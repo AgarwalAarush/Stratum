@@ -6,4 +6,6 @@ test('macserver releases recognize an existing linked worktree', async () => {
   const source = await readFile(new URL('../scripts/deploy-macserver-release.sh', import.meta.url), 'utf8')
   assert.match(source, /if \[\[ ! -e "\$release_dir\/\.git" \]\]; then/)
   assert.doesNotMatch(source, /if \[\[ ! -d "\$release_dir\/\.git" \]\]; then/)
+  assert.match(source, /cp "\$active_link\/\.env\.worker" "\$release_dir\/\.env\.worker"/)
+  assert.match(source, /mv -f -h "\$next_link" "\$active_link"/)
 })

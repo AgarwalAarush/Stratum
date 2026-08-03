@@ -25,10 +25,21 @@ npm run lint
 node --test --experimental-strip-types tests/world-memory.test.ts tests/candidate-scout.test.ts
 npm run build
 
+# The worker environment is intentionally gitignored. Carry its existing
+# owner-only file into the immutable release before the symlink switches.
+if [[ ! -f "$release_dir/.env.worker" && -f "$active_link/.env.worker" ]]; then
+  cp "$active_link/.env.worker" "$release_dir/.env.worker"
+  chmod 600 "$release_dir/.env.worker"
+fi
+if [[ ! -f "$release_dir/.env.worker" ]]; then
+  echo "Missing worker environment in $release_dir" >&2
+  exit 1
+fi
+
 next_link="${active_link}.next"
 rm -f "$next_link"
 ln -s "$release_dir" "$next_link"
-mv -f "$next_link" "$active_link"
+mv -f -h "$next_link" "$active_link"
 daemon_pid="$(launchctl print "system/$label" 2>/dev/null | awk '/pid =/{print $3; exit}')"
 if [[ "$daemon_pid" == <-> ]]; then
   # The daemon deliberately runs as the macserver user. Terminating that
