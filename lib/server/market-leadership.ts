@@ -107,6 +107,16 @@ interface ScreenerSnapshotMetric {
   daily_change: number | string | null
 }
 
+interface PublishedLeadershipSnapshot {
+  id: string
+}
+
+function publishedLeadershipSnapshotId(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const id = (value as Partial<PublishedLeadershipSnapshot>).id
+  return typeof id === 'string' ? id : null
+}
+
 async function loadAllRows<T>(
   loader: (from: number, to: number) => Promise<{ data: T[] | null; error: { message: string } | null }>,
 ): Promise<T[]> {
@@ -258,8 +268,12 @@ export async function materializeMarketLeadership(
       summary: signal.summary,
     })))
     if (divergenceError) throw new Error(`Unable to persist leadership divergences: ${divergenceError.message}`)
-    const { error: publishError } = await supabase.rpc('publish_market_leadership_snapshot', { p_snapshot_id: record.id })
+    const { data: published, error: publishError } = await supabase
+      .rpc('publish_market_leadership_snapshot', { p_snapshot_id: record.id })
     if (publishError) throw new Error(`Unable to publish leadership snapshot: ${publishError.message}`)
+    const publishedId = publishedLeadershipSnapshotId(published)
+    if (!publishedId) throw new Error('Unable to publish leadership snapshot: no snapshot was returned')
+    artifact.id = publishedId
     return artifact
   } catch (error) {
     await supabase.from('market_leadership_snapshots').update({

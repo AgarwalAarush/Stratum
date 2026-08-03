@@ -377,9 +377,7 @@ async function executeJob(
       snapshotId: snapshot.snapshotId,
       synthesize: Boolean(slot),
       ...(slot ? { slot: slot.slot } : {}),
-    }, slot
-      ? `generate-market-memo:${slot.date}:${slot.slot}`
-      : `generate-market-state:${snapshot.snapshotId}`)
+    })
     return snapshot
   }
 

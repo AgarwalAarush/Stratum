@@ -99,6 +99,17 @@ test('leadership migration requires complete atomic publication', async () => {
   assert.match(sql, /publish_market_leadership_snapshot/)
 })
 
+test('leadership publication reuses an already-complete trading date', async () => {
+  const [migration, materializer] = await Promise.all([
+    readFile(new URL('../supabase/migrations/202608030002_idempotent_market_home_and_leadership.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/server/market-leadership.ts', import.meta.url), 'utf8'),
+  ])
+  assert.match(migration, /pg_advisory_xact_lock/)
+  assert.match(migration, /existing_snapshot/)
+  assert.match(migration, /delete from public\.market_leadership_snapshots/)
+  assert.match(materializer, /publishedLeadershipSnapshotId/)
+})
+
 test('group metrics persist the market-day return', async () => {
   const [schema, materializer, migration] = await Promise.all([
     readFile(new URL('../supabase/migrations/202607280002_market_leadership_and_candidates.sql', import.meta.url), 'utf8'),

@@ -78,6 +78,12 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
   )
 })
 
+test('market memo jobs deduplicate by immutable screener snapshot', async () => {
+  const source = await readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8')
+  assert.match(source, /await enqueueAgentJob\('generate-market-memo', \{[\s\S]*?snapshotId: snapshot\.snapshotId/)
+  assert.doesNotMatch(source, /generate-market-memo:\$\{slot\.date\}:\$\{slot\.slot\}/)
+})
+
 test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('sync-market-assets'), 'alpaca')
   assert.equal(agentJobProvider('sync-robinhood-portfolio'), 'robinhood')
