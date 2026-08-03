@@ -27,6 +27,12 @@ The worker must run from an immutable release checkout, not a development checko
 
 The corpus root is `STRATUM_DATA_ROOT=/Users/Shared/StratumData`. It contains content-addressed raw/extracted evidence, DuckDB, Parquet observations, and rendered artifacts. The worker reserves 60 GiB free disk, caps its own managed corpus at 120 GiB, pauses optional downloads below 50 GiB free, and pauses non-critical ingestion below 40 GiB. DuckDB is private-worker-only; Vercel consumes normalized Supabase artifacts.
 
+### First real market-memory vertical: AI/power
+
+With `MARKET_WORLD_MODEL_ENABLED=true`, the worker fetches the curated `ai-power-v1` packet at 17:00 ET, archives the original source bytes before storing extracted text, and queues fresh global plus `ai-power` baselines and hypothesis synthesis. The initial packet is intentionally primary-source-heavy: EIA demand and deliverable-capacity material, FERC large-load interconnection action, DOE transformer supply-chain evidence, and NERC's independent reliability cross-check. Failed sources are retained in the job result as explicit gaps; a partial packet is never presented as complete diligence.
+
+Keep `MARKET_AUTO_THESIS_ENABLED=false` through the first real end-to-end validation. The first run may form a hypothesis; it cannot create a capital decision and auto-promotion is a separate, later gate.
+
 For boot persistence, replace the login-dependent LaunchAgent with the LaunchDaemon installer. Pass the stable production symlink rather than a release path:
 
 ```bash

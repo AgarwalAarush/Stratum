@@ -22,6 +22,9 @@ export interface WorldObservationInput {
   publisher: string
   sourceTier: WorldSourceTier
   body: string
+  /** Original source bytes when `body` is a cleaned extraction. */
+  rawBody?: string | Buffer
+  sourceExtension?: string
   mimeType?: string
   publishedAt?: string | null
   assertion: string
@@ -102,9 +105,10 @@ export async function ingestWorldObservation(input: WorldObservationInput): Prom
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const stored = await storeWorldCorpusDocument({
-    body: input.body,
+    body: input.rawBody ?? input.body,
+    extractedText: input.body,
     mimeType: input.mimeType,
-    extension: input.mimeType?.includes('html') ? 'html' : 'txt',
+    extension: input.sourceExtension ?? (input.mimeType?.includes('html') ? 'html' : 'txt'),
     title: input.title,
     canonicalUrl: input.canonicalUrl,
     publisher: input.publisher,

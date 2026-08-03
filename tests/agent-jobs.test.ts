@@ -76,6 +76,12 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
     }),
     'summarize-candidate-scout:2026-07-31',
   )
+  assert.equal(
+    buildAgentJobDedupeKey('compile-world-baseline', new Date('2026-08-03T21:03:00Z'), {
+      scopeType: 'domain', scopeKey: 'ai-power',
+    }),
+    'compile-world-baseline:domain:ai-power:2026-08-03T21:00:00.000Z',
+  )
 })
 
 test('market memo jobs deduplicate by immutable screener snapshot', async () => {

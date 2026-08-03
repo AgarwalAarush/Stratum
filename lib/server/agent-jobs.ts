@@ -27,6 +27,7 @@ import {
   runMarketWorldCycle,
 } from './world-memory.ts'
 import { backupMarketCorpus, verifyMarketCorpusBackup } from './world-backup.ts'
+import { getWorldSourceAdapter } from './world-sources.ts'
 import {
   fetchPersistedMarketAssets,
   materializeAlpacaScreener,
@@ -169,10 +170,16 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     const bucket = new Date(now)
     const cadence = jobType === 'monitor-market-theses' ? 60 : jobType === 'compile-world-baseline' ? 60 : 24 * 60
     bucket.setTime(Math.floor(bucket.getTime() / (cadence * 60_000)) * cadence * 60_000)
-    return `${jobType}:${bucket.toISOString()}`
+    const scope = jobType === 'compile-world-baseline'
+      ? `${payload.scopeType === 'domain' ? 'domain' : 'global'}:${typeof payload.scopeKey === 'string' ? payload.scopeKey : 'global'}`
+      : ''
+    return `${jobType}:${scope}:${bucket.toISOString()}`
   }
   if (jobType === 'backup-market-corpus' || jobType === 'verify-market-corpus') return `${jobType}:${now.toISOString().slice(0, 10)}`
-  if (jobType === 'ingest-world-source' && typeof payload.fingerprint === 'string') return `${jobType}:${payload.fingerprint}`
+  if (jobType === 'ingest-world-source') {
+    if (typeof payload.fingerprint === 'string') return `${jobType}:${payload.fingerprint}`
+    if (typeof payload.adapterId === 'string') return `${jobType}:${payload.adapterId}:${now.toISOString().slice(0, 10)}`
+  }
   if ((jobType === 'materialize-market-leadership' || jobType === 'run-candidate-scout') && typeof payload.tradingDate === 'string') {
     return `${jobType}:${payload.tradingDate}`
   }
@@ -488,6 +495,29 @@ async function executeJob(
   }
 
   if (job.job_type === 'ingest-world-source') {
+    const adapterId = typeof job.payload.adapterId === 'string' ? job.payload.adapterId : ''
+    if (adapterId) {
+      const adapter = getWorldSourceAdapter(adapterId)
+      if (!adapter) throw new Error(`Unknown world-source adapter: ${adapterId}`)
+      await reportProgress(10, `fetching ${adapter.label}`)
+      const sourceResult = await adapter.ingest()
+      const observations = sourceResult.observations
+      await reportProgress(55, 'archiving source documents and observations')
+      const stored = []
+      for (const observation of observations) stored.push(await ingestWorldObservation(observation))
+      await reportProgress(100, 'ingested')
+      if (isMarketWorldModelEnabled() && stored.some((item) => item.materiality >= 55)) {
+        await enqueueAgentJob('compile-world-baseline', { scopeType: 'domain', scopeKey: adapter.domain })
+        await enqueueAgentJob('compile-world-baseline', { scopeType: 'global', scopeKey: 'global' })
+        await enqueueAgentJob('synthesize-market-hypotheses', { reason: `source:${adapterId}` })
+      }
+      return {
+        adapterId,
+        sourceCount: observations.length,
+        observationIds: stored.map((item) => item.id),
+        failedSources: sourceResult.failures,
+      }
+    }
     const payload = job.payload.observation
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('World-source ingestion requires an observation payload')
     return ingestWorldObservation(payload as Parameters<typeof ingestWorldObservation>[0])

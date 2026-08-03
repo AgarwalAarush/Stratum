@@ -16,6 +16,12 @@ export interface CorpusDiskState {
 
 export interface WorldCorpusDocumentInput {
   body: string | Buffer
+  /**
+   * Readable extraction of `body`. The raw bytes are always archived unchanged;
+   * this is deliberately separate so an HTML or PDF source is not mistaken for
+   * its analyst-facing text representation.
+   */
+  extractedText?: string
   extension?: string
   mimeType?: string
   title: string
@@ -104,7 +110,7 @@ export async function storeWorldCorpusDocument(
   try {
     await stat(extractedPath)
   } catch {
-    const text = Buffer.isBuffer(input.body) ? input.body.toString('utf8') : input.body
+    const text = input.extractedText ?? (Buffer.isBuffer(input.body) ? input.body.toString('utf8') : input.body)
     const metadata = [
       `# ${input.title}`,
       '',

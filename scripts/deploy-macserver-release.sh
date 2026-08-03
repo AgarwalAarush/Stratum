@@ -22,7 +22,7 @@ fi
 cd "$release_dir"
 npm ci
 npm run lint
-node --test --experimental-strip-types tests/world-memory.test.ts tests/candidate-scout.test.ts
+node --test --experimental-strip-types tests/world-memory.test.ts tests/world-sources.test.ts tests/candidate-scout.test.ts
 npm run build
 
 # The worker environment is intentionally gitignored. Carry its existing
