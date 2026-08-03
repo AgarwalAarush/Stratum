@@ -141,7 +141,13 @@ async function fetchRecentEarningsTranscripts(
 
 const SEC_FILING_FORMS = new Set(['10-K', '10-Q', '8-K', 'S-1', 'S-1/A', '424B4'])
 const SEC_EXCERPT_TARGETS = [
-  'business',
+  'related party',
+  'affiliates',
+  'acquisition',
+  'artificial intelligence',
+  'data center',
+  'supercomputer',
+  'social media',
   'products and services',
   'customers',
   'competition',
@@ -150,12 +156,7 @@ const SEC_EXCERPT_TARGETS = [
   'regulation',
   'supply chain',
   'risk factors',
-  'related party',
-  'affiliates',
-  'acquisition',
-  'artificial intelligence',
-  'data center',
-  'social media',
+  'business',
 ]
 
 export function compactSecFilingText(value: string, maximumLength = 45_000): string | null {
