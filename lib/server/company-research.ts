@@ -22,6 +22,7 @@ import { collectCompanyResearchEvidence } from './company-research-evidence.ts'
 import { fetchSecLiquidityFacts } from './sec-financials.ts'
 import { isEtfInstrument } from './etf-research.ts'
 import { materializeCompanyMarketModel } from './company-market-model.ts'
+import { parseHTML } from 'linkedom'
 
 const RESEARCH_SECTION_IDS: EquityResearchSectionId[] = [
   'snapshot',
@@ -72,6 +73,14 @@ interface SecSubmissionRecent {
   reportDate?: string[]
   form?: string[]
   primaryDocument?: string[]
+}
+
+interface CompanyFilingEvidence {
+  title: string
+  url: string
+  publishedAt: string
+  form: string
+  excerpt: string | null
 }
 
 type FmpRequest = <T>(
@@ -130,9 +139,62 @@ async function fetchRecentEarningsTranscripts(
   return settled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
 }
 
+const SEC_FILING_FORMS = new Set(['10-K', '10-Q', '8-K', 'S-1', 'S-1/A', '424B4'])
+const SEC_EXCERPT_TARGETS = [
+  'business',
+  'products and services',
+  'customers',
+  'competition',
+  'market opportunity',
+  'government contracts',
+  'regulation',
+  'supply chain',
+  'risk factors',
+  'related party',
+  'affiliates',
+  'acquisition',
+  'artificial intelligence',
+]
+
+export function compactSecFilingText(value: string, maximumLength = 45_000): string | null {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (normalized.length < 200) return null
+  if (normalized.length <= maximumLength) return normalized
+  const windows: Array<{ start: number; end: number }> = [{ start: 0, end: 12_000 }]
+  const lower = normalized.toLowerCase()
+  for (const target of SEC_EXCERPT_TARGETS) {
+    const index = lower.indexOf(target)
+    if (index < 0) continue
+    const start = Math.max(0, index - 1_500)
+    const end = Math.min(normalized.length, index + 4_500)
+    if (windows.some((window) => start <= window.end && end >= window.start)) continue
+    windows.push({ start, end })
+    if (windows.reduce((total, window) => total + window.end - window.start, 0) >= maximumLength) break
+  }
+  return windows
+    .sort((left, right) => left.start - right.start)
+    .map((window) => normalized.slice(window.start, window.end))
+    .join('\n\n[Targeted filing excerpt]\n\n')
+    .slice(0, maximumLength)
+}
+
+async function fetchSecFilingExcerpt(url: string): Promise<string | null> {
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(15_000),
+    headers: {
+      Accept: 'text/html',
+      'User-Agent': process.env.SEC_API_USER_AGENT?.trim() || 'Stratum/0.3 (aarushagarwal.dev)',
+    },
+  })
+  if (!response.ok) return null
+  const { document } = parseHTML(await response.text())
+  for (const element of Array.from(document.querySelectorAll('script, style, noscript, svg'))) element.remove()
+  return compactSecFilingText(document.body?.textContent ?? '')
+}
+
 async function fetchRecentSecFilings(
   cikValue: unknown,
-): Promise<Array<{ title: string; url: string; publishedAt: string }>> {
+): Promise<CompanyFilingEvidence[]> {
   const cik = String(cikValue ?? '').replace(/\D/g, '')
   if (!cik) return []
   const response = await fetch(`https://data.sec.gov/submissions/CIK${cik.padStart(10, '0')}.json`, {
@@ -146,20 +208,31 @@ async function fetchRecentSecFilings(
   const payload = await response.json() as { filings?: { recent?: SecSubmissionRecent } }
   const recent = payload.filings?.recent
   if (!recent) return []
-  const filings: Array<{ title: string; url: string; publishedAt: string }> = []
+  const filings: CompanyFilingEvidence[] = []
   for (let index = 0; index < (recent.form?.length ?? 0); index += 1) {
     const form = recent.form?.[index]
     const accession = recent.accessionNumber?.[index]
     const document = recent.primaryDocument?.[index]
     const filedAt = recent.filingDate?.[index]
-    if (!form || !accession || !document || !filedAt || !['10-K', '10-Q', '8-K'].includes(form)) continue
+    if (!form || !accession || !document || !filedAt || !SEC_FILING_FORMS.has(form)) continue
     filings.push({
       title: `${form} filed ${filedAt}${recent.reportDate?.[index] ? ` · period ${recent.reportDate[index]}` : ''}`,
       url: `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession.replaceAll('-', '')}/${document}`,
       publishedAt: new Date(`${filedAt}T16:00:00Z`).toISOString(),
+      form,
+      excerpt: null,
     })
-    if (filings.length >= 12) break
+    if (filings.length >= 20) break
   }
+  const selected = new Set<number>()
+  for (const form of ['10-K', '10-Q', '424B4', 'S-1', 'S-1/A', '8-K']) {
+    const index = filings.findIndex((filing) => filing.form === form)
+    if (index >= 0) selected.add(index)
+    if (selected.size >= 6) break
+  }
+  const excerpts = await Promise.all([...selected].map(async (index) =>
+    [index, await fetchSecFilingExcerpt(filings[index]!.url).catch(() => null)] as const))
+  for (const [index, excerpt] of excerpts) filings[index]!.excerpt = excerpt
   return filings
 }
 
@@ -271,6 +344,7 @@ export async function materializeCompanyPacket(
         sector,
         subIndustry,
         description: typeof profile.description === 'string' ? profile.description : null,
+        leader: typeof profile.ceo === 'string' ? profile.ceo : null,
       },
     },
   ).catch(() => [])

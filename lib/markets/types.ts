@@ -593,7 +593,13 @@ export interface CompanyPacket {
   estimates: Array<Record<string, string | number | null>>
   transcripts?: CompanyTranscript[]
   peers: string[]
-  filings: Array<{ title: string; url: string; publishedAt: string }>
+  filings: Array<{
+    title: string
+    url: string
+    publishedAt: string
+    form?: string
+    excerpt?: string | null
+  }>
   events: Array<{ title: string; url: string; publishedAt: string; category: string }>
   researchEvidence?: CompanyResearchEvidence[]
   industryContext: {

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
-import { validateEquityResearch } from '../lib/server/company-research.ts'
+import { compactSecFilingText, validateEquityResearch } from '../lib/server/company-research.ts'
 
 const sectionIds = [
   'snapshot',
@@ -151,6 +151,13 @@ test('research persistence migration creates immutable owned versions and source
   assert.match(sql, /unique \(owner_id, symbol, version\)/i)
   assert.match(sql, /create table if not exists public\.equity_research_sources/i)
   assert.match(sql, /enable row level security/i)
+})
+
+test('SEC filing excerpts retain targeted business and related-party evidence beyond the filing front matter', () => {
+  const filing = `${'front matter '.repeat(2_000)} ${'middle '.repeat(8_000)} Related Party Transactions xAI shared infrastructure agreement ${'tail '.repeat(8_000)}`
+  const excerpt = compactSecFilingText(filing, 20_000)
+  assert.match(excerpt ?? '', /Related Party Transactions xAI shared infrastructure agreement/)
+  assert.ok((excerpt?.length ?? 0) <= 20_000)
 })
 
 test('research revision migration links each refresh to its prior immutable version', async () => {

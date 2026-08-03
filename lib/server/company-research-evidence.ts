@@ -22,6 +22,8 @@ export interface CompanyResearchContext {
   sector?: string | null
   subIndustry?: string | null
   description?: string | null
+  brand?: string | null
+  leader?: string | null
 }
 
 function normalizedCompanyName(companyName: string, symbol: string): string {
@@ -38,16 +40,44 @@ export function companyResearchQueries(
   context: CompanyResearchContext = {},
 ): string[] {
   const company = normalizedCompanyName(companyName, symbol)
+  const searchName = context.brand?.trim() || company
   const market = [context.sector, context.subIndustry].filter(Boolean).join(' ')
   const marketContext = market ? ` ${market}` : ''
+  const leaderContext = context.leader?.trim() ? ` "${context.leader.trim()}"` : ''
   return [
-    `"${company}" ${symbol} products customers adoption business model`,
-    `"${company}" ${symbol} growth contracts backlog partnerships`,
-    `"${company}" ${symbol} technology product strategy competitive advantage`,
-    `"${company}" ${symbol}${marketContext} market demand competition TAM`,
-    `"${company}" ${symbol}${marketContext} policy regulation macro environment`,
-    `"${company}" ${symbol} strategic relationship ecosystem platform`,
+    `"${searchName}" ${symbol} products customers adoption business model`,
+    `"${searchName}" ${symbol} growth contracts backlog pricing unit economics`,
+    `"${searchName}" ${symbol} capacity deployment technology product roadmap`,
+    `"${searchName}" ${symbol}${marketContext} market demand competition substitutes TAM`,
+    `"${searchName}" ${symbol}${marketContext} policy regulation macro supply chain environment`,
+    `"${searchName}" ${symbol} strategic relationship ecosystem platform`,
+    `"${searchName}" ${symbol}${leaderContext} affiliates related party acquisitions merger`,
+    `"${searchName}" ${symbol}${leaderContext} shared infrastructure customers suppliers partnerships`,
   ]
+}
+
+function websiteBrand(companyWebsite: string | null): string | null {
+  if (!companyWebsite) return null
+  try {
+    const host = new URL(companyWebsite).hostname.replace(/^www\./, '')
+    return host.split('.')[0]?.trim() || null
+  } catch {
+    return null
+  }
+}
+
+function relevantToCompany(
+  item: ParsedFeedItem,
+  companyName: string,
+  symbol: string,
+  brand: string | null,
+): boolean {
+  const title = item.title.toLowerCase()
+  const aliases = [normalizedCompanyName(companyName, symbol), brand]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .map((value) => value.toLowerCase())
+  if (aliases.some((alias) => title.includes(alias))) return true
+  return new RegExp(`\\b${symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(item.title)
 }
 
 function sourceName(item: ParsedFeedItem, url: string): string {
@@ -134,10 +164,11 @@ function diversifyByResearchLane(items: ParsedFeedItem[]): ParsedFeedItem[] {
 
 /**
  * Collects a bounded but broad company-specific research pack on the worker.
- * The six lanes deliberately cover product/customer value, commercial proof,
- * technology, market structure, macro/policy environment, and strategic
- * relationships.  The cap protects worker latency and packet size; it is not
- * a claim that twelve headlines are sufficient diligence. Search results are
+ * The eight lanes deliberately cover product/customer value, commercial proof,
+ * technology/capacity, market structure, macro/policy environment, strategic
+ * relationships, related parties, and shared infrastructure. The cap protects
+ * worker latency and packet size; it is not a claim that a headline count is
+ * sufficient diligence. Search results are
  * source material, never facts by themselves: the report prompt requires
  * attribution and distinguishes primary/regulatory evidence from independent
  * reporting and unresolved discovery links.
@@ -149,6 +180,7 @@ export async function collectCompanyResearchEvidence(
   options: CompanyResearchEvidenceOptions = {},
 ): Promise<CompanyResearchEvidence[]> {
   const context = options.context ?? {}
+  const brand = context.brand?.trim() || websiteBrand(companyWebsite)
   const collect = options.collect ?? (async (feeds) => collectFinanceFeedItems(feeds, {
     limit: 60,
     overallDeadlineMs: 45_000,
@@ -157,11 +189,13 @@ export async function collectCompanyResearchEvidence(
   }))
   const resolveGoogleNewsUrl = options.resolveGoogleNewsUrl ?? cachedDecodeGoogleNewsUrl
   const scrape = options.scrape ?? scrapeArticle
-  const feeds = companyResearchQueries(companyName, symbol, context).map((query, index) => ({
+  const feeds = companyResearchQueries(companyName, symbol, { ...context, brand }).map((query, index) => ({
     name: `Company research ${index + 1}`,
     url: financeGoogleNewsRss(query),
   }))
-  const discovered = diversifyByResearchLane(dedupe(await collect(feeds)))
+  const deduped = dedupe(await collect(feeds))
+  const relevant = deduped.filter((item) => relevantToCompany(item, companyName, symbol, brand))
+  const discovered = diversifyByResearchLane(relevant.length >= 4 ? relevant : deduped)
 
   const resolved = await Promise.all(discovered.map(async (item) => {
     try {
