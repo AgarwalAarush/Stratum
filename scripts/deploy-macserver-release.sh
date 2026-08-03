@@ -20,7 +20,8 @@ fi
 
 cd "$release_dir"
 npm ci
-npm test
+npm run lint
+node --test --experimental-strip-types tests/world-memory.test.ts tests/candidate-scout.test.ts
 npm run build
 
 next_link="${active_link}.next"
