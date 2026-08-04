@@ -8,6 +8,7 @@ import type {
 import { runCodexJson, type CodexExecResult } from './codex-exec.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { readWorldCorpusExtract } from './world-corpus.ts'
+import { selectMarketModel } from './market-model-policy.ts'
 
 type RecordValue = Record<string, unknown>
 
@@ -261,8 +262,8 @@ export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOpti
   }).select('*').single()
   if (createError || !row) throw new Error(`Unable to create market research artifact: ${createError?.message ?? 'unknown error'}`)
   try {
-    const researchRunner = options.researchRunner ?? ((prompt) => runCodexJson({ prompt, schemaPath: 'schemas/market-thesis-research.schema.json', validate: (value) => validateMarketThesisResearch(value, allowedSourceIds), timeoutMs: 20 * 60 * 1_000 }))
-    const criticRunner = options.criticRunner ?? ((prompt) => runCodexJson({ prompt, schemaPath: 'schemas/market-thesis-critique.schema.json', validate: (value) => validateMarketThesisCritique(value, allowedSourceIds), timeoutMs: 12 * 60 * 1_000 }))
+    const researchRunner = options.researchRunner ?? ((prompt) => runCodexJson({ prompt, schemaPath: 'schemas/market-thesis-research.schema.json', validate: (value) => validateMarketThesisResearch(value, allowedSourceIds), model: selectMarketModel('hypothesis_analysis').model, timeoutMs: 20 * 60 * 1_000 }))
+    const criticRunner = options.criticRunner ?? ((prompt) => runCodexJson({ prompt, schemaPath: 'schemas/market-thesis-critique.schema.json', validate: (value) => validateMarketThesisCritique(value, allowedSourceIds), model: selectMarketModel('hypothesis_critic').model, timeoutMs: 12 * 60 * 1_000 }))
     const researchResult = await researchRunner(researchPrompt(hypothesis, sourceWithExcerpt, prior, options.reason ?? 'scheduled deepening'))
     const research = validateMarketThesisResearch(researchResult.data, allowedSourceIds)
     const critiqueResult = await criticRunner(critiquePrompt(hypothesis, research, sources))

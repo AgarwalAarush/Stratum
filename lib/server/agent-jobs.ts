@@ -30,6 +30,7 @@ import { backupMarketCorpus, verifyMarketCorpusBackup } from './world-backup.ts'
 import { getWorldSourceAdapter } from './world-sources.ts'
 import { runWorldSourceScout } from './world-source-control.ts'
 import { AI_MODELS } from '../ai/config.ts'
+import { selectMarketModel } from './market-model-policy.ts'
 import {
   fetchPersistedMarketAssets,
   materializeAlpacaScreener,
@@ -651,7 +652,7 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
     ? 'market-data'
     : agentJobProvider(job.job_type)
   const model = provider === 'codex'
-    ? (job.job_type === 'scout-world-sources' ? AI_MODELS.sourceScout : (process.env.CODEX_SYNTHESIS_MODEL ?? 'gpt-5.6-terra'))
+    ? (job.job_type === 'scout-world-sources' ? selectMarketModel('source_scout').model : (process.env.CODEX_SYNTHESIS_MODEL ?? AI_MODELS.scheduledSynthesis))
     : null
   const { data: run, error: runError } = await supabase
     .from('agent_runs')

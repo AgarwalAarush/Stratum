@@ -1,4 +1,3 @@
-import { AI_MODELS } from '../ai/config.ts'
 import { getMarketDomainPack, isKnownMarketDomain } from '../markets/domain-packs.ts'
 import type {
   WorldSourceContract,
@@ -13,6 +12,7 @@ import type {
 } from '../markets/types.ts'
 import { runCodexJson, type CodexExecResult } from './codex-exec.ts'
 import { getSupabaseClient } from './supabase.ts'
+import { selectMarketModel } from './market-model-policy.ts'
 
 type RecordValue = Record<string, unknown>
 
@@ -242,7 +242,7 @@ export async function runWorldSourceScout(options: RunWorldSourceScoutOptions): 
       prompt,
       schemaPath: 'schemas/world-source-scout.schema.json',
       validate: (value) => ({ candidates: validateWorldSourceScoutCandidates(value, domain.id) }),
-      model: AI_MODELS.sourceScout,
+      model: selectMarketModel('source_scout').model,
       timeoutMs: 8 * 60 * 1_000,
     }))
     const result = await runner(buildWorldSourceScoutPrompt(domain.id, options.reason))
