@@ -175,6 +175,48 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
       explanation: 'Industrial automation investment can raise demand for compute, control, sensing, and networking components, but the transmission requires evidence from both value chains before it is active.',
     }],
   },
+  {
+    id: 'defense-industrial-capacity', version: 1, label: 'Defense-industrial capacity', status: 'candidate', parentDomainId: null,
+    description: 'Procurement demand, production capacity, supply-chain constraints, budget execution, and durable value-chain capture.',
+    mechanisms: [
+      { id: 'procurement_demand', label: 'Procurement demand and replenishment', required: true },
+      { id: 'production_capacity', label: 'Qualified production capacity', required: true },
+      { id: 'supply_chain_constraint', label: 'Component, labor, and materials constraint', required: true },
+      { id: 'budget_execution', label: 'Budget execution and program timing', required: true },
+      { id: 'economic_capture', label: 'Contract economics and value-chain capture', required: true },
+    ],
+    sourceRequirements: [
+      { evidenceClass: 'regulatory_data', purpose: 'appropriations, procurement, inventories, and program evidence', minimumSources: 2 },
+      { evidenceClass: 'operational_data', purpose: 'production, delivery, and capacity evidence', minimumSources: 1 },
+      { evidenceClass: 'company_disclosure', purpose: 'backlog, program execution, and supply-chain evidence', minimumSources: 2 },
+      { evidenceClass: 'industry_research', purpose: 'independent industrial-base cross-check', minimumSources: 1 },
+    ],
+    entityKinds: ['company', 'technology', 'facility', 'commodity', 'jurisdiction', 'regulator', 'industry', 'dataset'],
+    hypothesisTemplate: {
+      title: 'Sustained replenishment demand may expose qualified defense-industrial bottlenecks', horizon: '1–7 years',
+      coreMechanism: 'Procurement demand creates durable economics only when budgets execute, qualified capacity can scale, and components or materials do not redirect the value capture.',
+      counterThesis: 'Budget execution slips, inventories normalize, production ramps faster than expected, or fixed-price and supply-chain pressure absorb the apparent demand benefit.',
+      causalGraph: [
+        { from: 'Procurement demand and replenishment', to: 'Program demand visibility', mechanism: 'procurement_demand', core: true },
+        { from: 'Qualified production capacity', to: 'Deliverable program output', mechanism: 'production_capacity', core: true },
+        { from: 'Component, labor, and materials constraint', to: 'Delayed or costly production response', mechanism: 'supply_chain_constraint', core: true },
+        { from: 'Budget execution and program timing', to: 'Realized orders and deliveries', mechanism: 'budget_execution', core: true },
+        { from: 'Realized orders and deliveries', to: 'Contract economics and value-chain capture candidates', mechanism: 'economic_capture', core: true },
+      ],
+    },
+    crossDomainLinks: [
+      {
+        id: 'policy-to-defense-procurement', toDomainId: 'macro-policy-geopolitics', relationship: 'transmits',
+        fromMechanisms: ['budget_execution'], toMechanisms: ['policy_change'],
+        explanation: 'Budget authorization and execution can transmit policy priorities into industrial demand, but authorization alone is not evidence of delivered volume or contractor economics.',
+      },
+      {
+        id: 'materials-to-defense-production', toDomainId: 'critical-materials', relationship: 'constrains',
+        fromMechanisms: ['supply_chain_constraint'], toMechanisms: ['resource_supply', 'processing_concentration', 'trade_constraint'],
+        explanation: 'Materials availability can constrain defense production, but the connection needs program-specific evidence rather than a generalized geopolitical narrative.',
+      },
+    ],
+  },
 ] as const
 
 export function getMarketDomainPack(id: string): MarketDomainPack | null {

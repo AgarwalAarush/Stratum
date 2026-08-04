@@ -77,3 +77,15 @@ test('industrial automation is a candidate economic-system pack with a bounded c
   assert.equal(pack.sourceRequirements.find((requirement) => requirement.evidenceClass === 'company_disclosure')?.minimumSources, 2)
   assert.equal(pack.crossDomainLinks[0]?.toDomainId, 'semicap-data-center-equipment')
 })
+
+test('defense-industrial capacity stays a candidate system with procurement and production falsifiers', async () => {
+  const { getMarketDomainPack } = await import('../lib/markets/domain-packs.ts')
+  const pack = getMarketDomainPack('defense-industrial-capacity')
+  assert.ok(pack)
+  assert.equal(pack.status, 'candidate')
+  assert.deepEqual(pack.mechanisms.filter((mechanism) => mechanism.required).map((mechanism) => mechanism.id), [
+    'procurement_demand', 'production_capacity', 'supply_chain_constraint', 'budget_execution', 'economic_capture',
+  ])
+  assert.equal(pack.sourceRequirements.find((requirement) => requirement.evidenceClass === 'regulatory_data')?.minimumSources, 2)
+  assert.deepEqual(pack.crossDomainLinks.map((link) => link.toDomainId), ['macro-policy-geopolitics', 'critical-materials'])
+})
