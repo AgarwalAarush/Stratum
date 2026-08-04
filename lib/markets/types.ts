@@ -1176,6 +1176,29 @@ export interface MarketDomainPack {
     counterThesis: string
     causalGraph: Array<{ from: string; to: string; mechanism: string; core: boolean }>
   }
+  crossDomainLinks: Array<{
+    id: string
+    toDomainId: string
+    relationship: 'amplifies' | 'constrains' | 'transmits'
+    fromMechanisms: string[]
+    toMechanisms: string[]
+    explanation: string
+  }>
+}
+
+export interface MarketHypothesisCrossDomainLink {
+  id: string
+  ownerId: string
+  fromHypothesisId: string
+  toHypothesisId: string
+  linkId: string
+  relationship: 'amplifies' | 'constrains' | 'transmits'
+  explanation: string
+  sourceObservationIds: string[]
+  confidence: number
+  status: 'forming' | 'active' | 'archived'
+  createdAt: string
+  updatedAt: string
 }
 
 export interface WorldSourceScoutCandidate {

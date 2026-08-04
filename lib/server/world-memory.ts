@@ -363,6 +363,42 @@ export async function correlateAiPowerHypothesis(ownerId: string): Promise<Marke
   return correlateDomainHypothesis(ownerId, 'ai-power')
 }
 
+/**
+ * Cross-domain links preserve a transmission mechanism between two already
+ * formed hypotheses. They do not merge evidence, promote either thesis, or
+ * manufacture an exposure. Each side must remain independently sourced.
+ */
+export async function correlateCrossDomainHypotheses(ownerId: string): Promise<number> {
+  const hypotheses = await fetchMarketHypothesesInternal(ownerId)
+  const byDomain = new Map(hypotheses.filter((item) => !['rejected', 'archived'].includes(item.status)).map((item) => [item.scope, item]))
+  const supabase = getSupabaseClient()!
+  let linked = 0
+  for (const from of byDomain.values()) {
+    const pack = getMarketDomainPack(from.scope)
+    if (!pack || from.confidence < 65 || from.unresolvedNodes.length > 1) continue
+    for (const template of pack.crossDomainLinks) {
+      const to = byDomain.get(template.toDomainId)
+      if (!to || to.confidence < 65 || to.unresolvedNodes.length > 1) continue
+      const [fromEvidence, toEvidence] = await Promise.all([
+        supabase.from('market_hypothesis_evidence').select('observation_id,causal_node').eq('hypothesis_id', from.id).in('causal_node', template.fromMechanisms),
+        supabase.from('market_hypothesis_evidence').select('observation_id,causal_node').eq('hypothesis_id', to.id).in('causal_node', template.toMechanisms),
+      ])
+      if (fromEvidence.error || toEvidence.error) throw new Error(`Unable to load cross-domain evidence: ${fromEvidence.error?.message ?? toEvidence.error?.message}`)
+      const sourceObservationIds = [...new Set([...(fromEvidence.data ?? []).map((item) => String(item.observation_id)), ...(toEvidence.data ?? []).map((item) => String(item.observation_id))])]
+      if (sourceObservationIds.length < 2) continue
+      const confidence = Math.min(85, Math.round((from.confidence + to.confidence) / 2))
+      const { error } = await supabase.from('market_hypothesis_cross_domain_links').upsert({
+        owner_id: ownerId, from_hypothesis_id: from.id, to_hypothesis_id: to.id, link_id: template.id,
+        relationship: template.relationship, explanation: template.explanation, source_observation_ids: sourceObservationIds,
+        confidence, status: 'active', updated_at: new Date().toISOString(),
+      }, { onConflict: 'owner_id,from_hypothesis_id,to_hypothesis_id,link_id' })
+      if (error) throw new Error(`Unable to persist cross-domain hypothesis link: ${error.message}`)
+      linked += 1
+    }
+  }
+  return linked
+}
+
 export interface HypothesisPromotionEvidence {
   causalNode: string
   sourceTier: WorldSourceTier
@@ -588,12 +624,13 @@ export async function seedAiPowerDemoObservations(ownerId: string): Promise<{ ob
   return { observations: sources.length, hypothesis, thesis }
 }
 
-export async function runMarketWorldCycle(): Promise<{ baselineId: string; hypotheses: number; promoted: number }> {
+export async function runMarketWorldCycle(): Promise<{ baselineId: string; hypotheses: number; crossDomainLinks: number; promoted: number }> {
   const baseline = await compileWorldBaseline('global', 'global')
   const supabase = getSupabaseClient()!
   const { data: owners, error } = await supabase.from('market_users').select('id').limit(20)
   if (error) throw new Error(`Unable to load market thesis owners: ${error.message}`)
   let hypotheses = 0
+  let crossDomainLinks = 0
   let promoted = 0
   const activePacks = await fetchActiveMarketDomainPacks()
   for (const owner of owners ?? []) {
@@ -605,8 +642,9 @@ export async function runMarketWorldCycle(): Promise<{ baselineId: string; hypot
         if (thesis) promoted += 1
       }
     }
+    crossDomainLinks += await correlateCrossDomainHypotheses(owner.id)
   }
-  return { baselineId: baseline.id, hypotheses, promoted }
+  return { baselineId: baseline.id, hypotheses, crossDomainLinks, promoted }
 }
 
 export function isMarketWorldModelEnabled(environment: NodeJS.ProcessEnv = process.env): boolean {

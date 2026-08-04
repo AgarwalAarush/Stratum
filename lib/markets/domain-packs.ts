@@ -36,6 +36,11 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
         { from: 'Regional firm-power scarcity', to: 'Scarcity rents for proven supply and enabling equipment', mechanism: 'economic_capture', core: true },
       ],
     },
+    crossDomainLinks: [{
+      id: 'ai-compute-to-semicap-demand', toDomainId: 'semicap-data-center-equipment', relationship: 'amplifies',
+      fromMechanisms: ['data_center_load'], toMechanisms: ['compute_demand'],
+      explanation: 'AI and data-center build-out can jointly raise compute-system demand and regional electricity load; the connection is a transmission hypothesis, not proof that either value chain captures economics.',
+    }],
   },
   {
     id: 'semicap-data-center-equipment', version: 1, label: 'Semicap and data-center equipment', status: 'candidate', parentDomainId: 'ai-power',
@@ -64,6 +69,11 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
         { from: 'Supplier scarcity rents', to: 'Value-chain exposure candidates', mechanism: 'economic_capture', core: true },
       ],
     },
+    crossDomainLinks: [{
+      id: 'semicap-equipment-to-power-buildout', toDomainId: 'ai-power', relationship: 'constrains',
+      fromMechanisms: ['component_lead_time'], toMechanisms: ['equipment_lead_time'],
+      explanation: 'Specialized equipment constraints can interact with electrical-equipment availability, but each domain retains its own evidence and falsifiers.',
+    }],
   },
   {
     id: 'critical-materials', version: 1, label: 'Critical materials and supply chains', status: 'candidate', parentDomainId: null,
@@ -92,6 +102,11 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
         { from: 'Constraint durability', to: 'Scarcity-rent capture candidates', mechanism: 'economic_capture', core: true },
       ],
     },
+    crossDomainLinks: [{
+      id: 'materials-to-semicap-supply', toDomainId: 'semicap-data-center-equipment', relationship: 'constrains',
+      fromMechanisms: ['processing_concentration', 'trade_constraint'], toMechanisms: ['fabrication_capacity', 'component_lead_time'],
+      explanation: 'Material processing and trade constraints may restrict semiconductor supply response; the link requires evidence on both sides before it is active.',
+    }],
   },
   {
     id: 'macro-policy-geopolitics', version: 1, label: 'Macro, policy, and geopolitics', status: 'candidate', parentDomainId: null,
@@ -120,6 +135,10 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
         { from: 'Market-implied transmission', to: 'Exposure candidates', mechanism: 'economic_capture', core: true },
       ],
     },
+    crossDomainLinks: [
+      { id: 'policy-to-semicap-transmission', toDomainId: 'semicap-data-center-equipment', relationship: 'transmits', fromMechanisms: ['policy_change'], toMechanisms: ['supply_chain_capture'], explanation: 'Policy can transmit into semiconductor allocation and economics, but a policy announcement alone never establishes the downstream outcome.' },
+      { id: 'policy-to-materials-transmission', toDomainId: 'critical-materials', relationship: 'transmits', fromMechanisms: ['policy_change', 'supply_chain_disruption'], toMechanisms: ['trade_constraint'], explanation: 'Policy and geopolitical changes can transmit into materials trade constraints only when both the action and physical response are evidenced.' },
+    ],
   },
 ] as const
 
