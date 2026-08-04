@@ -127,13 +127,17 @@ test('agent jobs and thesis workspace preserve a bounded research frontier', asy
 })
 
 test('market-thesis promotion requires a completed analyst and critic artifact', async () => {
-  const [worldMemory, migration] = await Promise.all([
+  const [worldMemory, migration, criticFrontierMigration] = await Promise.all([
     readFile(new URL('../lib/server/world-memory.ts', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/202608030003_market_hypothesis_research.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/202608040017_backfill_critic_research_frontiers.sql', import.meta.url), 'utf8'),
   ])
   assert.match(worldMemory, /eq\('status', 'complete'\)/)
   assert.match(worldMemory, /research\.critique\?\.verdict !== 'pass'/)
   assert.match(worldMemory, /research_version_id: research\.id/)
   assert.match(worldMemory, /verification_status: 'needs_company_research'/)
   assert.match(migration, /add column if not exists research_version_id/)
+  assert.match(criticFrontierMigration, /jsonb_array_elements_text/)
+  assert.match(criticFrontierMigration, /adapter_id\s*,[\s\S]*'critic'/)
+  assert.match(criticFrontierMigration, /not exists/)
 })
