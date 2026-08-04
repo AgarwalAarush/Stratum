@@ -43,7 +43,7 @@ test('collector rejects an off-contract redirect before it is fetched', async ()
   assert.deepEqual(calls, ['https://official.example/data'])
 })
 
-test('collector rejects MIME types outside the source contract and leaves event sources manual', async () => {
+test('collector rejects MIME types outside the source contract and does not poll event sources after their initial capture', async () => {
   await assert.rejects(
     fetchGovernedSourceDocument({ source, contract }, {
       fetchImpl: async () => new Response('{"value":1}', { status: 200, headers: { 'content-type': 'application/json' } }),
@@ -61,7 +61,8 @@ test('a newly admitted source gets one governed capture before its normal refres
   assert.equal(shouldCollectGovernedSource('weekly', false, monday), true)
   assert.equal(shouldCollectGovernedSource('weekly', true, monday), false)
   assert.equal(shouldCollectGovernedSource('weekly', true, new Date('2026-08-02T00:00:00Z')), true)
-  assert.equal(shouldCollectGovernedSource('event', false, monday), false)
+  assert.equal(shouldCollectGovernedSource('event', false, monday), true)
+  assert.equal(shouldCollectGovernedSource('event', true, monday), false)
 })
 
 test('a corrected canonical target is treated as uncaptured under the existing contract', () => {

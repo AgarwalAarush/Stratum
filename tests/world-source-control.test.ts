@@ -175,6 +175,8 @@ test('source-control migration makes contracts mandatory for newly governed obse
   assert.match(worker, /enqueueAgentJob\('review-world-source-coverage'/)
   assert.match(controlRoute, /'activate-domain'/)
   assert.match(controlRoute, /'preflight-candidate'/)
+  assert.match(controlRoute, /trigger: 'source-approval'/)
+  assert.match(controlRoute, /initialCaptureQueued/)
   assert.match(systemPage, /fetchWorldSourceControlWorkspace/)
   assert.match(systemPage, /Promise\.allSettled/)
   assert.match(controlPanel, /Queue bounded source scout/)

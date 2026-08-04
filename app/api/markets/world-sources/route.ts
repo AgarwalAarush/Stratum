@@ -47,7 +47,10 @@ export async function POST(request: NextRequest) {
     if (body.action === 'approve') {
       if (typeof body.slug !== 'string' || typeof body.reason !== 'string') return NextResponse.json({ error: 'A source slug and approval reason are required.' }, { status: 400 })
       const source = await approveWorldSource(body.slug, validateWorldSourceContract(body.contract), body.reason)
-      return NextResponse.json({ source })
+      const collection = await enqueueAgentJob('collect-world-source-documents', {
+        trigger: 'source-approval', sourceSlug: source.slug,
+      })
+      return NextResponse.json({ source, initialCaptureQueued: !collection.deduplicated })
     }
     if (body.action === 'block') {
       if (typeof body.slug !== 'string' || typeof body.reason !== 'string') return NextResponse.json({ error: 'A source slug and block reason are required.' }, { status: 400 })

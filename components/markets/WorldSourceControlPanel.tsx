@@ -239,7 +239,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
       })
       const payload = await response.json() as { error?: string }
       if (!response.ok) throw new Error(payload.error ?? 'Unable to approve source contract')
-      setNotice(`${source.label} is approved with an active contract. It remains subject to health checks before any ingestion run.`)
+      setNotice(`${source.label} is approved with an active contract. Its first bounded immutable capture is queued; event sources are captured once and remain event-driven afterward.`)
       setReviewing(null)
       setContract(null)
       router.refresh()

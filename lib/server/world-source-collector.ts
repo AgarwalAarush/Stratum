@@ -158,15 +158,15 @@ export function isSourceCollectionDue(cadence: WorldSourceContract['cadence'], n
   return now.getUTCDate() === 1
 }
 
-/** An approved non-event source receives one prompt immutable capture after
- * admission. Subsequent collection follows its contracted cadence, so a
- * weekly filing admitted on Monday does not sit unevidenced until Sunday. */
+/** Every approved source receives one prompt immutable capture after
+ * admission. Event-driven sources stop after that first bounded capture;
+ * recurring sources then follow their contracted cadence. */
 export function shouldCollectGovernedSource(
   cadence: WorldSourceContract['cadence'],
   hasCaptureForActiveContract: boolean,
   now = new Date(),
 ): boolean {
-  return cadence !== 'event' && (!hasCaptureForActiveContract || isSourceCollectionDue(cadence, now))
+  return !hasCaptureForActiveContract || isSourceCollectionDue(cadence, now)
 }
 
 export function governedCaptureCoverageKey(sourceId: string, contractVersion: number, canonicalUrl: string): string {
