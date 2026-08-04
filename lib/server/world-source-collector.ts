@@ -169,6 +169,10 @@ export function shouldCollectGovernedSource(
   return cadence !== 'event' && (!hasCaptureForActiveContract || isSourceCollectionDue(cadence, now))
 }
 
+export function governedCaptureCoverageKey(sourceId: string, contractVersion: number, canonicalUrl: string): string {
+  return `${sourceId}:${contractVersion}:${canonicalUrl}`
+}
+
 async function fetchCollectionTargets(now: Date): Promise<GovernedSourceFetchTarget[]> {
   const [workspace, activePacks] = await Promise.all([fetchWorldSourceControlWorkspace(), fetchActiveMarketDomainPacks()])
   const activeDomainIds = new Set(activePacks.map((pack) => pack.id))
@@ -184,12 +188,15 @@ async function fetchCollectionTargets(now: Date): Promise<GovernedSourceFetchTar
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const { data: captures, error } = await supabase.from('world_source_document_captures')
-    .select('source_id,contract_version').in('source_id', eligible.map((target) => target.source.id))
+    .select('source_id,contract_version,canonical_url').in('source_id', eligible.map((target) => target.source.id))
   if (error) throw new Error(`Unable to determine source collection coverage: ${error.message}`)
-  const capturedContracts = new Set((captures ?? []).map((capture) => `${String(capture.source_id)}:${Number(capture.contract_version)}`))
+  // A human-approved canonical-target correction is a new collection target,
+  // even if the contract is unchanged. Key coverage to the actual bounded URL
+  // so a weekly source can be recovered promptly instead of waiting a week.
+  const capturedTargets = new Set((captures ?? []).map((capture) => governedCaptureCoverageKey(String(capture.source_id), Number(capture.contract_version), String(capture.canonical_url))))
   const targets = eligible.filter((target) => shouldCollectGovernedSource(
     target.contract.cadence,
-    capturedContracts.has(`${target.source.id}:${target.contract.version}`),
+    capturedTargets.has(governedCaptureCoverageKey(target.source.id, target.contract.version, target.source.canonicalUrl)),
     now,
   ))
   return targets.sort((left, right) => left.source.slug.localeCompare(right.source.slug))

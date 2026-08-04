@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { WorldSourceContract, WorldSourceRegistryEntry } from '../lib/markets/types.ts'
-import { fetchGovernedSourceDocument, isSourceCollectionDue, shouldCollectGovernedSource } from '../lib/server/world-source-collector.ts'
+import { fetchGovernedSourceDocument, governedCaptureCoverageKey, isSourceCollectionDue, shouldCollectGovernedSource } from '../lib/server/world-source-collector.ts'
 
 const source = {
   id: 'source-id', slug: 'official-source', label: 'Official source', publisher: 'Official publisher', canonicalUrl: 'https://official.example/data',
@@ -62,4 +62,11 @@ test('a newly admitted source gets one governed capture before its normal refres
   assert.equal(shouldCollectGovernedSource('weekly', true, monday), false)
   assert.equal(shouldCollectGovernedSource('weekly', true, new Date('2026-08-02T00:00:00Z')), true)
   assert.equal(shouldCollectGovernedSource('event', false, monday), false)
+})
+
+test('a corrected canonical target is treated as uncaptured under the existing contract', () => {
+  const previous = governedCaptureCoverageKey('source-id', 2, 'https://official.example/old-release')
+  const corrected = governedCaptureCoverageKey('source-id', 2, 'https://official.example/new-release')
+  assert.notEqual(previous, corrected)
+  assert.equal(shouldCollectGovernedSource('weekly', previous === corrected, new Date('2026-08-03T00:00:00Z')), true)
 })
