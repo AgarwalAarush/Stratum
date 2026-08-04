@@ -109,7 +109,7 @@ export function validateWorldSourceScoutCandidates(value: unknown, domainId: str
     }
     const domains = strings(item.domains)
     if (!domains.includes(domainId) || domains.some((entry) => !isKnownMarketDomain(entry))) {
-      throw new Error('Candidate domains must include the requested known domain')
+      throw new Error(`Candidate ${slug} domains must include the requested known domain ${domainId}; received ${domains.join(', ') || '(none)'}`)
     }
     const candidate: WorldSourceScoutCandidate = {
       slug,
@@ -176,6 +176,7 @@ export function buildWorldSourceScoutPrompt(domainId: string, reason: string): s
     'Return only direct, stable HTTPS canonical source landing pages, feeds, datasets, filings, or transcript indexes. Do not return search-result pages, article aggregators, social accounts, newsletters, individual market opinions, or URLs you are not confident exist.',
     'Prefer primary authorities, regulators, statistical agencies, company disclosures, and operational datasets. Independent or discovery sources may fill a clearly stated gap but must disclose limitations. The output is strictly candidate status; it cannot enter the evidence pipeline until a source contract is tested and approved.',
     `DOMAIN: ${JSON.stringify(domain)}`,
+    `DOMAIN ASSIGNMENT: Every candidate must set its domains field to include the exact requested domain ID ${JSON.stringify(domain.id)}. Do not substitute a related domain, label, theme, or broader category.`,
     `TRIGGER: ${reason}`,
     'For each candidate, explain which evidence class it covers and the limitation that prevents it from being decisive on its own. Return no more than 12 candidates. Do not fabricate a URL; omit uncertain candidates.',
   ].join('\n\n')

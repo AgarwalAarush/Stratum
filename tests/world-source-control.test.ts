@@ -33,7 +33,7 @@ test('source scout accepts bounded candidates only for a known requested domain'
 
 test('source scout rejects broad or ungovernable source output', () => {
   assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [{ ...candidate, canonicalUrl: 'http://grid.example.org/planning' }] }, 'ai-power'), /HTTPS/)
-  assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [{ ...candidate, domains: ['critical-materials'] }] }, 'ai-power'), /requested known domain/)
+  assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [{ ...candidate, slug: 'misrouted-candidate', domains: ['critical-materials'] }] }, 'ai-power'), /misrouted-candidate.*ai-power.*critical-materials/)
   assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [candidate, candidate] }, 'ai-power'), /duplicate/)
   assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [candidate] }, 'not-a-domain'), /Unknown market domain/)
 })
@@ -70,6 +70,7 @@ test('source-scout prompt forbids automatic admission and unbounded article sear
   assert.match(prompt, /candidate status/i)
   assert.match(prompt, /Do not return search-result pages/i)
   assert.match(prompt, /do not form a market view/i)
+  assert.match(prompt, /exact requested domain ID "ai-power"/i)
 })
 
 test('source-scout output schema stays within Codex structured-output compatibility', async () => {
