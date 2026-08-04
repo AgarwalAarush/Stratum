@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
-import type { MarketDomainPack, WorldSourceControlWorkspaceData } from '@/lib/markets/types'
+import type { MarketDomainPack, WorldSourceControlWorkspaceData, WorldSourceRegistryEntry } from '@/lib/markets/types'
 
 type SourceStatus = 'approved' | 'probation'
 
@@ -27,12 +27,46 @@ function formatDate(value: string | null): string {
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/New_York' }).format(new Date(value))
 }
 
+type ContractDraft = {
+  allowedHosts: string
+  allowedPaths: string
+  acceptedMimeTypes: string
+  cadence: 'event' | 'daily' | 'weekly' | 'monthly'
+  assertionsAllowed: string
+  retentionDays: string
+  notes: string
+  reason: string
+}
+
+const CADENCES: ContractDraft['cadence'][] = ['event', 'daily', 'weekly', 'monthly']
+
+function defaultContract(source: WorldSourceRegistryEntry): ContractDraft {
+  let url: URL | null = null
+  try { url = new URL(source.canonicalUrl) } catch { /* Server validation remains authoritative. */ }
+  const mime = source.sourceKind === 'pdf' ? 'application/pdf'
+    : source.sourceKind === 'api' ? 'application/json'
+      : source.sourceKind === 'dataset' ? 'application/json, text/csv'
+        : 'text/html'
+  return {
+    allowedHosts: url?.hostname ?? '', allowedPaths: url?.pathname && url.pathname !== '/' ? url.pathname : '', acceptedMimeTypes: mime,
+    cadence: source.sourceKind === 'filing' || source.sourceKind === 'transcript' ? 'event' : 'monthly', assertionsAllowed: 'fact, estimate, claim', retentionDays: '365',
+    notes: `Reviewed direct canonical ${source.sourceKind} source for ${source.domainIds.join(', ') || 'market research'} coverage.`,
+    reason: `Reviewed ${source.publisher}'s direct canonical source and bounded its contract before admitting it to governed evidence.`,
+  }
+}
+
+function listValue(value: string): string[] {
+  return value.split(',').map((item) => item.trim()).filter(Boolean)
+}
+
 export function WorldSourceControlPanel({ workspace, unavailableReason }: { workspace: WorldSourceControlWorkspaceData | null; unavailableReason: string | null }) {
   const router = useRouter()
   const [selectedDomainId, setSelectedDomainId] = useState(workspace?.domains[0]?.id ?? '')
   const [reason, setReason] = useState('Review source coverage gaps before expanding this domain.')
   const [pending, setPending] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [reviewing, setReviewing] = useState<string | null>(null)
+  const [contract, setContract] = useState<ContractDraft | null>(null)
   const selectedDomain = useMemo(() => workspace?.domains.find((domain) => domain.id === selectedDomainId) ?? null, [workspace, selectedDomainId])
 
   if (!workspace) {
@@ -83,6 +117,39 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
       router.refresh()
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to queue source health audit')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const startReview = (source: WorldSourceRegistryEntry) => {
+    setReviewing(source.id)
+    setContract(defaultContract(source))
+    setNotice(null)
+  }
+
+  const approveCandidate = async (source: WorldSourceRegistryEntry) => {
+    if (!contract || pending) return
+    setPending(true)
+    setNotice(null)
+    try {
+      const response = await fetch('/api/markets/world-sources', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+          action: 'approve', slug: source.slug, reason: contract.reason,
+          contract: {
+            allowedHosts: listValue(contract.allowedHosts), allowedPaths: listValue(contract.allowedPaths), acceptedMimeTypes: listValue(contract.acceptedMimeTypes), cadence: contract.cadence,
+            assertionsAllowed: listValue(contract.assertionsAllowed), retentionDays: contract.retentionDays.trim() ? Number(contract.retentionDays) : null, notes: contract.notes,
+          },
+        }),
+      })
+      const payload = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to approve source contract')
+      setNotice(`${source.label} is approved with an active contract. It remains subject to health checks before any ingestion run.`)
+      setReviewing(null)
+      setContract(null)
+      router.refresh()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to approve source contract')
     } finally {
       setPending(false)
     }
@@ -154,8 +221,20 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           <h3>Recent source candidates</h3>
           {candidates.length ? candidates.slice(0, 8).map((source) => (
             <article key={source.id}>
-              <div><strong>{source.label}</strong><span>{source.publisher} · {source.evidenceClasses.join(', ').replaceAll('_', ' ')}</span></div>
+              <div><strong>{source.label}</strong><span>{source.publisher} · {source.evidenceClasses.join(', ').replaceAll('_', ' ')}</span><a href={source.canonicalUrl} target="_blank" rel="noreferrer">Open canonical source</a></div>
               <time>{formatDate(source.updatedAt)}</time>
+              {reviewing === source.id && contract ? <form className="market-source-contract-review" onSubmit={(event) => { event.preventDefault(); void approveCandidate(source) }}>
+                <p>Review every boundary below. Approval activates this contract; it does not ingest evidence or activate a domain.</p>
+                <label>Allowed hosts<input value={contract.allowedHosts} onChange={(event) => setContract({ ...contract, allowedHosts: event.target.value })} required /></label>
+                <label>Allowed paths (comma separated; blank allows any path on the approved host)<input value={contract.allowedPaths} onChange={(event) => setContract({ ...contract, allowedPaths: event.target.value })} /></label>
+                <label>Accepted MIME types (comma separated)<input value={contract.acceptedMimeTypes} onChange={(event) => setContract({ ...contract, acceptedMimeTypes: event.target.value })} required /></label>
+                <fieldset className="market-source-cadence"><legend>Cadence</legend><div>{CADENCES.map((cadence) => <button key={cadence} type="button" data-selected={contract.cadence === cadence} onClick={() => setContract({ ...contract, cadence })}>{cadence}</button>)}</div></fieldset>
+                <label>Allowed assertion kinds (comma separated)<input value={contract.assertionsAllowed} onChange={(event) => setContract({ ...contract, assertionsAllowed: event.target.value })} required /></label>
+                <label>Retention days (blank for no expiry)<input inputMode="numeric" value={contract.retentionDays} onChange={(event) => setContract({ ...contract, retentionDays: event.target.value })} /></label>
+                <label>Contract notes<textarea value={contract.notes} onChange={(event) => setContract({ ...contract, notes: event.target.value })} required maxLength={1000} /></label>
+                <label>Approval rationale<textarea value={contract.reason} onChange={(event) => setContract({ ...contract, reason: event.target.value })} required maxLength={1000} /></label>
+                <footer><button type="submit" disabled={pending}>{pending ? 'Activating contract…' : 'Approve reviewed contract'}</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setReviewing(null); setContract(null) }}>Cancel</button></footer>
+              </form> : <button type="button" className="market-source-review-button" onClick={() => startReview(source)} disabled={pending}>Review contract</button>}
             </article>
           )) : <p>No candidate sources are awaiting review.</p>}
         </div>
