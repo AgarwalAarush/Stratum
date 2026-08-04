@@ -402,6 +402,22 @@ export async function deferResearchFrontiersForScout(frontierIds: string[], sour
   if (error) throw new Error(`Unable to defer research frontiers for source scouting: ${error.message}`)
 }
 
+/**
+ * Evidence received from a governed, human-reviewed source is only resolved
+ * after a bounded research + critic pass has assessed it. A critic that finds
+ * another gap persists fresh queued frontier work rather than reopening this
+ * already-assessed evidence item.
+ */
+export async function completeEvidenceReceivedResearchFrontiers(hypothesisId: string, researchVersionId: string): Promise<number> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data, error } = await supabase.from('market_hypothesis_research_frontier').update({
+    status: 'complete', adapter_id: `assessed-by-research:${researchVersionId}`, updated_at: new Date().toISOString(),
+  }).eq('hypothesis_id', hypothesisId).eq('status', 'evidence_received').select('id')
+  if (error) throw new Error(`Unable to complete assessed evidence frontiers: ${error.message}`)
+  return data?.length ?? 0
+}
+
 export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOptions): Promise<MarketHypothesisResearchVersion> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
@@ -433,6 +449,7 @@ export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOpti
     }).eq('id', row.id).eq('status', 'running')
     if (updateError) throw new Error(`Unable to publish market research artifact: ${updateError.message}`)
     await persistFrontier(hypothesis.id, row.id, buildPersistedResearchFrontier(research.researchFrontier, critique))
+    await completeEvidenceReceivedResearchFrontiers(hypothesis.id, String(row.id))
     return { id: row.id, hypothesisId: hypothesis.id, version, status, content: research, critique, sourceIds: research.sourceIds, observationIds: sources.map((source) => source.observationId), priorResearchVersionId: prior?.id ?? null, revisionDiff: revisionDiff(prior, research), provider: researchResult.metadata.provider, model: researchResult.metadata.model, criticProvider: critiqueResult.metadata.provider, criticModel: critiqueResult.metadata.model, criticGeneratedAt: generatedAt, dataAsOf: now, generatedAt, error: null }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

@@ -1446,7 +1446,7 @@ export interface MarketResearchFrontierItem {
   priority: number
   sourceTypes: string[]
   adapterId: string | null
-  status: 'queued' | 'complete' | 'blocked' | 'deferred'
+  status: 'queued' | 'evidence_received' | 'complete' | 'blocked' | 'deferred'
   evidenceNeeded: string
   attemptCount: number
   lastError: string | null

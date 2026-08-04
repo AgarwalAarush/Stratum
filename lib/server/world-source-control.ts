@@ -411,7 +411,7 @@ function normalizeTriageRun(row: RecordValue): WorldObservationProposalTriageRun
 
 function normalizeResearchFrontier(row: RecordValue): MarketResearchFrontierItem {
   const status = String(row.status)
-  if (status !== 'queued' && status !== 'complete' && status !== 'blocked' && status !== 'deferred') throw new Error(`Invalid research frontier status: ${status}`)
+  if (status !== 'queued' && status !== 'evidence_received' && status !== 'complete' && status !== 'blocked' && status !== 'deferred') throw new Error(`Invalid research frontier status: ${status}`)
   return {
     id: String(row.id), hypothesisId: String(row.hypothesis_id), researchVersionId: row.research_version_id === null ? null : String(row.research_version_id ?? ''),
     question: String(row.question), causalNode: String(row.causal_node), priority: Number(row.priority), sourceTypes: strings(row.source_types), adapterId: row.adapter_id === null ? null : String(row.adapter_id ?? ''),

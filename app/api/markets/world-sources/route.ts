@@ -64,7 +64,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'A proposal, explicit decision, and review rationale are required.' }, { status: 400 })
       }
       const review = await reviewWorldObservationProposal({ proposalId: body.proposalId, reviewerId: user.id, decision: body.decision, rationale: body.rationale })
-      return NextResponse.json({ review })
+      const queued = review.decision === 'accepted' && review.observationId
+        ? await enqueueAgentJob('synthesize-market-hypotheses', {
+          reason: `accepted observation:${review.observationId}`,
+          evidenceFingerprint: review.observationId,
+        })
+        : null
+      return NextResponse.json({ review, analysisQueued: queued ? !queued.deduplicated : false })
     }
     if (body.action === 'revise-canonical-url') {
       if (typeof body.slug !== 'string' || typeof body.canonicalUrl !== 'string' || typeof body.rationale !== 'string') {

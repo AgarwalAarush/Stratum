@@ -117,6 +117,7 @@ function PredictionLedgerEntry({ prediction }: { prediction: ThesisPrediction })
 
 function frontierStatus(item: MarketResearchFrontierItem) {
   if (item.status === 'deferred' && item.adapterId?.startsWith('world-source-scout:')) return 'Candidate discovery awaiting review'
+  if (item.status === 'evidence_received') return 'Governed evidence received — analyst revision pending'
   if (item.status === 'blocked') return 'Blocked pending a permitted source path'
   if (item.status === 'complete') return 'Evidence gap resolved'
   return 'Awaiting bounded research routing'

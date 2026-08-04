@@ -329,7 +329,7 @@ function normalizeResearchFrontier(row: RecordValue): MarketResearchFrontierItem
     id: String(row.id), hypothesisId: String(row.hypothesis_id), researchVersionId: row.research_version_id === null ? null : String(row.research_version_id ?? ''),
     question: String(row.question ?? ''), causalNode: String(row.causal_node ?? ''), priority: number(row.priority), sourceTypes: strings(row.source_types),
     adapterId: row.adapter_id === null ? null : String(row.adapter_id ?? ''),
-    status: (status === 'complete' || status === 'blocked' || status === 'deferred' ? status : 'queued') as MarketResearchFrontierItem['status'],
+    status: (status === 'evidence_received' || status === 'complete' || status === 'blocked' || status === 'deferred' ? status : 'queued') as MarketResearchFrontierItem['status'],
     evidenceNeeded: String(row.evidence_needed ?? ''), attemptCount: number(row.attempt_count), lastError: row.last_error === null ? null : String(row.last_error ?? ''),
     nextRunAt: row.next_run_at === null ? null : String(row.next_run_at ?? ''),
   }

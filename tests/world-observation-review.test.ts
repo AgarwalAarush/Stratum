@@ -3,11 +3,12 @@ import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
 test('proposal review preserves a human gate before any accepted observation', async () => {
-  const [review, route, migration, acceptanceMigration] = await Promise.all([
+  const [review, route, migration, acceptanceMigration, evidenceReceivedMigration] = await Promise.all([
     readFile(new URL('../lib/server/world-observation-review.ts', import.meta.url), 'utf8'),
     readFile(new URL('../app/api/markets/world-sources/route.ts', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/202608040010_world_observation_proposal_reviews.sql', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/202608040011_accept_world_observation_proposal.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/202608040022_research_frontier_evidence_received.sql', import.meta.url), 'utf8'),
   ])
   assert.match(review, /A persisted authenticated reviewer is required/)
   assert.match(review, /input\.decision === 'rejected'/)
@@ -17,8 +18,13 @@ test('proposal review preserves a human gate before any accepted observation', a
   assert.match(review, /sourceCaptureId/)
   assert.match(review, /accept_world_observation_proposal/)
   assert.match(route, /review-observation-proposal/)
+  assert.match(route, /accepted observation:\$\{review\.observationId\}/)
+  assert.match(route, /synthesize-market-hypotheses/)
   assert.match(migration, /decision in \('accepted', 'rejected'\)/)
   assert.match(migration, /decision = 'accepted' and observation_id is not null/)
+  assert.match(evidenceReceivedMigration, /status = 'evidence_received'/)
+  assert.match(evidenceReceivedMigration, /world_source_discovery_runs/)
+  assert.match(evidenceReceivedMigration, /accepted-observation:/)
 })
 
 test('acceptance commits the observation and audit record as one database operation', async () => {
