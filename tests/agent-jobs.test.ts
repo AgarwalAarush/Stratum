@@ -102,6 +102,12 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
     'scout-world-sources:critical-materials:2026-08-03',
   )
   assert.equal(
+    buildAgentJobDedupeKey('scout-world-sources', new Date('2026-08-03T21:03:00Z'), {
+      domainId: 'ai-power', trigger: 'frontier_gap', frontierIds: ['frontier-b', 'frontier-a'],
+    }),
+    'scout-world-sources:ai-power:frontier:frontier-a,frontier-b:2026-08-03',
+  )
+  assert.equal(
     buildAgentJobDedupeKey('verify-world-source-health', new Date('2026-08-03T21:03:00Z')),
     'verify-world-source-health:2026-08-03',
   )

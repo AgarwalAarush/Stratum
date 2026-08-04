@@ -230,6 +230,15 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
   }
   if (jobType === 'verify-world-source-health') return `${jobType}:${now.toISOString().slice(0, 10)}`
   if (jobType === 'scout-world-sources' && typeof payload.domainId === 'string') {
+    // A frontier pass is deliberately capped to a few questions. Including its
+    // stable frontier set lets the next bounded pass cover the remaining gap
+    // today, while still deduplicating retries of the same request.
+    const frontierIds = payload.trigger === 'frontier_gap' && Array.isArray(payload.frontierIds)
+      ? payload.frontierIds.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).sort()
+      : []
+    if (frontierIds.length > 0) {
+      return `${jobType}:${payload.domainId}:frontier:${frontierIds.join(',')}:${now.toISOString().slice(0, 10)}`
+    }
     return `${jobType}:${payload.domainId}:${now.toISOString().slice(0, 10)}`
   }
   if ((jobType === 'materialize-market-leadership' || jobType === 'run-candidate-scout') && typeof payload.tradingDate === 'string') {
