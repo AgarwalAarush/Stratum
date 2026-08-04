@@ -81,6 +81,12 @@ test('source-scout output schema stays within Codex structured-output compatibil
   assert.equal(canonicalUrl.pattern, '^https://')
 })
 
+test('failed scout history cannot invalidate the source-control workspace', async () => {
+  const control = await readFile(new URL('../lib/server/world-source-control.ts', import.meta.url), 'utf8')
+  assert.match(control, /status === 'complete' && Array\.isArray\(row\.candidates\)/)
+  assert.match(control, /A failed run legitimately has the empty default candidate list/)
+})
+
 test('source-control migration makes contracts mandatory for newly governed observations', async () => {
   const [migration, activationMigration, memory, jobs, adapters, controlRoute, systemPage, controlPanel, controlService] = await Promise.all([
     readFile(new URL('../supabase/migrations/202608040001_world_source_control_plane.sql', import.meta.url), 'utf8'),

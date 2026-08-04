@@ -281,9 +281,15 @@ export async function runWorldSourceScout(options: RunWorldSourceScoutOptions): 
 }
 
 function normalizeDiscoveryRun(row: RecordValue): WorldSourceDiscoveryRun {
-  const candidates = Array.isArray(row.candidates) ? validateWorldSourceScoutCandidates({ candidates: row.candidates }, String(row.domain_id)) : []
+  const status = row.status as WorldSourceDiscoveryRun['status']
+  // A failed run legitimately has the empty default candidate list. It must
+  // remain auditable in the control workspace instead of making downstream
+  // governed collection fail while trying to render historical telemetry.
+  const candidates = status === 'complete' && Array.isArray(row.candidates)
+    ? validateWorldSourceScoutCandidates({ candidates: row.candidates }, String(row.domain_id))
+    : []
   return {
-    id: String(row.id), domainId: String(row.domain_id), status: row.status as WorldSourceDiscoveryRun['status'], trigger: row.trigger as WorldSourceDiscoveryRun['trigger'], reason: String(row.reason),
+    id: String(row.id), domainId: String(row.domain_id), status, trigger: row.trigger as WorldSourceDiscoveryRun['trigger'], reason: String(row.reason),
     candidates, provider: row.provider === null ? null : String(row.provider ?? ''), model: row.model === null ? null : String(row.model ?? ''),
     generatedAt: row.generated_at === null ? null : String(row.generated_at ?? ''), error: row.error === null ? null : String(row.error ?? ''), createdAt: String(row.created_at),
   }
