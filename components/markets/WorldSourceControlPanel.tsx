@@ -67,6 +67,8 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const [notice, setNotice] = useState<string | null>(null)
   const [reviewing, setReviewing] = useState<string | null>(null)
   const [contract, setContract] = useState<ContractDraft | null>(null)
+  const [reviewingProposal, setReviewingProposal] = useState<string | null>(null)
+  const [proposalRationale, setProposalRationale] = useState('')
   const selectedDomain = useMemo(() => workspace?.domains.find((domain) => domain.id === selectedDomainId) ?? null, [workspace, selectedDomainId])
 
   if (!workspace) {
@@ -150,6 +152,25 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
       router.refresh()
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to approve source contract')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const reviewProposal = async (proposalId: string, decision: 'accepted' | 'rejected') => {
+    if (!proposalRationale.trim() || pending) return
+    setPending(true)
+    setNotice(null)
+    try {
+      const response = await fetch('/api/markets/world-sources', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'review-observation-proposal', proposalId, decision, rationale: proposalRationale.trim() }) })
+      const payload = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to record evidence review')
+      setNotice(decision === 'accepted' ? 'Proposal accepted as a governed observation. It remains evidence, not a thesis or capital decision.' : 'Proposal rejected. Its immutable source and review record remain available.')
+      setReviewingProposal(null)
+      setProposalRationale('')
+      router.refresh()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to record evidence review')
     } finally {
       setPending(false)
     }
@@ -255,7 +276,11 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           <p>Low-cost extraction proposals are not accepted observations. They never enter baselines, hypotheses, predictions, or capital decisions without a separate evidence-review gate.</p>
           {workspace.observationProposals.length ? workspace.observationProposals.slice(0, 12).map((proposal) => (
             <article key={proposal.id}>
-              <div><strong>{proposal.domainId.replaceAll('-', ' ')} · {proposal.mechanism.replaceAll('_', ' ')}</strong><span>{proposal.kind} · confidence {proposal.confidence} · materiality {proposal.materiality}</span><p>{proposal.assertion}</p><blockquote>{proposal.evidenceQuote}</blockquote><a href={proposal.sourceUrl} target="_blank" rel="noreferrer">{proposal.sourceLabel}</a></div>
+              <div><strong>{proposal.domainId.replaceAll('-', ' ')} · {proposal.mechanism.replaceAll('_', ' ')}</strong><span>{proposal.kind} · confidence {proposal.confidence} · materiality {proposal.materiality}</span><p>{proposal.assertion}</p><blockquote>{proposal.evidenceQuote}</blockquote><a href={proposal.sourceUrl} target="_blank" rel="noreferrer">{proposal.sourceLabel}</a>
+                {proposal.review ? <small className="market-proposal-review" data-decision={proposal.review.decision}>{proposal.review.decision} · {proposal.review.rationale}</small>
+                  : reviewingProposal === proposal.id ? <form className="market-source-contract-review" onSubmit={(event) => { event.preventDefault(); void reviewProposal(proposal.id, 'accepted') }}><p>Accepting creates one governed observation from this exact quote. It does not create a thesis or investment decision.</p><label>Review rationale<textarea value={proposalRationale} onChange={(event) => setProposalRationale(event.target.value)} required maxLength={1000} /></label><footer><button type="submit" disabled={pending || !proposalRationale.trim()}>{pending ? 'Recording…' : 'Accept as observation'}</button><button type="button" className="market-source-secondary-button" disabled={pending || !proposalRationale.trim()} onClick={() => void reviewProposal(proposal.id, 'rejected')}>Reject proposal</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setReviewingProposal(null); setProposalRationale('') }}>Cancel</button></footer></form>
+                    : <button type="button" className="market-source-review-button" disabled={pending} onClick={() => { setReviewingProposal(proposal.id); setProposalRationale('') }}>Review proposal</button>}
+              </div>
               <time>{formatDate(proposal.generatedAt)}</time>
             </article>
           )) : <p>No extracted observation proposals are awaiting review.</p>}

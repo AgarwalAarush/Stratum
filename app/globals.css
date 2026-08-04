@@ -3377,6 +3377,9 @@
 .market-source-proposals article p { color: var(--market-text); font-family: var(--font-ibm-plex-sans), sans-serif; font-size: 12px; line-height: 1.5; margin: 9px 0; }
 .market-source-proposals blockquote { border-left: 2px solid var(--market-border); color: var(--market-text-muted); font-size: 11px; line-height: 1.45; margin: 9px 0; padding-left: 9px; }
 .market-source-proposals a { color: var(--market-text); font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 10px; }
+.market-proposal-review { display: block; font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 10px; line-height: 1.45; margin-top: 11px; }
+.market-proposal-review[data-decision="accepted"] { color: var(--market-positive); }
+.market-proposal-review[data-decision="rejected"] { color: var(--market-negative); }
 
 @media (max-width: 767px) {
   .equity-research-note {

@@ -8,6 +8,7 @@ import {
   fetchWorldSourceControlWorkspace,
   validateWorldSourceContract,
 } from '@/lib/server/world-source-control'
+import { reviewWorldObservationProposal } from '@/lib/server/world-observation-review'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +52,13 @@ export async function POST(request: NextRequest) {
       if (typeof body.domainId !== 'string' || typeof body.reason !== 'string') return NextResponse.json({ error: 'A domain and activation reason are required.' }, { status: 400 })
       const event = await activateMarketDomainPack(body.domainId, body.reason)
       return NextResponse.json({ event })
+    }
+    if (body.action === 'review-observation-proposal') {
+      if (typeof body.proposalId !== 'string' || (body.decision !== 'accepted' && body.decision !== 'rejected') || typeof body.rationale !== 'string') {
+        return NextResponse.json({ error: 'A proposal, explicit decision, and review rationale are required.' }, { status: 400 })
+      }
+      const review = await reviewWorldObservationProposal({ proposalId: body.proposalId, reviewerId: user.id, decision: body.decision, rationale: body.rationale })
+      return NextResponse.json({ review })
     }
     return NextResponse.json({ error: 'Unsupported source-control action.' }, { status: 400 })
   } catch (error) {

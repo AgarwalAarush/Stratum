@@ -299,11 +299,13 @@ function normalizeDiscoveryRun(row: RecordValue): WorldSourceDiscoveryRun {
 function normalizeObservationProposal(row: RecordValue): WorldObservationProposal {
   const source = record(row.world_source_registry)
   const document = record(row.world_documents)
+  const review = record(row.world_observation_proposal_reviews)
   return {
     id: String(row.id), domainId: String(row.domain_id), mechanism: String(row.mechanism), assertion: String(row.assertion),
     kind: row.observation_kind as WorldObservationProposal['kind'], evidenceQuote: String(row.evidence_quote),
     confidence: Number(row.confidence), materiality: Number(row.materiality), novelty: Number(row.novelty),
     sourceLabel: String(source.label ?? document.title ?? 'Governed source'), sourceUrl: String(document.canonical_url ?? source.canonical_url ?? ''), generatedAt: String(row.generated_at),
+    review: review.decision === 'accepted' || review.decision === 'rejected' ? { decision: review.decision, rationale: String(review.rationale ?? ''), reviewedAt: String(review.reviewed_at), observationId: review.observation_id === null ? null : String(review.observation_id ?? '') } : null,
   }
 }
 
@@ -374,7 +376,7 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
     supabase.from('world_source_discovery_runs').select('*').order('created_at', { ascending: false }).limit(60),
     supabase.from('world_source_domains').select('source_id,domain_id'),
     supabase.from('world_source_health_checks').select('*').order('checked_at', { ascending: false }).limit(500),
-    supabase.from('world_observation_proposals').select('*,world_source_registry(label,canonical_url),world_documents(title,canonical_url)').order('generated_at', { ascending: false }).limit(60),
+    supabase.from('world_observation_proposals').select('*,world_source_registry(label,canonical_url),world_documents(title,canonical_url),world_observation_proposal_reviews(decision,rationale,reviewed_at,observation_id)').order('generated_at', { ascending: false }).limit(60),
   ])
   const error = domains.error ?? sources.error ?? runs.error ?? mappings.error ?? healthChecks.error ?? proposals.error
   if (error) throw new Error(`Unable to load source-control workspace: ${error.message}`)

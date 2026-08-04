@@ -1270,6 +1270,7 @@ export interface WorldObservationProposal {
   sourceLabel: string
   sourceUrl: string
   generatedAt: string
+  review: { decision: 'accepted' | 'rejected'; rationale: string; reviewedAt: string; observationId: string | null } | null
 }
 
 export interface MarketDomainPackEvent {
