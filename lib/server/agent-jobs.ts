@@ -70,6 +70,7 @@ export const AGENT_JOB_TYPES = [
   'synthesize-market-hypotheses',
   'deepen-market-hypothesis',
   'refresh-market-hypothesis-research',
+  'route-market-research-frontiers',
   'evaluate-market-prediction',
   'evaluate-market-predictions',
   'monitor-market-theses',
@@ -201,6 +202,11 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     bucket.setUTCHours(Math.floor(bucket.getUTCHours() / 6) * 6, 0, 0, 0)
     return `${jobType}:${bucket.toISOString()}`
   }
+  if (jobType === 'route-market-research-frontiers') {
+    const bucket = new Date(now)
+    bucket.setUTCHours(Math.floor(bucket.getUTCHours() / 6) * 6, 0, 0, 0)
+    return `${jobType}:${bucket.toISOString()}`
+  }
   if (jobType === 'evaluate-market-prediction' && typeof payload.predictionId === 'string') {
     return `${jobType}:${payload.predictionId}:${now.toISOString().slice(0, 10)}`
   }
@@ -247,6 +253,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
     || jobType === 'correlate-market-signals'
     || jobType === 'monitor-market-theses'
     || jobType === 'refresh-market-hypothesis-research'
+    || jobType === 'route-market-research-frontiers'
     || jobType === 'evaluate-market-predictions'
     || jobType === 'prune-market-data'
   ) return 'market-data'
@@ -625,6 +632,22 @@ async function executeJob(
     const due = await findDueMarketHypothesisResearch()
     const queued = await Promise.all(due.map((item) => enqueueAgentJob('deepen-market-hypothesis', item)))
     return { queued: queued.length, hypothesisIds: due.map((item) => item.hypothesisId) }
+  }
+
+  if (job.job_type === 'route-market-research-frontiers') {
+    const { deferResearchFrontiersForScout, findQueuedResearchFrontierScoutPlans } = await import('./market-thesis-research.ts')
+    const plans = await findQueuedResearchFrontierScoutPlans()
+    const results = []
+    for (const plan of plans) {
+      const queued = await enqueueAgentJob('scout-world-sources', {
+        domainId: plan.domainId, reason: plan.reason, trigger: 'frontier_gap', frontierIds: plan.frontierIds,
+      })
+      // A same-day scout may already have completed with a different bounded
+      // request. Keep this frontier queued for a future pass in that case.
+      if (!queued.deduplicated) await deferResearchFrontiersForScout(plan.frontierIds, queued.id)
+      results.push({ domainId: plan.domainId, frontierCount: plan.frontierIds.length, ...queued })
+    }
+    return { planned: plans.length, queued: results.filter((item) => !item.deduplicated).length, results }
   }
 
   if (job.job_type === 'evaluate-market-prediction') {

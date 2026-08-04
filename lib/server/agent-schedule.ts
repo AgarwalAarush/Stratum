@@ -96,6 +96,7 @@ export function buildDueAgentJobs(
     }
     if (newYork.hour % 6 === 0 && newYork.minute < 10) {
       jobs.push(scheduledJob('refresh-market-hypothesis-research', now))
+      jobs.push(scheduledJob('route-market-research-frontiers', now))
       jobs.push(scheduledJob('evaluate-market-predictions', now))
     }
     if (newYork.weekday === 'Sun' && newYork.hour === 18 && newYork.minute < 10) {

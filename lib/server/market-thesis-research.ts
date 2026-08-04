@@ -9,6 +9,7 @@ import { runCodexJson, type CodexExecResult } from './codex-exec.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { readWorldCorpusExtract } from './world-corpus.ts'
 import { selectMarketModel } from './market-model-policy.ts'
+import { getMarketDomainPack } from '../markets/domain-packs.ts'
 
 type RecordValue = Record<string, unknown>
 
@@ -257,6 +258,102 @@ export function shouldQueueMarketHypothesisResearch(
   newLinkedObservationCount: number,
 ): boolean {
   return latestStatus === null || newLinkedObservationCount > 0
+}
+
+export interface ResearchFrontierScoutInput {
+  id: string
+  question: string
+  causalNode: string
+  priority: number
+  sourceTypes: string[]
+  evidenceNeeded: string
+}
+
+export interface ResearchFrontierScoutPlan {
+  domainId: string
+  frontierIds: string[]
+  reason: string
+}
+
+/**
+ * Frontier routing can request candidate discovery, never unrestricted
+ * retrieval. The resulting sources remain candidates until a human-approved
+ * contract and health check admit them to evidence ingestion.
+ */
+export function buildResearchFrontierScoutPlan(
+  domainId: string,
+  frontiers: ResearchFrontierScoutInput[],
+): ResearchFrontierScoutPlan | null {
+  const domain = getMarketDomainPack(domainId)
+  if (!domain) return null
+  const selected = [...frontiers]
+    .filter((item) => item.id && item.question.trim() && item.evidenceNeeded.trim())
+    .sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))
+    .slice(0, 3)
+  if (selected.length === 0) return null
+  const questions = selected.map((item, index) => {
+    const sourceTypes = item.sourceTypes.filter(Boolean).slice(0, 6).join(', ') || 'authoritative primary or regulatory sources'
+    return `${index + 1}. Causal node: ${item.causalNode}. Question: ${item.question}. Evidence needed: ${item.evidenceNeeded}. Preferred source classes: ${sourceTypes}.`
+  }).join('\n')
+  return {
+    domainId,
+    frontierIds: selected.map((item) => item.id),
+    reason: [
+      `Research-frontier coverage gap for ${domain.label}. Propose at most 12 direct, stable, authoritative source candidates that can reduce the bounded gaps below.`,
+      'This is source discovery only: do not answer the questions, draw a market conclusion, approve a source, or retrieve article text. Every candidate will require separate contract, health, and human approval before ingestion.',
+      questions,
+    ].join('\n\n').slice(0, 6_000),
+  }
+}
+
+interface PersistedResearchFrontier extends ResearchFrontierScoutInput {
+  domainId: string
+}
+
+function normalizePersistedResearchFrontier(value: unknown): PersistedResearchFrontier | null {
+  const row = record(value)
+  const hypothesis = record(row.market_hypotheses)
+  const id = typeof row.id === 'string' ? row.id : ''
+  const domainId = typeof hypothesis.scope === 'string' ? hypothesis.scope : ''
+  const question = typeof row.question === 'string' ? row.question : ''
+  const causalNode = typeof row.causal_node === 'string' ? row.causal_node : ''
+  const evidenceNeeded = typeof row.evidence_needed === 'string' ? row.evidence_needed : ''
+  if (!id || !domainId || !question || !causalNode || !evidenceNeeded) return null
+  return { id, domainId, question, causalNode, priority: number(row.priority), sourceTypes: strings(row.source_types), evidenceNeeded }
+}
+
+/** Return one bounded scout plan per known domain from queued research gaps. */
+export async function findQueuedResearchFrontierScoutPlans(limit = 8): Promise<ResearchFrontierScoutPlan[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data, error } = await supabase
+    .from('market_hypothesis_research_frontier')
+    .select('id,question,causal_node,priority,source_types,evidence_needed,market_hypotheses!inner(scope)')
+    .eq('status', 'queued')
+    .order('priority', { ascending: false })
+    .limit(Math.max(1, Math.min(limit * 6, 48)))
+  if (error) throw new Error(`Unable to load queued research frontiers: ${error.message}`)
+  const byDomain = new Map<string, ResearchFrontierScoutInput[]>()
+  for (const row of data ?? []) {
+    const frontier = normalizePersistedResearchFrontier(row)
+    if (!frontier || !getMarketDomainPack(frontier.domainId)) continue
+    byDomain.set(frontier.domainId, [...(byDomain.get(frontier.domainId) ?? []), frontier])
+  }
+  return [...byDomain.entries()]
+    .map(([domainId, frontiers]) => buildResearchFrontierScoutPlan(domainId, frontiers))
+    .filter((plan): plan is ResearchFrontierScoutPlan => plan !== null)
+    .slice(0, Math.max(1, Math.min(limit, 12)))
+}
+
+/** Deferred means candidate discovery is queued; it is not evidence completion. */
+export async function deferResearchFrontiersForScout(frontierIds: string[], sourceScoutJobId: string): Promise<void> {
+  if (frontierIds.length === 0) return
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { error } = await supabase.from('market_hypothesis_research_frontier').update({
+    status: 'deferred', adapter_id: `world-source-scout:${sourceScoutJobId}`, next_run_at: null, updated_at: new Date().toISOString(),
+  }).in('id', frontierIds).eq('status', 'queued')
+  if (error) throw new Error(`Unable to defer research frontiers for source scouting: ${error.message}`)
 }
 
 export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOptions): Promise<MarketHypothesisResearchVersion> {

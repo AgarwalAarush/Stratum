@@ -3,6 +3,7 @@ import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
 import {
+  buildResearchFrontierScoutPlan,
   shouldQueueMarketHypothesisResearch,
   validateMarketThesisCritique,
   validateMarketThesisResearch,
@@ -68,6 +69,19 @@ test('scheduled research does not repeat an unchanged revision frontier', () => 
   assert.equal(shouldQueueMarketHypothesisResearch('needs_revision', 1), true)
 })
 
+test('research frontiers route only to bounded candidate discovery for a known domain', () => {
+  const plan = buildResearchFrontierScoutPlan('ai-power', [
+    { id: 'low', question: 'What capacity is deliverable?', causalNode: 'firm_capacity_constraint', priority: 2, sourceTypes: ['operator data'], evidenceNeeded: 'Delivered capacity by region.' },
+    { id: 'high', question: 'Which queues bind?', causalNode: 'interconnection_constraint', priority: 5, sourceTypes: ['ISO filings'], evidenceNeeded: 'Queue timing and withdrawal evidence.' },
+    { id: 'middle', question: 'Where is load growing?', causalNode: 'data_center_load', priority: 4, sourceTypes: ['regulator releases'], evidenceNeeded: 'Load forecasts by region.' },
+    { id: 'excluded', question: 'What is priced?', causalNode: 'expectations', priority: 1, sourceTypes: [], evidenceNeeded: 'Bounded expectations evidence.' },
+  ])
+  assert.deepEqual(plan?.frontierIds, ['high', 'middle', 'low'])
+  assert.match(plan?.reason ?? '', /source discovery only/i)
+  assert.match(plan?.reason ?? '', /human approval/i)
+  assert.equal(buildResearchFrontierScoutPlan('not-a-domain', []), null)
+})
+
 test('agent jobs use a dedicated bounded research job and deterministic revision trigger', async () => {
   const [jobs, research, actions, schedule] = await Promise.all([
     readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8'),
@@ -77,6 +91,8 @@ test('agent jobs use a dedicated bounded research job and deterministic revision
   ])
   assert.match(jobs, /'deepen-market-hypothesis'/)
   assert.match(jobs, /findDueMarketHypothesisResearch/)
+  assert.match(jobs, /route-market-research-frontiers/)
+  assert.match(research, /findQueuedResearchFrontierScoutPlans/)
   assert.match(research, /linked observation/)
   assert.match(actions, /enqueueAgentJob\('deepen-market-hypothesis'/)
   assert.match(schedule, /refresh-market-hypothesis-research/)
