@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { aiPowerV1SourceAdapter, criticalMaterialsV1SourceAdapter, semicapDataCenterV1SourceAdapter } from '../lib/server/world-sources.ts'
+import { aiPowerV1SourceAdapter, criticalMaterialsV1SourceAdapter, macroPolicyGeopoliticsV1SourceAdapter, semicapDataCenterV1SourceAdapter } from '../lib/server/world-sources.ts'
 
 function html(title: string) {
   return `<!doctype html><html><head><title>${title}</title><script>ignore()</script></head><body><main>${'Evidence about AI data centers, electricity demand, reliability, interconnection, capacity and equipment. '.repeat(8)}</main></body></html>`
@@ -54,4 +54,14 @@ test('critical-materials packet maps supply, processing, trade, and substitution
   assert.deepEqual(new Set(result.observations.map((item) => item.mechanism)), new Set(['resource_supply', 'processing_concentration', 'trade_constraint', 'substitution']))
   assert.ok(result.observations.every((item) => item.domain === 'critical-materials' && Boolean(item.sourceSlug)))
   assert.ok(result.observations.every((item) => !/price target|buy|sell/i.test(item.assertion)))
+})
+
+test('macro/policy packet keeps policy, conditions, trade transmission, and expectations distinct', async () => {
+  const result = await macroPolicyGeopoliticsV1SourceAdapter.ingest({
+    fetchImpl: async () => new Response(html('macro policy source'), { status: 200, headers: { 'content-type': 'text/html' } }),
+  })
+  assert.equal(result.observations.length, 4)
+  assert.deepEqual(new Set(result.observations.map((item) => item.mechanism)), new Set(['policy_change', 'financial_conditions', 'supply_chain_disruption', 'expectations_shift']))
+  assert.ok(result.observations.every((item) => item.domain === 'macro-policy-geopolitics' && item.sourceTier === 'regulatory'))
+  assert.ok(result.observations.some((item) => /not a factual substitute/i.test(item.assertion)))
 })

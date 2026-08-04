@@ -149,6 +149,7 @@ test('source-control migration makes contracts mandatory for newly governed obse
   assert.match(jobs, /'scout-world-sources'/)
   assert.match(activationMigration, /market_domain_pack_events/i)
   assert.match(await readFile(new URL('../supabase/migrations/202608040007_critical_materials_source_packet.sql', import.meta.url), 'utf8'), /critical-materials/)
+  assert.match(await readFile(new URL('../supabase/migrations/202608040021_macro_policy_source_packet.sql', import.meta.url), 'utf8'), /macro-policy-geopolitics/)
   assert.match(memory, /isMarketDomainActive/)
   assert.match(memory, /fetchActiveMarketDomainPacks/)
   assert.match(adapters, /listWorldSourceAdapters/)

@@ -275,7 +275,59 @@ export const criticalMaterialsV1SourceAdapter: WorldSourceAdapter = {
   },
 }
 
-const WORLD_SOURCE_ADAPTERS: WorldSourceAdapter[] = [aiPowerV1SourceAdapter, semicapDataCenterV1SourceAdapter, criticalMaterialsV1SourceAdapter]
+/**
+ * Macro is a transmission packet: policy, financial conditions, real-economy
+ * cross-border data, and surveyed expectations remain distinct inputs. It is
+ * intentionally not a headline or geopolitical-news feed.
+ */
+export const MACRO_POLICY_GEOPOLITICS_SOURCE_SPECS: WorldDocumentSourceSpec[] = [
+  {
+    id: 'fed-fomc-june-2026', sourceSlug: 'fed-fomc-june-2026', domain: 'macro-policy-geopolitics',
+    title: 'Federal Reserve FOMC statement, June 17 2026', url: 'https://www.federalreserve.gov/newsevents/pressreleases/monetary20260617a.htm',
+    publisher: 'Board of Governors of the Federal Reserve System', sourceTier: 'regulatory',
+    assertion: 'The Federal Open Market Committee maintained the federal funds target range at 3.5 to 3.75 percent in June 2026 and stated that it would assess incoming data, the evolving outlook, and risks when considering further adjustments.',
+    kind: 'fact', mechanism: 'policy_change', entities: [{ kind: 'regulator', name: 'Federal Open Market Committee', aliases: ['FOMC'] }, { kind: 'jurisdiction', name: 'United States' }],
+    geography: 'United States', publishedAt: '2026-06-17T18:00:00.000Z', confidence: 96, materiality: 92, novelty: 70,
+  },
+  {
+    id: 'chicago-fed-nfci', sourceSlug: 'chicago-fed-nfci', domain: 'macro-policy-geopolitics',
+    title: 'Chicago Fed National Financial Conditions Index current data', url: 'https://www.chicagofed.org/research/data/nfci/current-data',
+    publisher: 'Federal Reserve Bank of Chicago', sourceTier: 'regulatory',
+    assertion: 'The Chicago Fed describes the National Financial Conditions Index as a weekly measure of U.S. financial conditions across money, debt, equity, and banking markets; revisions and changing indicator weights remain explicit limitations.',
+    kind: 'fact', mechanism: 'financial_conditions', entities: [{ kind: 'regulator', name: 'Federal Reserve Bank of Chicago', aliases: ['Chicago Fed'] }, { kind: 'dataset', name: 'National Financial Conditions Index', aliases: ['NFCI'] }, { kind: 'jurisdiction', name: 'United States' }],
+    geography: 'United States', confidence: 90, materiality: 84, novelty: 60,
+  },
+  {
+    id: 'census-international-trade-current', sourceSlug: 'census-international-trade-current', domain: 'macro-policy-geopolitics',
+    title: 'U.S. International Trade in Goods and Services, current release', url: 'https://www.census.gov/foreign-trade/current/index.html',
+    publisher: 'U.S. Census Bureau and Bureau of Economic Analysis', sourceTier: 'regulatory',
+    assertion: 'The Census Bureau and Bureau of Economic Analysis publish monthly goods and services trade data, including imports and exports, as direct operational evidence for cross-border economic transmission rather than a conclusion about a specific policy outcome.',
+    kind: 'fact', mechanism: 'supply_chain_disruption', entities: [{ kind: 'regulator', name: 'U.S. Census Bureau' }, { kind: 'regulator', name: 'Bureau of Economic Analysis', aliases: ['BEA'] }, { kind: 'industry', name: 'International trade' }, { kind: 'jurisdiction', name: 'United States' }],
+    geography: 'United States and global', publishedAt: '2026-07-07T12:30:00.000Z', confidence: 93, materiality: 83, novelty: 64,
+  },
+  {
+    id: 'nyfed-survey-market-expectations', sourceSlug: 'nyfed-survey-market-expectations', domain: 'macro-policy-geopolitics',
+    title: 'New York Fed Survey of Market Expectations', url: 'https://www.newyorkfed.org/markets/market-intelligence/survey-of-market-expectations',
+    publisher: 'Federal Reserve Bank of New York', sourceTier: 'regulatory',
+    assertion: 'The New York Fed Survey of Market Expectations surveys primary dealers and market participants before FOMC meetings on the outlook, monetary policy, and financial markets; surveyed expectations are evidence of beliefs, not a factual substitute for outcomes.',
+    kind: 'estimate', mechanism: 'expectations_shift', entities: [{ kind: 'regulator', name: 'Federal Reserve Bank of New York', aliases: ['New York Fed'] }, { kind: 'dataset', name: 'Survey of Market Expectations' }, { kind: 'jurisdiction', name: 'United States' }],
+    geography: 'United States', confidence: 87, materiality: 82, novelty: 62,
+  },
+]
+
+export const macroPolicyGeopoliticsV1SourceAdapter: WorldSourceAdapter = {
+  id: 'macro-policy-geopolitics-v1', label: 'Macro/policy official transmission packet', domain: 'macro-policy-geopolitics', cadence: 'weekly', sourceIds: MACRO_POLICY_GEOPOLITICS_SOURCE_SPECS.map((item) => item.id),
+  async ingest(options = {}) {
+    const fetchImpl = options.fetchImpl ?? fetch
+    const results = await Promise.allSettled(MACRO_POLICY_GEOPOLITICS_SOURCE_SPECS.map((spec) => fetchWorldSourceSpec(spec, fetchImpl)))
+    const observations = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
+    const failures = results.flatMap((result, index) => result.status === 'rejected' ? [{ sourceId: MACRO_POLICY_GEOPOLITICS_SOURCE_SPECS[index]!.id, message: result.reason instanceof Error ? result.reason.message : String(result.reason) }] : [])
+    if (observations.length === 0) throw new Error(`Macro/policy source adapter did not ingest any documents: ${failures.map((item) => item.message).join('; ')}`)
+    return { observations, failures }
+  },
+}
+
+const WORLD_SOURCE_ADAPTERS: WorldSourceAdapter[] = [aiPowerV1SourceAdapter, semicapDataCenterV1SourceAdapter, criticalMaterialsV1SourceAdapter, macroPolicyGeopoliticsV1SourceAdapter]
 
 export function getWorldSourceAdapter(id: string): WorldSourceAdapter | null {
   return WORLD_SOURCE_ADAPTERS.find((adapter) => adapter.id === id) ?? null
