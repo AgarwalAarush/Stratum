@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { calculateScreenerRow } from '../lib/markets/calculations.ts'
+import { calculateScreenerRow, calculateScreenerRowFromMetrics } from '../lib/markets/calculations.ts'
 import type { MarketAsset, MarketDailyBar, MarketSnapshot } from '../lib/markets/types.ts'
 
 const asset: MarketAsset = {
@@ -89,6 +89,29 @@ test('market calculations exclude the partial current-day bar from historical av
   const row = calculateScreenerRow(asset, snapshot, bars)
   assert.equal(row?.relativeVolume, 2)
   assert.ok((row?.fiftyDayAverage ?? 0) < 150)
+})
+
+test('compact persisted history metrics produce the same live-row shape without loading every bar', () => {
+  const row = calculateScreenerRowFromMetrics(asset, snapshot, {
+    symbol: 'TEST', barCount: 252, averageVolume: 1_000_000, fiftyDayAverage: 105,
+    yearLow: 80, yearHigh: 130, range: [100, 101, 102], close5d: 101,
+    close30d: 100, close90d: 95, close180d: 90, closeYtd: 92, close1y: 85,
+  })
+  assert.ok(row)
+  assert.equal(row?.relativeVolume, 2)
+  assert.equal(row?.return5d, 8.91)
+  assert.equal(row?.return1y, 29.41)
+  assert.deepEqual(row?.range, [100, 101, 102])
+})
+
+test('screener history metric migration keeps compact reads server-side and service-only', () => {
+  const sql = readFileSync(join(process.cwd(), 'supabase/migrations/202608040019_screener_history_metrics.sql'), 'utf8')
+  const optimization = readFileSync(join(process.cwd(), 'supabase/migrations/202608040020_optimize_screener_history_metrics.sql'), 'utf8')
+  assert.match(sql, /create or replace function public\.screener_history_metrics/)
+  assert.match(sql, /row_number\(\) over \(partition by bars\.symbol/)
+  assert.match(sql, /grant execute on function public\.screener_history_metrics\(text\[\], text, date\) to service_role/)
+  assert.match(optimization, /create or replace function public\.screener_history_metrics/)
+  assert.doesNotMatch(optimization, /left join lateral/)
 })
 
 test('markets migration defines atomic publication, job claiming, and service-only access', () => {

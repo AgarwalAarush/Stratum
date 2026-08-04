@@ -1,4 +1,4 @@
-import { calculateScreenerRow } from '../markets/calculations.ts'
+import { calculateScreenerRow, calculateScreenerRowFromMetrics, type ScreenerHistoryMetrics } from '../markets/calculations.ts'
 import type { MarketAsset, MarketDailyBar, MarketFeed, ScreenerRow } from '../markets/types.ts'
 import { getAlpacaClient, type AlpacaClient } from './alpaca.ts'
 import { GICS_CONSTITUENTS_URL, parseGicsConstituents } from './market-leadership.ts'
@@ -28,6 +28,22 @@ interface DailyBarRow {
   source_as_of: string
 }
 
+interface ScreenerHistoryMetricRow {
+  symbol: string
+  bar_count: number | string
+  average_volume: number | string | null
+  fifty_day_average: number | string | null
+  year_low: number | string | null
+  year_high: number | string | null
+  range_values: Array<number | string> | null
+  close_5d: number | string | null
+  close_30d: number | string | null
+  close_90d: number | string | null
+  close_180d: number | string | null
+  close_ytd: number | string | null
+  close_1y: number | string | null
+}
+
 let historyCacheFeed: Exclude<MarketFeed, 'illustrative'> | null = null
 let historyBackfillDate: string | null = null
 const historyCache = new Map<string, MarketDailyBar[]>()
@@ -42,6 +58,58 @@ function batches<T>(items: T[], size = DATABASE_BATCH_SIZE): T[][] {
 
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10)
+}
+
+function newYorkDate(timestamp: string): string {
+  const date = new Date(timestamp)
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? ''
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
+function finiteMetric(value: number | string | null): number | null {
+  const number = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+async function loadScreenerHistoryMetrics(
+  supabase: SupabaseServiceClient,
+  symbols: string[],
+  feed: Exclude<MarketFeed, 'illustrative'>,
+  asOf: string,
+): Promise<Map<string, ScreenerHistoryMetrics>> {
+  const { data, error } = await supabase.rpc('screener_history_metrics', {
+    p_symbols: symbols,
+    p_feed: feed,
+    p_as_of: newYorkDate(asOf),
+  })
+  if (error) throw new Error(`Unable to calculate persisted screener history metrics: ${error.message}`)
+  return new Map(((data ?? []) as ScreenerHistoryMetricRow[]).flatMap((row) => {
+    const barCount = Number(row.bar_count)
+    const averageVolume = finiteMetric(row.average_volume)
+    const fiftyDayAverage = finiteMetric(row.fifty_day_average)
+    const yearLow = finiteMetric(row.year_low)
+    const yearHigh = finiteMetric(row.year_high)
+    if (!row.symbol || !Number.isFinite(barCount) || averageVolume === null || fiftyDayAverage === null || yearLow === null || yearHigh === null) return []
+    const metric: ScreenerHistoryMetrics = {
+      symbol: row.symbol,
+      barCount,
+      averageVolume,
+      fiftyDayAverage,
+      yearLow,
+      yearHigh,
+      range: (row.range_values ?? []).map(finiteMetric).filter((value): value is number => value !== null),
+      close5d: finiteMetric(row.close_5d),
+      close30d: finiteMetric(row.close_30d),
+      close90d: finiteMetric(row.close_90d),
+      close180d: finiteMetric(row.close_180d),
+      closeYtd: finiteMetric(row.close_ytd),
+      close1y: finiteMetric(row.close_1y),
+    }
+    return [[metric.symbol, metric] as const]
+  }))
 }
 
 export function mergeMarketDailyBars(
@@ -339,15 +407,22 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
   const taxonomyBySymbol = await loadGicsTaxonomy(symbols, options.fetchImpl)
   let snapshotsResult = await client.fetchSnapshots(symbols)
   let feed = snapshotsResult.feed
-  let historyResult = await loadScreenerHistory(client, supabase, symbols, feed, now)
-  if (historyResult.feed !== feed) {
-    snapshotsResult = await client.fetchSnapshots(symbols, historyResult.feed)
-    feed = snapshotsResult.feed
-    historyResult = await loadScreenerHistory(client, supabase, symbols, feed, now)
-  }
-  if (historyResult.feed !== feed) throw new Error(`Alpaca returned inconsistent feeds: ${feed} and ${historyResult.feed}`)
-
   const dataAsOf = newestTimestamp(snapshotsResult.data, now.toISOString())
+  let historyMetrics = await loadScreenerHistoryMetrics(supabase, symbols, feed, dataAsOf)
+  let historyResult: Awaited<ReturnType<typeof loadScreenerHistory>> | null = null
+  // A fresh database has no compact metrics yet. Preserve the existing
+  // bootstrap path, but do not reload an established full bar archive on each
+  // routine refresh.
+  if (historyMetrics.size === 0) {
+    historyResult = await loadScreenerHistory(client, supabase, symbols, feed, now)
+    if (historyResult.feed !== feed) {
+      snapshotsResult = await client.fetchSnapshots(symbols, historyResult.feed)
+      feed = snapshotsResult.feed
+      historyResult = await loadScreenerHistory(client, supabase, symbols, feed, now)
+    }
+    if (historyResult.feed !== feed) throw new Error(`Alpaca returned inconsistent feeds: ${feed} and ${historyResult.feed}`)
+    historyMetrics = await loadScreenerHistoryMetrics(supabase, symbols, feed, newestTimestamp(snapshotsResult.data, now.toISOString()))
+  }
   const { data: snapshotRecord, error: snapshotError } = await supabase
     .from('market_snapshots')
     .insert({ feed, status: 'building', data_as_of: dataAsOf })
@@ -358,12 +433,14 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
   try {
     const assetsBySymbol = new Map<string, MarketAsset>(assets.map((asset) => [asset.symbol, asset]))
     const barsBySymbol = new Map<string, MarketDailyBar[]>()
-    for (const bar of historyResult.bars) barsBySymbol.set(bar.symbol, [...(barsBySymbol.get(bar.symbol) ?? []), bar])
+    for (const bar of historyResult?.bars ?? []) barsBySymbol.set(bar.symbol, [...(barsBySymbol.get(bar.symbol) ?? []), bar])
 
     const rows: ScreenerRow[] = snapshotsResult.data.flatMap((snapshot) => {
       const asset = assetsBySymbol.get(snapshot.symbol)
       if (!asset) return []
-      const row = calculateScreenerRow(asset, snapshot, barsBySymbol.get(snapshot.symbol) ?? [])
+      const row = historyMetrics.get(snapshot.symbol)
+        ? calculateScreenerRowFromMetrics(asset, snapshot, historyMetrics.get(snapshot.symbol)!)
+        : calculateScreenerRow(asset, snapshot, barsBySymbol.get(snapshot.symbol) ?? [])
       if (!row) return []
       const classification = taxonomyBySymbol.get(row.symbol)
       return [{
@@ -410,7 +487,7 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
       feed,
       rowCount: rows.length,
       dataAsOf,
-      fetchedBarCount: historyResult.fetchedBarCount,
+      fetchedBarCount: historyResult?.fetchedBarCount ?? 0,
     }
   } catch (error) {
     await supabase.from('market_snapshots').update({

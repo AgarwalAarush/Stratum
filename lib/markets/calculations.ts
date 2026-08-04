@@ -5,6 +5,25 @@ const RELATIVE_VOLUME_WINDOW = 20
 const YEAR_WINDOW = 252
 const RETURN_LOOKBACK_TOLERANCE_DAYS = 7
 
+/** A compact, database-derived representation of the history needed for a
+ * screener row. Keeping the reduction server-side avoids transferring the
+ * full daily-bar archive on every intraday snapshot refresh. */
+export interface ScreenerHistoryMetrics {
+  symbol: string
+  barCount: number
+  averageVolume: number | null
+  fiftyDayAverage: number | null
+  yearLow: number | null
+  yearHigh: number | null
+  range: number[]
+  close5d: number | null
+  close30d: number | null
+  close90d: number | null
+  close180d: number | null
+  closeYtd: number | null
+  close1y: number | null
+}
+
 function average(values: number[]): number {
   if (values.length === 0) return 0
   return values.reduce((total, value) => total + value, 0) / values.length
@@ -117,6 +136,42 @@ export function calculateScreenerRow(
     relativeVolume: round(averageVolume > 0 ? snapshot.volume / averageVolume : 0),
     range: sorted.slice(0, 18).reverse().map((bar) => round(bar.close)),
     fiftyDayAverage: round(fiftyDayAverage),
+    fiftyTwoWeekPosition: round(Math.max(0, Math.min(100, fiftyTwoWeekPosition))),
+    exchange: asset.exchange,
+    sector: 'Unclassified',
+    subIndustry: 'Unclassified',
+    tradable: asset.tradable && asset.active,
+    asOf: snapshot.asOf,
+  }
+}
+
+export function calculateScreenerRowFromMetrics(
+  asset: MarketAsset,
+  snapshot: MarketSnapshot,
+  metrics: ScreenerHistoryMetrics,
+): ScreenerRow | null {
+  if (asset.symbol !== snapshot.symbol || metrics.symbol !== asset.symbol || metrics.barCount < MINIMUM_DAILY_BARS) return null
+  if (metrics.averageVolume === null || metrics.fiftyDayAverage === null || metrics.yearLow === null || metrics.yearHigh === null) return null
+
+  const yearRange = metrics.yearHigh - metrics.yearLow
+  const fiftyTwoWeekPosition = yearRange <= 0 ? 50 : ((snapshot.price - metrics.yearLow) / yearRange) * 100
+
+  return {
+    symbol: asset.symbol,
+    company: asset.name,
+    price: round(snapshot.price),
+    dailyChange: round(percentChange(snapshot.price, snapshot.previousClose)),
+    return5d: historicalReturn(snapshot.price, metrics.close5d),
+    return30d: historicalReturn(snapshot.price, metrics.close30d),
+    return90d: historicalReturn(snapshot.price, metrics.close90d),
+    return180d: historicalReturn(snapshot.price, metrics.close180d),
+    returnYtd: historicalReturn(snapshot.price, metrics.closeYtd),
+    return1y: historicalReturn(snapshot.price, metrics.close1y),
+    gap: round(percentChange(snapshot.open, snapshot.previousClose)),
+    volume: snapshot.volume,
+    relativeVolume: round(metrics.averageVolume > 0 ? snapshot.volume / metrics.averageVolume : 0),
+    range: metrics.range.map((value) => round(value)),
+    fiftyDayAverage: round(metrics.fiftyDayAverage),
     fiftyTwoWeekPosition: round(Math.max(0, Math.min(100, fiftyTwoWeekPosition))),
     exchange: asset.exchange,
     sector: 'Unclassified',
