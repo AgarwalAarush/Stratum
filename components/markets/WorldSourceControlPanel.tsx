@@ -70,6 +70,8 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const [notice, setNotice] = useState<string | null>(null)
   const [reviewing, setReviewing] = useState<string | null>(null)
   const [contract, setContract] = useState<ContractDraft | null>(null)
+  const [blockingCandidate, setBlockingCandidate] = useState<string | null>(null)
+  const [blockRationale, setBlockRationale] = useState('')
   const [reviewingProposal, setReviewingProposal] = useState<string | null>(null)
   const [proposalRationale, setProposalRationale] = useState('')
   const [revisingCanonicalSlug, setRevisingCanonicalSlug] = useState<string | null>(null)
@@ -146,7 +148,29 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const startReview = (source: WorldSourceRegistryEntry) => {
     setReviewing(source.id)
     setContract(defaultContract(source))
+    setBlockingCandidate(null)
     setNotice(null)
+  }
+
+  const blockCandidate = async (source: WorldSourceRegistryEntry) => {
+    if (!blockRationale.trim() || pending) return
+    setPending(true)
+    setNotice(null)
+    try {
+      const response = await fetch('/api/markets/world-sources', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'block', slug: source.slug, reason: blockRationale.trim() }),
+      })
+      const payload = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to block source candidate')
+      setNotice(`${source.label} is blocked. Its discovery record remains available, but it cannot be approved or collected.`)
+      setBlockingCandidate(null)
+      setBlockRationale('')
+      router.refresh()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to block source candidate')
+    } finally {
+      setPending(false)
+    }
   }
 
   const approveCandidate = async (source: WorldSourceRegistryEntry) => {
@@ -249,7 +273,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           const complete = coverage.every((item) => item.current >= item.minimumSources)
           const selected = selectedDomainId === domain.id
           return (
-              <button key={domain.id} type="button" className="market-domain-control-card" data-selected={selected} onClick={() => { setSelectedDomainId(domain.id); setCandidateLimit(12); setProposalLimit(12); setReviewingProposal(null); setProposalRationale('') }} role="listitem">
+              <button key={domain.id} type="button" className="market-domain-control-card" data-selected={selected} onClick={() => { setSelectedDomainId(domain.id); setCandidateLimit(12); setProposalLimit(12); setReviewing(null); setContract(null); setBlockingCandidate(null); setBlockRationale(''); setReviewingProposal(null); setProposalRationale('') }} role="listitem">
               <span data-status={domain.status}>{domain.status}</span>
               <strong>{domain.label}</strong>
               <small>{complete ? 'Coverage requirement met' : 'Coverage gap remains'}</small>
@@ -313,7 +337,11 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
                 <label>Contract notes<textarea value={contract.notes} onChange={(event) => setContract({ ...contract, notes: event.target.value })} required maxLength={1000} /></label>
                 <label>Approval rationale<textarea value={contract.reason} onChange={(event) => setContract({ ...contract, reason: event.target.value })} required maxLength={1000} /></label>
                 <footer><button type="submit" disabled={pending}>{pending ? 'Activating contract…' : 'Approve reviewed contract'}</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setReviewing(null); setContract(null) }}>Cancel</button></footer>
-              </form> : <button type="button" className="market-source-review-button" onClick={() => startReview(source)} disabled={pending}>Review contract</button>}
+              </form> : blockingCandidate === source.id ? <form className="market-source-contract-review" onSubmit={(event) => { event.preventDefault(); void blockCandidate(source) }}>
+                <p>Blocking preserves this candidate and its discovery trail, but permanently prevents approval and collection. Use it for an invalid, overly broad, or unsuitable source.</p>
+                <label>Block rationale<textarea value={blockRationale} onChange={(event) => setBlockRationale(event.target.value)} required maxLength={1000} /></label>
+                <footer><button type="submit" className="market-source-block-button" disabled={pending || !blockRationale.trim()}>{pending ? 'Blocking…' : 'Block candidate'}</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setBlockingCandidate(null); setBlockRationale('') }}>Cancel</button></footer>
+              </form> : <footer className="market-source-candidate-actions"><button type="button" className="market-source-review-button" onClick={() => startReview(source)} disabled={pending}>Review contract</button><button type="button" className="market-source-secondary-button market-source-block-button" onClick={() => { setBlockingCandidate(source.id); setReviewing(null); setContract(null); setBlockRationale(''); setNotice(null) }} disabled={pending}>Block candidate</button></footer>}
             </article>
             )
           }) : <p>No candidate sources are awaiting review for this domain.</p>}

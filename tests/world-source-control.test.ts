@@ -34,6 +34,9 @@ test('source scout accepts bounded candidates only for a known requested domain'
 
 test('source scout rejects broad or ungovernable source output', () => {
   assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [{ ...candidate, canonicalUrl: 'http://grid.example.org/planning' }] }, 'ai-power'), /HTTPS/)
+  assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [{ ...candidate, canonicalUrl: 'https://www.sec.gov/edgar/search/index.html' }] }, 'ai-power'), /search or query portal/)
+  assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [{ ...candidate, canonicalUrl: 'https://elibrary.ferc.gov/eLibrary/search' }] }, 'ai-power'), /search or query portal/)
+  assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [{ ...candidate, canonicalUrl: 'https://example.org/data?query=capacity' }] }, 'ai-power'), /search query/)
   assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [{ ...candidate, slug: 'misrouted-candidate', domains: ['critical-materials'] }] }, 'ai-power'), /misrouted-candidate.*ai-power.*critical-materials/)
   assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [candidate, candidate] }, 'ai-power'), /duplicate/)
   assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [candidate] }, 'not-a-domain'), /Unknown market domain/)
@@ -140,6 +143,8 @@ test('source-control migration makes contracts mandatory for newly governed obse
   assert.match(controlPanel, /Show 12 more proposals/)
   assert.doesNotMatch(controlPanel, /workspace\.observationProposals\.slice\(0, 12\)/)
   assert.match(controlPanel, /action: 'approve'/)
+  assert.match(controlPanel, /action: 'block'/)
+  assert.match(controlPanel, /Block candidate/)
   assert.match(controlPanel, /payload\.deduplicated/)
   assert.match(controlPanel, /No additional model run was started/)
   assert.match(controlPanel, /No additional probe run was started/)

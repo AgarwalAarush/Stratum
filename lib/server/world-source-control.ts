@@ -67,6 +67,24 @@ function safeHttpsUrl(value: string, label: string): URL {
   return url
 }
 
+/** Search and query portals are navigation tools, not bounded sources. A
+ * candidate must identify a stable landing page, feed, dataset, filing, or
+ * transcript index that a reviewer can contract without authorizing open-web
+ * search. */
+function validateScoutCanonicalUrl(value: string): string {
+  const url = safeHttpsUrl(value, 'candidate')
+  const pathSegments = url.pathname.toLowerCase().split('/').filter(Boolean)
+  const searchSegments = new Set(['search', 'searches', 'result', 'results', 'query', 'queries', 'lookup'])
+  if (pathSegments.some((segment) => searchSegments.has(segment))) {
+    throw new Error('Candidate URL cannot be a search or query portal')
+  }
+  const searchParameters = new Set(['q', 'query', 'search', 'keyword', 'keywords', 'term'])
+  if ([...url.searchParams.keys()].some((key) => searchParameters.has(key.toLowerCase()))) {
+    throw new Error('Candidate URL cannot contain a search query')
+  }
+  return url.toString()
+}
+
 function normalizeSlug(value: string): string {
   const slug = value.trim().toLowerCase()
   if (!/^[a-z0-9]+(?:-[a-z0-9]+){0,79}$/.test(slug)) throw new Error('Source slug must be lowercase kebab-case')
@@ -99,7 +117,7 @@ export function validateWorldSourceScoutCandidates(value: unknown, domainId: str
     const slug = normalizeSlug(requiredString(item.slug, 'candidate slug'))
     if (seen.has(slug)) throw new Error(`Source scout returned duplicate candidate ${slug}`)
     seen.add(slug)
-    const canonicalUrl = safeHttpsUrl(requiredString(item.canonicalUrl, 'candidate'), 'candidate').toString()
+    const canonicalUrl = validateScoutCanonicalUrl(requiredString(item.canonicalUrl, 'candidate'))
     const sourceTier = item.sourceTier as WorldSourceTier
     const sourceKind = item.sourceKind as WorldSourceKind
     if (!SOURCE_TIERS.has(sourceTier)) throw new Error('Invalid source tier')
@@ -174,7 +192,7 @@ export function buildWorldSourceScoutPrompt(domainId: string, reason: string): s
   if (!domain) throw new Error(`Unknown market domain: ${domainId}`)
   return [
     'You are Stratum\'s source-scout. Your job is to propose authoritative source-level inputs for a bounded market-research domain. You do not form a market view, extract a thesis, make a recommendation, or approve a source.',
-    'Return only direct, stable HTTPS canonical source landing pages, feeds, datasets, filings, or transcript indexes. Do not return search-result pages, article aggregators, social accounts, newsletters, individual market opinions, or URLs you are not confident exist.',
+    'Return only direct, stable HTTPS canonical source landing pages, feeds, datasets, filings, or transcript indexes. Do not return search-result pages, search/query portals, article aggregators, social accounts, newsletters, individual market opinions, or URLs you are not confident exist. URLs with /search, /results, /query, /lookup, or search-query parameters are deterministically rejected.',
     'Prefer primary authorities, regulators, statistical agencies, company disclosures, and operational datasets. Independent or discovery sources may fill a clearly stated gap but must disclose limitations. The output is strictly candidate status; it cannot enter the evidence pipeline until a source contract is tested and approved.',
     `DOMAIN: ${JSON.stringify(domain)}`,
     `DOMAIN ASSIGNMENT: Every candidate must set its domains field to include the exact requested domain ID ${JSON.stringify(domain.id)}. Do not substitute a related domain, label, theme, or broader category.`,
