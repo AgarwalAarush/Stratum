@@ -3,6 +3,8 @@ import type {
   MarketDomainPack,
   MarketResearchScoutLead,
   MarketResearchScoutRun,
+  MarketOrchestrationAction,
+  MarketOrchestrationRun,
   MarketResearchFrontierItem,
   MarketDomainPackEvent,
   WorldSourceContract,
@@ -400,6 +402,30 @@ function normalizeResearchScoutRun(row: RecordValue): MarketResearchScoutRun {
   return { id: String(row.id), domainId: String(row.domain_id), status, trigger, reason: String(row.reason), frontierIds: strings(row.frontier_ids), leads: (Array.isArray(row.leads) ? row.leads : []).flatMap((entry) => { const lead = normalizeResearchScoutLead(entry); return lead ? [lead] : [] }), unresolvedQuestions: strings(row.unresolved_questions), provider: row.provider === null ? null : String(row.provider ?? ''), model: row.model === null ? null : String(row.model ?? ''), generatedAt: row.generated_at === null ? null : String(row.generated_at ?? ''), error: row.error === null ? null : String(row.error ?? ''), createdAt: String(row.created_at) }
 }
 
+function normalizeOrchestrationRun(row: RecordValue): MarketOrchestrationRun {
+  const status = String(row.status)
+  if (status !== 'running' && status !== 'complete' && status !== 'failed') throw new Error(`Invalid orchestration run status: ${status}`)
+  const trigger = row.trigger === 'manual' ? 'manual' : 'scheduled'
+  return {
+    id: String(row.id), status, trigger, marketRegime: row.market_regime === null ? null : String(row.market_regime ?? ''),
+    inputSummary: record(row.input_summary), createdAt: String(row.created_at),
+    completedAt: row.completed_at === null ? null : String(row.completed_at ?? ''), error: row.error === null ? null : String(row.error ?? ''),
+  }
+}
+
+function normalizeOrchestrationAction(row: RecordValue): MarketOrchestrationAction {
+  const actionType = String(row.action_type)
+  const state = String(row.state)
+  const actionTypes = new Set(['investigate_broad', 'verify_recurring_source', 'critic_revision', 'collect_known_source', 'awaiting_review', 'no_action'])
+  const states = new Set(['planned', 'enqueued', 'awaiting_review', 'no_action', 'skipped', 'failed'])
+  if (!actionTypes.has(actionType) || !states.has(state)) throw new Error('Invalid persisted orchestration action')
+  return {
+    id: String(row.id), runId: String(row.run_id), domainId: String(row.domain_id), actionType: actionType as MarketOrchestrationAction['actionType'],
+    state: state as MarketOrchestrationAction['state'], priority: Number(row.priority), rationale: String(row.rationale), deterministicSignals: record(row.deterministic_signals),
+    jobType: row.job_type === null ? null : String(row.job_type ?? ''), jobId: row.job_id === null ? null : String(row.job_id ?? ''), createdAt: String(row.created_at),
+  }
+}
+
 function normalizeObservationProposal(row: RecordValue): WorldObservationProposal {
   const source = relatedRecord(row.world_source_registry)
   const document = relatedRecord(row.world_documents)
@@ -573,7 +599,7 @@ export async function reviseWorldSourceCanonicalUrl(input: { slug: string; canon
 export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceControlWorkspaceData> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const [domains, sources, runs, researchScoutRuns, mappings, healthChecks, proposals, triageRuns, researchFrontiers] = await Promise.all([
+  const [domains, sources, runs, researchScoutRuns, mappings, healthChecks, proposals, triageRuns, researchFrontiers, orchestrationRuns, orchestrationActions] = await Promise.all([
     supabase.from('market_domain_packs').select('*').order('id'),
     supabase.from('world_source_registry').select('*').order('updated_at', { ascending: false }).limit(200),
     supabase.from('world_source_discovery_runs').select('*').order('created_at', { ascending: false }).limit(60),
@@ -583,8 +609,10 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
     supabase.from('world_observation_proposals').select('*,world_source_registry(label,canonical_url),world_documents(title,canonical_url),world_observation_proposal_reviews(decision,rationale,reviewed_at,observation_id)').order('generated_at', { ascending: false }).limit(60),
     supabase.from('world_observation_proposal_triage_runs').select('*,world_source_document_captures(source_id,world_source_registry(slug,label,canonical_url))').order('completed_at', { ascending: false }).limit(60),
     supabase.from('market_hypothesis_research_frontier').select('*').order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(120),
+    supabase.from('market_orchestration_runs').select('*').order('created_at', { ascending: false }).limit(20),
+    supabase.from('market_orchestration_actions').select('*').order('created_at', { ascending: false }).limit(120),
   ])
-  const error = domains.error ?? sources.error ?? runs.error ?? researchScoutRuns.error ?? mappings.error ?? healthChecks.error ?? proposals.error ?? triageRuns.error ?? researchFrontiers.error
+  const error = domains.error ?? sources.error ?? runs.error ?? researchScoutRuns.error ?? mappings.error ?? healthChecks.error ?? proposals.error ?? triageRuns.error ?? researchFrontiers.error ?? orchestrationRuns.error ?? orchestrationActions.error
   if (error) throw new Error(`Unable to load source-control workspace: ${error.message}`)
   const domainIdsBySourceId = new Map<string, string[]>()
   for (const mapping of mappings.data ?? []) {
@@ -615,6 +643,8 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
     researchFrontiers: (researchFrontiers.data ?? []).map((row) => normalizeResearchFrontier(row as RecordValue)),
     observationProposals: (proposals.data ?? []).map((row) => normalizeObservationProposal(row as RecordValue)),
     triageRuns: (triageRuns.data ?? []).map((row) => normalizeTriageRun(row as RecordValue)),
+    orchestrationRuns: (orchestrationRuns.data ?? []).map((row) => normalizeOrchestrationRun(row as RecordValue)),
+    orchestrationActions: (orchestrationActions.data ?? []).map((row) => normalizeOrchestrationAction(row as RecordValue)),
   }
 }
 

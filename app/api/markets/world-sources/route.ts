@@ -32,6 +32,10 @@ export async function POST(request: NextRequest) {
       const queued = await enqueueAgentJob('verify-world-source-health', { trigger: 'manual' })
       return NextResponse.json({ queued: true, ...queued })
     }
+    if (body.action === 'orchestrate-market-research') {
+      const queued = await enqueueAgentJob('orchestrate-market-research', { trigger: 'manual' })
+      return NextResponse.json({ queued: true, ...queued })
+    }
     if (body.action === 'preflight-candidate') {
       if (typeof body.slug !== 'string' || !body.slug.trim()) return NextResponse.json({ error: 'A candidate source is required.' }, { status: 400 })
       const queued = await enqueueAgentJob('preflight-world-source-candidate', { slug: body.slug.trim().toLowerCase(), trigger: 'manual' })

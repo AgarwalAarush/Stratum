@@ -111,6 +111,28 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const triageAttention = workspace.triageRuns.filter((run) => run.status !== 'succeeded')
   const researchLeads = workspace.researchScoutRuns.filter((run) => run.status === 'complete')
     .flatMap((run) => run.leads.map((lead) => ({ run, lead }))).slice(0, 12)
+  const recentOrchestration = workspace.orchestrationRuns[0] ?? null
+  const orchestrationActions = workspace.orchestrationActions.slice(0, 18)
+  const requestOrchestration = async () => {
+    if (pending) return
+    setPending(true)
+    setNotice(null)
+    try {
+      const response = await fetch('/api/markets/world-sources', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'orchestrate-market-research' }),
+      })
+      const payload = await response.json() as { error?: string; deduplicated?: boolean }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue market orchestration')
+      setNotice(payload.deduplicated
+        ? 'A market-wide orchestration run is already queued or completed in this planning window.'
+        : 'Market-wide orchestration queued. It records deterministic signals and queues only bounded worker jobs; it cannot create evidence, a thesis, or a capital decision.')
+      router.refresh()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to queue market orchestration')
+    } finally {
+      setPending(false)
+    }
+  }
   const requestScout = async () => {
     if (!selectedDomain || !reason.trim() || pending) return
     setPending(true)
@@ -340,6 +362,32 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           <div><dt>Triage attention</dt><dd>{triageAttention.length}</dd></div>
           <div><dt>Failed scouts</dt><dd>{failedRuns.length}</dd></div>
         </dl>
+      </div>
+
+      <section className="market-source-control-detail" aria-labelledby="orchestration-board-heading">
+        <div>
+          <p className="markets-eyebrow">Market-wide work queue</p>
+          <h3 id="orchestration-board-heading">Research orchestration</h3>
+          <p>Plans read governed evidence, review waits, research frontiers, provisional lead dossiers, source coverage, and market regime. They select bounded follow-up—not a market recommendation.</p>
+          {recentOrchestration ? <small>Latest {recentOrchestration.status} run · {formatDate(recentOrchestration.completedAt ?? recentOrchestration.createdAt)}{recentOrchestration.marketRegime ? ` · regime: ${recentOrchestration.marketRegime}` : ''}</small> : <small>No orchestration run has been recorded.</small>}
+        </div>
+        <div className="market-source-scout-form">
+          <button type="button" onClick={requestOrchestration} disabled={pending}>{pending ? 'Queuing planner…' : 'Queue market-wide orchestration'}</button>
+          <p>The initial planner is deterministic and cooldown-bounded so every action is auditable. A planned broad lead remains provisional; accepted review is still required before it becomes governed evidence.</p>
+        </div>
+      </section>
+
+      <div className="market-source-control-ledger" aria-label="Orchestration actions">
+        <div>
+          <p className="markets-eyebrow">Why work is queued</p>
+          <h3>Recent orchestration actions</h3>
+          {orchestrationActions.length ? orchestrationActions.map((action) => (
+            <article key={action.id} data-status={action.state}>
+              <div><strong>{action.domainId.replaceAll('-', ' ')} · {action.actionType.replaceAll('_', ' ')}</strong><span>{action.state} · priority {action.priority}{action.jobType ? ` · ${action.jobType}` : ''}</span><p>{action.rationale}</p></div>
+              <time>{formatDate(action.createdAt)}</time>
+            </article>
+          )) : <p>No durable orchestration decisions yet.</p>}
+        </div>
       </div>
 
       <div className="market-domain-control-grid" role="list" aria-label="Market research domains">

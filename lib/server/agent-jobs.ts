@@ -79,6 +79,7 @@ export const AGENT_JOB_TYPES = [
   'deepen-market-hypothesis',
   'refresh-market-hypothesis-research',
   'route-market-research-frontiers',
+  'orchestrate-market-research',
   'evaluate-market-prediction',
   'evaluate-market-predictions',
   'monitor-market-theses',
@@ -215,6 +216,11 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     bucket.setUTCHours(Math.floor(bucket.getUTCHours() / 6) * 6, 0, 0, 0)
     return `${jobType}:${bucket.toISOString()}`
   }
+  if (jobType === 'orchestrate-market-research') {
+    const bucket = new Date(now)
+    bucket.setUTCHours(Math.floor(bucket.getUTCHours() / 6) * 6, 0, 0, 0)
+    return `${jobType}:${bucket.toISOString()}`
+  }
   if (jobType === 'evaluate-market-prediction' && typeof payload.predictionId === 'string') {
     return `${jobType}:${payload.predictionId}:${now.toISOString().slice(0, 10)}`
   }
@@ -286,6 +292,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
     || jobType === 'monitor-market-theses'
     || jobType === 'refresh-market-hypothesis-research'
     || jobType === 'route-market-research-frontiers'
+    || jobType === 'orchestrate-market-research'
     || jobType === 'review-world-source-coverage'
     || jobType === 'evaluate-market-predictions'
     || jobType === 'prune-market-data'
@@ -344,7 +351,7 @@ export function shouldRefreshClosedMarket(
 export function agentJobPriority(jobType: AgentJobType): number {
   if (jobType === 'preflight-world-source-candidate') return 20
   if (jobType === 'verify-world-source-health') return 30
-  if (jobType === 'scout-world-sources' || jobType === 'scout-market-research' || jobType === 'review-world-source-coverage' || jobType === 'route-market-research-frontiers') return 40
+  if (jobType === 'scout-world-sources' || jobType === 'scout-market-research' || jobType === 'review-world-source-coverage' || jobType === 'route-market-research-frontiers' || jobType === 'orchestrate-market-research') return 40
   if (jobType === 'collect-world-source-documents' || jobType === 'triage-world-observation-proposals') return 50
   if (jobType === 'refresh-market-screener' || jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence') return 140
   return 100
@@ -889,6 +896,14 @@ async function executeJob(
       results.push({ domainId: plan.domainId, frontierCount: plan.frontierIds.length, ...queued })
     }
     return { planned: plans.length, queued: results.filter((item) => !item.deduplicated).length, results }
+  }
+
+  if (job.job_type === 'orchestrate-market-research') {
+    const { runMarketResearchOrchestration } = await import('./market-research-orchestrator.ts')
+    await reportProgress(5, 'reading governed evidence, frontier, and lead signals across active domains')
+    const result = await runMarketResearchOrchestration({ trigger: job.payload.trigger === 'manual' ? 'manual' : 'scheduled' })
+    await reportProgress(100, `${result.planned} durable actions planned; ${result.enqueued} worker jobs enqueued; ${result.awaitingReview} review waits`)
+    return result
   }
 
   if (job.job_type === 'evaluate-market-prediction') {

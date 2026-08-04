@@ -1288,6 +1288,41 @@ export interface MarketResearchScoutRun {
   createdAt: string
 }
 
+/** Durable, auditable decision record for market-wide research work. An
+ * orchestration action is not evidence, a hypothesis, a thesis, or a trade. */
+export type MarketOrchestrationActionType =
+  | 'investigate_broad'
+  | 'verify_recurring_source'
+  | 'critic_revision'
+  | 'collect_known_source'
+  | 'awaiting_review'
+  | 'no_action'
+
+export interface MarketOrchestrationAction {
+  id: string
+  runId: string
+  domainId: string
+  actionType: MarketOrchestrationActionType
+  state: 'planned' | 'enqueued' | 'awaiting_review' | 'no_action' | 'skipped' | 'failed'
+  priority: number
+  rationale: string
+  deterministicSignals: Record<string, unknown>
+  jobType: string | null
+  jobId: string | null
+  createdAt: string
+}
+
+export interface MarketOrchestrationRun {
+  id: string
+  status: 'running' | 'complete' | 'failed'
+  trigger: 'scheduled' | 'manual'
+  marketRegime: string | null
+  inputSummary: Record<string, unknown>
+  createdAt: string
+  completedAt: string | null
+  error: string | null
+}
+
 export interface WorldSourceControlWorkspaceData {
   domains: MarketDomainPack[]
   sources: WorldSourceRegistryEntry[]
@@ -1296,6 +1331,8 @@ export interface WorldSourceControlWorkspaceData {
   researchFrontiers: MarketResearchFrontierItem[]
   observationProposals: WorldObservationProposal[]
   triageRuns: WorldObservationProposalTriageRun[]
+  orchestrationRuns: MarketOrchestrationRun[]
+  orchestrationActions: MarketOrchestrationAction[]
 }
 
 /** Quote-bound cheap-model output. It is deliberately not a WorldObservation

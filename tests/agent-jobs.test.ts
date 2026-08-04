@@ -197,6 +197,14 @@ test('bounded market-research jobs persist their actual routed model policy', as
   assert.match(source, /findDueMarketHypothesisResearch\(undefined, scheduledResearchLimit\)/)
 })
 
+test('market-wide orchestration uses a six-hour durable dedupe bucket', () => {
+  assert.equal(
+    buildAgentJobDedupeKey('orchestrate-market-research', new Date('2026-08-04T09:58:00Z')),
+    'orchestrate-market-research:2026-08-04T06:00:00.000Z',
+  )
+  assert.equal(agentJobProvider('orchestrate-market-research'), 'market-data')
+})
+
 test('observation-triage work deduplicates the immutable capture set', () => {
   assert.equal(
     buildAgentJobDedupeKey('triage-world-observation-proposals', new Date('2026-08-04T00:00:00Z'), { captureIds: ['capture-b', 'capture-a'] }),
