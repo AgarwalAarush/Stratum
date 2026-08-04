@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import type { MarketDomainPack, WorldSourceControlWorkspaceData, WorldSourceRegistryEntry } from '@/lib/markets/types'
+import { prioritizeWorldSourceCandidates } from '@/lib/markets/source-review-priority'
 
 type SourceStatus = 'approved' | 'probation'
 
@@ -87,7 +88,9 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   }
 
   const candidates = workspace.sources.filter((source) => source.status === 'candidate')
-  const scopedCandidates = selectedDomain ? candidates.filter((source) => source.domainIds.includes(selectedDomain.id)) : candidates
+  const scopedCandidates = selectedDomain
+    ? prioritizeWorldSourceCandidates(workspace.sources, selectedDomain)
+    : candidates.map((source) => ({ source, closesCoverageGaps: [] }))
   const visibleCandidates = scopedCandidates.slice(0, candidateLimit)
   const hasMoreCandidates = visibleCandidates.length < scopedCandidates.length
   const scopedProposals = selectedDomain ? workspace.observationProposals.filter((proposal) => proposal.domainId === selectedDomain.id) : workspace.observationProposals
@@ -289,9 +292,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           <p className="markets-eyebrow">Review ledger</p>
           <h3>{selectedDomain ? `${selectedDomain.label} source candidates` : 'Source candidates'}</h3>
           <p className="market-source-candidate-summary">Showing {visibleCandidates.length} of {scopedCandidates.length} candidate{scopedCandidates.length === 1 ? '' : 's'} mapped to the selected domain. Candidates may support more than one domain.</p>
-          {scopedCandidates.length ? visibleCandidates.map((source) => (
+          {scopedCandidates.length ? visibleCandidates.map(({ source, closesCoverageGaps }) => (
             <article key={source.id}>
               <div><strong>{source.label}</strong><span>{source.publisher} · {source.evidenceClasses.join(', ').replaceAll('_', ' ')}</span>
+                {closesCoverageGaps.length ? <small className="market-source-coverage-priority">Closes coverage gap: {closesCoverageGaps.join(', ').replaceAll('_', ' ')}</small> : null}
                 {source.candidateContext ? <div className="market-source-candidate-context"><p><b>Coverage:</b> {source.candidateContext.coverage || 'Not supplied'}</p><p><b>Why this source:</b> {source.candidateContext.whyThisSource || 'Not supplied'}</p><small>Deterministic score {source.candidateContext.deterministicScore ?? '—'} · scout score {source.candidateContext.scoutScore ?? '—'}{source.candidateContext.limitations.length ? ` · limitations: ${source.candidateContext.limitations.join('; ')}` : ''}</small></div> : null}
                 <a href={source.canonicalUrl} target="_blank" rel="noreferrer">Open canonical source</a></div>
               <time>{formatDate(source.updatedAt)}</time>

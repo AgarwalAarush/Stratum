@@ -131,7 +131,7 @@ test('source-control migration makes contracts mandatory for newly governed obse
   assert.match(controlPanel, /Approve reviewed contract/)
   assert.match(controlPanel, /Why this source:/)
   assert.match(controlPanel, /Deterministic score/)
-  assert.match(controlPanel, /source\.domainIds\.includes\(selectedDomain\.id\)/)
+  assert.match(controlPanel, /prioritizeWorldSourceCandidates\(workspace\.sources, selectedDomain\)/)
   assert.match(controlPanel, /Showing \{visibleCandidates\.length\} of \{scopedCandidates\.length\}/)
   assert.match(controlPanel, /Show 12 more candidates/)
   assert.doesNotMatch(controlPanel, /candidates\.slice\(0, 8\)/)
