@@ -223,7 +223,7 @@ export function ThesisWorkspace({ initialData, initialMarketData }: { initialDat
         <button type="button" data-active={library === 'market'} onClick={() => setLibrary('market')}>Market theses</button>
         <button type="button" data-active={library === 'company'} onClick={() => setLibrary('company')}>Company theses</button>
       </nav>
-      {library === 'market' ? <MarketThesisWorkspace initialData={initialMarketData ?? { baseline: null, hypotheses: [], theses: [] }} /> : null}
+      {library === 'market' ? <MarketThesisWorkspace initialData={initialMarketData ?? { baseline: null, hypotheses: [], theses: [], frontiers: [] }} /> : null}
 
       <div hidden={library !== 'company'}>
       <p className="thesis-intro">A screen can surface a name; a thesis states the belief, what changed, and what would prove it wrong. New evidence creates a proposal—never a silent rewrite.</p>

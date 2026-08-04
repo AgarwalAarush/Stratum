@@ -1706,6 +1706,11 @@
 .market-hypothesis-research[data-status="complete"] > span { color: var(--market-positive); }
 .market-hypothesis-research[data-status="needs_revision"] > span { color: var(--market-negative); }
 .market-hypothesis-research small { color: var(--market-text-muted); display: block; font-size: 11px; line-height: 1.45; margin-top: 8px; }
+.market-hypothesis-frontier > p { color: var(--market-text-muted); font-size: 12px; line-height: 1.45; margin: 7px 0 0; }
+.market-hypothesis-frontier ul { display: grid; gap: 9px; list-style: none; margin: 11px 0 0; padding: 0; }
+.market-hypothesis-frontier li { border-left: 2px solid var(--market-border); padding-left: 9px; }
+.market-hypothesis-frontier li strong { display: block; font-size: 12px; font-weight: 500; line-height: 1.4; }
+.market-hypothesis-frontier li small { color: var(--market-text-muted); display: block; font-size: 10px; line-height: 1.4; margin-top: 3px; }
 .market-hypothesis-card footer { border-top: 1px solid var(--market-border); margin-top: 15px; padding-top: 11px; }
 .market-hypothesis-card footer > div { border: 0; display: flex; gap: 7px; margin: 0; padding: 0; }
 .market-hypothesis-card button { background: transparent; border: 1px solid var(--market-border); color: var(--market-text); cursor: pointer; font-size: 10px; padding: 7px 8px; }

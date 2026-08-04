@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { MarketHypothesis, MarketThesisWorkspaceData } from '@/lib/markets/types'
+import type { MarketHypothesis, MarketResearchFrontierItem, MarketThesisWorkspaceData } from '@/lib/markets/types'
 
 type Action = 'freeze' | 'reject' | 'archive' | 'reactivate' | 'request_deepening'
 
@@ -64,7 +64,7 @@ export function MarketThesisWorkspace({ initialData }: { initialData: MarketThes
 
     <section className="market-thesis-section" aria-labelledby="forming-hypotheses-title">
       <header><div><p className="markets-eyebrow">Signal correlation</p><h2 id="forming-hypotheses-title">Hypotheses forming</h2></div><span>{forming.length} in incubation</span></header>
-      {forming.length === 0 ? <p className="thesis-empty">No cluster has enough causal evidence to propose a market thesis yet.</p> : <div className="market-hypothesis-grid">{forming.map((hypothesis) => <HypothesisCard key={hypothesis.id} hypothesis={hypothesis} busy={busy} onAction={takeAction} />)}</div>}
+      {forming.length === 0 ? <p className="thesis-empty">No cluster has enough causal evidence to propose a market thesis yet.</p> : <div className="market-hypothesis-grid">{forming.map((hypothesis) => <HypothesisCard key={hypothesis.id} hypothesis={hypothesis} frontiers={data.frontiers.filter((item) => item.hypothesisId === hypothesis.id)} busy={busy} onAction={takeAction} />)}</div>}
     </section>
 
     <section className="market-thesis-section" aria-labelledby="active-market-theses-title">
@@ -79,12 +79,19 @@ export function MarketThesisWorkspace({ initialData }: { initialData: MarketThes
       </article>)}</div>}
     </section>
 
-    {history.length > 0 ? <section className="market-thesis-section market-thesis-history"><header><div><p className="markets-eyebrow">Preserved history</p><h2>Rejected and archived</h2></div><span>{history.length}</span></header><div className="market-hypothesis-grid">{history.map((hypothesis) => <HypothesisCard key={hypothesis.id} hypothesis={hypothesis} busy={busy} onAction={takeAction} />)}</div></section> : null}
+    {history.length > 0 ? <section className="market-thesis-section market-thesis-history"><header><div><p className="markets-eyebrow">Preserved history</p><h2>Rejected and archived</h2></div><span>{history.length}</span></header><div className="market-hypothesis-grid">{history.map((hypothesis) => <HypothesisCard key={hypothesis.id} hypothesis={hypothesis} frontiers={data.frontiers.filter((item) => item.hypothesisId === hypothesis.id)} busy={busy} onAction={takeAction} />)}</div></section> : null}
     {notice ? <p className="thesis-notice" role="status">{notice}</p> : null}
   </div>
 }
 
-function HypothesisCard({ hypothesis, busy, onAction }: { hypothesis: MarketHypothesis; busy: string | null; onAction: (hypothesis: MarketHypothesis, action: Action) => Promise<void> }) {
+function frontierStatus(item: MarketResearchFrontierItem) {
+  if (item.status === 'deferred' && item.adapterId?.startsWith('world-source-scout:')) return 'Candidate discovery awaiting review'
+  if (item.status === 'blocked') return 'Blocked pending a permitted source path'
+  if (item.status === 'complete') return 'Evidence gap resolved'
+  return 'Awaiting bounded research routing'
+}
+
+function HypothesisCard({ hypothesis, frontiers, busy, onAction }: { hypothesis: MarketHypothesis; frontiers: MarketResearchFrontierItem[]; busy: string | null; onAction: (hypothesis: MarketHypothesis, action: Action) => Promise<void> }) {
   const primary = actionLabel(hypothesis)
   const research = hypothesis.latestResearch
   return <article className="market-hypothesis-card" data-status={hypothesis.status}>
@@ -99,6 +106,11 @@ function HypothesisCard({ hypothesis, busy, onAction }: { hypothesis: MarketHypo
       </> : <p>{research.error || 'The bounded research run is still preparing its source ledger.'}</p>}
       {research.critique?.verdict === 'needs_revision' ? <small>Critic requires revision: {research.critique.summary}</small> : null}
     </div> : <div className="market-hypothesis-research" data-status="pending"><span>Analytical research</span><p>No durable analysis yet; it will queue only when the source gate is met.</p></div>}
+    {frontiers.length > 0 ? <div className="market-hypothesis-frontier">
+      <span>Research frontier · {frontiers.length} open gap{frontiers.length === 1 ? '' : 's'}</span>
+      <p>These questions can trigger governed candidate discovery, but candidates remain outside the evidence ledger until contract, health, and human approval are complete.</p>
+      <ul>{frontiers.slice(0, 3).map((item) => <li key={item.id}><strong>{item.question}</strong><small>{frontierStatus(item)} · evidence needed: {item.evidenceNeeded}</small></li>)}</ul>
+    </div> : null}
     <footer><span>{hypothesis.evidence.length} linked observation{hypothesis.evidence.length === 1 ? '' : 's'} · {hypothesis.unresolvedNodes.length} unresolved node{hypothesis.unresolvedNodes.length === 1 ? '' : 's'}</span><div><button type="button" disabled={busy !== null} onClick={() => onAction(hypothesis, primary.action)}>{busy === `${hypothesis.id}:${primary.action}` ? 'Saving…' : primary.label}</button>{!['rejected', 'archived'].includes(hypothesis.status) ? <button type="button" disabled={busy !== null} onClick={() => onAction(hypothesis, 'archive')}>Archive</button> : null}</div></footer>
   </article>
 }

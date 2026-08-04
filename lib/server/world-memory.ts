@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type {
   MarketHypothesis,
   MarketHypothesisEvidence,
+  MarketResearchFrontierItem,
   MarketThesisVersion,
   MarketThesisWorkspaceData,
   ThesisPrediction,
@@ -304,6 +305,18 @@ function normalizeHypothesis(row: RecordValue, evidence: MarketHypothesisEvidenc
   }
 }
 
+function normalizeResearchFrontier(row: RecordValue): MarketResearchFrontierItem {
+  const status = row.status
+  return {
+    id: String(row.id), hypothesisId: String(row.hypothesis_id), researchVersionId: row.research_version_id === null ? null : String(row.research_version_id ?? ''),
+    question: String(row.question ?? ''), causalNode: String(row.causal_node ?? ''), priority: number(row.priority), sourceTypes: strings(row.source_types),
+    adapterId: row.adapter_id === null ? null : String(row.adapter_id ?? ''),
+    status: (status === 'complete' || status === 'blocked' || status === 'deferred' ? status : 'queued') as MarketResearchFrontierItem['status'],
+    evidenceNeeded: String(row.evidence_needed ?? ''), attemptCount: number(row.attempt_count), lastError: row.last_error === null ? null : String(row.last_error ?? ''),
+    nextRunAt: row.next_run_at === null ? null : String(row.next_run_at ?? ''),
+  }
+}
+
 async function fetchMarketHypothesesInternal(ownerId?: string): Promise<MarketHypothesis[]> {
   const supabase = getSupabaseClient()!
   let query = supabase.from('market_hypotheses').select('*').order('updated_at', { ascending: false }).limit(80)
@@ -535,7 +548,7 @@ function normalizeThesis(row: RecordValue, predictionRows: RecordValue[], exposu
 
 export async function fetchMarketThesisWorkspace(ownerId: string): Promise<MarketThesisWorkspaceData> {
   const supabase = getSupabaseClient()
-  if (!supabase) return { baseline: null, hypotheses: [], theses: [] }
+  if (!supabase) return { baseline: null, hypotheses: [], theses: [], frontiers: [] }
   const [baselineRow, hypothesisResult] = await Promise.all([
     fetchLatestBaselineRow('global', 'global'),
     supabase.from('market_hypotheses').select('*').eq('owner_id', ownerId).order('updated_at', { ascending: false }).limit(80),
@@ -560,6 +573,12 @@ export async function fetchMarketThesisWorkspace(ownerId: string): Promise<Marke
   if (researchResult.error && !/market_hypothesis_research_versions|schema cache/i.test(researchResult.error.message)) {
     throw new Error(`Unable to load market research versions: ${researchResult.error.message}`)
   }
+  const frontierResult = hypothesisIds.length > 0
+    ? await supabase.from('market_hypothesis_research_frontier').select('*').in('hypothesis_id', hypothesisIds).order('priority', { ascending: false }).limit(120)
+    : { data: [], error: null }
+  if (frontierResult.error && !/market_hypothesis_research_frontier|schema cache/i.test(frontierResult.error.message)) {
+    throw new Error(`Unable to load market research frontiers: ${frontierResult.error.message}`)
+  }
   const predictionsByThesis = new Map<string, RecordValue[]>()
   for (const item of predictionResult.data ?? []) predictionsByThesis.set(item.market_thesis_version_id, [...(predictionsByThesis.get(item.market_thesis_version_id) ?? []), item as RecordValue])
   const exposuresByThesis = new Map<string, RecordValue[]>()
@@ -579,6 +598,7 @@ export async function fetchMarketThesisWorkspace(ownerId: string): Promise<Marke
       return { ...hypothesis, latestResearch: latestResearchByHypothesis.get(hypothesis.id) ?? null }
     }),
     theses: (thesisResult.data ?? []).map((item) => normalizeThesis(item as RecordValue, predictionsByThesis.get(item.id) ?? [], exposuresByThesis.get(item.id) ?? [])),
+    frontiers: frontierResult.error ? [] : (frontierResult.data ?? []).map((item) => normalizeResearchFrontier(item as RecordValue)),
   }
 }
 

@@ -82,12 +82,14 @@ test('research frontiers route only to bounded candidate discovery for a known d
   assert.equal(buildResearchFrontierScoutPlan('not-a-domain', []), null)
 })
 
-test('agent jobs use a dedicated bounded research job and deterministic revision trigger', async () => {
-  const [jobs, research, actions, schedule] = await Promise.all([
+test('agent jobs and thesis workspace preserve a bounded research frontier', async () => {
+  const [jobs, research, actions, schedule, workspace, memory] = await Promise.all([
     readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/market-thesis-research.ts', import.meta.url), 'utf8'),
     readFile(new URL('../app/api/markets/market-theses/[id]/actions/route.ts', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/agent-schedule.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../components/markets/MarketThesisWorkspace.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/server/world-memory.ts', import.meta.url), 'utf8'),
   ])
   assert.match(jobs, /'deepen-market-hypothesis'/)
   assert.match(jobs, /findDueMarketHypothesisResearch/)
@@ -96,6 +98,9 @@ test('agent jobs use a dedicated bounded research job and deterministic revision
   assert.match(research, /linked observation/)
   assert.match(actions, /enqueueAgentJob\('deepen-market-hypothesis'/)
   assert.match(schedule, /refresh-market-hypothesis-research/)
+  assert.match(workspace, /Candidate discovery awaiting review/)
+  assert.match(workspace, /contract, health, and human approval/i)
+  assert.match(memory, /market_hypothesis_research_frontier/)
 })
 
 test('market-thesis promotion requires a completed analyst and critic artifact', async () => {

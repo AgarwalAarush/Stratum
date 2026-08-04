@@ -1469,4 +1469,5 @@ export interface MarketThesisWorkspaceData {
   baseline: WorldBaseline | null
   hypotheses: MarketHypothesis[]
   theses: MarketThesisVersion[]
+  frontiers: MarketResearchFrontierItem[]
 }
