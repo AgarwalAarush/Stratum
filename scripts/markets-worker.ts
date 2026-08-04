@@ -1,5 +1,5 @@
 import { hostname } from 'node:os'
-import { processOneAgentJob, recoverInterruptedAgentJobs, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
+import { enqueueAgentJob, processOneAgentJob, recoverInterruptedAgentJobs, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
 import { enqueueDueAgentJobs } from '../lib/server/agent-schedule.ts'
 import { recordWorkerHeartbeat } from '../lib/server/worker-heartbeat.ts'
 import type { AgentJobType } from '../lib/server/agent-jobs.ts'
@@ -87,6 +87,18 @@ async function main() {
   const domainSync = await ensureDeclaredMarketDomainPacks()
   if (domainSync.inserted.length > 0 || domainSync.upgraded.length > 0) {
     console.info(JSON.stringify({ level: 'info', workerId, event: 'market_domain_packs_synchronized', ...domainSync }))
+  }
+  if (domainSync.inserted.length > 0) {
+    // A code-reviewed declaration earns one durable coverage-planning pass,
+    // not automatic source admission. The planner is deduplicated daily and
+    // each resulting scout remains capped to direct canonical candidates.
+    const coverageReview = await enqueueAgentJob('review-world-source-coverage', {
+      trigger: 'declared-domain-bootstrap', domainIds: domainSync.inserted,
+    })
+    console.info(JSON.stringify({
+      level: 'info', workerId, event: 'declared_domain_coverage_review_queued',
+      domainIds: domainSync.inserted, jobId: coverageReview.id, deduplicated: coverageReview.deduplicated,
+    }))
   }
   const restartedJobs = await recoverInterruptedAgentJobs(workerId)
   if (restartedJobs > 0) {
