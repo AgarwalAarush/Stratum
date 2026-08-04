@@ -197,12 +197,21 @@ function normalizeHealthCheck(row: RecordValue): WorldSourceHealthCheck {
 function normalizeRegistryEntry(row: RecordValue, domainIds: string[] = [], health: WorldSourceHealthCheck | null = null): WorldSourceRegistryEntry {
   const status = String(row.status) as WorldSourceStatus
   if (!SOURCE_STATUSES.has(status)) throw new Error(`Invalid persisted source status: ${status}`)
+  const metadata = record(row.metadata)
+  const coverage = typeof metadata.coverage === 'string' ? metadata.coverage.trim() : ''
+  const whyThisSource = typeof metadata.whyThisSource === 'string' ? metadata.whyThisSource.trim() : ''
   return {
     id: String(row.id), slug: String(row.slug), label: String(row.label), publisher: String(row.publisher), canonicalUrl: String(row.canonical_url),
     sourceTier: String(row.source_tier) as WorldSourceTier, sourceKind: String(row.source_kind) as WorldSourceKind, status,
     evidenceClasses: strings(row.evidence_classes) as WorldSourceEvidenceClass[], discoveredBy: row.discovered_by as WorldSourceRegistryEntry['discoveredBy'],
     discoveryRunId: row.discovery_run_id === null ? null : String(row.discovery_run_id ?? ''), approvedAt: row.approved_at === null ? null : String(row.approved_at ?? ''),
-    blockedReason: row.blocked_reason === null ? null : String(row.blocked_reason ?? ''), domainIds: [...new Set(domainIds)].sort(), health,
+    blockedReason: row.blocked_reason === null ? null : String(row.blocked_reason ?? ''),
+    candidateContext: coverage || whyThisSource ? {
+      coverage, whyThisSource, limitations: strings(metadata.limitations),
+      scoutScore: Number.isFinite(Number(metadata.scoutScore)) ? Number(metadata.scoutScore) : null,
+      deterministicScore: Number.isFinite(Number(metadata.deterministicScore)) ? Number(metadata.deterministicScore) : null,
+    } : null,
+    domainIds: [...new Set(domainIds)].sort(), health,
     createdAt: String(row.created_at), updatedAt: String(row.updated_at),
   }
 }

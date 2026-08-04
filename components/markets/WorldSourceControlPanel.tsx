@@ -278,7 +278,9 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           <h3>Recent source candidates</h3>
           {candidates.length ? candidates.slice(0, 8).map((source) => (
             <article key={source.id}>
-              <div><strong>{source.label}</strong><span>{source.publisher} · {source.evidenceClasses.join(', ').replaceAll('_', ' ')}</span><a href={source.canonicalUrl} target="_blank" rel="noreferrer">Open canonical source</a></div>
+              <div><strong>{source.label}</strong><span>{source.publisher} · {source.evidenceClasses.join(', ').replaceAll('_', ' ')}</span>
+                {source.candidateContext ? <div className="market-source-candidate-context"><p><b>Coverage:</b> {source.candidateContext.coverage || 'Not supplied'}</p><p><b>Why this source:</b> {source.candidateContext.whyThisSource || 'Not supplied'}</p><small>Deterministic score {source.candidateContext.deterministicScore ?? '—'} · scout score {source.candidateContext.scoutScore ?? '—'}{source.candidateContext.limitations.length ? ` · limitations: ${source.candidateContext.limitations.join('; ')}` : ''}</small></div> : null}
+                <a href={source.canonicalUrl} target="_blank" rel="noreferrer">Open canonical source</a></div>
               <time>{formatDate(source.updatedAt)}</time>
               {reviewing === source.id && contract ? <form className="market-source-contract-review" onSubmit={(event) => { event.preventDefault(); void approveCandidate(source) }}>
                 <p>Review every boundary below. Approval activates this contract; it does not ingest evidence or activate a domain.</p>

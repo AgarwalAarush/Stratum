@@ -1141,6 +1141,14 @@ export interface WorldSourceRegistryEntry {
   discoveryRunId: string | null
   approvedAt: string | null
   blockedReason: string | null
+  /** Scout rationale retained for review; never an admission decision on its own. */
+  candidateContext: {
+    coverage: string
+    whyThisSource: string
+    limitations: string[]
+    scoutScore: number | null
+    deterministicScore: number | null
+  } | null
   /** Domains this source is registered to cover. Present in the control workspace. */
   domainIds: string[]
   /** Most recent worker-owned probe. Health never changes admission by itself. */

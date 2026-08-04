@@ -3348,6 +3348,11 @@
   display: block;
 }
 
+.market-source-candidate-context { margin: 9px 0; }
+.market-source-candidate-context p { color: var(--market-text); font-family: var(--font-ibm-plex-sans), sans-serif; font-size: 12px; line-height: 1.45; margin: 5px 0; }
+.market-source-candidate-context b { font-weight: 500; }
+.market-source-candidate-context small { color: var(--market-text-muted); display: block; font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 10px; line-height: 1.45; margin-top: 7px; }
+
 .market-source-control-ledger article strong {
   font-size: 14px;
   font-weight: 500;
