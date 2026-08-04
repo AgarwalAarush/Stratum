@@ -29,6 +29,15 @@ function normalizedText(value: string): string {
   return value.toLocaleLowerCase().replace(/\s+/g, ' ').trim()
 }
 
+/** Inline-XBRL and other machine-readable field labels can survive a generic
+ * HTML extraction. They are provenance, not an economic observation, and
+ * must not enter a human evidence-review queue as though they were prose. */
+function isMachineReadableFieldArtifact(value: string): boolean {
+  const namespaceField = /\b(?:us-gaap|dei|srt|xbrli|ix|link|xlink|iso4217|[a-z][a-z0-9_-]{0,7}):[a-z][a-z0-9_.-]{4,}/i
+  const words = value.match(/[A-Za-z][A-Za-z'-]*/g) ?? []
+  return namespaceField.test(value) || words.length < 4
+}
+
 export interface WorldObservationProposalContent {
   proposals: Array<{
     assertion: string
@@ -68,12 +77,18 @@ export function validateWorldObservationProposals(
       if (evidenceQuote.length < 20 || evidenceQuote.length > 1200 || !sourceText.includes(normalizedText(evidenceQuote))) {
         throw new Error('Proposal evidence quote is not a verbatim excerpt from the source document')
       }
+      if (isMachineReadableFieldArtifact(evidenceQuote)) {
+        throw new Error('Proposal evidence quote is a machine-readable field artifact, not a reviewable source statement')
+      }
       const fingerprint = `${kind}|${mechanism}|${normalizedText(assertion)}`
       if (seen.has(fingerprint)) throw new Error('Observation triage returned duplicate proposals')
       seen.add(fingerprint)
       return {
         assertion, kind, mechanism, evidenceQuote,
-        confidence: integerScore(proposal.confidence, 'proposal confidence'), materiality: integerScore(proposal.materiality, 'proposal materiality'), novelty: integerScore(proposal.novelty, 'proposal novelty'),
+        // Quote matching proves extraction provenance, not that the proposed
+        // fact is complete or economically decisive. Reserve certainty for a
+        // human evidence review and keep the cheap triage score bounded.
+        confidence: Math.min(95, integerScore(proposal.confidence, 'proposal confidence')), materiality: integerScore(proposal.materiality, 'proposal materiality'), novelty: integerScore(proposal.novelty, 'proposal novelty'),
       }
     }),
   }
@@ -132,7 +147,7 @@ function proposalPrompt(context: CapturedDocumentContext, excerpt: string, allow
     `DOMAIN: ${domain.id}`,
     `PERMITTED MECHANISMS: ${domain.mechanisms.map((item) => item.id).join(', ')}`,
     `PERMITTED OBSERVATION KINDS: ${allowedKinds.join(', ')}`,
-    'Every evidenceQuote must be a direct, contiguous excerpt from SOURCE EXCERPT. Assertions must be modest restatements of that quote.',
+    'Every evidenceQuote must be a direct, contiguous, human-readable statement from SOURCE EXCERPT. Assertions must be modest restatements of that quote. Do not propose XBRL/taxonomy labels, internal document fields, accounting member names, tickers, footnote markers, boilerplate headings, or isolated table labels.',
     `SOURCE EXCERPT:\n${excerpt}`,
   ].join('\n\n')
 }

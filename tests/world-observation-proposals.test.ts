@@ -18,6 +18,26 @@ test('cheap observation triage requires an exact quote, declared mechanism, and 
   assert.equal(output.proposals[0]?.mechanism, 'interconnection_constraint')
 })
 
+test('triage rejects machine-readable filing fields and caps cheap-model certainty', () => {
+  const taxonomyProposal = {
+    assertion: 'The filing identifies a Samarium Project Loan as a notes-payable or other-payables item.',
+    kind: 'fact', mechanism: 'resource_supply',
+    evidenceQuote: 'mp:SamariumProjectLoanMemberus-gaap:NotesPayableOtherPayablesMember',
+    confidence: 99, materiality: 48, novelty: 11,
+  }
+  assert.throws(() => validateWorldObservationProposals({ proposals: [taxonomyProposal] }, {
+    domainId: 'critical-materials', contract, extractedText: taxonomyProposal.evidenceQuote,
+  }), /machine-readable field artifact/)
+
+  const output = validateWorldObservationProposals({ proposals: [{
+    assertion: 'The regulator states that deliverable capacity additions require completed interconnection studies and construction before service can begin.',
+    kind: 'fact', mechanism: 'interconnection_constraint',
+    evidenceQuote: 'deliverable capacity additions require completed interconnection studies and construction before service can begin',
+    confidence: 99, materiality: 64, novelty: 42,
+  }] }, { domainId: 'ai-power', contract, extractedText })
+  assert.equal(output.proposals[0]?.confidence, 95)
+})
+
 test('triage isolates an invalid document output and records immutable failure telemetry', async () => {
   const [service, migration] = await Promise.all([
     readFile(new URL('../lib/server/world-observation-proposals.ts', import.meta.url), 'utf8'),
