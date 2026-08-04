@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { getMarketDomainPack } from '../lib/markets/domain-packs.ts'
-import { candidateResearchFrontiers, prioritizeWorldSourceCandidates } from '../lib/markets/source-review-priority.ts'
-import type { MarketResearchFrontierItem, WorldSourceDiscoveryRun, WorldSourceRegistryEntry } from '../lib/markets/types.ts'
+import { candidateResearchFrontiers, prioritizeWorldObservationProposals, prioritizeWorldSourceCandidates } from '../lib/markets/source-review-priority.ts'
+import type { MarketResearchFrontierItem, WorldObservationProposal, WorldSourceDiscoveryRun, WorldSourceRegistryEntry } from '../lib/markets/types.ts'
 
 function source(input: Partial<WorldSourceRegistryEntry> & Pick<WorldSourceRegistryEntry, 'id' | 'label' | 'status' | 'evidenceClasses'>): WorldSourceRegistryEntry {
   return {
@@ -58,4 +58,25 @@ test('candidate frontier provenance includes every matching bounded discovery ru
     { id: 'higher', hypothesisId: 'hypothesis', researchVersionId: 'version', question: 'Higher', causalNode: 'higher-priority node', priority: 5, sourceTypes: [], adapterId: null, status: 'deferred', evidenceNeeded: 'Evidence', attemptCount: 0, lastError: null, nextRunAt: null },
   ]
   assert.deepEqual(candidateResearchFrontiers(candidate, [discoveryRun], frontiers).map((item) => item.id), ['higher', 'lower'])
+})
+
+test('observation review gives a human the highest-materiality open frontier evidence first', () => {
+  const proposal = (id: string, partial: Partial<WorldObservationProposal> = {}): WorldObservationProposal => ({
+    id, domainId: 'ai-power', mechanism: 'firm_capacity_constraint', assertion: id, kind: 'fact', evidenceQuote: id,
+    confidence: 80, materiality: 70, novelty: 60, sourceLabel: 'Governed source', sourceUrl: 'https://example.com', generatedAt: '2026-08-04T00:00:00.000Z', review: null,
+    ...partial,
+  })
+  const frontiers: MarketResearchFrontierItem[] = [
+    { id: 'high', hypothesisId: 'hypothesis', researchVersionId: null, question: 'Deliverable capacity?', causalNode: 'firm_capacity_constraint', priority: 5, sourceTypes: [], adapterId: null, status: 'deferred', evidenceNeeded: 'Evidence', attemptCount: 0, lastError: null, nextRunAt: null },
+    { id: 'complete', hypothesisId: 'hypothesis', researchVersionId: null, question: 'Resolved', causalNode: 'data_center_load', priority: 5, sourceTypes: [], adapterId: null, status: 'complete', evidenceNeeded: 'Evidence', attemptCount: 0, lastError: null, nextRunAt: null },
+  ]
+  const ordered = prioritizeWorldObservationProposals([
+    proposal('reviewed', { review: { decision: 'accepted', rationale: 'Reviewed', reviewedAt: '2026-08-04T01:00:00.000Z', observationId: 'observation' } }),
+    proposal('non-frontier', { mechanism: 'data_center_load', materiality: 99 }),
+    proposal('frontier-low', { materiality: 71 }),
+    proposal('frontier-high', { materiality: 90 }),
+  ], frontiers, 'ai-power')
+  assert.deepEqual(ordered.map((item) => item.proposal.id), ['frontier-high', 'frontier-low', 'non-frontier', 'reviewed'])
+  assert.deepEqual(ordered[0]?.advancesFrontiers.map((item) => item.id), ['high'])
+  assert.deepEqual(ordered[2]?.advancesFrontiers, [])
 })

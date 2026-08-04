@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import type { MarketDomainPack, WorldSourceControlWorkspaceData, WorldSourceRegistryEntry } from '@/lib/markets/types'
-import { candidateResearchFrontiers, prioritizeWorldSourceCandidates } from '@/lib/markets/source-review-priority'
+import { candidateResearchFrontiers, prioritizeWorldObservationProposals, prioritizeWorldSourceCandidates } from '@/lib/markets/source-review-priority'
 
 type SourceStatus = 'approved' | 'probation'
 
@@ -99,7 +99,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     : candidates.map((source) => ({ source, closesCoverageGaps: [] }))
   const visibleCandidates = scopedCandidates.slice(0, candidateLimit)
   const hasMoreCandidates = visibleCandidates.length < scopedCandidates.length
-  const scopedProposals = selectedDomain ? workspace.observationProposals.filter((proposal) => proposal.domainId === selectedDomain.id) : workspace.observationProposals
+  const scopedProposals = prioritizeWorldObservationProposals(workspace.observationProposals, workspace.researchFrontiers, selectedDomain?.id)
   const visibleProposals = scopedProposals.slice(0, proposalLimit)
   const hasMoreProposals = visibleProposals.length < scopedProposals.length
   const failedRuns = workspace.discoveryRuns.filter((run) => run.status === 'failed')
@@ -252,9 +252,11 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setNotice(null)
     try {
       const response = await fetch('/api/markets/world-sources', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'review-observation-proposal', proposalId, decision, rationale: proposalRationale.trim() }) })
-      const payload = await response.json() as { error?: string }
+      const payload = await response.json() as { error?: string; analysisQueued?: boolean }
       if (!response.ok) throw new Error(payload.error ?? 'Unable to record evidence review')
-      setNotice(decision === 'accepted' ? 'Proposal accepted as a governed observation. It remains evidence, not a thesis or capital decision.' : 'Proposal rejected. Its immutable source and review record remain available.')
+      setNotice(decision === 'accepted'
+        ? `Proposal accepted as a governed observation.${payload.analysisQueued ? ' A bounded analyst revision is queued.' : ''} It remains evidence, not a thesis or capital decision.`
+        : 'Proposal rejected. Its immutable source and review record remain available.')
       setReviewingProposal(null)
       setProposalRationale('')
       router.refresh()
@@ -441,9 +443,9 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           <h3>{selectedDomain ? `${selectedDomain.label} quote-bound proposals` : 'Quote-bound observation proposals'}</h3>
           <p>Low-cost extraction proposals are not accepted observations. They never enter baselines, hypotheses, predictions, or capital decisions without a separate evidence-review gate.</p>
           <p className="market-source-proposal-summary">Showing {visibleProposals.length} of {scopedProposals.length} proposal{scopedProposals.length === 1 ? '' : 's'} mapped to the selected domain.</p>
-          {scopedProposals.length ? visibleProposals.map((proposal) => (
+          {scopedProposals.length ? visibleProposals.map(({ proposal, advancesFrontiers }) => (
             <article key={proposal.id}>
-              <div><strong>{proposal.domainId.replaceAll('-', ' ')} · {proposal.mechanism.replaceAll('_', ' ')}</strong><span>{proposal.kind} · confidence {proposal.confidence} · materiality {proposal.materiality}</span><p>{proposal.assertion}</p><blockquote>{proposal.evidenceQuote}</blockquote><a href={proposal.sourceUrl} target="_blank" rel="noreferrer">{proposal.sourceLabel}</a>
+              <div><strong>{proposal.domainId.replaceAll('-', ' ')} · {proposal.mechanism.replaceAll('_', ' ')}</strong><span>{proposal.kind} · confidence {proposal.confidence} · materiality {proposal.materiality}</span>{advancesFrontiers.length ? <small className="market-source-frontier-priority">Addresses research frontier: {advancesFrontiers[0]?.causalNode}{advancesFrontiers.length > 1 ? ` +${advancesFrontiers.length - 1} related gap${advancesFrontiers.length === 2 ? '' : 's'}` : ''} · review still decides whether the quote is evidence</small> : null}<p>{proposal.assertion}</p><blockquote>{proposal.evidenceQuote}</blockquote><a href={proposal.sourceUrl} target="_blank" rel="noreferrer">{proposal.sourceLabel}</a>
                 {proposal.review ? <small className="market-proposal-review" data-decision={proposal.review.decision}>{proposal.review.decision} · {proposal.review.rationale}</small>
                   : reviewingProposal === proposal.id ? <form className="market-source-contract-review" onSubmit={(event) => { event.preventDefault(); void reviewProposal(proposal.id, 'accepted') }}><p>Accepting creates one governed observation from this exact quote. It does not create a thesis or investment decision.</p><label>Review rationale<textarea value={proposalRationale} onChange={(event) => setProposalRationale(event.target.value)} required maxLength={1000} /></label><footer><button type="submit" disabled={pending || !proposalRationale.trim()}>{pending ? 'Recording…' : 'Accept as observation'}</button><button type="button" className="market-source-secondary-button" disabled={pending || !proposalRationale.trim()} onClick={() => void reviewProposal(proposal.id, 'rejected')}>Reject proposal</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setReviewingProposal(null); setProposalRationale('') }}>Cancel</button></footer></form>
                     : <button type="button" className="market-source-review-button" disabled={pending} onClick={() => { setReviewingProposal(proposal.id); setProposalRationale('') }}>Review proposal</button>}
