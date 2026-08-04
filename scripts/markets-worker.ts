@@ -1,5 +1,5 @@
 import { hostname } from 'node:os'
-import { processOneAgentJob, recoverStaleAgentJobs } from '../lib/server/agent-jobs.ts'
+import { processOneAgentJob, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
 import { enqueueDueAgentJobs } from '../lib/server/agent-schedule.ts'
 import { recordWorkerHeartbeat } from '../lib/server/worker-heartbeat.ts'
 import type { AgentJobType } from '../lib/server/agent-jobs.ts'
@@ -20,6 +20,7 @@ let stopping = false
 let nextScheduleAt = 0
 let nextHeartbeatAt = 0
 let nextRecoveryAt = 0
+let nextQueueReconcileAt = 0
 let shutdownTimer: NodeJS.Timeout | null = null
 
 function requestStop(signal: 'SIGINT' | 'SIGTERM') {
@@ -91,6 +92,8 @@ async function main() {
       count: recoveredJobs,
     }))
   }
+  const supersededJobs = await supersedeQueuedRoutineAgentJobs()
+  if (supersededJobs > 0) console.info(JSON.stringify({ level: 'info', workerId, event: 'routine_queue_superseded', count: supersededJobs }))
 
   do {
     try {
@@ -99,6 +102,11 @@ async function main() {
         const recovered = await recoverStaleAgentJobs()
         if (recovered > 0) console.info(JSON.stringify({ level: 'info', workerId, event: 'stale_jobs_recovered', count: recovered }))
         nextRecoveryAt = Date.now() + 60_000
+      }
+      if (Date.now() >= nextQueueReconcileAt) {
+        const superseded = await supersedeQueuedRoutineAgentJobs()
+        if (superseded > 0) console.info(JSON.stringify({ level: 'info', workerId, event: 'routine_queue_superseded', count: superseded }))
+        nextQueueReconcileAt = Date.now() + 60_000
       }
       if (schedulerEnabled && Date.now() >= nextScheduleAt) {
         const scheduled = await enqueueDueAgentJobs(new Date(), lastScheduledKeys, {

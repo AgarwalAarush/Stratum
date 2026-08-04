@@ -355,6 +355,43 @@ export function shouldCoalesceAgentJob(jobType: AgentJobType, payload: Record<st
   return jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence' || jobType === 'monitor-investment-theses'
 }
 
+interface QueuedRoutineAgentJob {
+  id: string
+  job_type: string
+  payload: Record<string, unknown>
+}
+
+/** Preserve operational history but remove replay pressure after an outage.
+ * One newest queued routine snapshot per lane remains available as a fallback
+ * for a running job; coverage and governed/research jobs are never selected. */
+export async function supersedeQueuedRoutineAgentJobs(now = new Date()): Promise<number> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data, error } = await supabase
+    .from('agent_jobs')
+    .select('id,job_type,payload')
+    .eq('status', 'queued')
+    .order('created_at', { ascending: false })
+    .limit(500)
+  if (error) throw new Error(`Unable to inspect queued routine jobs: ${error.message}`)
+  const retainedTypes = new Set<AgentJobType>()
+  const supersededIds: string[] = []
+  for (const row of (data ?? []) as QueuedRoutineAgentJob[]) {
+    const jobType = parseAgentJobType(row.job_type)
+    if (!jobType || !shouldCoalesceAgentJob(jobType, row.payload)) continue
+    if (retainedTypes.has(jobType)) supersededIds.push(row.id)
+    else retainedTypes.add(jobType)
+  }
+  if (supersededIds.length === 0) return 0
+  const { error: updateError } = await supabase.from('agent_jobs').update({
+    status: 'cancelled',
+    last_error: 'Superseded by newer routine snapshot work after queue backlog.',
+    updated_at: now.toISOString(),
+  }).in('id', supersededIds).eq('status', 'queued')
+  if (updateError) throw new Error(`Unable to supersede queued routine jobs: ${updateError.message}`)
+  return supersededIds.length
+}
+
 interface StaleAgentJob {
   id: string
   job_type: string
