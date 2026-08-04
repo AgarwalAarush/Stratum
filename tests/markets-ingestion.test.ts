@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   appendMarketDailyBars,
   mergeMarketDailyBars,
@@ -69,4 +71,11 @@ test('history backfill suppresses young symbols already attempted today', () => 
     symbolsNeedingHistoryBackfill(['COMPLETE', 'YOUNG', 'MISSING'], cache, new Set(['YOUNG'])),
     ['MISSING'],
   )
+})
+
+test('screener refresh explicitly aligns snapshots to the durable history feed instead of mixing delayed SIP and IEX', () => {
+  const source = readFileSync(join(process.cwd(), 'lib/server/markets-ingestion.ts'), 'utf8')
+  assert.match(source, /historyMetrics\.size === 0 && feed === 'delayed_sip'/)
+  assert.match(source, /client\.fetchSnapshots\(symbols, 'iex'\)/)
+  assert.match(source, /Never blend those feeds/)
 })

@@ -407,9 +407,21 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
   const taxonomyBySymbol = await loadGicsTaxonomy(symbols, options.fetchImpl)
   let snapshotsResult = await client.fetchSnapshots(symbols)
   let feed = snapshotsResult.feed
-  const dataAsOf = newestTimestamp(snapshotsResult.data, now.toISOString())
+  let dataAsOf = newestTimestamp(snapshotsResult.data, now.toISOString())
   let historyMetrics = await loadScreenerHistoryMetrics(supabase, symbols, feed, dataAsOf)
   let historyResult: Awaited<ReturnType<typeof loadScreenerHistory>> | null = null
+  // Alpaca can return delayed-SIP snapshots even where our durable daily bars
+  // are IEX. Never blend those feeds: explicitly re-fetch the snapshots on
+  // IEX when it is the only feed with usable persisted history.
+  if (historyMetrics.size === 0 && feed === 'delayed_sip') {
+    const iexMetrics = await loadScreenerHistoryMetrics(supabase, symbols, 'iex', dataAsOf)
+    if (iexMetrics.size > 0) {
+      snapshotsResult = await client.fetchSnapshots(symbols, 'iex')
+      feed = snapshotsResult.feed
+      dataAsOf = newestTimestamp(snapshotsResult.data, now.toISOString())
+      historyMetrics = await loadScreenerHistoryMetrics(supabase, symbols, feed, dataAsOf)
+    }
+  }
   // A fresh database has no compact metrics yet. Preserve the existing
   // bootstrap path, but do not reload an established full bar archive on each
   // routine refresh.
