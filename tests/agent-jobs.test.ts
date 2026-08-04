@@ -22,6 +22,7 @@ test('agent job parser rejects unknown work', () => {
   assert.equal(parseAgentJobType('generate-etf-research'), 'generate-etf-research')
   assert.equal(parseAgentJobType('fetch-stock-price-history'), 'fetch-stock-price-history')
   assert.equal(parseAgentJobType('scout-world-sources'), 'scout-world-sources')
+  assert.equal(parseAgentJobType('scout-market-research'), 'scout-market-research')
   assert.equal(parseAgentJobType('review-world-source-coverage'), 'review-world-source-coverage')
   assert.equal(parseAgentJobType('verify-world-source-health'), 'verify-world-source-health')
   assert.equal(parseAgentJobType('preflight-world-source-candidate'), 'preflight-world-source-candidate')
@@ -157,6 +158,7 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('scan-research-refreshes'), 'market-data')
   assert.equal(agentJobProvider('monitor-investment-theses'), 'market-data')
   assert.equal(agentJobProvider('scout-world-sources'), 'codex')
+  assert.equal(agentJobProvider('scout-market-research'), 'codex')
   assert.equal(agentJobProvider('verify-world-source-health'), 'market-data')
   assert.equal(agentJobProvider('preflight-world-source-candidate'), 'market-data')
   assert.equal(agentJobProvider('triage-world-observation-proposals'), 'codex')
@@ -184,6 +186,7 @@ test('bounded market-research jobs persist their actual routed model policy', as
     STRATUM_MARKET_RESEARCH_MODEL: 'strong-model',
   } as NodeJS.ProcessEnv
   assert.deepEqual(marketModelRoutingForAgentJob('scout-world-sources', environment).map((item) => item.model), ['cheap-model'])
+  assert.deepEqual(marketModelRoutingForAgentJob('scout-market-research', environment).map((item) => item.model), ['standard-model'])
   assert.deepEqual(marketModelRoutingForAgentJob('deepen-market-hypothesis', environment).map((item) => item.task), ['hypothesis_analysis', 'hypothesis_critic'])
   assert.equal(modelForAgentJob('deepen-market-hypothesis', environment), 'strong-model')
   assert.equal(modelForAgentJob('evaluate-market-prediction', environment), 'standard-model')

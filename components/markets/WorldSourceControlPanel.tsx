@@ -109,6 +109,8 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const failedRuns = workspace.discoveryRuns.filter((run) => run.status === 'failed')
   const health = workspace.sources.flatMap((source) => source.health ? [source.health] : [])
   const triageAttention = workspace.triageRuns.filter((run) => run.status !== 'succeeded')
+  const researchLeads = workspace.researchScoutRuns.filter((run) => run.status === 'complete')
+    .flatMap((run) => run.leads.map((lead) => ({ run, lead }))).slice(0, 12)
   const requestScout = async () => {
     if (!selectedDomain || !reason.trim() || pending) return
     setPending(true)
@@ -414,6 +416,15 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
               <time>{formatDate(run.generatedAt ?? run.createdAt)}</time>
             </article>
           )) : <p>No source-scout runs have been recorded.</p>}
+          <p className="markets-eyebrow">Broad research</p>
+          <h3>Provisional lead dossiers</h3>
+          <p>Research agents search beyond the governed registry. These attributable leads can challenge or direct follow-up, but cannot become evidence or recurring collection automatically.</p>
+          {researchLeads.length ? researchLeads.map(({ run, lead }) => (
+            <article key={`${run.id}:${lead.url}`}>
+              <div><strong><a href={lead.url} target="_blank" rel="noreferrer">{lead.title}</a></strong><span>{run.domainId.replaceAll('-', ' ')} · {lead.supports} · {lead.publisher}</span><p>{lead.claim}</p><blockquote>{lead.evidenceQuote}</blockquote><small>{lead.sourceType}{lead.recurringSourceCandidate ? ' · recurring-source candidate only' : ''}</small></div>
+              <time>{formatDate(run.generatedAt ?? run.createdAt)}</time>
+            </article>
+          )) : <p>No completed broad-research dossiers yet.</p>}
         </div>
         <div className="market-source-triage">
           <p className="markets-eyebrow">Operational telemetry</p>

@@ -29,6 +29,7 @@ import {
 import { backupMarketCorpus, verifyMarketCorpusBackup } from './world-backup.ts'
 import { getWorldSourceAdapter } from './world-sources.ts'
 import { findCandidateSourcePreflights, findWorldSourceCoverageScoutPlans, isMarketDomainActive, runWorldSourceScout } from './world-source-control.ts'
+import { runMarketResearchScout } from './market-research-scout.ts'
 import { auditWorldSourceHealth, preflightWorldSourceCandidate } from './world-source-health.ts'
 import { collectGovernedWorldSourceDocuments } from './world-source-collector.ts'
 import { triageCapturedWorldObservationProposals } from './world-observation-proposals.ts'
@@ -69,6 +70,7 @@ export const AGENT_JOB_TYPES = [
   'preflight-world-source-candidate',
   'collect-world-source-documents',
   'triage-world-observation-proposals',
+  'scout-market-research',
   'scout-world-sources',
   'review-world-source-coverage',
   'compile-world-baseline',
@@ -246,6 +248,12 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     }
     return `${jobType}:${payload.domainId}:${now.toISOString().slice(0, 10)}`
   }
+  if (jobType === 'scout-market-research' && typeof payload.domainId === 'string') {
+    const frontierIds = Array.isArray(payload.frontierIds)
+      ? payload.frontierIds.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).sort()
+      : []
+    return `${jobType}:${payload.domainId}:${frontierIds.join(',') || 'manual'}:${now.toISOString().slice(0, 10)}`
+  }
   if (jobType === 'review-world-source-coverage') return `${jobType}:${now.toISOString().slice(0, 10)}`
   if ((jobType === 'materialize-market-leadership' || jobType === 'run-candidate-scout') && typeof payload.tradingDate === 'string') {
     return `${jobType}:${payload.tradingDate}`
@@ -266,7 +274,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'fetch-stock-price-history' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
   if (jobType === 'ingest-world-source' || jobType === 'verify-world-source-health' || jobType === 'preflight-world-source-candidate' || jobType === 'collect-world-source-documents') return 'market-data'
-  if (jobType === 'triage-world-observation-proposals') return 'codex'
+  if (jobType === 'triage-world-observation-proposals' || jobType === 'scout-market-research') return 'codex'
   if (
     jobType === 'refresh-cross-asset'
     || jobType === 'materialize-market-leadership'
@@ -297,6 +305,8 @@ export function marketModelRoutingForAgentJob(
 ): MarketModelSelection[] {
   const tasks = jobType === 'scout-world-sources'
     ? ['source_scout'] as const
+    : jobType === 'scout-market-research'
+      ? ['research_planning'] as const
     : jobType === 'triage-world-observation-proposals'
       ? ['observation_triage'] as const
       : jobType === 'deepen-market-hypothesis'
@@ -334,7 +344,7 @@ export function shouldRefreshClosedMarket(
 export function agentJobPriority(jobType: AgentJobType): number {
   if (jobType === 'preflight-world-source-candidate') return 20
   if (jobType === 'verify-world-source-health') return 30
-  if (jobType === 'scout-world-sources' || jobType === 'review-world-source-coverage' || jobType === 'route-market-research-frontiers') return 40
+  if (jobType === 'scout-world-sources' || jobType === 'scout-market-research' || jobType === 'review-world-source-coverage' || jobType === 'route-market-research-frontiers') return 40
   if (jobType === 'collect-world-source-documents' || jobType === 'triage-world-observation-proposals') return 50
   if (jobType === 'refresh-market-screener' || jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence') return 140
   return 100
@@ -798,6 +808,18 @@ async function executeJob(
     }
   }
 
+  if (job.job_type === 'scout-market-research') {
+    const domainId = typeof job.payload.domainId === 'string' ? job.payload.domainId : ''
+    const reason = typeof job.payload.reason === 'string' ? job.payload.reason : ''
+    const frontierIds = Array.isArray(job.payload.frontierIds)
+      ? job.payload.frontierIds.filter((item): item is string => typeof item === 'string') : []
+    if (!domainId || !reason) throw new Error('Broad research scout requires a domain and reason')
+    await reportProgress(5, 'investigating broad, citation-required research leads')
+    const run = await runMarketResearchScout({ domainId, reason, frontierIds, trigger: job.payload.trigger === 'frontier_gap' ? 'frontier_gap' : 'manual' })
+    await reportProgress(100, `${run.leads.length} provisional leads; no source contract or market evidence was auto-created`)
+    return { researchScoutRunId: run.id, domainId, leadCount: run.leads.length, unresolvedQuestions: run.unresolvedQuestions.length }
+  }
+
   if (job.job_type === 'review-world-source-coverage') {
     const plans = await findWorldSourceCoverageScoutPlans()
     const queued = await Promise.all(plans.map((plan) => enqueueAgentJob('scout-world-sources', {
@@ -857,11 +879,12 @@ async function executeJob(
     const plans = await findQueuedResearchFrontierScoutPlans()
     const results = []
     for (const plan of plans) {
-      const queued = await enqueueAgentJob('scout-world-sources', {
+      const queued = await enqueueAgentJob('scout-market-research', {
         domainId: plan.domainId, reason: plan.reason, trigger: 'frontier_gap', frontierIds: plan.frontierIds,
       })
-      // A same-day scout may already have completed with a different bounded
-      // request. Keep this frontier queued for a future pass in that case.
+      // A same-day broad research pass may already cover this exact frontier.
+      // These frontiers remain unresolved until independent governed evidence
+      // is accepted; a lead dossier is deliberately not an evidence completion.
       if (!queued.deduplicated) await deferResearchFrontiersForScout(plan.frontierIds, queued.id)
       results.push({ domainId: plan.domainId, frontierCount: plan.frontierIds.length, ...queued })
     }

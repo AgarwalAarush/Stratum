@@ -1,6 +1,8 @@
 import { getMarketDomainPack, isKnownMarketDomain, MARKET_DOMAIN_PACKS } from '../markets/domain-packs.ts'
 import type {
   MarketDomainPack,
+  MarketResearchScoutLead,
+  MarketResearchScoutRun,
   MarketResearchFrontierItem,
   MarketDomainPackEvent,
   WorldSourceContract,
@@ -383,6 +385,21 @@ function normalizeDiscoveryRun(row: RecordValue): WorldSourceDiscoveryRun {
   }
 }
 
+function normalizeResearchScoutLead(value: unknown): MarketResearchScoutLead | null {
+  const lead = record(value)
+  const supports = lead.supports
+  if (typeof lead.title !== 'string' || typeof lead.publisher !== 'string' || typeof lead.url !== 'string' || typeof lead.sourceType !== 'string' || typeof lead.claim !== 'string' || typeof lead.evidenceQuote !== 'string') return null
+  if (supports !== 'supports' && supports !== 'contradicts' && supports !== 'context') return null
+  return { title: lead.title, publisher: lead.publisher, url: lead.url, sourceType: lead.sourceType, claim: lead.claim, evidenceQuote: lead.evidenceQuote, supports, limitations: strings(lead.limitations), recurringSourceCandidate: Boolean(lead.recurringSourceCandidate) }
+}
+
+function normalizeResearchScoutRun(row: RecordValue): MarketResearchScoutRun {
+  const status = String(row.status)
+  if (status !== 'running' && status !== 'complete' && status !== 'failed') throw new Error(`Invalid persisted broad research-scout status: ${status}`)
+  const trigger = row.trigger === 'frontier_gap' || row.trigger === 'manual' ? row.trigger : 'manual'
+  return { id: String(row.id), domainId: String(row.domain_id), status, trigger, reason: String(row.reason), frontierIds: strings(row.frontier_ids), leads: (Array.isArray(row.leads) ? row.leads : []).flatMap((entry) => { const lead = normalizeResearchScoutLead(entry); return lead ? [lead] : [] }), unresolvedQuestions: strings(row.unresolved_questions), provider: row.provider === null ? null : String(row.provider ?? ''), model: row.model === null ? null : String(row.model ?? ''), generatedAt: row.generated_at === null ? null : String(row.generated_at ?? ''), error: row.error === null ? null : String(row.error ?? ''), createdAt: String(row.created_at) }
+}
+
 function normalizeObservationProposal(row: RecordValue): WorldObservationProposal {
   const source = relatedRecord(row.world_source_registry)
   const document = relatedRecord(row.world_documents)
@@ -556,17 +573,18 @@ export async function reviseWorldSourceCanonicalUrl(input: { slug: string; canon
 export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceControlWorkspaceData> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const [domains, sources, runs, mappings, healthChecks, proposals, triageRuns, researchFrontiers] = await Promise.all([
+  const [domains, sources, runs, researchScoutRuns, mappings, healthChecks, proposals, triageRuns, researchFrontiers] = await Promise.all([
     supabase.from('market_domain_packs').select('*').order('id'),
     supabase.from('world_source_registry').select('*').order('updated_at', { ascending: false }).limit(200),
     supabase.from('world_source_discovery_runs').select('*').order('created_at', { ascending: false }).limit(60),
+    supabase.from('market_research_scout_runs').select('*').order('created_at', { ascending: false }).limit(40),
     supabase.from('world_source_domains').select('source_id,domain_id'),
     supabase.from('world_source_health_checks').select('*').order('checked_at', { ascending: false }).limit(500),
     supabase.from('world_observation_proposals').select('*,world_source_registry(label,canonical_url),world_documents(title,canonical_url),world_observation_proposal_reviews(decision,rationale,reviewed_at,observation_id)').order('generated_at', { ascending: false }).limit(60),
     supabase.from('world_observation_proposal_triage_runs').select('*,world_source_document_captures(source_id,world_source_registry(slug,label,canonical_url))').order('completed_at', { ascending: false }).limit(60),
     supabase.from('market_hypothesis_research_frontier').select('*').order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(120),
   ])
-  const error = domains.error ?? sources.error ?? runs.error ?? mappings.error ?? healthChecks.error ?? proposals.error ?? triageRuns.error ?? researchFrontiers.error
+  const error = domains.error ?? sources.error ?? runs.error ?? researchScoutRuns.error ?? mappings.error ?? healthChecks.error ?? proposals.error ?? triageRuns.error ?? researchFrontiers.error
   if (error) throw new Error(`Unable to load source-control workspace: ${error.message}`)
   const domainIdsBySourceId = new Map<string, string[]>()
   for (const mapping of mappings.data ?? []) {
@@ -593,6 +611,7 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
       latestHealthBySourceId.get(String(row.id)) ?? null,
     )),
     discoveryRuns: (runs.data ?? []).map((row) => normalizeDiscoveryRun(row as RecordValue)),
+    researchScoutRuns: (researchScoutRuns.data ?? []).map((row) => normalizeResearchScoutRun(row as RecordValue)),
     researchFrontiers: (researchFrontiers.data ?? []).map((row) => normalizeResearchFrontier(row as RecordValue)),
     observationProposals: (proposals.data ?? []).map((row) => normalizeObservationProposal(row as RecordValue)),
     triageRuns: (triageRuns.data ?? []).map((row) => normalizeTriageRun(row as RecordValue)),

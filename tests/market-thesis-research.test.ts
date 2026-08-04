@@ -90,7 +90,7 @@ test('scheduled research does not repeat an unchanged revision frontier', () => 
   assert.equal(shouldQueueMarketHypothesisResearch('needs_revision', 1), true)
 })
 
-test('research frontiers route only to bounded candidate discovery for a known domain', () => {
+test('research frontiers route to bounded broad research leads for a known domain', () => {
   const plan = buildResearchFrontierScoutPlan('ai-power', [
     { id: 'low', question: 'What capacity is deliverable?', causalNode: 'firm_capacity_constraint', priority: 2, sourceTypes: ['operator data'], evidenceNeeded: 'Delivered capacity by region.' },
     { id: 'high', question: 'Which queues bind?', causalNode: 'interconnection_constraint', priority: 5, sourceTypes: ['ISO filings'], evidenceNeeded: 'Queue timing and withdrawal evidence.' },
@@ -98,8 +98,8 @@ test('research frontiers route only to bounded candidate discovery for a known d
     { id: 'excluded', question: 'What is priced?', causalNode: 'expectations', priority: 1, sourceTypes: [], evidenceNeeded: 'Bounded expectations evidence.' },
   ])
   assert.deepEqual(plan?.frontierIds, ['high', 'middle', 'low'])
-  assert.match(plan?.reason ?? '', /source discovery only/i)
-  assert.match(plan?.reason ?? '', /human approval/i)
+  assert.match(plan?.reason ?? '', /broad research/i)
+  assert.match(plan?.reason ?? '', /source contract/i)
   assert.equal(buildResearchFrontierScoutPlan('not-a-domain', []), null)
 })
 

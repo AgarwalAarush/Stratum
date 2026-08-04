@@ -322,9 +322,9 @@ export interface ResearchFrontierScoutPlan {
 }
 
 /**
- * Frontier routing can request candidate discovery, never unrestricted
- * retrieval. The resulting sources remain candidates until a human-approved
- * contract and health check admit them to evidence ingestion.
+ * Frontier routing requests broad, citation-required research leads. It does
+ * not create evidence or source authority: recurring sources discovered there
+ * still need separate promotion, contract, and health checks.
  */
 export function buildResearchFrontierScoutPlan(
   domainId: string,
@@ -345,8 +345,8 @@ export function buildResearchFrontierScoutPlan(
     domainId,
     frontierIds: selected.map((item) => item.id),
     reason: [
-      `Research-frontier coverage gap for ${domain.label}. Propose at most 12 direct, stable, authoritative source candidates that can reduce the bounded gaps below.`,
-      'This is source discovery only: do not answer the questions, draw a market conclusion, approve a source, or retrieve article text. Every candidate will require separate contract, health, and human approval before ingestion.',
+      `Research-frontier investigation for ${domain.label}. Find a compact, diverse lead dossier that can reduce the bounded gaps below, including primary evidence and credible counter-evidence.`,
+      'This is broad research, not a conclusion. Every lead needs an attributable URL and quote. It cannot become a market observation or automatically create a source contract; recurring sources require separate promotion, contract, and health checks.',
       questions,
     ].join('\n\n').slice(0, 6_000),
   }

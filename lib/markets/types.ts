@@ -1258,10 +1258,41 @@ export interface WorldSourceDiscoveryRun {
   createdAt: string
 }
 
+/** Provisional, attributable leads from broad web research. They cannot be
+ * consumed as governed observations or automatically become recurring sources. */
+export interface MarketResearchScoutLead {
+  title: string
+  publisher: string
+  url: string
+  sourceType: string
+  claim: string
+  evidenceQuote: string
+  supports: 'supports' | 'contradicts' | 'context'
+  limitations: string[]
+  recurringSourceCandidate: boolean
+}
+
+export interface MarketResearchScoutRun {
+  id: string
+  domainId: string
+  status: 'running' | 'complete' | 'failed'
+  trigger: 'frontier_gap' | 'manual'
+  reason: string
+  frontierIds: string[]
+  leads: MarketResearchScoutLead[]
+  unresolvedQuestions: string[]
+  provider: string | null
+  model: string | null
+  generatedAt: string | null
+  error: string | null
+  createdAt: string
+}
+
 export interface WorldSourceControlWorkspaceData {
   domains: MarketDomainPack[]
   sources: WorldSourceRegistryEntry[]
   discoveryRuns: WorldSourceDiscoveryRun[]
+  researchScoutRuns: MarketResearchScoutRun[]
   researchFrontiers: MarketResearchFrontierItem[]
   observationProposals: WorldObservationProposal[]
   triageRuns: WorldObservationProposalTriageRun[]
