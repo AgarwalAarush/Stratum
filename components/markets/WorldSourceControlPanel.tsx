@@ -62,6 +62,7 @@ function listValue(value: string): string[] {
 export function WorldSourceControlPanel({ workspace, unavailableReason }: { workspace: WorldSourceControlWorkspaceData | null; unavailableReason: string | null }) {
   const router = useRouter()
   const [selectedDomainId, setSelectedDomainId] = useState(workspace?.domains[0]?.id ?? '')
+  const [candidateLimit, setCandidateLimit] = useState(12)
   const [reason, setReason] = useState('Review source coverage gaps before expanding this domain.')
   const [pending, setPending] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -85,6 +86,9 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   }
 
   const candidates = workspace.sources.filter((source) => source.status === 'candidate')
+  const scopedCandidates = selectedDomain ? candidates.filter((source) => source.domainIds.includes(selectedDomain.id)) : candidates
+  const visibleCandidates = scopedCandidates.slice(0, candidateLimit)
+  const hasMoreCandidates = visibleCandidates.length < scopedCandidates.length
   const failedRuns = workspace.discoveryRuns.filter((run) => run.status === 'failed')
   const health = workspace.sources.flatMap((source) => source.health ? [source.health] : [])
   const triageAttention = workspace.triageRuns.filter((run) => run.status !== 'succeeded')
@@ -234,7 +238,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           const complete = coverage.every((item) => item.current >= item.minimumSources)
           const selected = selectedDomainId === domain.id
           return (
-            <button key={domain.id} type="button" className="market-domain-control-card" data-selected={selected} onClick={() => setSelectedDomainId(domain.id)} role="listitem">
+              <button key={domain.id} type="button" className="market-domain-control-card" data-selected={selected} onClick={() => { setSelectedDomainId(domain.id); setCandidateLimit(12) }} role="listitem">
               <span data-status={domain.status}>{domain.status}</span>
               <strong>{domain.label}</strong>
               <small>{complete ? 'Coverage requirement met' : 'Coverage gap remains'}</small>
@@ -275,8 +279,9 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
       <div className="market-source-control-ledger">
         <div>
           <p className="markets-eyebrow">Review ledger</p>
-          <h3>Recent source candidates</h3>
-          {candidates.length ? candidates.slice(0, 8).map((source) => (
+          <h3>{selectedDomain ? `${selectedDomain.label} source candidates` : 'Source candidates'}</h3>
+          <p className="market-source-candidate-summary">Showing {visibleCandidates.length} of {scopedCandidates.length} candidate{scopedCandidates.length === 1 ? '' : 's'} mapped to the selected domain. Candidates may support more than one domain.</p>
+          {scopedCandidates.length ? visibleCandidates.map((source) => (
             <article key={source.id}>
               <div><strong>{source.label}</strong><span>{source.publisher} · {source.evidenceClasses.join(', ').replaceAll('_', ' ')}</span>
                 {source.candidateContext ? <div className="market-source-candidate-context"><p><b>Coverage:</b> {source.candidateContext.coverage || 'Not supplied'}</p><p><b>Why this source:</b> {source.candidateContext.whyThisSource || 'Not supplied'}</p><small>Deterministic score {source.candidateContext.deterministicScore ?? '—'} · scout score {source.candidateContext.scoutScore ?? '—'}{source.candidateContext.limitations.length ? ` · limitations: ${source.candidateContext.limitations.join('; ')}` : ''}</small></div> : null}
@@ -295,7 +300,8 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
                 <footer><button type="submit" disabled={pending}>{pending ? 'Activating contract…' : 'Approve reviewed contract'}</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setReviewing(null); setContract(null) }}>Cancel</button></footer>
               </form> : <button type="button" className="market-source-review-button" onClick={() => startReview(source)} disabled={pending}>Review contract</button>}
             </article>
-          )) : <p>No candidate sources are awaiting review.</p>}
+          )) : <p>No candidate sources are awaiting review for this domain.</p>}
+          {hasMoreCandidates ? <button type="button" className="market-source-review-button" onClick={() => setCandidateLimit((limit) => Math.min(limit + 12, scopedCandidates.length))} disabled={pending}>Show 12 more candidates</button> : null}
         </div>
         <div>
           <p className="markets-eyebrow">Scout trail</p>
