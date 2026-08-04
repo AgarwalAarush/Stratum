@@ -106,7 +106,7 @@ export function scoreWorldSourceCandidate(candidate: Pick<WorldSourceScoutCandid
   return Math.max(0, Math.min(100, sourceTierScore(candidate.sourceTier) + sourceStructure + evidenceBreadth - disclosedLimitations))
 }
 
-export function validateWorldSourceScoutCandidates(value: unknown, domainId: string): WorldSourceScoutCandidate[] {
+function validateWorldSourceScoutCandidatesInternal(value: unknown, domainId: string, allowHistoricalSearchPortals: boolean): WorldSourceScoutCandidate[] {
   if (!isKnownMarketDomain(domainId)) throw new Error(`Unknown market domain: ${domainId}`)
   const payload = record(value)
   const rawCandidates = Array.isArray(payload.candidates) ? payload.candidates : []
@@ -117,7 +117,9 @@ export function validateWorldSourceScoutCandidates(value: unknown, domainId: str
     const slug = normalizeSlug(requiredString(item.slug, 'candidate slug'))
     if (seen.has(slug)) throw new Error(`Source scout returned duplicate candidate ${slug}`)
     seen.add(slug)
-    const canonicalUrl = validateScoutCanonicalUrl(requiredString(item.canonicalUrl, 'candidate'))
+    const canonicalUrl = allowHistoricalSearchPortals
+      ? safeHttpsUrl(requiredString(item.canonicalUrl, 'candidate'), 'candidate').toString()
+      : validateScoutCanonicalUrl(requiredString(item.canonicalUrl, 'candidate'))
     const sourceTier = item.sourceTier as WorldSourceTier
     const sourceKind = item.sourceKind as WorldSourceKind
     if (!SOURCE_TIERS.has(sourceTier)) throw new Error('Invalid source tier')
@@ -148,6 +150,18 @@ export function validateWorldSourceScoutCandidates(value: unknown, domainId: str
     // deterministic prior plus later live-source reliability measurements.
     return candidate
   })
+}
+
+/** Strict write-time admission validation for every new scout output. */
+export function validateWorldSourceScoutCandidates(value: unknown, domainId: string): WorldSourceScoutCandidate[] {
+  return validateWorldSourceScoutCandidatesInternal(value, domainId, false)
+}
+
+/** Historical runs are immutable audit artifacts. They may contain a URL that
+ * predates a later admission rule, but never grant the candidate authority to
+ * enter evidence; reviewers can explicitly block the linked candidate row. */
+export function validatePersistedWorldSourceScoutCandidates(value: unknown, domainId: string): WorldSourceScoutCandidate[] {
+  return validateWorldSourceScoutCandidatesInternal(value, domainId, true)
 }
 
 export interface WorldSourceContractInput {
@@ -325,7 +339,7 @@ function normalizeDiscoveryRun(row: RecordValue): WorldSourceDiscoveryRun {
   // remain auditable in the control workspace instead of making downstream
   // governed collection fail while trying to render historical telemetry.
   const candidates = status === 'complete' && Array.isArray(row.candidates)
-    ? validateWorldSourceScoutCandidates({ candidates: row.candidates }, String(row.domain_id))
+    ? validatePersistedWorldSourceScoutCandidates({ candidates: row.candidates }, String(row.domain_id))
     : []
   return {
     id: String(row.id), domainId: String(row.domain_id), status, trigger: row.trigger as WorldSourceDiscoveryRun['trigger'], reason: String(row.reason),

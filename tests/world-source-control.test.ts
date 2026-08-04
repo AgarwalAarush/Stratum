@@ -6,6 +6,7 @@ import {
   scoreWorldSourceCandidate,
   validateWorldSourceContractTarget,
   validateWorldSourceContract,
+  validatePersistedWorldSourceScoutCandidates,
   validateWorldSourceScoutCandidates,
 } from '../lib/server/world-source-control.ts'
 import { getMarketDomainPack } from '../lib/markets/domain-packs.ts'
@@ -40,6 +41,11 @@ test('source scout rejects broad or ungovernable source output', () => {
   assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [{ ...candidate, slug: 'misrouted-candidate', domains: ['critical-materials'] }] }, 'ai-power'), /misrouted-candidate.*ai-power.*critical-materials/)
   assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [candidate, candidate] }, 'ai-power'), /duplicate/)
   assert.throws(() => validateWorldSourceScoutCandidates({ candidates: [candidate] }, 'not-a-domain'), /Unknown market domain/)
+})
+
+test('historical scout artifacts remain auditable when a later admission rule becomes stricter', () => {
+  const historical = validatePersistedWorldSourceScoutCandidates({ candidates: [{ ...candidate, canonicalUrl: 'https://www.sec.gov/edgar/search/index.html' }] }, 'ai-power')
+  assert.equal(historical[0]?.canonicalUrl, 'https://www.sec.gov/edgar/search/index.html')
 })
 
 test('source score is deterministic and does not treat discovery sources as authoritative', () => {
