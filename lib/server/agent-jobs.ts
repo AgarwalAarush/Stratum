@@ -31,6 +31,7 @@ import { getWorldSourceAdapter } from './world-sources.ts'
 import { runWorldSourceScout } from './world-source-control.ts'
 import { AI_MODELS } from '../ai/config.ts'
 import { selectMarketModel } from './market-model-policy.ts'
+import { evaluateMarketPrediction, findDueMarketPredictionEvaluations } from './market-prediction-evaluation.ts'
 import {
   fetchPersistedMarketAssets,
   materializeAlpacaScreener,
@@ -67,6 +68,8 @@ export const AGENT_JOB_TYPES = [
   'synthesize-market-hypotheses',
   'deepen-market-hypothesis',
   'refresh-market-hypothesis-research',
+  'evaluate-market-prediction',
+  'evaluate-market-predictions',
   'monitor-market-theses',
   'backup-market-corpus',
   'verify-market-corpus',
@@ -196,6 +199,14 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     bucket.setUTCHours(Math.floor(bucket.getUTCHours() / 6) * 6, 0, 0, 0)
     return `${jobType}:${bucket.toISOString()}`
   }
+  if (jobType === 'evaluate-market-prediction' && typeof payload.predictionId === 'string') {
+    return `${jobType}:${payload.predictionId}:${now.toISOString().slice(0, 10)}`
+  }
+  if (jobType === 'evaluate-market-predictions') {
+    const bucket = new Date(now)
+    bucket.setUTCHours(Math.floor(bucket.getUTCHours() / 6) * 6, 0, 0, 0)
+    return `${jobType}:${bucket.toISOString()}`
+  }
   if (jobType === 'backup-market-corpus' || jobType === 'verify-market-corpus') return `${jobType}:${now.toISOString().slice(0, 10)}`
   if (jobType === 'ingest-world-source') {
     if (typeof payload.fingerprint === 'string') return `${jobType}:${payload.fingerprint}`
@@ -233,6 +244,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
     || jobType === 'correlate-market-signals'
     || jobType === 'monitor-market-theses'
     || jobType === 'refresh-market-hypothesis-research'
+    || jobType === 'evaluate-market-predictions'
     || jobType === 'prune-market-data'
   ) return 'market-data'
   if (jobType === 'backup-market-corpus' || jobType === 'verify-market-corpus') return 'market-data'
@@ -603,6 +615,27 @@ async function executeJob(
     const due = await findDueMarketHypothesisResearch()
     const queued = await Promise.all(due.map((item) => enqueueAgentJob('deepen-market-hypothesis', item)))
     return { queued: queued.length, hypothesisIds: due.map((item) => item.hypothesisId) }
+  }
+
+  if (job.job_type === 'evaluate-market-prediction') {
+    const predictionId = typeof job.payload.predictionId === 'string' ? job.payload.predictionId : ''
+    if (!predictionId) throw new Error('Prediction evaluation requires a prediction ID')
+    await reportProgress(5, 'loading post-prediction evidence')
+    const result = await evaluateMarketPrediction({ predictionId })
+    if (result.evaluation.verdict === 'disconfirmed') {
+      await enqueueAgentJob('deepen-market-hypothesis', {
+        ownerId: result.ownerId, hypothesisId: result.hypothesisId,
+        reason: `prediction disconfirmed: ${predictionId}`,
+      })
+    }
+    await reportProgress(100, `prediction evaluation ${result.evaluation.verdict}`)
+    return { predictionId, evaluationId: result.evaluation.id, verdict: result.evaluation.verdict, hypothesisId: result.hypothesisId }
+  }
+
+  if (job.job_type === 'evaluate-market-predictions') {
+    const predictionIds = await findDueMarketPredictionEvaluations()
+    const queued = await Promise.all(predictionIds.map((predictionId) => enqueueAgentJob('evaluate-market-prediction', { predictionId })))
+    return { queued: queued.length, predictionIds }
   }
 
   if (job.job_type === 'monitor-market-theses') {

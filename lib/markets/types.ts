@@ -1361,6 +1361,23 @@ export interface ThesisPrediction {
   evidenceNeeded: string
   result: 'pending' | 'confirmed' | 'disconfirmed' | 'expired'
   evaluatedAt: string | null
+  latestEvaluation?: MarketThesisPredictionEvaluation | null
+}
+
+export interface MarketThesisPredictionEvaluation {
+  id: string
+  predictionId: string
+  version: number
+  status: 'running' | 'complete' | 'failed'
+  verdict: 'confirmed' | 'disconfirmed' | 'inconclusive'
+  rationale: string
+  sourceIds: string[]
+  observationIds: string[]
+  provider: string | null
+  model: string | null
+  dataAsOf: string
+  generatedAt: string | null
+  error: string | null
 }
 
 export interface MarketThesisExposure {

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "rationale", "sourceIds"],
+  "properties": {
+    "verdict": { "enum": ["confirmed", "disconfirmed", "inconclusive"] },
+    "rationale": { "type": "string", "minLength": 20, "maxLength": 2400 },
+    "sourceIds": { "type": "array", "maxItems": 10, "items": { "type": "string", "minLength": 1, "maxLength": 100 } }
+  }
+}

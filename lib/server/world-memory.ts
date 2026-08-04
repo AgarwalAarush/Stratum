@@ -15,6 +15,7 @@ import { getSupabaseClient } from './supabase.ts'
 import { mirrorObservationToWarehouse, storeWorldCorpusDocument } from './world-corpus.ts'
 import { resolveApprovedWorldSource } from './world-source-control.ts'
 import { getMarketDomainPack, MARKET_DOMAIN_PACKS } from '../markets/domain-packs.ts'
+import { predictionDeadlineFromHorizon } from './market-prediction-evaluation.ts'
 
 export interface WorldObservationInput {
   title: string
@@ -465,7 +466,7 @@ export async function promoteEligibleMarketHypothesis(ownerId: string, hypothesi
   if (error || !data) throw new Error(`Unable to promote market thesis: ${error?.message ?? 'unknown error'}`)
   const predictions = researchContent.predictions.map((item) => ({
     prediction: item.prediction, expected_direction: `Confirm: ${item.confirmation}; disconfirm: ${item.disconfirmation}`,
-    deadline: null, evidence_needed: item.leadingIndicator, result: 'pending',
+    deadline: predictionDeadlineFromHorizon(item.horizon, new Date(now)), evidence_needed: item.leadingIndicator, result: 'pending',
   }))
   const { data: predictionRows, error: predictionError } = await supabase.from('market_thesis_predictions').insert(predictions.map((item) => ({ ...item, market_thesis_version_id: data.id }))).select('*')
   if (predictionError) throw new Error(`Unable to persist market thesis predictions: ${predictionError.message}`)

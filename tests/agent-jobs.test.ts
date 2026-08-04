@@ -17,6 +17,7 @@ test('agent job parser rejects unknown work', () => {
   assert.equal(parseAgentJobType('generate-etf-research'), 'generate-etf-research')
   assert.equal(parseAgentJobType('fetch-stock-price-history'), 'fetch-stock-price-history')
   assert.equal(parseAgentJobType('scout-world-sources'), 'scout-world-sources')
+  assert.equal(parseAgentJobType('evaluate-market-prediction'), 'evaluate-market-prediction')
   assert.throws(() => parseAgentJobType('place-order'), /Unsupported agent job type/)
 })
 
@@ -98,6 +99,10 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
   assert.equal(
     buildAgentJobDedupeKey('scout-world-sources', new Date('2026-08-03T21:03:00Z'), { domainId: 'critical-materials' }),
     'scout-world-sources:critical-materials:2026-08-03',
+  )
+  assert.equal(
+    buildAgentJobDedupeKey('evaluate-market-prediction', new Date('2026-08-03T21:03:00Z'), { predictionId: 'prediction-1' }),
+    'evaluate-market-prediction:prediction-1:2026-08-03',
   )
 })
 
