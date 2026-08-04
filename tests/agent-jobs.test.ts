@@ -12,6 +12,7 @@ import {
   modelForAgentJob,
   normalizeClaimedAgentJob,
   parseAgentJobType,
+  shouldCoalesceAgentJob,
   shouldRefreshClosedMarket,
 } from '../lib/server/agent-jobs.ts'
 
@@ -166,6 +167,14 @@ test('source-verification work preempts routine refreshes and short refreshes re
   assert.ok(agentJobPriority('verify-world-source-health') < agentJobPriority('refresh-cross-asset'))
   assert.equal(agentJobStaleAfterMs('refresh-market-screener'), 10 * 60 * 1_000)
   assert.equal(agentJobStaleAfterMs('deepen-market-hypothesis'), 45 * 60 * 1_000)
+})
+
+test('routine snapshot refreshes coalesce during a backlog without swallowing targeted coverage or governed work', () => {
+  assert.equal(shouldCoalesceAgentJob('refresh-market-screener', {}), true)
+  assert.equal(shouldCoalesceAgentJob('refresh-market-screener', { mode: 'coverage', symbol: 'NVDA' }), false)
+  assert.equal(shouldCoalesceAgentJob('refresh-cross-asset', {}), true)
+  assert.equal(shouldCoalesceAgentJob('monitor-investment-theses', {}), true)
+  assert.equal(shouldCoalesceAgentJob('preflight-world-source-candidate', { slug: 'fred' }), false)
 })
 
 test('bounded market-research jobs persist their actual routed model policy', async () => {

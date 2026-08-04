@@ -347,6 +347,14 @@ export function agentJobStaleAfterMs(jobType: AgentJobType, defaultStaleAfterMs 
   return defaultStaleAfterMs
 }
 
+/** Routine publications are snapshots, not a historical work queue. If an
+ * earlier refresh is still queued or running, a later calendar tick can reuse
+ * it; symbol-specific coverage and all governed research work stay distinct. */
+export function shouldCoalesceAgentJob(jobType: AgentJobType, payload: Record<string, unknown>): boolean {
+  if (jobType === 'refresh-market-screener') return payload.mode !== 'coverage' && typeof payload.symbol !== 'string'
+  return jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence' || jobType === 'monitor-investment-theses'
+}
+
 interface StaleAgentJob {
   id: string
   job_type: string
@@ -416,6 +424,19 @@ export async function enqueueAgentJob(
 ): Promise<{ id: string; deduplicated: boolean }> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
+
+  if (shouldCoalesceAgentJob(jobType, payload)) {
+    const { data: pending, error: pendingError } = await supabase
+      .from('agent_jobs')
+      .select('id')
+      .eq('job_type', jobType)
+      .in('status', ['queued', 'running'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (pendingError) throw new Error(`Unable to inspect active ${jobType} work: ${pendingError.message}`)
+    if (pending) return { id: String(pending.id), deduplicated: true }
+  }
 
   const { data, error } = await supabase
     .from('agent_jobs')
