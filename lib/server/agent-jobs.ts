@@ -28,7 +28,7 @@ import {
 } from './world-memory.ts'
 import { backupMarketCorpus, verifyMarketCorpusBackup } from './world-backup.ts'
 import { getWorldSourceAdapter } from './world-sources.ts'
-import { runWorldSourceScout } from './world-source-control.ts'
+import { isMarketDomainActive, runWorldSourceScout } from './world-source-control.ts'
 import { auditWorldSourceHealth } from './world-source-health.ts'
 import { AI_MODELS } from '../ai/config.ts'
 import { selectMarketModel } from './market-model-policy.ts'
@@ -546,6 +546,9 @@ async function executeJob(
     if (adapterId) {
       const adapter = getWorldSourceAdapter(adapterId)
       if (!adapter) throw new Error(`Unknown world-source adapter: ${adapterId}`)
+      if (!(await isMarketDomainActive(adapter.domain))) {
+        return { adapterId, skipped: `domain ${adapter.domain} is not active` }
+      }
       await reportProgress(10, `fetching ${adapter.label}`)
       const sourceResult = await adapter.ingest()
       const observations = sourceResult.observations

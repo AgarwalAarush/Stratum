@@ -280,3 +280,9 @@ const WORLD_SOURCE_ADAPTERS: WorldSourceAdapter[] = [aiPowerV1SourceAdapter, sem
 export function getWorldSourceAdapter(id: string): WorldSourceAdapter | null {
   return WORLD_SOURCE_ADAPTERS.find((adapter) => adapter.id === id) ?? null
 }
+
+/** The adapter registry is separate from admission; schedulers select only
+ * adapters for domains that are active in durable source-control state. */
+export function listWorldSourceAdapters(): readonly WorldSourceAdapter[] {
+  return WORLD_SOURCE_ADAPTERS
+}

@@ -97,6 +97,24 @@ test('world-source health checks are scheduled before the daily source packet', 
   assert.match(source, /newYork\.hour === 17/)
 })
 
+test('active-domain source adapters schedule by declared cadence', () => {
+  const adapters = [
+    { id: 'daily-domain', cadence: 'daily' as const },
+    { id: 'weekly-domain', cadence: 'weekly' as const },
+  ]
+  const weekday = buildDueAgentJobs(new Date('2026-07-28T21:05:00Z'), { worldSourceAdapters: adapters })
+    .filter((job) => job.jobType === 'ingest-world-source')
+  assert.deepEqual(weekday.map((job) => job.payload.adapterId), ['daily-domain'])
+
+  const sunday = buildDueAgentJobs(new Date('2026-08-02T21:05:00Z'), { worldSourceAdapters: adapters })
+    .filter((job) => job.jobType === 'ingest-world-source')
+  assert.deepEqual(sunday.map((job) => job.payload.adapterId), ['daily-domain', 'weekly-domain'])
+
+  const none = buildDueAgentJobs(new Date('2026-07-28T21:05:00Z'), { worldSourceAdapters: [] })
+    .filter((job) => job.jobType === 'ingest-world-source')
+  assert.deepEqual(none, [])
+})
+
 test('worker schedules weekly and semimonthly intelligence on due dates', () => {
   const monday = jobTypes('2026-07-27T14:00:00Z')
   assert.ok(monday.includes('generate-weekly-overview'))

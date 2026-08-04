@@ -82,11 +82,12 @@ test('source-scout output schema stays within Codex structured-output compatibil
 })
 
 test('source-control migration makes contracts mandatory for newly governed observations', async () => {
-  const [migration, activationMigration, memory, jobs, controlRoute, systemPage, controlPanel, controlService] = await Promise.all([
+  const [migration, activationMigration, memory, jobs, adapters, controlRoute, systemPage, controlPanel, controlService] = await Promise.all([
     readFile(new URL('../supabase/migrations/202608040001_world_source_control_plane.sql', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/202608040003_market_domain_activation_events.sql', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/world-memory.ts', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/server/world-sources.ts', import.meta.url), 'utf8'),
     readFile(new URL('../app/api/markets/world-sources/route.ts', import.meta.url), 'utf8'),
     readFile(new URL('../app/markets/system/page.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../components/markets/WorldSourceControlPanel.tsx', import.meta.url), 'utf8'),
@@ -103,6 +104,8 @@ test('source-control migration makes contracts mandatory for newly governed obse
   assert.match(await readFile(new URL('../supabase/migrations/202608040007_critical_materials_source_packet.sql', import.meta.url), 'utf8'), /critical-materials/)
   assert.match(memory, /isMarketDomainActive/)
   assert.match(memory, /fetchActiveMarketDomainPacks/)
+  assert.match(adapters, /listWorldSourceAdapters/)
+  assert.match(jobs, /domain \$\{adapter\.domain\} is not active/)
   assert.match(controlRoute, /'activate-domain'/)
   assert.match(systemPage, /fetchWorldSourceControlWorkspace/)
   assert.match(systemPage, /Promise\.allSettled/)
