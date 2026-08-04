@@ -1252,6 +1252,24 @@ export interface WorldSourceControlWorkspaceData {
   domains: MarketDomainPack[]
   sources: WorldSourceRegistryEntry[]
   discoveryRuns: WorldSourceDiscoveryRun[]
+  observationProposals: WorldObservationProposal[]
+}
+
+/** Quote-bound cheap-model output. It is deliberately not a WorldObservation
+ * and is never consumed by baselines, hypotheses, or predictions directly. */
+export interface WorldObservationProposal {
+  id: string
+  domainId: string
+  mechanism: string
+  assertion: string
+  kind: WorldObservationKind
+  evidenceQuote: string
+  confidence: number
+  materiality: number
+  novelty: number
+  sourceLabel: string
+  sourceUrl: string
+  generatedAt: string
 }
 
 export interface MarketDomainPackEvent {

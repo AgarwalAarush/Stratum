@@ -167,6 +167,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           <div><dt>Governed sources</dt><dd>{workspace.sources.filter((source) => isUsableSource(source.status)).length}</dd></div>
           <div><dt>Latest healthy</dt><dd>{health.filter((check) => check.status === 'healthy').length}/{health.length || '—'}</dd></div>
           <div><dt>Pending review</dt><dd>{candidates.length}</dd></div>
+          <div><dt>Evidence proposals</dt><dd>{workspace.observationProposals.length}</dd></div>
           <div><dt>Failed scouts</dt><dd>{failedRuns.length}</dd></div>
         </dl>
       </div>
@@ -247,6 +248,17 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
               <time>{formatDate(run.generatedAt ?? run.createdAt)}</time>
             </article>
           )) : <p>No source-scout runs have been recorded.</p>}
+        </div>
+        <div className="market-source-proposals">
+          <p className="markets-eyebrow">Proposal ledger</p>
+          <h3>Quote-bound observation proposals</h3>
+          <p>Low-cost extraction proposals are not accepted observations. They never enter baselines, hypotheses, predictions, or capital decisions without a separate evidence-review gate.</p>
+          {workspace.observationProposals.length ? workspace.observationProposals.slice(0, 12).map((proposal) => (
+            <article key={proposal.id}>
+              <div><strong>{proposal.domainId.replaceAll('-', ' ')} · {proposal.mechanism.replaceAll('_', ' ')}</strong><span>{proposal.kind} · confidence {proposal.confidence} · materiality {proposal.materiality}</span><p>{proposal.assertion}</p><blockquote>{proposal.evidenceQuote}</blockquote><a href={proposal.sourceUrl} target="_blank" rel="noreferrer">{proposal.sourceLabel}</a></div>
+              <time>{formatDate(proposal.generatedAt)}</time>
+            </article>
+          )) : <p>No extracted observation proposals are awaiting review.</p>}
         </div>
       </div>
     </section>

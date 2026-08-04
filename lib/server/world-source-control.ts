@@ -13,6 +13,7 @@ import type {
   WorldSourceScoutCandidate,
   WorldSourceStatus,
   WorldSourceTier,
+  WorldObservationProposal,
 } from '../markets/types.ts'
 import { runCodexJson, type CodexExecResult } from './codex-exec.ts'
 import { getSupabaseClient } from './supabase.ts'
@@ -295,6 +296,17 @@ function normalizeDiscoveryRun(row: RecordValue): WorldSourceDiscoveryRun {
   }
 }
 
+function normalizeObservationProposal(row: RecordValue): WorldObservationProposal {
+  const source = record(row.world_source_registry)
+  const document = record(row.world_documents)
+  return {
+    id: String(row.id), domainId: String(row.domain_id), mechanism: String(row.mechanism), assertion: String(row.assertion),
+    kind: row.observation_kind as WorldObservationProposal['kind'], evidenceQuote: String(row.evidence_quote),
+    confidence: Number(row.confidence), materiality: Number(row.materiality), novelty: Number(row.novelty),
+    sourceLabel: String(source.label ?? document.title ?? 'Governed source'), sourceUrl: String(document.canonical_url ?? source.canonical_url ?? ''), generatedAt: String(row.generated_at),
+  }
+}
+
 /** Resolve an already-approved source against its immutable active contract. */
 export async function resolveApprovedWorldSource(slug: string, canonicalUrl: string, mimeType?: string): Promise<{ source: WorldSourceRegistryEntry; contract: WorldSourceContract }> {
   const supabase = getSupabaseClient()
@@ -356,14 +368,15 @@ export async function blockWorldSource(slug: string, reason: string): Promise<vo
 export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceControlWorkspaceData> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const [domains, sources, runs, mappings, healthChecks] = await Promise.all([
+  const [domains, sources, runs, mappings, healthChecks, proposals] = await Promise.all([
     supabase.from('market_domain_packs').select('*').order('id'),
     supabase.from('world_source_registry').select('*').order('updated_at', { ascending: false }).limit(200),
     supabase.from('world_source_discovery_runs').select('*').order('created_at', { ascending: false }).limit(60),
     supabase.from('world_source_domains').select('source_id,domain_id'),
     supabase.from('world_source_health_checks').select('*').order('checked_at', { ascending: false }).limit(500),
+    supabase.from('world_observation_proposals').select('*,world_source_registry(label,canonical_url),world_documents(title,canonical_url)').order('generated_at', { ascending: false }).limit(60),
   ])
-  const error = domains.error ?? sources.error ?? runs.error ?? mappings.error ?? healthChecks.error
+  const error = domains.error ?? sources.error ?? runs.error ?? mappings.error ?? healthChecks.error ?? proposals.error
   if (error) throw new Error(`Unable to load source-control workspace: ${error.message}`)
   const domainIdsBySourceId = new Map<string, string[]>()
   for (const mapping of mappings.data ?? []) {
@@ -390,6 +403,7 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
       latestHealthBySourceId.get(String(row.id)) ?? null,
     )),
     discoveryRuns: (runs.data ?? []).map((row) => normalizeDiscoveryRun(row as RecordValue)),
+    observationProposals: (proposals.data ?? []).map((row) => normalizeObservationProposal(row as RecordValue)),
   }
 }
 
