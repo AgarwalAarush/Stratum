@@ -13,8 +13,8 @@ import type {
 } from '../markets/types.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { mirrorObservationToWarehouse, storeWorldCorpusDocument } from './world-corpus.ts'
-import { resolveApprovedWorldSource } from './world-source-control.ts'
-import { getMarketDomainPack, MARKET_DOMAIN_PACKS } from '../markets/domain-packs.ts'
+import { fetchActiveMarketDomainPacks, isMarketDomainActive, resolveApprovedWorldSource } from './world-source-control.ts'
+import { getMarketDomainPack } from '../markets/domain-packs.ts'
 import { predictionDeadlineFromHorizon } from './market-prediction-evaluation.ts'
 
 export interface WorldObservationInput {
@@ -315,7 +315,7 @@ async function fetchMarketHypothesesInternal(ownerId?: string): Promise<MarketHy
 
 export async function correlateDomainHypothesis(ownerId: string, domainId: string): Promise<MarketHypothesis | null> {
   const pack = getMarketDomainPack(domainId)
-  if (!pack || pack.status !== 'active') return null
+  if (!pack || !(await isMarketDomainActive(domainId))) return null
   const observations = await loadRecentObservations(pack.id, 240)
   const normalized = observations.map(({ row, document, entityIds }) => normalizeObservation(row, document, entityIds))
   const requiredMechanisms = pack.mechanisms.filter((mechanism) => mechanism.required).map((mechanism) => mechanism.id)
@@ -396,7 +396,7 @@ export async function promoteEligibleMarketHypothesis(ownerId: string, hypothesi
   const existing = hypothesisId ? (await fetchMarketHypothesesInternal(ownerId)).find((item) => item.id === hypothesisId) ?? null : null
   const hypothesis = existing
     ? await correlateDomainHypothesis(ownerId, existing.scope)
-    : (await Promise.all(MARKET_DOMAIN_PACKS.filter((pack) => pack.status === 'active').map((pack) => correlateDomainHypothesis(ownerId, pack.id)))).find((item): item is MarketHypothesis => item !== null) ?? null
+    : (await Promise.all((await fetchActiveMarketDomainPacks()).map((pack) => correlateDomainHypothesis(ownerId, pack.id)))).find((item): item is MarketHypothesis => item !== null) ?? null
   if (!hypothesis) return null
   const supabase = getSupabaseClient()!
   const { data: evidenceRows, error: evidenceError } = await supabase
@@ -595,7 +595,7 @@ export async function runMarketWorldCycle(): Promise<{ baselineId: string; hypot
   if (error) throw new Error(`Unable to load market thesis owners: ${error.message}`)
   let hypotheses = 0
   let promoted = 0
-  const activePacks = MARKET_DOMAIN_PACKS.filter((pack) => pack.status === 'active')
+  const activePacks = await fetchActiveMarketDomainPacks()
   for (const owner of owners ?? []) {
     for (const pack of activePacks) {
       const hypothesis = await correlateDomainHypothesis(owner.id, pack.id)

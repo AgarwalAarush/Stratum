@@ -1,5 +1,7 @@
 import { getMarketDomainPack, isKnownMarketDomain } from '../markets/domain-packs.ts'
 import type {
+  MarketDomainPack,
+  MarketDomainPackEvent,
   WorldSourceContract,
   WorldSourceControlWorkspaceData,
   WorldSourceDiscoveryRun,
@@ -347,4 +349,60 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
     sources: (sources.data ?? []).map((row) => normalizeRegistryEntry(row as RecordValue)),
     discoveryRuns: (runs.data ?? []).map((row) => normalizeDiscoveryRun(row as RecordValue)),
   }
+}
+
+function sourceRecord(value: unknown): { id: string; status: string; evidenceClasses: string[] } | null {
+  const row = record(value)
+  return typeof row.id === 'string' ? { id: row.id, status: String(row.status), evidenceClasses: strings(row.evidence_classes) } : null
+}
+
+export async function fetchActiveMarketDomainPacks(): Promise<MarketDomainPack[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data, error } = await supabase.from('market_domain_packs').select('id').eq('status', 'active').order('id')
+  if (error) throw new Error(`Unable to load active market domains: ${error.message}`)
+  return (data ?? []).flatMap((row) => {
+    const pack = getMarketDomainPack(String(row.id))
+    return pack ? [pack] : []
+  })
+}
+
+export async function isMarketDomainActive(domainId: string): Promise<boolean> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data, error } = await supabase.from('market_domain_packs').select('status').eq('id', domainId).maybeSingle()
+  if (error || !data) throw new Error(`Unable to load domain ${domainId}: ${error?.message ?? 'unknown error'}`)
+  return data.status === 'active'
+}
+
+export async function activateMarketDomainPack(domainId: string, reason: string): Promise<MarketDomainPackEvent> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const pack = getMarketDomainPack(domainId)
+  if (!pack) throw new Error(`Unknown market domain: ${domainId}`)
+  const activationReason = requiredString(reason, 'domain activation reason')
+  const { data: domainRow, error: domainError } = await supabase.from('market_domain_packs').select('status').eq('id', domainId).maybeSingle()
+  if (domainError || !domainRow) throw new Error(`Unable to load domain ${domainId}: ${domainError?.message ?? 'unknown error'}`)
+  if (domainRow.status === 'archived') throw new Error(`Archived domain ${domainId} cannot be activated`)
+  const { data: mappings, error: sourceError } = await supabase
+    .from('world_source_domains')
+    .select('source_id,world_source_registry(id,status,evidence_classes)')
+    .eq('domain_id', domainId)
+  if (sourceError) throw new Error(`Unable to inspect domain source coverage: ${sourceError.message}`)
+  const approved = (mappings ?? []).flatMap((mapping) => {
+    const source = sourceRecord(mapping.world_source_registry)
+    return source && (source.status === 'approved' || source.status === 'probation') ? [source] : []
+  })
+  for (const requirement of pack.sourceRequirements) {
+    const matching = new Set(approved.filter((source) => source.evidenceClasses.includes(requirement.evidenceClass)).map((source) => source.id))
+    if (matching.size < requirement.minimumSources) {
+      throw new Error(`${domainId} needs ${requirement.minimumSources} approved ${requirement.evidenceClass} source${requirement.minimumSources === 1 ? '' : 's'} before activation`)
+    }
+  }
+  const sourceIds = [...new Set(approved.map((source) => source.id))]
+  const { error: updateError } = await supabase.from('market_domain_packs').update({ status: 'active', updated_at: new Date().toISOString() }).eq('id', domainId)
+  if (updateError) throw new Error(`Unable to activate domain ${domainId}: ${updateError.message}`)
+  const { data: event, error: eventError } = await supabase.from('market_domain_pack_events').insert({ domain_id: domainId, action: 'activated', reason: activationReason, source_ids: sourceIds }).select('*').single()
+  if (eventError || !event) throw new Error(`Domain ${domainId} was activated but activation event failed: ${eventError?.message ?? 'unknown error'}`)
+  return { id: String(event.id), domainId: String(event.domain_id), action: 'activated', reason: String(event.reason), sourceIds: strings(event.source_ids), createdAt: String(event.created_at) }
 }

@@ -73,10 +73,12 @@ test('source-scout prompt forbids automatic admission and unbounded article sear
 })
 
 test('source-control migration makes contracts mandatory for newly governed observations', async () => {
-  const [migration, memory, jobs] = await Promise.all([
+  const [migration, activationMigration, memory, jobs, controlRoute] = await Promise.all([
     readFile(new URL('../supabase/migrations/202608040001_world_source_control_plane.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/202608040003_market_domain_activation_events.sql', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/world-memory.ts', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../app/api/markets/world-sources/route.ts', import.meta.url), 'utf8'),
   ])
   assert.match(migration, /world_source_registry/i)
   assert.match(migration, /world_source_contract_versions/i)
@@ -85,4 +87,8 @@ test('source-control migration makes contracts mandatory for newly governed obse
   assert.match(memory, /resolveApprovedWorldSource/)
   assert.match(memory, /source_registry_id/)
   assert.match(jobs, /'scout-world-sources'/)
+  assert.match(activationMigration, /market_domain_pack_events/i)
+  assert.match(memory, /isMarketDomainActive/)
+  assert.match(memory, /fetchActiveMarketDomainPacks/)
+  assert.match(controlRoute, /'activate-domain'/)
 })

@@ -3,6 +3,7 @@ import { getAllowedMarketUser } from '@/lib/auth/markets-session'
 import { enqueueAgentJob } from '@/lib/server/agent-jobs'
 import {
   approveWorldSource,
+  activateMarketDomainPack,
   blockWorldSource,
   fetchWorldSourceControlWorkspace,
   validateWorldSourceContract,
@@ -41,6 +42,11 @@ export async function POST(request: NextRequest) {
       if (typeof body.slug !== 'string' || typeof body.reason !== 'string') return NextResponse.json({ error: 'A source slug and block reason are required.' }, { status: 400 })
       await blockWorldSource(body.slug, body.reason)
       return NextResponse.json({ blocked: true })
+    }
+    if (body.action === 'activate-domain') {
+      if (typeof body.domainId !== 'string' || typeof body.reason !== 'string') return NextResponse.json({ error: 'A domain and activation reason are required.' }, { status: 400 })
+      const event = await activateMarketDomainPack(body.domainId, body.reason)
+      return NextResponse.json({ event })
     }
     return NextResponse.json({ error: 'Unsupported source-control action.' }, { status: 400 })
   } catch (error) {

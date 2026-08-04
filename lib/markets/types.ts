@@ -1213,6 +1213,15 @@ export interface WorldSourceControlWorkspaceData {
   discoveryRuns: WorldSourceDiscoveryRun[]
 }
 
+export interface MarketDomainPackEvent {
+  id: string
+  domainId: string
+  action: 'activated' | 'archived'
+  reason: string
+  sourceIds: string[]
+  createdAt: string
+}
+
 export interface WorldObservation {
   id: string
   documentId: string
