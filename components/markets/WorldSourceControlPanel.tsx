@@ -47,6 +47,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
 
   const candidates = workspace.sources.filter((source) => source.status === 'candidate')
   const failedRuns = workspace.discoveryRuns.filter((run) => run.status === 'failed')
+  const health = workspace.sources.flatMap((source) => source.health ? [source.health] : [])
   const requestScout = async () => {
     if (!selectedDomain || !reason.trim() || pending) return
     setPending(true)
@@ -68,6 +69,25 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     }
   }
 
+  const requestHealthAudit = async () => {
+    if (pending) return
+    setPending(true)
+    setNotice(null)
+    try {
+      const response = await fetch('/api/markets/world-sources', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'audit-health' }),
+      })
+      const payload = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue source health audit')
+      setNotice('Source health audit queued. It probes approved contracts only and records review telemetry; it does not change source admission.')
+      router.refresh()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to queue source health audit')
+    } finally {
+      setPending(false)
+    }
+  }
+
   return (
     <section className="market-source-control" aria-labelledby="source-control-heading">
       <div className="market-source-control-heading">
@@ -78,6 +98,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
         </div>
         <dl>
           <div><dt>Governed sources</dt><dd>{workspace.sources.filter((source) => isUsableSource(source.status)).length}</dd></div>
+          <div><dt>Latest healthy</dt><dd>{health.filter((check) => check.status === 'healthy').length}/{health.length || '—'}</dd></div>
           <div><dt>Pending review</dt><dd>{candidates.length}</dd></div>
           <div><dt>Failed scouts</dt><dd>{failedRuns.length}</dd></div>
         </dl>
@@ -119,7 +140,9 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
             <label htmlFor="source-scout-reason">Coverage-review reason</label>
             <textarea id="source-scout-reason" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={600} />
             <button type="button" onClick={requestScout} disabled={pending || !reason.trim()}>{pending ? 'Queuing scout…' : 'Queue bounded source scout'}</button>
+            <button type="button" className="market-source-secondary-button" onClick={requestHealthAudit} disabled={pending}>{pending ? 'Queuing audit…' : 'Run source health audit'}</button>
             <p>Uses the low-cost scout tier and returns at most 12 direct canonical source candidates. It cannot approve a source, ingest evidence, activate a domain, create a thesis, or move capital.</p>
+            <p>A health audit checks reachability, redirect destination, and MIME type against the active contract. A failed check is review telemetry, not an automatic source block.</p>
             {notice ? <output aria-live="polite">{notice}</output> : null}
           </div>
         </div>

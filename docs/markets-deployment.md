@@ -39,6 +39,8 @@ Sources are governed independently from the documents they emit. `world_source_r
 
 `scout-world-sources` is an explicit, bounded worker job rather than a broad daily crawl. It uses `STRATUM_SOURCE_SCOUT_MODEL` to propose at most twelve **candidate** source-level URLs for one domain and one stated coverage gap. It cannot approve a source or publish evidence. Approval must create a contract through the authenticated source-control API; use `STRATUM_MARKET_RESEARCH_MODEL` for durable analyst/critic runs and `STRATUM_MARKET_STANDARD_MODEL` only for bounded planning/evaluation. Keep those variables worker-only.
 
+The worker also runs `verify-world-source-health` at 16:00 ET. It records reachability, final redirect destination, HTTP status, MIME type, and latency in `world_source_health_checks`, validating the result against each source's active contract. A health failure is review telemetry only: it does not auto-approve, block, retire, ingest, activate a domain, form a thesis, or trigger a capital action.
+
 For boot persistence, replace the login-dependent LaunchAgent with the LaunchDaemon installer. Pass the stable production symlink rather than a release path:
 
 ```bash
@@ -102,6 +104,7 @@ The worker scheduler is enabled by default and checks once per minute. It create
 | After market-leadership materialization | `run-candidate-scout` | Enqueued by the materializer with a trading-date dedupe key |
 | Every five minutes while relevant | `monitor-investment-theses` | `/api/cron/agent-jobs` with the monitored-thesis payload |
 | Explicit coverage request only | `scout-world-sources` | `/api/cron/agent-jobs` with a bounded domain and source-gap reason |
+| Daily at 16:00 ET when the market-world model is enabled | `verify-world-source-health` | `/api/cron/agent-jobs` with `{"jobType":"verify-world-source-health"}` |
 | Daily after 12:00 UTC | `generate-morning-brief` | `/api/cron/morning-brief` |
 | Mondays after 13:00 UTC | `generate-weekly-overview` | `/api/cron/weekly-overview` |
 | 1st and 15th after 14:00 UTC | `generate-monthly-overview` | `/api/cron/monthly-overview` |

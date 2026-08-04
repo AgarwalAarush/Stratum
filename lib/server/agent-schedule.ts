@@ -82,6 +82,9 @@ export function buildDueAgentJobs(
   jobs.push(scheduledJob('monitor-investment-theses', now, { cadenceMinutes: monitorCadence }))
   const newYork = newYorkClockParts(now)
   if (isMarketWorldModelEnabled()) {
+    if (newYork.hour === 16 && newYork.minute < 10) {
+      jobs.push(scheduledJob('verify-world-source-health', now))
+    }
     if (newYork.hour === 17 && newYork.minute < 10) {
       jobs.push(scheduledJob('ingest-world-source', now, { adapterId: 'ai-power-v1' }))
     }

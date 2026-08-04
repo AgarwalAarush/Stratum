@@ -90,6 +90,13 @@ test('market synthesis has only open, midday, and close slots', () => {
   assert.equal(marketMemoSlot(new Date('2026-07-28T16:00:00Z')), null)
 })
 
+test('world-source health checks are scheduled before the daily source packet', async () => {
+  const source = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../lib/server/agent-schedule.ts', import.meta.url), 'utf8'))
+  assert.match(source, /newYork\.hour === 16/)
+  assert.match(source, /'verify-world-source-health'/)
+  assert.match(source, /newYork\.hour === 17/)
+})
+
 test('worker schedules weekly and semimonthly intelligence on due dates', () => {
   const monday = jobTypes('2026-07-27T14:00:00Z')
   assert.ok(monday.includes('generate-weekly-overview'))

@@ -26,6 +26,10 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   try {
     const body = await request.json() as Record<string, unknown>
+    if (body.action === 'audit-health') {
+      const queued = await enqueueAgentJob('verify-world-source-health', { trigger: 'manual' })
+      return NextResponse.json({ queued: true, ...queued })
+    }
     if (body.action === 'scout') {
       if (typeof body.domainId !== 'string' || typeof body.reason !== 'string' || !body.reason.trim()) {
         return NextResponse.json({ error: 'A domain and source-coverage reason are required.' }, { status: 400 })

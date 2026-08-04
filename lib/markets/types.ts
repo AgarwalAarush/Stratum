@@ -1096,6 +1096,7 @@ export interface ScreenerResponse {
 // sourced market context even before there is a security-level conclusion.
 export type WorldSourceTier = 'primary' | 'regulatory' | 'independent' | 'discovery'
 export type WorldSourceStatus = 'candidate' | 'probation' | 'approved' | 'blocked' | 'retired'
+export type WorldSourceHealthStatus = 'healthy' | 'degraded' | 'failed'
 export type WorldSourceKind = 'api' | 'rss' | 'html' | 'pdf' | 'dataset' | 'filing' | 'transcript'
 export type WorldSourceEvidenceClass = 'regulatory_data' | 'company_disclosure' | 'operational_data' | 'technical_research' | 'industry_research' | 'market_expectations' | 'discovery'
 export type WorldObservationKind = 'fact' | 'estimate' | 'claim' | 'inference'
@@ -1142,8 +1143,23 @@ export interface WorldSourceRegistryEntry {
   blockedReason: string | null
   /** Domains this source is registered to cover. Present in the control workspace. */
   domainIds: string[]
+  /** Most recent worker-owned probe. Health never changes admission by itself. */
+  health: WorldSourceHealthCheck | null
   createdAt: string
   updatedAt: string
+}
+
+export interface WorldSourceHealthCheck {
+  id: string
+  sourceId: string
+  status: WorldSourceHealthStatus
+  canonicalUrl: string
+  resolvedUrl: string | null
+  httpStatus: number | null
+  mimeType: string | null
+  latencyMs: number | null
+  error: string | null
+  checkedAt: string
 }
 
 export interface WorldSourceContract {

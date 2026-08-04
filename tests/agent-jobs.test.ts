@@ -17,6 +17,7 @@ test('agent job parser rejects unknown work', () => {
   assert.equal(parseAgentJobType('generate-etf-research'), 'generate-etf-research')
   assert.equal(parseAgentJobType('fetch-stock-price-history'), 'fetch-stock-price-history')
   assert.equal(parseAgentJobType('scout-world-sources'), 'scout-world-sources')
+  assert.equal(parseAgentJobType('verify-world-source-health'), 'verify-world-source-health')
   assert.equal(parseAgentJobType('evaluate-market-prediction'), 'evaluate-market-prediction')
   assert.throws(() => parseAgentJobType('place-order'), /Unsupported agent job type/)
 })
@@ -101,6 +102,10 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
     'scout-world-sources:critical-materials:2026-08-03',
   )
   assert.equal(
+    buildAgentJobDedupeKey('verify-world-source-health', new Date('2026-08-03T21:03:00Z')),
+    'verify-world-source-health:2026-08-03',
+  )
+  assert.equal(
     buildAgentJobDedupeKey('evaluate-market-prediction', new Date('2026-08-03T21:03:00Z'), { predictionId: 'prediction-1' }),
     'evaluate-market-prediction:prediction-1:2026-08-03',
   )
@@ -131,6 +136,7 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('scan-research-refreshes'), 'market-data')
   assert.equal(agentJobProvider('monitor-investment-theses'), 'market-data')
   assert.equal(agentJobProvider('scout-world-sources'), 'codex')
+  assert.equal(agentJobProvider('verify-world-source-health'), 'market-data')
 })
 
 test('stock coverage requests refresh the materialized screener through the existing Alpaca worker', async () => {

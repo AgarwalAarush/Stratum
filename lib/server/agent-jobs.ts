@@ -29,6 +29,7 @@ import {
 import { backupMarketCorpus, verifyMarketCorpusBackup } from './world-backup.ts'
 import { getWorldSourceAdapter } from './world-sources.ts'
 import { runWorldSourceScout } from './world-source-control.ts'
+import { auditWorldSourceHealth } from './world-source-health.ts'
 import { AI_MODELS } from '../ai/config.ts'
 import { selectMarketModel } from './market-model-policy.ts'
 import { evaluateMarketPrediction, findDueMarketPredictionEvaluations } from './market-prediction-evaluation.ts'
@@ -62,6 +63,7 @@ export const AGENT_JOB_TYPES = [
   'generate-weekly-overview',
   'generate-monthly-overview',
   'ingest-world-source',
+  'verify-world-source-health',
   'scout-world-sources',
   'compile-world-baseline',
   'correlate-market-signals',
@@ -212,6 +214,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     if (typeof payload.fingerprint === 'string') return `${jobType}:${payload.fingerprint}`
     if (typeof payload.adapterId === 'string') return `${jobType}:${payload.adapterId}:${now.toISOString().slice(0, 10)}`
   }
+  if (jobType === 'verify-world-source-health') return `${jobType}:${now.toISOString().slice(0, 10)}`
   if (jobType === 'scout-world-sources' && typeof payload.domainId === 'string') {
     return `${jobType}:${payload.domainId}:${now.toISOString().slice(0, 10)}`
   }
@@ -233,7 +236,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-robinhood-portfolio') return 'robinhood'
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'fetch-stock-price-history' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
-  if (jobType === 'ingest-world-source') return 'market-data'
+  if (jobType === 'ingest-world-source' || jobType === 'verify-world-source-health') return 'market-data'
   if (
     jobType === 'refresh-cross-asset'
     || jobType === 'materialize-market-leadership'
@@ -562,6 +565,13 @@ async function executeJob(
     const payload = job.payload.observation
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('World-source ingestion requires an observation payload')
     return ingestWorldObservation(payload as Parameters<typeof ingestWorldObservation>[0])
+  }
+
+  if (job.job_type === 'verify-world-source-health') {
+    await reportProgress(5, 'probing approved source contracts')
+    const audit = await auditWorldSourceHealth()
+    await reportProgress(100, `${audit.healthy} healthy, ${audit.degraded} degraded, ${audit.failed} failed`)
+    return { checked: audit.checks.length, healthy: audit.healthy, degraded: audit.degraded, failed: audit.failed }
   }
 
   if (job.job_type === 'scout-world-sources') {

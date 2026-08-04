@@ -3282,6 +3282,12 @@
   opacity: 0.55;
 }
 
+.market-source-scout-form .market-source-secondary-button {
+  background: transparent;
+  color: var(--market-text);
+  margin-top: 8px;
+}
+
 .market-source-scout-form p,
 .market-source-scout-form output {
   color: var(--market-text-muted);
