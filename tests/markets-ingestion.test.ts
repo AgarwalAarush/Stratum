@@ -79,4 +79,5 @@ test('screener refresh explicitly aligns snapshots to the durable history feed i
   assert.match(source, /client\.fetchSnapshots\(symbols, 'iex'\)/)
   assert.match(source, /Never blend those feeds/)
   assert.match(source, /metric\.barCount >= 50/)
+  assert.match(source, /loadCachedScreenerHistory\(supabase, 'iex'\)/)
 })

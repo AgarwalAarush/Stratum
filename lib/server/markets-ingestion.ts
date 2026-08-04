@@ -1,4 +1,4 @@
-import { calculateScreenerRow, calculateScreenerRowFromMetrics, type ScreenerHistoryMetrics } from '../markets/calculations.ts'
+import { calculateScreenerRow, calculateScreenerRowFromCachedHistory, calculateScreenerRowFromMetrics, type CachedScreenerHistory, type ScreenerHistoryMetrics } from '../markets/calculations.ts'
 import type { MarketAsset, MarketDailyBar, MarketFeed, ScreenerRow } from '../markets/types.ts'
 import { getAlpacaClient, type AlpacaClient } from './alpaca.ts'
 import { GICS_CONSTITUENTS_URL, parseGicsConstituents } from './market-leadership.ts'
@@ -42,6 +42,21 @@ interface ScreenerHistoryMetricRow {
   close_180d: number | string | null
   close_ytd: number | string | null
   close_1y: number | string | null
+}
+
+interface CachedScreenerHistoryRow {
+  symbol: string
+  price: number | string
+  return_5d: number | string | null
+  return_30d: number | string | null
+  return_90d: number | string | null
+  return_180d: number | string | null
+  return_ytd: number | string | null
+  return_1y: number | string | null
+  relative_volume: number | string
+  range_values: Array<number | string> | null
+  fifty_day_average: number | string
+  fifty_two_week_position: number | string
 }
 
 let historyCacheFeed: Exclude<MarketFeed, 'illustrative'> | null = null
@@ -109,6 +124,50 @@ async function loadScreenerHistoryMetrics(
       close1y: finiteMetric(row.close_1y),
     }
     return [[metric.symbol, metric] as const]
+  }))
+}
+
+async function loadCachedScreenerHistory(
+  supabase: SupabaseServiceClient,
+  feed: Exclude<MarketFeed, 'illustrative'>,
+): Promise<Map<string, CachedScreenerHistory>> {
+  const { data: snapshot, error: snapshotError } = await supabase
+    .from('market_snapshots')
+    .select('id')
+    .eq('status', 'complete')
+    .eq('feed', feed)
+    .eq('is_latest', true)
+    .maybeSingle()
+  if (snapshotError) throw new Error(`Unable to load cached screener snapshot: ${snapshotError.message}`)
+  if (!snapshot) return new Map()
+
+  const rows: CachedScreenerHistoryRow[] = []
+  for (let from = 0; ; from += DATABASE_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('screener_rows')
+      .select('symbol,price,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,relative_volume,range_values,fifty_day_average,fifty_two_week_position')
+      .eq('snapshot_id', snapshot.id)
+      .order('symbol', { ascending: true })
+      .range(from, from + DATABASE_PAGE_SIZE - 1)
+    if (error) throw new Error(`Unable to load cached screener rows: ${error.message}`)
+    const page = (data ?? []) as CachedScreenerHistoryRow[]
+    rows.push(...page)
+    if (page.length < DATABASE_PAGE_SIZE) break
+  }
+  return new Map(rows.flatMap((row) => {
+    const price = finiteMetric(row.price)
+    const relativeVolume = finiteMetric(row.relative_volume)
+    const fiftyDayAverage = finiteMetric(row.fifty_day_average)
+    const fiftyTwoWeekPosition = finiteMetric(row.fifty_two_week_position)
+    if (!row.symbol || price === null || relativeVolume === null || fiftyDayAverage === null || fiftyTwoWeekPosition === null) return []
+    const history: CachedScreenerHistory = {
+      symbol: row.symbol, price, relativeVolume, fiftyDayAverage, fiftyTwoWeekPosition,
+      range: (row.range_values ?? []).map(finiteMetric).filter((value): value is number => value !== null),
+      return5d: finiteMetric(row.return_5d), return30d: finiteMetric(row.return_30d),
+      return90d: finiteMetric(row.return_90d), return180d: finiteMetric(row.return_180d),
+      returnYtd: finiteMetric(row.return_ytd), return1y: finiteMetric(row.return_1y),
+    }
+    return [[history.symbol, history] as const]
   }))
 }
 
@@ -412,24 +471,35 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
   let snapshotsResult = await client.fetchSnapshots(symbols)
   let feed = snapshotsResult.feed
   let dataAsOf = newestTimestamp(snapshotsResult.data, now.toISOString())
-  let historyMetrics = await loadScreenerHistoryMetrics(supabase, symbols, feed, dataAsOf)
+  let historyMetrics: Map<string, ScreenerHistoryMetrics>
+  try {
+    historyMetrics = await loadScreenerHistoryMetrics(supabase, symbols, feed, dataAsOf)
+  } catch {
+    historyMetrics = new Map()
+  }
+  let cachedHistory = new Map<string, CachedScreenerHistory>()
   let historyResult: Awaited<ReturnType<typeof loadScreenerHistory>> | null = null
   // Alpaca can return delayed-SIP snapshots even where our durable daily bars
   // are IEX. Never blend those feeds: explicitly re-fetch the snapshots on
   // IEX when it is the only feed with usable persisted history.
   if (!hasUsableScreenerHistory(historyMetrics) && feed === 'delayed_sip') {
-    const iexMetrics = await loadScreenerHistoryMetrics(supabase, symbols, 'iex', dataAsOf)
-    if (iexMetrics.size > 0) {
+    let iexMetrics = new Map<string, ScreenerHistoryMetrics>()
+    try {
+      iexMetrics = await loadScreenerHistoryMetrics(supabase, symbols, 'iex', dataAsOf)
+    } catch {
+      // The compact reduction may be statement-limited on a large archive.
+    }
+    if (hasUsableScreenerHistory(iexMetrics) || (cachedHistory = await loadCachedScreenerHistory(supabase, 'iex')).size > 0) {
       snapshotsResult = await client.fetchSnapshots(symbols, 'iex')
       feed = snapshotsResult.feed
       dataAsOf = newestTimestamp(snapshotsResult.data, now.toISOString())
-      historyMetrics = await loadScreenerHistoryMetrics(supabase, symbols, feed, dataAsOf)
+      historyMetrics = iexMetrics
     }
   }
   // A fresh database has no compact metrics yet. Preserve the existing
   // bootstrap path, but do not reload an established full bar archive on each
   // routine refresh.
-  if (!hasUsableScreenerHistory(historyMetrics)) {
+  if (!hasUsableScreenerHistory(historyMetrics) && cachedHistory.size === 0) {
     historyResult = await loadScreenerHistory(client, supabase, symbols, feed, now)
     if (historyResult.feed !== feed) {
       snapshotsResult = await client.fetchSnapshots(symbols, historyResult.feed)
@@ -456,6 +526,8 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
       if (!asset) return []
       const row = historyMetrics.get(snapshot.symbol)
         ? calculateScreenerRowFromMetrics(asset, snapshot, historyMetrics.get(snapshot.symbol)!)
+        : cachedHistory.get(snapshot.symbol)
+          ? calculateScreenerRowFromCachedHistory(asset, snapshot, cachedHistory.get(snapshot.symbol)!)
         : calculateScreenerRow(asset, snapshot, barsBySymbol.get(snapshot.symbol) ?? [])
       if (!row) return []
       const classification = taxonomyBySymbol.get(row.symbol)

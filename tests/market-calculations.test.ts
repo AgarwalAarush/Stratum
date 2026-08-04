@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { calculateScreenerRow, calculateScreenerRowFromMetrics } from '../lib/markets/calculations.ts'
+import { calculateScreenerRow, calculateScreenerRowFromCachedHistory, calculateScreenerRowFromMetrics } from '../lib/markets/calculations.ts'
 import type { MarketAsset, MarketDailyBar, MarketSnapshot } from '../lib/markets/types.ts'
 
 const asset: MarketAsset = {
@@ -102,6 +102,19 @@ test('compact persisted history metrics produce the same live-row shape without 
   assert.equal(row?.return5d, 8.91)
   assert.equal(row?.return1y, 29.41)
   assert.deepEqual(row?.range, [100, 101, 102])
+})
+
+test('cached same-feed screener history re-expresses existing baselines at the current price', () => {
+  const row = calculateScreenerRowFromCachedHistory(asset, snapshot, {
+    symbol: 'TEST', price: 100, return5d: 5, return30d: 10, return90d: null,
+    return180d: null, returnYtd: 20, return1y: 25, relativeVolume: 1.5,
+    range: [90, 95, 100], fiftyDayAverage: 98, fiftyTwoWeekPosition: 72,
+  })
+  assert.ok(row)
+  assert.equal(row?.return5d, 15.5)
+  assert.equal(row?.return30d, 21)
+  assert.equal(row?.return90d, null)
+  assert.equal(row?.relativeVolume, 1.5)
 })
 
 test('screener history metric migration keeps compact reads server-side and service-only', () => {

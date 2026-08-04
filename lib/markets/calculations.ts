@@ -24,6 +24,21 @@ export interface ScreenerHistoryMetrics {
   close1y: number | null
 }
 
+export interface CachedScreenerHistory {
+  symbol: string
+  price: number
+  return5d: number | null
+  return30d: number | null
+  return90d: number | null
+  return180d: number | null
+  returnYtd: number | null
+  return1y: number | null
+  relativeVolume: number
+  range: number[]
+  fiftyDayAverage: number
+  fiftyTwoWeekPosition: number
+}
+
 function average(values: number[]): number {
   if (values.length === 0) return 0
   return values.reduce((total, value) => total + value, 0) / values.length
@@ -173,6 +188,45 @@ export function calculateScreenerRowFromMetrics(
     range: metrics.range.map((value) => round(value)),
     fiftyDayAverage: round(metrics.fiftyDayAverage),
     fiftyTwoWeekPosition: round(Math.max(0, Math.min(100, fiftyTwoWeekPosition))),
+    exchange: asset.exchange,
+    sector: 'Unclassified',
+    subIndustry: 'Unclassified',
+    tradable: asset.tradable && asset.active,
+    asOf: snapshot.asOf,
+  }
+}
+
+function carryForwardReturn(currentPrice: number, priorPrice: number, priorReturn: number | null): number | null {
+  if (!Number.isFinite(currentPrice) || !Number.isFinite(priorPrice) || priorPrice <= 0 || priorReturn === null) return null
+  return round((((1 + priorReturn / 100) * currentPrice / priorPrice) - 1) * 100)
+}
+
+/** Use only an immediately preceding, same-feed published row when the raw
+ * history reduction is temporarily unavailable. Its historical baselines stay
+ * explicit evidence; the current price re-expresses their existing returns. */
+export function calculateScreenerRowFromCachedHistory(
+  asset: MarketAsset,
+  snapshot: MarketSnapshot,
+  history: CachedScreenerHistory,
+): ScreenerRow | null {
+  if (asset.symbol !== snapshot.symbol || history.symbol !== asset.symbol || history.price <= 0) return null
+  return {
+    symbol: asset.symbol,
+    company: asset.name,
+    price: round(snapshot.price),
+    dailyChange: round(percentChange(snapshot.price, snapshot.previousClose)),
+    return5d: carryForwardReturn(snapshot.price, history.price, history.return5d),
+    return30d: carryForwardReturn(snapshot.price, history.price, history.return30d),
+    return90d: carryForwardReturn(snapshot.price, history.price, history.return90d),
+    return180d: carryForwardReturn(snapshot.price, history.price, history.return180d),
+    returnYtd: carryForwardReturn(snapshot.price, history.price, history.returnYtd),
+    return1y: carryForwardReturn(snapshot.price, history.price, history.return1y),
+    gap: round(percentChange(snapshot.open, snapshot.previousClose)),
+    volume: snapshot.volume,
+    relativeVolume: history.relativeVolume,
+    range: history.range.map((value) => round(value)),
+    fiftyDayAverage: history.fiftyDayAverage,
+    fiftyTwoWeekPosition: history.fiftyTwoWeekPosition,
     exchange: asset.exchange,
     sector: 'Unclassified',
     subIndustry: 'Unclassified',
