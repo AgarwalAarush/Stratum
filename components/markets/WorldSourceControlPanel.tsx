@@ -7,8 +7,12 @@ import { candidateResearchFrontiers, prioritizeWorldObservationProposals, priori
 
 type SourceStatus = 'approved' | 'probation'
 
-function isUsableSource(status: string): status is SourceStatus {
+function isAdmittedSource(status: string): status is SourceStatus {
   return status === 'approved' || status === 'probation'
+}
+
+function isApprovedSource(status: string): status is Extract<SourceStatus, 'approved'> {
+  return status === 'approved'
 }
 
 function domainSources(workspace: WorldSourceControlWorkspaceData, domainId: string) {
@@ -16,7 +20,7 @@ function domainSources(workspace: WorldSourceControlWorkspaceData, domainId: str
 }
 
 function sourceCoverage(workspace: WorldSourceControlWorkspaceData, domain: MarketDomainPack) {
-  const sources = domainSources(workspace, domain.id).filter((source) => isUsableSource(source.status))
+  const sources = domainSources(workspace, domain.id).filter((source) => isApprovedSource(source.status))
   return domain.sourceRequirements.map((requirement) => ({
     ...requirement,
     current: new Set(sources.filter((source) => source.evidenceClasses.includes(requirement.evidenceClass)).map((source) => source.id)).size,
@@ -306,7 +310,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           <p>Coverage is counted only from approved or probationary sources with an active contract. Candidate links never enter market evidence.</p>
         </div>
         <dl>
-          <div><dt>Governed sources</dt><dd>{workspace.sources.filter((source) => isUsableSource(source.status)).length}</dd></div>
+          <div><dt>Governed sources</dt><dd>{workspace.sources.filter((source) => isAdmittedSource(source.status)).length}</dd></div>
           <div><dt>Latest healthy</dt><dd>{health.filter((check) => check.status === 'healthy').length}/{health.length || '—'}</dd></div>
           <div><dt>Pending review</dt><dd>{candidates.length}</dd></div>
           <div><dt>Evidence proposals</dt><dd>{workspace.observationProposals.length}</dd></div>
@@ -324,8 +328,8 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
               <button key={domain.id} type="button" className="market-domain-control-card" data-selected={selected} onClick={() => { setSelectedDomainId(domain.id); setCandidateLimit(12); setProposalLimit(12); setReviewing(null); setContract(null); setBlockingCandidate(null); setBlockRationale(''); setActivatingDomainId(null); setActivationReason(''); setReviewingProposal(null); setProposalRationale('') }} role="listitem">
               <span data-status={domain.status}>{domain.status}</span>
               <strong>{domain.label}</strong>
-              <small>{complete ? 'Coverage requirement met' : 'Coverage gap remains'}</small>
-              <em>{coverage.filter((item) => item.current >= item.minimumSources).length}/{coverage.length} source classes satisfied</em>
+              <small>{complete ? 'Approved coverage requirement met' : 'Approved coverage gap remains'}</small>
+              <em>{coverage.filter((item) => item.current >= item.minimumSources).length}/{coverage.length} approved source classes satisfied</em>
             </button>
           )
         })}
