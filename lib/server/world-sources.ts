@@ -15,9 +15,10 @@ export interface WorldSourceIngestResult {
   failures: Array<{ sourceId: string; message: string }>
 }
 
-interface AiPowerSourceSpec {
+interface WorldDocumentSourceSpec {
   id: string
   sourceSlug: string
+  domain: string
   title: string
   url: string
   publisher: string
@@ -41,9 +42,9 @@ interface AiPowerSourceSpec {
  * an adapter catalogue, not a hidden thesis: later synthesis must still connect
  * demand, supply, constraints, economics, and the counter-case.
  */
-export const AI_POWER_SOURCE_SPECS: AiPowerSourceSpec[] = [
+export const AI_POWER_SOURCE_SPECS: WorldDocumentSourceSpec[] = [
   {
-    id: 'eia-data-center-load', sourceSlug: 'eia',
+    id: 'eia-data-center-load', sourceSlug: 'eia', domain: 'ai-power',
     title: 'Data center server energy use grows across the commercial building stock',
     url: 'https://www.eia.gov/todayinenergy/detail.php?id=67704',
     publisher: 'U.S. Energy Information Administration', sourceTier: 'regulatory',
@@ -54,7 +55,7 @@ export const AI_POWER_SOURCE_SPECS: AiPowerSourceSpec[] = [
     confidence: 88, materiality: 92, novelty: 78,
   },
   {
-    id: 'eia-deliverable-capacity', sourceSlug: 'eia',
+    id: 'eia-deliverable-capacity', sourceSlug: 'eia', domain: 'ai-power',
     title: 'Fossil generation could rise with faster-than-expected growth in data center power demand',
     url: 'https://www.eia.gov/TODAYINENERGY/detail.php?id=67344',
     publisher: 'U.S. Energy Information Administration', sourceTier: 'regulatory',
@@ -64,7 +65,7 @@ export const AI_POWER_SOURCE_SPECS: AiPowerSourceSpec[] = [
     publishedAt: '2026-03-12T00:00:00.000Z', confidence: 86, materiality: 89, novelty: 76,
   },
   {
-    id: 'ferc-large-load-integration', sourceSlug: 'ferc',
+    id: 'ferc-large-load-integration', sourceSlug: 'ferc', domain: 'ai-power',
     title: 'FERC order on large-load interconnection',
     url: 'https://www.ferc.gov/sites/default/files/2026-06/EL26-68-000.pdf',
     publisher: 'Federal Energy Regulatory Commission', sourceTier: 'regulatory',
@@ -74,7 +75,7 @@ export const AI_POWER_SOURCE_SPECS: AiPowerSourceSpec[] = [
     publishedAt: '2026-06-18T00:00:00.000Z', confidence: 92, materiality: 90, novelty: 85,
   },
   {
-    id: 'doe-transformer-supply', sourceSlug: 'doe',
+    id: 'doe-transformer-supply', sourceSlug: 'doe', domain: 'ai-power',
     title: 'Department of Energy supply chain and market analysis',
     url: 'https://www.energy.gov/oe/supply-chain-and-market-analysis',
     publisher: 'U.S. Department of Energy', sourceTier: 'regulatory',
@@ -85,7 +86,7 @@ export const AI_POWER_SOURCE_SPECS: AiPowerSourceSpec[] = [
     confidence: 84, materiality: 80, novelty: 65,
   },
   {
-    id: 'nerc-ltra-large-loads', sourceSlug: 'nerc',
+    id: 'nerc-ltra-large-loads', sourceSlug: 'nerc', domain: 'ai-power',
     title: 'NERC 2025 Long-Term Reliability Assessment',
     url: 'https://www.nerc.com/globalassets/our-work/assessments/nerc_ltra_2025.pdf',
     publisher: 'North American Electric Reliability Corporation', sourceTier: 'independent',
@@ -133,7 +134,7 @@ function extension(type: string): string {
   return 'html'
 }
 
-async function fetchAiPowerSpec(spec: AiPowerSourceSpec, fetchImpl: typeof fetch): Promise<WorldObservationInput> {
+async function fetchWorldSourceSpec(spec: WorldDocumentSourceSpec, fetchImpl: typeof fetch): Promise<WorldObservationInput> {
   const response = await fetchImpl(spec.url, {
     headers: { 'User-Agent': 'StratumMarketMemory/1.0 (+private research worker)', Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.7' },
     signal: AbortSignal.timeout(30_000),
@@ -147,7 +148,7 @@ async function fetchAiPowerSpec(spec: AiPowerSourceSpec, fetchImpl: typeof fetch
     title: spec.title, canonicalUrl: response.url || spec.url, publisher: spec.publisher, sourceTier: spec.sourceTier,
     sourceSlug: spec.sourceSlug,
     body: text, rawBody: raw, mimeType: type, sourceExtension: extension(type), publishedAt: spec.publishedAt ?? null,
-    assertion: spec.assertion, kind: spec.kind, domain: 'ai-power', mechanism: spec.mechanism, entities: spec.entities,
+    assertion: spec.assertion, kind: spec.kind, domain: spec.domain, mechanism: spec.mechanism, entities: spec.entities,
     geography: spec.geography ?? 'United States', numericValue: spec.numericValue ?? null, numericUnit: spec.numericUnit ?? null,
     observedAt: spec.publishedAt ?? new Date().toISOString(), confidence: spec.confidence, materiality: spec.materiality, novelty: spec.novelty,
   }
@@ -157,7 +158,7 @@ export const aiPowerV1SourceAdapter: WorldSourceAdapter = {
   id: 'ai-power-v1', label: 'AI/power official source packet', domain: 'ai-power', cadence: 'daily', sourceIds: AI_POWER_SOURCE_SPECS.map((item) => item.id),
   async ingest(options = {}) {
     const fetchImpl = options.fetchImpl ?? fetch
-    const results = await Promise.allSettled(AI_POWER_SOURCE_SPECS.map((spec) => fetchAiPowerSpec(spec, fetchImpl)))
+    const results = await Promise.allSettled(AI_POWER_SOURCE_SPECS.map((spec) => fetchWorldSourceSpec(spec, fetchImpl)))
     const observations = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
     const failures = results.flatMap((result, index) => result.status === 'rejected' ? [{
       sourceId: AI_POWER_SOURCE_SPECS[index]!.id,
@@ -170,7 +171,59 @@ export const aiPowerV1SourceAdapter: WorldSourceAdapter = {
   },
 }
 
-const WORLD_SOURCE_ADAPTERS: WorldSourceAdapter[] = [aiPowerV1SourceAdapter]
+/**
+ * First non-power packet. These are company/regulator documents, not a claim
+ * that any one issuer is investable. The packet gives the domain’s generic
+ * model an auditable demand/supply/constraint ledger before activation.
+ */
+export const SEMICAP_DATA_CENTER_SOURCE_SPECS: WorldDocumentSourceSpec[] = [
+  {
+    id: 'nvidia-fy2026-10k', sourceSlug: 'sec-nvidia-fy2026-10k', domain: 'semicap-data-center-equipment',
+    title: 'NVIDIA fiscal 2026 annual report', url: 'https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm',
+    publisher: 'NVIDIA Corporation', sourceTier: 'primary',
+    assertion: 'NVIDIA reports fiscal-2026 Data Center revenue growth of 68% year over year, tying compute and networking demand to accelerated-computing and AI platform adoption.',
+    kind: 'fact', mechanism: 'compute_demand', entities: [{ kind: 'company', name: 'NVIDIA', aliases: ['NVDA'] }, { kind: 'industry', name: 'Data centers' }, { kind: 'technology', name: 'Accelerated computing' }],
+    geography: 'Global', publishedAt: '2026-02-25T00:00:00.000Z', confidence: 91, materiality: 90, novelty: 74,
+  },
+  {
+    id: 'asml-fy2025-20f', sourceSlug: 'sec-asml-fy2025-20f', domain: 'semicap-data-center-equipment',
+    title: 'ASML 2025 annual report on Form 20-F', url: 'https://www.sec.gov/Archives/edgar/data/937966/000162828026011378/asml-20251231.htm',
+    publisher: 'ASML Holding N.V.', sourceTier: 'primary',
+    assertion: 'ASML reports that advanced logic and DRAM for AI led semiconductor-market growth and that lithography-system output is constrained by critical supplier capacity, including sole-source optics.',
+    kind: 'fact', mechanism: 'component_lead_time', entities: [{ kind: 'company', name: 'ASML Holding', aliases: ['ASML'] }, { kind: 'technology', name: 'Lithography systems' }, { kind: 'industry', name: 'Semiconductor equipment' }],
+    geography: 'Global', publishedAt: '2026-02-25T00:00:00.000Z', confidence: 92, materiality: 88, novelty: 76,
+  },
+  {
+    id: 'micron-fy2025-10k', sourceSlug: 'sec-micron-fy2025-10k', domain: 'semicap-data-center-equipment',
+    title: 'Micron fiscal 2025 annual report', url: 'https://www.sec.gov/Archives/edgar/data/723125/000072312525000040/202510karscopy.pdf',
+    publisher: 'Micron Technology', sourceTier: 'primary',
+    assertion: 'Micron describes planned advanced-packaging capacity and DRAM/HBM modernization intended to support high-bandwidth memory demand for data-intensive compute systems.',
+    kind: 'estimate', mechanism: 'fabrication_capacity', entities: [{ kind: 'company', name: 'Micron Technology', aliases: ['MU'] }, { kind: 'technology', name: 'High Bandwidth Memory', aliases: ['HBM'] }, { kind: 'industry', name: 'Semiconductors' }],
+    geography: 'Global', publishedAt: '2025-12-31T00:00:00.000Z', confidence: 85, materiality: 84, novelty: 68,
+  },
+  {
+    id: 'bis-semiconductor-export-policy', sourceSlug: 'bis-semiconductor-export-policy', domain: 'semicap-data-center-equipment',
+    title: 'BIS semiconductor export license-review policy revision', url: 'https://www.bis.gov/sites/default/files/documents/DoC%20Revises%20License%20Review%20Policy%20for%20Semiconductors%20Exports.pdf',
+    publisher: 'U.S. Bureau of Industry and Security', sourceTier: 'regulatory',
+    assertion: 'BIS revised semiconductor export licensing policy, showing that trade controls can alter accessible demand, supplier economics, and regional supply-chain allocation.',
+    kind: 'fact', mechanism: 'supply_chain_capture', entities: [{ kind: 'regulator', name: 'U.S. Bureau of Industry and Security', aliases: ['BIS'] }, { kind: 'industry', name: 'Semiconductors' }, { kind: 'jurisdiction', name: 'United States' }],
+    geography: 'United States', publishedAt: '2026-01-13T00:00:00.000Z', confidence: 89, materiality: 77, novelty: 72,
+  },
+]
+
+export const semicapDataCenterV1SourceAdapter: WorldSourceAdapter = {
+  id: 'semicap-data-center-v1', label: 'Semicap/data-center primary source packet', domain: 'semicap-data-center-equipment', cadence: 'weekly', sourceIds: SEMICAP_DATA_CENTER_SOURCE_SPECS.map((item) => item.id),
+  async ingest(options = {}) {
+    const fetchImpl = options.fetchImpl ?? fetch
+    const results = await Promise.allSettled(SEMICAP_DATA_CENTER_SOURCE_SPECS.map((spec) => fetchWorldSourceSpec(spec, fetchImpl)))
+    const observations = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
+    const failures = results.flatMap((result, index) => result.status === 'rejected' ? [{ sourceId: SEMICAP_DATA_CENTER_SOURCE_SPECS[index]!.id, message: result.reason instanceof Error ? result.reason.message : String(result.reason) }] : [])
+    if (observations.length === 0) throw new Error(`Semicap/data-center source adapter did not ingest any documents: ${failures.map((item) => item.message).join('; ')}`)
+    return { observations, failures }
+  },
+}
+
+const WORLD_SOURCE_ADAPTERS: WorldSourceAdapter[] = [aiPowerV1SourceAdapter, semicapDataCenterV1SourceAdapter]
 
 export function getWorldSourceAdapter(id: string): WorldSourceAdapter | null {
   return WORLD_SOURCE_ADAPTERS.find((adapter) => adapter.id === id) ?? null

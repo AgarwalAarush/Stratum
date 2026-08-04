@@ -49,7 +49,7 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
     sourceRequirements: [
       { evidenceClass: 'company_disclosure', purpose: 'orders, backlog, capex, and capacity', minimumSources: 3 },
       { evidenceClass: 'technical_research', purpose: 'technology and supply constraint validation', minimumSources: 1 },
-      { evidenceClass: 'industry_research', purpose: 'independent cycle cross-check', minimumSources: 1 },
+      { evidenceClass: 'regulatory_data', purpose: 'trade and policy transmission evidence', minimumSources: 1 },
     ],
     entityKinds: ['company', 'technology', 'facility', 'commodity', 'jurisdiction', 'industry'],
     hypothesisTemplate: {
