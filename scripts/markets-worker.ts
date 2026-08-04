@@ -4,6 +4,7 @@ import { enqueueDueAgentJobs } from '../lib/server/agent-schedule.ts'
 import { recordWorkerHeartbeat } from '../lib/server/worker-heartbeat.ts'
 import type { AgentJobType } from '../lib/server/agent-jobs.ts'
 import { isRobinhoodPortfolioSyncConfigured } from '../lib/server/robinhood-portfolio-sync.ts'
+import { ensureDeclaredMarketDomainPacks } from '../lib/server/world-source-control.ts'
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 5_000)
 const SCHEDULER_INTERVAL_MS = Number(process.env.WORKER_SCHEDULER_INTERVAL_MS ?? 60_000)
@@ -82,6 +83,10 @@ async function main() {
       provider: 'robinhood',
       reason: 'Robinhood sync is enabled but its private worker credentials are incomplete',
     }))
+  }
+  const domainSync = await ensureDeclaredMarketDomainPacks()
+  if (domainSync.inserted.length > 0 || domainSync.upgraded.length > 0) {
+    console.info(JSON.stringify({ level: 'info', workerId, event: 'market_domain_packs_synchronized', ...domainSync }))
   }
   const restartedJobs = await recoverInterruptedAgentJobs(workerId)
   if (restartedJobs > 0) {

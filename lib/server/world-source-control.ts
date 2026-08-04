@@ -1,4 +1,4 @@
-import { getMarketDomainPack, isKnownMarketDomain } from '../markets/domain-packs.ts'
+import { getMarketDomainPack, isKnownMarketDomain, MARKET_DOMAIN_PACKS } from '../markets/domain-packs.ts'
 import type {
   MarketDomainPack,
   MarketResearchFrontierItem,
@@ -687,6 +687,51 @@ export async function fetchActiveMarketDomainPacks(): Promise<MarketDomainPack[]
     const pack = getMarketDomainPack(String(row.id))
     return pack ? [pack] : []
   })
+}
+
+/**
+ * Code owns a pack's versioned economic definition; the database owns its
+ * activation state. This lets a new candidate vertical enter the governed
+ * control plane on worker startup without silently reactivating, downgrading,
+ * or mutating an already reviewed domain.
+ */
+export async function ensureDeclaredMarketDomainPacks(): Promise<{ inserted: string[]; upgraded: string[] }> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data, error } = await supabase.from('market_domain_packs').select('id,version').in('id', MARKET_DOMAIN_PACKS.map((pack) => pack.id))
+  if (error) throw new Error(`Unable to inspect declared market domains: ${error.message}`)
+  const persisted = new Map((data ?? []).map((row) => [String(row.id), Number(row.version)]))
+  const inserted: string[] = []
+  const upgraded: string[] = []
+  for (const pack of MARKET_DOMAIN_PACKS) {
+    const definition = {
+      mechanisms: pack.mechanisms,
+      sourceRequirements: pack.sourceRequirements,
+      entityKinds: pack.entityKinds,
+      hypothesisTemplate: pack.hypothesisTemplate,
+      crossDomainLinks: pack.crossDomainLinks,
+    }
+    const currentVersion = persisted.get(pack.id)
+    if (currentVersion === undefined) {
+      const { error: insertError } = await supabase.from('market_domain_packs').insert({
+        id: pack.id, version: pack.version, label: pack.label, description: pack.description, status: pack.status,
+        parent_domain_id: pack.parentDomainId, definition,
+      })
+      if (insertError) throw new Error(`Unable to register market domain ${pack.id}: ${insertError.message}`)
+      inserted.push(pack.id)
+      continue
+    }
+    if (currentVersion > pack.version) throw new Error(`Persisted market domain ${pack.id} is newer than this worker release`)
+    if (currentVersion < pack.version) {
+      const { error: updateError } = await supabase.from('market_domain_packs').update({
+        version: pack.version, label: pack.label, description: pack.description, parent_domain_id: pack.parentDomainId,
+        definition, updated_at: new Date().toISOString(),
+      }).eq('id', pack.id).eq('version', currentVersion)
+      if (updateError) throw new Error(`Unable to upgrade market domain ${pack.id}: ${updateError.message}`)
+      upgraded.push(pack.id)
+    }
+  }
+  return { inserted, upgraded }
 }
 
 export async function isMarketDomainActive(domainId: string): Promise<boolean> {

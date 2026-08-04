@@ -65,3 +65,15 @@ test('macro/policy packet keeps policy, conditions, trade transmission, and expe
   assert.ok(result.observations.every((item) => item.domain === 'macro-policy-geopolitics' && item.sourceTier === 'regulatory'))
   assert.ok(result.observations.some((item) => /not a factual substitute/i.test(item.assertion)))
 })
+
+test('industrial automation is a candidate economic-system pack with a bounded cross-domain transmission', async () => {
+  const { getMarketDomainPack } = await import('../lib/markets/domain-packs.ts')
+  const pack = getMarketDomainPack('industrial-automation')
+  assert.ok(pack)
+  assert.equal(pack.status, 'candidate')
+  assert.deepEqual(pack.mechanisms.filter((mechanism) => mechanism.required).map((mechanism) => mechanism.id), [
+    'labor_constraint', 'automation_capex', 'deployment_bottleneck', 'productivity_realization', 'economic_capture',
+  ])
+  assert.equal(pack.sourceRequirements.find((requirement) => requirement.evidenceClass === 'company_disclosure')?.minimumSources, 2)
+  assert.equal(pack.crossDomainLinks[0]?.toDomainId, 'semicap-data-center-equipment')
+})

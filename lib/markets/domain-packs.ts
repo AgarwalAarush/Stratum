@@ -140,6 +140,41 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
       { id: 'policy-to-materials-transmission', toDomainId: 'critical-materials', relationship: 'transmits', fromMechanisms: ['policy_change', 'supply_chain_disruption'], toMechanisms: ['trade_constraint'], explanation: 'Policy and geopolitical changes can transmit into materials trade constraints only when both the action and physical response are evidenced.' },
     ],
   },
+  {
+    id: 'industrial-automation', version: 1, label: 'Industrial automation and robotics', status: 'candidate', parentDomainId: null,
+    description: 'Labor constraints, automation capex, deployment bottlenecks, realized productivity, and value-chain capture.',
+    mechanisms: [
+      { id: 'labor_constraint', label: 'Labor availability and cost pressure', required: true },
+      { id: 'automation_capex', label: 'Automation and robotics capital spending', required: true },
+      { id: 'deployment_bottleneck', label: 'Integration, controls, and deployment bottleneck', required: true },
+      { id: 'productivity_realization', label: 'Realized productivity and utilization', required: true },
+      { id: 'economic_capture', label: 'Value-chain capture and substitution', required: true },
+    ],
+    sourceRequirements: [
+      { evidenceClass: 'regulatory_data', purpose: 'labor, productivity, and manufacturing activity evidence', minimumSources: 1 },
+      { evidenceClass: 'operational_data', purpose: 'deployment, utilization, and order-flow evidence', minimumSources: 1 },
+      { evidenceClass: 'company_disclosure', purpose: 'automation capex, backlog, and deployment evidence', minimumSources: 2 },
+      { evidenceClass: 'industry_research', purpose: 'independent technology and adoption cross-check', minimumSources: 1 },
+    ],
+    entityKinds: ['company', 'technology', 'facility', 'jurisdiction', 'regulator', 'industry', 'dataset'],
+    hypothesisTemplate: {
+      title: 'Persistent labor and throughput constraints may raise the value of deployable industrial automation', horizon: '1–5 years',
+      coreMechanism: 'Labor pressure and automation capex create value only when controls, integration, and customer utilization turn installed equipment into sustained productivity.',
+      counterThesis: 'Labor pressure eases, adoption stalls at integration complexity, equipment commoditizes, or customers fail to realize the expected productivity gains.',
+      causalGraph: [
+        { from: 'Labor availability and cost pressure', to: 'Automation payback pressure', mechanism: 'labor_constraint', core: true },
+        { from: 'Automation and robotics capital spending', to: 'Installed automation base', mechanism: 'automation_capex', core: true },
+        { from: 'Integration, controls, and deployment bottleneck', to: 'Delayed productive deployment', mechanism: 'deployment_bottleneck', core: true },
+        { from: 'Realized productivity and utilization', to: 'Customer willingness to sustain adoption', mechanism: 'productivity_realization', core: true },
+        { from: 'Customer willingness to sustain adoption', to: 'Automation value-chain capture candidates', mechanism: 'economic_capture', core: true },
+      ],
+    },
+    crossDomainLinks: [{
+      id: 'industrial-automation-to-semicap-demand', toDomainId: 'semicap-data-center-equipment', relationship: 'amplifies',
+      fromMechanisms: ['automation_capex'], toMechanisms: ['compute_demand'],
+      explanation: 'Industrial automation investment can raise demand for compute, control, sensing, and networking components, but the transmission requires evidence from both value chains before it is active.',
+    }],
+  },
 ] as const
 
 export function getMarketDomainPack(id: string): MarketDomainPack | null {
