@@ -72,6 +72,15 @@ test('source-scout prompt forbids automatic admission and unbounded article sear
   assert.match(prompt, /do not form a market view/i)
 })
 
+test('source-scout output schema stays within Codex structured-output compatibility', async () => {
+  const schema = JSON.parse(await readFile(new URL('../schemas/world-source-scout.schema.json', import.meta.url), 'utf8')) as {
+    properties: { candidates: { items: { properties: { canonicalUrl: Record<string, unknown> } } } }
+  }
+  const canonicalUrl = schema.properties.candidates.items.properties.canonicalUrl
+  assert.equal(canonicalUrl.format, undefined)
+  assert.equal(canonicalUrl.pattern, '^https://')
+})
+
 test('source-control migration makes contracts mandatory for newly governed observations', async () => {
   const [migration, activationMigration, memory, jobs, controlRoute, systemPage, controlPanel, controlService] = await Promise.all([
     readFile(new URL('../supabase/migrations/202608040001_world_source_control_plane.sql', import.meta.url), 'utf8'),
