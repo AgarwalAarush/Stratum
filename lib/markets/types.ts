@@ -1169,6 +1169,13 @@ export interface MarketDomainPack {
   mechanisms: Array<{ id: string; label: string; required: boolean }>
   sourceRequirements: Array<{ evidenceClass: WorldSourceEvidenceClass; purpose: string; minimumSources: number }>
   entityKinds: WorldEntityKind[]
+  hypothesisTemplate: {
+    title: string
+    horizon: string
+    coreMechanism: string
+    counterThesis: string
+    causalGraph: Array<{ from: string; to: string; mechanism: string; core: boolean }>
+  }
 }
 
 export interface WorldSourceScoutCandidate {

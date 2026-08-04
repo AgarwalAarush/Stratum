@@ -24,6 +24,18 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
       { evidenceClass: 'industry_research', purpose: 'independent constraint cross-check', minimumSources: 1 },
     ],
     entityKinds: ['company', 'technology', 'facility', 'jurisdiction', 'regulator', 'industry', 'dataset'],
+    hypothesisTemplate: {
+      title: 'AI-driven firm-power scarcity may create regional scarcity rents', horizon: '1–5 years',
+      coreMechanism: 'Data-center load growth collides with slow firm-capacity, interconnection, and equipment response.',
+      counterThesis: 'Efficiency gains, flexible load, generation overbuild, grid reform, or lower AI capital spending could eliminate scarcity before it produces durable rents.',
+      causalGraph: [
+        { from: 'Data-center and AI load growth', to: 'Regional firm-power demand', mechanism: 'data_center_load', core: true },
+        { from: 'Slow firm generation additions', to: 'Regional firm-power scarcity', mechanism: 'firm_capacity_constraint', core: true },
+        { from: 'Interconnection delays', to: 'Delayed load-serving capacity', mechanism: 'interconnection_constraint', core: true },
+        { from: 'Equipment lead times', to: 'Slow capacity response', mechanism: 'equipment_lead_time', core: false },
+        { from: 'Regional firm-power scarcity', to: 'Scarcity rents for proven supply and enabling equipment', mechanism: 'economic_capture', core: true },
+      ],
+    },
   },
   {
     id: 'semicap-data-center-equipment', version: 1, label: 'Semicap and data-center equipment', status: 'candidate', parentDomainId: 'ai-power',
@@ -40,6 +52,18 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
       { evidenceClass: 'industry_research', purpose: 'independent cycle cross-check', minimumSources: 1 },
     ],
     entityKinds: ['company', 'technology', 'facility', 'commodity', 'jurisdiction', 'industry'],
+    hypothesisTemplate: {
+      title: 'AI build-out may leave specialized compute supply-chain bottlenecks durable longer than expected', horizon: '1–4 years',
+      coreMechanism: 'Compute demand, fabrication capacity, component lead times, and substitution determine whether suppliers retain scarcity rents.',
+      counterThesis: 'Demand normalizes, capacity expands faster than expected, architectures substitute away from constrained components, or customers internalize supply.',
+      causalGraph: [
+        { from: 'Compute and networking demand', to: 'Specialized component demand', mechanism: 'compute_demand', core: true },
+        { from: 'Fabrication and packaging capacity', to: 'Deliverable component supply', mechanism: 'fabrication_capacity', core: true },
+        { from: 'Component and equipment lead times', to: 'Delayed supply response', mechanism: 'component_lead_time', core: true },
+        { from: 'Delayed supply response', to: 'Supplier scarcity rents', mechanism: 'supply_chain_capture', core: true },
+        { from: 'Supplier scarcity rents', to: 'Value-chain exposure candidates', mechanism: 'economic_capture', core: true },
+      ],
+    },
   },
   {
     id: 'critical-materials', version: 1, label: 'Critical materials and supply chains', status: 'candidate', parentDomainId: null,
@@ -56,6 +80,18 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
       { evidenceClass: 'company_disclosure', purpose: 'project, cost, and capacity evidence', minimumSources: 2 },
     ],
     entityKinds: ['company', 'technology', 'facility', 'commodity', 'jurisdiction', 'regulator', 'industry', 'dataset'],
+    hypothesisTemplate: {
+      title: 'Critical-material supply constraints may persist through processing concentration and slow project response', horizon: '2–7 years',
+      coreMechanism: 'Resource supply, processing concentration, trade constraints, and substitution determine whether material scarcity becomes durable economics.',
+      counterThesis: 'Inventories, substitution, recycling, new supply, or policy coordination resolve the constraint before rents persist.',
+      causalGraph: [
+        { from: 'Mine and processing supply', to: 'Available material supply', mechanism: 'resource_supply', core: true },
+        { from: 'Processing concentration', to: 'Fragile supply response', mechanism: 'processing_concentration', core: true },
+        { from: 'Trade and export constraints', to: 'Regional availability shock', mechanism: 'trade_constraint', core: true },
+        { from: 'Substitution and demand response', to: 'Constraint durability', mechanism: 'substitution', core: true },
+        { from: 'Constraint durability', to: 'Scarcity-rent capture candidates', mechanism: 'economic_capture', core: true },
+      ],
+    },
   },
   {
     id: 'macro-policy-geopolitics', version: 1, label: 'Macro, policy, and geopolitics', status: 'candidate', parentDomainId: null,
@@ -72,6 +108,18 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
       { evidenceClass: 'market_expectations', purpose: 'expectations evidence, never a factual substitute', minimumSources: 1 },
     ],
     entityKinds: ['company', 'commodity', 'jurisdiction', 'regulator', 'industry', 'dataset'],
+    hypothesisTemplate: {
+      title: 'Macro and policy changes may transmit unevenly through financial conditions and physical supply chains', horizon: '6–36 months',
+      coreMechanism: 'Policy change, financial conditions, supply disruption, and expectations jointly determine the economic transmission rather than a headline alone.',
+      counterThesis: 'Policy implementation differs from announcement, financial conditions offset the action, supply chains adapt, or expectations already discount the outcome.',
+      causalGraph: [
+        { from: 'Policy or trade-rule change', to: 'Financial and operating conditions', mechanism: 'policy_change', core: true },
+        { from: 'Financial-conditions transmission', to: 'Funding and demand response', mechanism: 'financial_conditions', core: true },
+        { from: 'Physical supply-chain disruption', to: 'Availability and cost pressure', mechanism: 'supply_chain_disruption', core: false },
+        { from: 'Expectations and positioning shift', to: 'Market-implied transmission', mechanism: 'expectations_shift', core: true },
+        { from: 'Market-implied transmission', to: 'Exposure candidates', mechanism: 'economic_capture', core: true },
+      ],
+    },
   },
 ] as const
 

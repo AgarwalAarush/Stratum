@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import type { MarketHypothesis } from '../lib/markets/types.ts'
 import { storeWorldCorpusDocument } from '../lib/server/world-corpus.ts'
-import { marketHypothesisPromotionEligible } from '../lib/server/world-memory.ts'
+import { marketHypothesisPromotionEligible, minimumMechanismsForDomainHypothesis } from '../lib/server/world-memory.ts'
 
 function hypothesis(): MarketHypothesis {
   return {
@@ -53,4 +53,11 @@ test('balanced automatic promotion accepts one non-core gap but blocks missing o
     ...official.filter((item) => item.causalNode !== 'interconnection_constraint'),
     { causalNode: 'equipment_lead_time', sourceTier: 'independent', observedAt: '2026-08-02T00:00:00.000Z' },
   ], now), false)
+})
+
+test('all market domain packs use the same bounded correlation threshold', () => {
+  assert.equal(minimumMechanismsForDomainHypothesis('ai-power'), 3)
+  assert.equal(minimumMechanismsForDomainHypothesis('semicap-data-center-equipment'), 3)
+  assert.equal(minimumMechanismsForDomainHypothesis('critical-materials'), 3)
+  assert.throws(() => minimumMechanismsForDomainHypothesis('unknown-domain'), /Unknown market domain/)
 })

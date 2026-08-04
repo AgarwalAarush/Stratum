@@ -14,8 +14,7 @@ import type {
 import { getSupabaseClient } from './supabase.ts'
 import { mirrorObservationToWarehouse, storeWorldCorpusDocument } from './world-corpus.ts'
 import { resolveApprovedWorldSource } from './world-source-control.ts'
-
-const CORE_POWER_MECHANISMS = ['data_center_load', 'firm_capacity_constraint', 'interconnection_constraint', 'equipment_lead_time'] as const
+import { getMarketDomainPack, MARKET_DOMAIN_PACKS } from '../markets/domain-packs.ts'
 
 export interface WorldObservationInput {
   title: string
@@ -313,45 +312,54 @@ async function fetchMarketHypothesesInternal(ownerId?: string): Promise<MarketHy
   return (data ?? []).map((row) => normalizeHypothesis(row as RecordValue))
 }
 
-export async function correlateAiPowerHypothesis(ownerId: string): Promise<MarketHypothesis | null> {
-  const observations = await loadRecentObservations('ai-power', 240)
+export async function correlateDomainHypothesis(ownerId: string, domainId: string): Promise<MarketHypothesis | null> {
+  const pack = getMarketDomainPack(domainId)
+  if (!pack || pack.status !== 'active') return null
+  const observations = await loadRecentObservations(pack.id, 240)
   const normalized = observations.map(({ row, document, entityIds }) => normalizeObservation(row, document, entityIds))
-  const matched = CORE_POWER_MECHANISMS.flatMap((mechanism) => normalized.filter((item) => item.mechanism === mechanism).slice(0, 2))
+  const requiredMechanisms = pack.mechanisms.filter((mechanism) => mechanism.required).map((mechanism) => mechanism.id)
+  const matched = pack.mechanisms.flatMap((mechanism) => normalized.filter((item) => item.mechanism === mechanism.id).slice(0, 2))
   const mechanisms = new Set(matched.map((item) => item.mechanism))
-  if (mechanisms.size < 3) return null
+  const minimumMechanisms = minimumMechanismsForDomainHypothesis(domainId)
+  if (mechanisms.size < minimumMechanisms) return null
   const primaryCount = new Set(matched.filter((item) => item.source.sourceTier === 'primary' || item.source.sourceTier === 'regulatory').map((item) => item.documentId)).size
   const independentCount = new Set(matched.filter((item) => item.source.sourceTier === 'independent').map((item) => item.documentId)).size
-  const unresolvedNodes = CORE_POWER_MECHANISMS.filter((item) => !mechanisms.has(item))
+  const unresolvedNodes = requiredMechanisms.filter((item) => !mechanisms.has(item))
   const confidence = Math.min(90, 45 + mechanisms.size * 12 + Math.min(10, primaryCount * 4) + Math.min(6, independentCount * 3))
-  const existing = (await fetchMarketHypothesesInternal(ownerId)).find((item) => item.scope === 'ai-power' && !['rejected', 'archived'].includes(item.status))
-  const causalGraph = [
-    { from: 'Data-center and AI load growth', to: 'Regional firm-power demand', mechanism: 'data_center_load', core: true },
-    { from: 'Slow firm generation additions', to: 'Regional firm-power scarcity', mechanism: 'firm_capacity_constraint', core: true },
-    { from: 'Interconnection delays', to: 'Delayed load-serving capacity', mechanism: 'interconnection_constraint', core: true },
-    { from: 'Equipment lead times', to: 'Slow capacity response', mechanism: 'equipment_lead_time', core: false },
-    { from: 'Regional firm-power scarcity', to: 'Scarcity rents for proven supply and enabling equipment', mechanism: 'economic_capture', core: true },
-  ]
+  const existing = (await fetchMarketHypothesesInternal(ownerId)).find((item) => item.scope === pack.id && !['rejected', 'archived'].includes(item.status))
   const supabase = getSupabaseClient()!
   const payload = {
     owner_id: ownerId,
-    title: 'AI-driven firm-power scarcity may create regional scarcity rents',
+    title: pack.hypothesisTemplate.title,
     status: existing?.status === 'active' ? 'active' : confidence >= 65 ? 'proposed' : 'forming',
-    scope: 'ai-power', horizon: '1–5 years',
-    core_mechanism: 'Data-center load growth collides with slow firm-capacity, interconnection, and equipment response.',
-    causal_graph: causalGraph, confidence, unresolved_nodes: unresolvedNodes,
-    counter_thesis: 'Efficiency gains, flexible load, generation overbuild, grid reform, or lower AI capital spending could eliminate scarcity before it produces durable rents.',
+    scope: pack.id, horizon: pack.hypothesisTemplate.horizon,
+    core_mechanism: pack.hypothesisTemplate.coreMechanism,
+    causal_graph: pack.hypothesisTemplate.causalGraph, confidence, unresolved_nodes: unresolvedNodes,
+    counter_thesis: pack.hypothesisTemplate.counterThesis,
     updated_at: new Date().toISOString(),
   }
   const { data, error } = existing
     ? await supabase.from('market_hypotheses').update(payload).eq('id', existing.id).select('*').single()
     : await supabase.from('market_hypotheses').insert(payload).select('*').single()
-  if (error || !data) throw new Error(`Unable to persist AI-power hypothesis: ${error?.message ?? 'unknown error'}`)
+  if (error || !data) throw new Error(`Unable to persist ${pack.id} hypothesis: ${error?.message ?? 'unknown error'}`)
   const { error: evidenceError } = await supabase.from('market_hypothesis_evidence').upsert(matched.map((item) => ({
     hypothesis_id: data.id, observation_id: item.id, role: 'supporting', causal_node: item.mechanism, weight: Math.round((item.confidence + item.materiality) / 2), explanation: item.assertion,
   })), { onConflict: 'hypothesis_id,observation_id,causal_node' })
   if (evidenceError) throw new Error(`Unable to persist hypothesis evidence: ${evidenceError.message}`)
   const evidence: MarketHypothesisEvidence[] = matched.map((item) => ({ observationId: item.id, role: 'supporting', causalNode: item.mechanism, weight: Math.round((item.confidence + item.materiality) / 2), explanation: item.assertion }))
   return normalizeHypothesis(data as RecordValue, evidence)
+}
+
+/** Shared deterministic entry gate for every declared market domain. */
+export function minimumMechanismsForDomainHypothesis(domainId: string): number {
+  const pack = getMarketDomainPack(domainId)
+  if (!pack) throw new Error(`Unknown market domain: ${domainId}`)
+  return Math.max(2, Math.min(3, pack.mechanisms.filter((mechanism) => mechanism.required).length))
+}
+
+/** Backward-compatible entry point for the first active domain pack. */
+export async function correlateAiPowerHypothesis(ownerId: string): Promise<MarketHypothesis | null> {
+  return correlateDomainHypothesis(ownerId, 'ai-power')
 }
 
 export interface HypothesisPromotionEvidence {
@@ -383,8 +391,11 @@ export function marketHypothesisPromotionEligible(
     && hypothesis.unresolvedNodes.length <= 1
 }
 
-export async function promoteEligibleMarketHypothesis(ownerId: string): Promise<MarketThesisVersion | null> {
-  const hypothesis = await correlateAiPowerHypothesis(ownerId)
+export async function promoteEligibleMarketHypothesis(ownerId: string, hypothesisId?: string): Promise<MarketThesisVersion | null> {
+  const existing = hypothesisId ? (await fetchMarketHypothesesInternal(ownerId)).find((item) => item.id === hypothesisId) ?? null : null
+  const hypothesis = existing
+    ? await correlateDomainHypothesis(ownerId, existing.scope)
+    : (await Promise.all(MARKET_DOMAIN_PACKS.filter((pack) => pack.status === 'active').map((pack) => correlateDomainHypothesis(ownerId, pack.id)))).find((item): item is MarketHypothesis => item !== null) ?? null
   if (!hypothesis) return null
   const supabase = getSupabaseClient()!
   const { data: evidenceRows, error: evidenceError } = await supabase
@@ -572,7 +583,7 @@ export async function seedAiPowerDemoObservations(ownerId: string): Promise<{ ob
   ]
   for (const source of sources) await ingestWorldObservation(source)
   const hypothesis = await correlateAiPowerHypothesis(ownerId)
-  const thesis = await promoteEligibleMarketHypothesis(ownerId)
+  const thesis = await promoteEligibleMarketHypothesis(ownerId, hypothesis?.id)
   return { observations: sources.length, hypothesis, thesis }
 }
 
@@ -583,12 +594,15 @@ export async function runMarketWorldCycle(): Promise<{ baselineId: string; hypot
   if (error) throw new Error(`Unable to load market thesis owners: ${error.message}`)
   let hypotheses = 0
   let promoted = 0
+  const activePacks = MARKET_DOMAIN_PACKS.filter((pack) => pack.status === 'active')
   for (const owner of owners ?? []) {
-    const hypothesis = await correlateAiPowerHypothesis(owner.id)
-    if (hypothesis) hypotheses += 1
-    if (isMarketAutoThesisEnabled()) {
-      const thesis = await promoteEligibleMarketHypothesis(owner.id)
-      if (thesis) promoted += 1
+    for (const pack of activePacks) {
+      const hypothesis = await correlateDomainHypothesis(owner.id, pack.id)
+      if (hypothesis) hypotheses += 1
+      if (hypothesis && isMarketAutoThesisEnabled()) {
+        const thesis = await promoteEligibleMarketHypothesis(owner.id, hypothesis.id)
+        if (thesis) promoted += 1
+      }
     }
   }
   return { baselineId: baseline.id, hypotheses, promoted }

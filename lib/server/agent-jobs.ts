@@ -594,7 +594,7 @@ async function executeJob(
     await reportProgress(5, 'loading bounded source ledger')
     const research = await deepenMarketHypothesis({ ownerId, hypothesisId, reason: typeof job.payload.reason === 'string' ? job.payload.reason : 'scheduled deepening' })
     await reportProgress(100, research.status === 'complete' ? 'validated research published' : 'research requires revision')
-    const marketThesis = research.status === 'complete' ? await import('./world-memory.ts').then(({ promoteEligibleMarketHypothesis }) => promoteEligibleMarketHypothesis(ownerId)) : null
+    const marketThesis = research.status === 'complete' ? await import('./world-memory.ts').then(({ promoteEligibleMarketHypothesis }) => promoteEligibleMarketHypothesis(ownerId, hypothesisId)) : null
     return { hypothesisId, researchVersionId: research.id, version: research.version, status: research.status, marketThesisId: marketThesis?.id ?? null }
   }
 
