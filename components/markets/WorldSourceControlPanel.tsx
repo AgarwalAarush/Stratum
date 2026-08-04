@@ -134,6 +134,27 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     }
   }
 
+  const requestBroadResearch = async () => {
+    if (!selectedDomain || !reason.trim() || pending) return
+    setPending(true)
+    setNotice(null)
+    try {
+      const response = await fetch('/api/markets/world-sources', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'scout-broad-research', domainId: selectedDomain.id, reason: reason.trim() }),
+      })
+      const payload = await response.json() as { error?: string; deduplicated?: boolean }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue broad research')
+      setNotice(payload.deduplicated
+        ? `A broad-research scout for this exact domain/question is already queued or completed today.`
+        : `Broad research queued for ${selectedDomain.label}. It will return provisional cited leads, including counter-evidence where found; it cannot create market evidence or a thesis.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to queue broad research')
+    } finally {
+      setPending(false)
+    }
+  }
+
   const requestHealthAudit = async () => {
     if (pending) return
     setPending(true)
@@ -354,11 +375,12 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
             </dl>
           </div>
           <div className="market-source-scout-form">
-            <label htmlFor="source-scout-reason">Coverage-review reason</label>
+            <label htmlFor="source-scout-reason">Research question or coverage reason</label>
             <textarea id="source-scout-reason" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={600} />
-            <button type="button" onClick={requestScout} disabled={pending || !reason.trim()}>{pending ? 'Queuing scout…' : 'Queue bounded source scout'}</button>
+            <button type="button" onClick={requestBroadResearch} disabled={pending || !reason.trim()}>{pending ? 'Queuing scout…' : 'Queue broad research scout'}</button>
+            <button type="button" className="market-source-secondary-button" onClick={requestScout} disabled={pending || !reason.trim()}>Queue recurring-source scout</button>
             <button type="button" className="market-source-secondary-button" onClick={requestHealthAudit} disabled={pending}>{pending ? 'Queuing audit…' : 'Run source health audit'}</button>
-            <p>Uses the low-cost scout tier and returns at most 12 direct canonical source candidates. It cannot approve a source, ingest evidence, activate a domain, create a thesis, or move capital.</p>
+            <p>Broad research uses the standard research tier to return a compact, cited, and deliberately mixed lead dossier. The separate low-cost source scout only proposes recurring collection candidates. They cannot approve a source, ingest evidence, activate a domain, create a thesis, or move capital.</p>
             <p>A health audit checks reachability, redirect destination, and MIME type against the active contract. A failed check is review telemetry, not an automatic source block.</p>
             {selectedDomain.status === 'candidate' ? activatingDomainId === selectedDomain.id ? <form className="market-source-contract-review market-domain-activation-review" onSubmit={(event) => { event.preventDefault(); void activateDomain(selectedDomain) }}>
               <p>Activation is a human decision after every required source class has approved, contract-bounded coverage. It enables scheduled collection for approved sources only; it does not admit candidates, create observations, publish a thesis, or move capital.</p>

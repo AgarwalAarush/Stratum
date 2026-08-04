@@ -44,6 +44,13 @@ export async function POST(request: NextRequest) {
       const queued = await enqueueAgentJob('scout-world-sources', { domainId: body.domainId, reason: body.reason.trim(), trigger: 'manual' })
       return NextResponse.json({ queued: true, ...queued })
     }
+    if (body.action === 'scout-broad-research') {
+      if (typeof body.domainId !== 'string' || typeof body.reason !== 'string' || !body.reason.trim()) {
+        return NextResponse.json({ error: 'A domain and research question are required.' }, { status: 400 })
+      }
+      const queued = await enqueueAgentJob('scout-market-research', { domainId: body.domainId, reason: body.reason.trim(), trigger: 'manual' })
+      return NextResponse.json({ queued: true, ...queued })
+    }
     if (body.action === 'approve') {
       if (typeof body.slug !== 'string' || typeof body.reason !== 'string') return NextResponse.json({ error: 'A source slug and approval reason are required.' }, { status: 400 })
       const source = await approveWorldSource(body.slug, validateWorldSourceContract(body.contract), body.reason)
