@@ -403,6 +403,18 @@ export async function correlateCrossDomainHypotheses(ownerId: string): Promise<n
   const hypotheses = await fetchMarketHypothesesInternal(ownerId)
   const byDomain = new Map(hypotheses.filter((item) => !['rejected', 'archived'].includes(item.status)).map((item) => [item.scope, item]))
   const supabase = getSupabaseClient()!
+  const hypothesisIds = hypotheses.map((item) => item.id)
+  const { data: researchRows, error: researchError } = hypothesisIds.length > 0
+    ? await supabase.from('market_hypothesis_research_versions').select('hypothesis_id,version,status,critique').in('hypothesis_id', hypothesisIds).order('version', { ascending: false })
+    : { data: [], error: null }
+  if (researchError) throw new Error(`Unable to load cross-domain research readiness: ${researchError.message}`)
+  const validatedResearchByHypothesis = new Map<string, boolean>()
+  for (const row of researchRows ?? []) {
+    const hypothesisId = String(row.hypothesis_id)
+    if (validatedResearchByHypothesis.has(hypothesisId)) continue
+    const critique = record(row.critique)
+    validatedResearchByHypothesis.set(hypothesisId, row.status === 'complete' && critique.verdict === 'pass')
+  }
   let linked = 0
   for (const from of byDomain.values()) {
     const pack = getMarketDomainPack(from.scope)
@@ -418,10 +430,17 @@ export async function correlateCrossDomainHypotheses(ownerId: string): Promise<n
       const sourceObservationIds = [...new Set([...(fromEvidence.data ?? []).map((item) => String(item.observation_id)), ...(toEvidence.data ?? []).map((item) => String(item.observation_id))])]
       if (sourceObservationIds.length < 2) continue
       const confidence = Math.min(85, Math.round((from.confidence + to.confidence) / 2))
+      // A shared transmission mechanism can be worth retaining before it is
+      // decision-ready, but it is not active until both bounded analyst/critic
+      // loops pass. This prevents a preliminary correlation from looking like
+      // validated cross-domain causality.
+      const status = validatedResearchByHypothesis.get(from.id) === true && validatedResearchByHypothesis.get(to.id) === true
+        ? 'active'
+        : 'forming'
       const { error } = await supabase.from('market_hypothesis_cross_domain_links').upsert({
         owner_id: ownerId, from_hypothesis_id: from.id, to_hypothesis_id: to.id, link_id: template.id,
         relationship: template.relationship, explanation: template.explanation, source_observation_ids: sourceObservationIds,
-        confidence, status: 'active', updated_at: new Date().toISOString(),
+        confidence, status, updated_at: new Date().toISOString(),
       }, { onConflict: 'owner_id,from_hypothesis_id,to_hypothesis_id,link_id' })
       if (error) throw new Error(`Unable to persist cross-domain hypothesis link: ${error.message}`)
       linked += 1
