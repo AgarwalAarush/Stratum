@@ -3,6 +3,7 @@ import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
 import {
+  shouldQueueMarketHypothesisResearch,
   validateMarketThesisCritique,
   validateMarketThesisResearch,
 } from '../lib/server/market-thesis-research.ts'
@@ -57,6 +58,14 @@ test('critic output is constrained to the same source ledger', () => {
   assert.throws(() => validateMarketThesisCritique({
     verdict: 'needs_revision', summary: 'The causal bridge needs support.', unsupportedClaims: [], contradictoryEvidence: [], missingAlternatives: [], requiredResearch: [], confidenceAdjustment: -10, sourceIds: ['not-in-ledger'],
   }, new Set(sourceIds)), /unknown source IDs/)
+})
+
+test('scheduled research does not repeat an unchanged revision frontier', () => {
+  assert.equal(shouldQueueMarketHypothesisResearch(null, 0), true)
+  assert.equal(shouldQueueMarketHypothesisResearch('complete', 0), false)
+  assert.equal(shouldQueueMarketHypothesisResearch('needs_revision', 0), false)
+  assert.equal(shouldQueueMarketHypothesisResearch('failed', 0), false)
+  assert.equal(shouldQueueMarketHypothesisResearch('needs_revision', 1), true)
 })
 
 test('agent jobs use a dedicated bounded research job and deterministic revision trigger', async () => {

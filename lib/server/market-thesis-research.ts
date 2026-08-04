@@ -245,6 +245,20 @@ export interface DeepenMarketHypothesisOptions {
   criticRunner?: (prompt: string) => Promise<CodexExecResult<MarketHypothesisCritique>>
 }
 
+/**
+ * A critique that requests revision is a durable research frontier, not a
+ * license to spend another strong-model pass on the same evidence. Scheduled
+ * work reopens only for an initial artifact or new linked evidence. An
+ * operator may still explicitly request a revision when they have resolved a
+ * frontier outside the automated source path.
+ */
+export function shouldQueueMarketHypothesisResearch(
+  latestStatus: string | null,
+  newLinkedObservationCount: number,
+): boolean {
+  return latestStatus === null || newLinkedObservationCount > 0
+}
+
 export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOptions): Promise<MarketHypothesisResearchVersion> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
@@ -285,8 +299,8 @@ export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOpti
 
 /**
  * Select research that actually needs another bounded pass. This is deliberately
- * deterministic: new linked observations, an unfinished critique, or no prior
- * artifact may trigger work; a calendar tick alone may not.
+ * deterministic: an initial artifact or new linked observations may trigger
+ * work; a calendar tick or an unchanged unfinished critique may not.
  */
 export async function findDueMarketHypothesisResearch(ownerId?: string, limit = 12): Promise<Array<{
   ownerId: string
@@ -313,10 +327,6 @@ export async function findDueMarketHypothesisResearch(ownerId?: string, limit = 
       due.push({ ownerId: String(hypothesis.owner_id), hypothesisId: String(hypothesis.id), reason: 'initial source-backed analysis' })
       continue
     }
-    if (latest.status === 'needs_revision' || latest.status === 'failed') {
-      due.push({ ownerId: String(hypothesis.owner_id), hypothesisId: String(hypothesis.id), reason: `prior research ${String(latest.status)}` })
-      continue
-    }
     const since = typeof latest.generated_at === 'string' ? latest.generated_at : latest.data_as_of
     const { count, error: evidenceError } = await supabase
       .from('market_hypothesis_evidence')
@@ -324,7 +334,7 @@ export async function findDueMarketHypothesisResearch(ownerId?: string, limit = 
       .eq('hypothesis_id', hypothesis.id)
       .gt('world_observations.ingested_at', since)
     if (evidenceError) throw new Error(`Unable to inspect new market evidence: ${evidenceError.message}`)
-    if ((count ?? 0) > 0) {
+    if (shouldQueueMarketHypothesisResearch(String(latest.status), count ?? 0)) {
       due.push({ ownerId: String(hypothesis.owner_id), hypothesisId: String(hypothesis.id), reason: `${count} linked observation${count === 1 ? '' : 's'} arrived after the prior research version` })
     }
   }
