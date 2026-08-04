@@ -18,6 +18,7 @@ const lastScheduledKeys = new Map<AgentJobType, string>()
 let stopping = false
 let nextScheduleAt = 0
 let nextHeartbeatAt = 0
+let nextRecoveryAt = 0
 
 process.on('SIGINT', () => { stopping = true })
 process.on('SIGTERM', () => { stopping = true })
@@ -78,6 +79,11 @@ async function main() {
   do {
     try {
       await heartbeat()
+      if (Date.now() >= nextRecoveryAt) {
+        const recovered = await recoverStaleAgentJobs()
+        if (recovered > 0) console.info(JSON.stringify({ level: 'info', workerId, event: 'stale_jobs_recovered', count: recovered }))
+        nextRecoveryAt = Date.now() + 60_000
+      }
       if (schedulerEnabled && Date.now() >= nextScheduleAt) {
         const scheduled = await enqueueDueAgentJobs(new Date(), lastScheduledKeys, {
           includeFmp: fmpEnabled,

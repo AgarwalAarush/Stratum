@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises'
 
 import {
   agentJobProvider,
+  agentJobPriority,
+  agentJobStaleAfterMs,
   buildAgentJobDedupeKey,
   isMissingDedupeConstraint,
   marketModelRoutingForAgentJob,
@@ -159,6 +161,13 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('triage-world-observation-proposals'), 'codex')
 })
 
+test('source-verification work preempts routine refreshes and short refreshes recover quickly', () => {
+  assert.ok(agentJobPriority('preflight-world-source-candidate') < agentJobPriority('refresh-market-screener'))
+  assert.ok(agentJobPriority('verify-world-source-health') < agentJobPriority('refresh-cross-asset'))
+  assert.equal(agentJobStaleAfterMs('refresh-market-screener'), 10 * 60 * 1_000)
+  assert.equal(agentJobStaleAfterMs('deepen-market-hypothesis'), 45 * 60 * 1_000)
+})
+
 test('bounded market-research jobs persist their actual routed model policy', async () => {
   const environment = {
     STRATUM_SOURCE_SCOUT_MODEL: 'cheap-model',
@@ -256,9 +265,11 @@ test('worker startup recovers stale claimed jobs after a hard stop', async () =>
   ])
   assert.match(agentJobsSource, /export async function recoverStaleAgentJobs/)
   assert.match(agentJobsSource, /45 \* 60 \* 1_000/)
+  assert.match(agentJobsSource, /agentJobStaleAfterMs\(jobType, defaultStaleAfterMs\)/)
   assert.match(agentJobsSource, /status: 'queued'/)
   assert.match(agentJobsSource, /Recovered after the worker stopped/)
   assert.match(workerSource, /await recoverStaleAgentJobs\(\)/)
+  assert.match(workerSource, /nextRecoveryAt/)
   assert.match(workerSource, /stale_jobs_recovered/)
 })
 

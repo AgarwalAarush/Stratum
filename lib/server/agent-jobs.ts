@@ -328,26 +328,49 @@ export function shouldRefreshClosedMarket(
   return !Number.isFinite(publishedAt) || now.getTime() - publishedAt >= 6 * 60 * 60 * 1_000
 }
 
+/** Lower values claim first. Human-initiated source verification must not wait
+ * behind a backlog of routine market-refresh work, while it remains only
+ * operational telemetry—not admission authority. */
+export function agentJobPriority(jobType: AgentJobType): number {
+  if (jobType === 'preflight-world-source-candidate') return 20
+  if (jobType === 'verify-world-source-health') return 30
+  if (jobType === 'scout-world-sources' || jobType === 'review-world-source-coverage' || jobType === 'route-market-research-frontiers') return 40
+  if (jobType === 'collect-world-source-documents' || jobType === 'triage-world-observation-proposals') return 50
+  if (jobType === 'refresh-market-screener' || jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence') return 140
+  return 100
+}
+
+/** Short, bounded refreshes should not hold the sole worker for as long as an
+ * intentionally long research generation. */
+export function agentJobStaleAfterMs(jobType: AgentJobType, defaultStaleAfterMs = 45 * 60 * 1_000): number {
+  if (jobType === 'refresh-market-screener' || jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence') return 10 * 60 * 1_000
+  return defaultStaleAfterMs
+}
+
 interface StaleAgentJob {
   id: string
+  job_type: string
   attempts: number
   max_attempts: number
+  claimed_at: string | null
 }
 
 export async function recoverStaleAgentJobs(
   now = new Date(),
-  staleAfterMs = 45 * 60 * 1_000,
+  defaultStaleAfterMs = 45 * 60 * 1_000,
 ): Promise<number> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const staleBefore = new Date(now.getTime() - staleAfterMs).toISOString()
   const { data, error } = await supabase
     .from('agent_jobs')
-    .select('id,attempts,max_attempts')
+    .select('id,job_type,attempts,max_attempts,claimed_at')
     .eq('status', 'running')
-    .lt('claimed_at', staleBefore)
   if (error) throw new Error(`Unable to inspect stale agent jobs: ${error.message}`)
-  const jobs = (data ?? []) as StaleAgentJob[]
+  const jobs = ((data ?? []) as StaleAgentJob[]).filter((job) => {
+    const jobType = parseAgentJobType(job.job_type)
+    const claimedAt = job.claimed_at ? Date.parse(job.claimed_at) : Number.NaN
+    return jobType !== null && Number.isFinite(claimedAt) && claimedAt < now.getTime() - agentJobStaleAfterMs(jobType, defaultStaleAfterMs)
+  })
   if (jobs.length === 0) return 0
 
   const retryableIds = jobs.filter((job) => job.attempts < job.max_attempts).map((job) => job.id)
@@ -396,7 +419,7 @@ export async function enqueueAgentJob(
 
   const { data, error } = await supabase
     .from('agent_jobs')
-    .upsert({ job_type: jobType, payload, dedupe_key: dedupeKey }, { onConflict: 'dedupe_key', ignoreDuplicates: true })
+    .upsert({ job_type: jobType, payload, dedupe_key: dedupeKey, priority: agentJobPriority(jobType) }, { onConflict: 'dedupe_key', ignoreDuplicates: true })
     .select('id')
     .maybeSingle()
   if (error && !isMissingDedupeConstraint(error.message)) {
@@ -415,7 +438,7 @@ export async function enqueueAgentJob(
   if (!error) throw new Error(`Unable to find deduplicated agent job: ${dedupeKey}`)
   const { data: inserted, error: insertError } = await supabase
     .from('agent_jobs')
-    .insert({ job_type: jobType, payload, dedupe_key: dedupeKey })
+    .insert({ job_type: jobType, payload, dedupe_key: dedupeKey, priority: agentJobPriority(jobType) })
     .select('id')
     .single()
   if (insertError || !inserted) {
