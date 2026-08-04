@@ -3433,6 +3433,9 @@
 .market-source-frontier-priority { color: var(--market-text-muted); display: block; font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 10px; line-height: 1.45; margin-top: 5px; }
 .market-source-candidate-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .market-source-block-button { color: var(--market-negative) !important; }
+.market-domain-activation-summary { border-top: 1px solid var(--market-border); display: grid; gap: 8px; margin-top: 13px; padding-top: 13px; }
+.market-domain-activation-summary small { color: var(--market-text-muted); font-size: 11px; line-height: 1.45; }
+.market-domain-activation-review { margin-top: 13px; }
 .market-source-candidate-summary { color: var(--market-text-muted); font-size: 12px; line-height: 1.5; margin: -8px 0 18px; max-width: 680px; }
 
 .market-source-control-ledger article strong {

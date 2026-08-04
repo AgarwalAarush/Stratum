@@ -72,12 +72,16 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const [contract, setContract] = useState<ContractDraft | null>(null)
   const [blockingCandidate, setBlockingCandidate] = useState<string | null>(null)
   const [blockRationale, setBlockRationale] = useState('')
+  const [activatingDomainId, setActivatingDomainId] = useState<string | null>(null)
+  const [activationReason, setActivationReason] = useState('')
   const [reviewingProposal, setReviewingProposal] = useState<string | null>(null)
   const [proposalRationale, setProposalRationale] = useState('')
   const [revisingCanonicalSlug, setRevisingCanonicalSlug] = useState<string | null>(null)
   const [canonicalUrl, setCanonicalUrl] = useState('')
   const [canonicalRationale, setCanonicalRationale] = useState('')
   const selectedDomain = useMemo(() => workspace?.domains.find((domain) => domain.id === selectedDomainId) ?? null, [workspace, selectedDomainId])
+  const selectedDomainCoverage = useMemo(() => selectedDomain ? sourceCoverage(workspace!, selectedDomain) : [], [workspace, selectedDomain])
+  const selectedDomainComplete = selectedDomainCoverage.every((item) => item.current >= item.minimumSources)
 
   if (!workspace) {
     return (
@@ -140,6 +144,27 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
       router.refresh()
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to queue source health audit')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const activateDomain = async (domain: MarketDomainPack) => {
+    if (!activationReason.trim() || pending) return
+    setPending(true)
+    setNotice(null)
+    try {
+      const response = await fetch('/api/markets/world-sources', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'activate-domain', domainId: domain.id, reason: activationReason.trim() }),
+      })
+      const payload = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to activate market domain')
+      setNotice(`${domain.label} is active. Only its approved, contract-bounded sources may enter the scheduled collection path; candidates remain outside evidence.`)
+      setActivatingDomainId(null)
+      setActivationReason('')
+      router.refresh()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to activate market domain')
     } finally {
       setPending(false)
     }
@@ -273,7 +298,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           const complete = coverage.every((item) => item.current >= item.minimumSources)
           const selected = selectedDomainId === domain.id
           return (
-              <button key={domain.id} type="button" className="market-domain-control-card" data-selected={selected} onClick={() => { setSelectedDomainId(domain.id); setCandidateLimit(12); setProposalLimit(12); setReviewing(null); setContract(null); setBlockingCandidate(null); setBlockRationale(''); setReviewingProposal(null); setProposalRationale('') }} role="listitem">
+              <button key={domain.id} type="button" className="market-domain-control-card" data-selected={selected} onClick={() => { setSelectedDomainId(domain.id); setCandidateLimit(12); setProposalLimit(12); setReviewing(null); setContract(null); setBlockingCandidate(null); setBlockRationale(''); setActivatingDomainId(null); setActivationReason(''); setReviewingProposal(null); setProposalRationale('') }} role="listitem">
               <span data-status={domain.status}>{domain.status}</span>
               <strong>{domain.label}</strong>
               <small>{complete ? 'Coverage requirement met' : 'Coverage gap remains'}</small>
@@ -290,7 +315,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
             <h3>{selectedDomain.label}</h3>
             <p>{selectedDomain.description}</p>
             <dl className="market-source-requirements">
-              {sourceCoverage(workspace, selectedDomain).map((requirement) => (
+              {selectedDomainCoverage.map((requirement) => (
                 <div key={requirement.evidenceClass} data-complete={requirement.current >= requirement.minimumSources}>
                   <dt>{requirement.evidenceClass.replaceAll('_', ' ')}</dt>
                   <dd>{requirement.current}/{requirement.minimumSources}</dd>
@@ -306,6 +331,11 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
             <button type="button" className="market-source-secondary-button" onClick={requestHealthAudit} disabled={pending}>{pending ? 'Queuing audit…' : 'Run source health audit'}</button>
             <p>Uses the low-cost scout tier and returns at most 12 direct canonical source candidates. It cannot approve a source, ingest evidence, activate a domain, create a thesis, or move capital.</p>
             <p>A health audit checks reachability, redirect destination, and MIME type against the active contract. A failed check is review telemetry, not an automatic source block.</p>
+            {selectedDomain.status === 'candidate' ? activatingDomainId === selectedDomain.id ? <form className="market-source-contract-review market-domain-activation-review" onSubmit={(event) => { event.preventDefault(); void activateDomain(selectedDomain) }}>
+              <p>Activation is a human decision after every required source class has approved, contract-bounded coverage. It enables scheduled collection for approved sources only; it does not admit candidates, create observations, publish a thesis, or move capital.</p>
+              <label>Activation rationale<textarea value={activationReason} onChange={(event) => setActivationReason(event.target.value)} required maxLength={1000} /></label>
+              <footer><button type="submit" disabled={pending || !selectedDomainComplete || !activationReason.trim()}>{pending ? 'Activating domain…' : 'Activate verified domain'}</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setActivatingDomainId(null); setActivationReason('') }}>Cancel</button></footer>
+            </form> : <div className="market-domain-activation-summary"><button type="button" className="market-source-secondary-button" disabled={pending || !selectedDomainComplete} onClick={() => { setActivatingDomainId(selectedDomain.id); setActivationReason(''); setNotice(null) }}>Review domain activation</button><small>{selectedDomainComplete ? 'All required source classes have approved coverage. Activation remains a separately recorded human decision.' : 'Activation remains unavailable until every required source class has approved coverage.'}</small></div> : null}
             {notice ? <output aria-live="polite">{notice}</output> : null}
           </div>
         </div>
