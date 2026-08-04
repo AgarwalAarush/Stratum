@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 import {
+  buildWorldSourceCoverageScoutPlan,
   buildWorldSourceScoutPrompt,
   scoreWorldSourceCandidate,
   validateWorldSourceContractTarget,
@@ -53,6 +54,25 @@ test('source score is deterministic and does not treat discovery sources as auth
   const discovery = scoreWorldSourceCandidate({ ...candidate, sourceTier: 'discovery', sourceKind: 'html', evidenceClasses: ['discovery'], limitations: ['Opinion-led', 'No primary data'] })
   assert.ok(regulatory > discovery)
   assert.equal(regulatory, scoreWorldSourceCandidate(candidate))
+})
+
+test('weekly coverage discovery targets only declared gaps without candidate coverage', () => {
+  const domain = getMarketDomainPack('macro-policy-geopolitics')!
+  const plan = buildWorldSourceCoverageScoutPlan(domain, [
+    { id: 'policy-1', status: 'approved', evidenceClasses: ['regulatory_data'] },
+    { id: 'policy-candidate', status: 'candidate', evidenceClasses: ['regulatory_data'] },
+    { id: 'operations-candidate', status: 'candidate', evidenceClasses: ['operational_data'] },
+  ])
+  assert.equal(plan?.domainId, domain.id)
+  assert.match(plan?.reason ?? '', /market_expectations/)
+  assert.doesNotMatch(plan?.reason ?? '', /regulatory_data/)
+  assert.match(plan?.reason ?? '', /cannot ingest/i)
+  assert.equal(buildWorldSourceCoverageScoutPlan(domain, [
+    { id: 'policy-1', status: 'approved', evidenceClasses: ['regulatory_data'] },
+    { id: 'policy-2', status: 'candidate', evidenceClasses: ['regulatory_data'] },
+    { id: 'operations', status: 'candidate', evidenceClasses: ['operational_data'] },
+    { id: 'expectations', status: 'candidate', evidenceClasses: ['market_expectations'] },
+  ]), null)
 })
 
 test('source contracts constrain hosts, paths, MIME types, and allowed observation kinds', () => {

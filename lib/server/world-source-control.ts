@@ -547,9 +547,83 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
   }
 }
 
-function sourceRecord(value: unknown): { id: string; status: string; evidenceClasses: string[] } | null {
-  const row = record(value)
-  return typeof row.id === 'string' ? { id: row.id, status: String(row.status), evidenceClasses: strings(row.evidence_classes) } : null
+type CoverageSource = Pick<WorldSourceRegistryEntry, 'id' | 'status' | 'evidenceClasses'>
+
+function sourceRecord(value: unknown): CoverageSource | null {
+  const row = relatedRecord(value)
+  const status = String(row.status) as WorldSourceStatus
+  const evidenceClasses = strings(row.evidence_classes) as WorldSourceEvidenceClass[]
+  return typeof row.id === 'string' && SOURCE_STATUSES.has(status) && evidenceClasses.every((entry) => EVIDENCE_CLASSES.has(entry))
+    ? { id: row.id, status, evidenceClasses }
+    : null
+}
+
+export interface WorldSourceCoverageScoutPlan {
+  domainId: string
+  reason: string
+}
+
+/**
+ * Identify only declared evidence-class gaps that have neither admitted nor
+ * pending candidate coverage. This keeps scheduled discovery inexpensive and
+ * avoids repeatedly searching a domain while its human review queue is full.
+ */
+export function buildWorldSourceCoverageScoutPlan(
+  domain: MarketDomainPack,
+  sources: CoverageSource[],
+): WorldSourceCoverageScoutPlan | null {
+  const gaps = domain.sourceRequirements.flatMap((requirement) => {
+    const admitted = new Set(sources
+      .filter((source) => (source.status === 'approved' || source.status === 'probation') && source.evidenceClasses.includes(requirement.evidenceClass))
+      .map((source) => source.id))
+    const candidates = new Set(sources
+      .filter((source) => source.status === 'candidate' && source.evidenceClasses.includes(requirement.evidenceClass))
+      .map((source) => source.id))
+    const missing = requirement.minimumSources - new Set([...admitted, ...candidates]).size
+    return missing > 0 ? [{ ...requirement, admitted: admitted.size, candidates: candidates.size, missing }] : []
+  })
+  if (gaps.length === 0) return null
+  const gapSummary = gaps.map((gap) => (
+    `${gap.evidenceClass}: ${gap.missing} additional direct candidate source${gap.missing === 1 ? '' : 's'} needed `
+      + `(${gap.admitted} admitted, ${gap.candidates} pending candidate; requirement ${gap.minimumSources}).`
+  )).join('\n')
+  return {
+    domainId: domain.id,
+    reason: [
+      `Weekly bounded coverage review for ${domain.label}.`,
+      'Propose direct canonical source candidates only for the declared coverage gaps below. Candidates remain unapproved and cannot ingest, affect a thesis, or activate the domain without separate contract, health, and human approval.',
+      gapSummary,
+    ].join('\n\n'),
+  }
+}
+
+/**
+ * The source scout explores declared domains on a cadence, not the open
+ * internet. It runs only when the registry lacks even candidate-level
+ * coverage, so review backlog does not create recurring model spend.
+ */
+export async function findWorldSourceCoverageScoutPlans(limit = 8): Promise<WorldSourceCoverageScoutPlan[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const [domainResult, mappingResult] = await Promise.all([
+    supabase.from('market_domain_packs').select('id,status').in('status', ['candidate', 'active']).order('id'),
+    supabase.from('world_source_domains').select('domain_id,world_source_registry(id,status,evidence_classes)'),
+  ])
+  if (domainResult.error || mappingResult.error) {
+    throw new Error(`Unable to inspect source coverage: ${domainResult.error?.message ?? mappingResult.error?.message}`)
+  }
+  const sourcesByDomain = new Map<string, CoverageSource[]>()
+  for (const mapping of mappingResult.data ?? []) {
+    const source = sourceRecord(mapping.world_source_registry)
+    if (!source) continue
+    const domainId = String(mapping.domain_id)
+    sourcesByDomain.set(domainId, [...(sourcesByDomain.get(domainId) ?? []), source])
+  }
+  return (domainResult.data ?? []).flatMap((row) => {
+    const domain = getMarketDomainPack(String(row.id))
+    return domain ? [buildWorldSourceCoverageScoutPlan(domain, sourcesByDomain.get(domain.id) ?? [])] : []
+  }).filter((plan): plan is WorldSourceCoverageScoutPlan => plan !== null)
+    .slice(0, Math.max(1, Math.min(limit, 12)))
 }
 
 export async function fetchActiveMarketDomainPacks(): Promise<MarketDomainPack[]> {

@@ -123,6 +123,9 @@ export function buildDueAgentJobs(
     if (newYork.weekday === 'Sun' && newYork.hour === 18 && newYork.minute < 10) {
       jobs.push(scheduledJob('correlate-market-signals', now, { mode: 'weekly' }))
     }
+    if (newYork.weekday === 'Sun' && newYork.hour === 19 && newYork.minute < 10) {
+      jobs.push(scheduledJob('review-world-source-coverage', now))
+    }
   }
   if (newYork.hour === 2 && newYork.minute >= 30 && newYork.minute < 40) {
     jobs.push(scheduledJob('backup-market-corpus', now))

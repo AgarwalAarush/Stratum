@@ -28,7 +28,7 @@ import {
 } from './world-memory.ts'
 import { backupMarketCorpus, verifyMarketCorpusBackup } from './world-backup.ts'
 import { getWorldSourceAdapter } from './world-sources.ts'
-import { isMarketDomainActive, runWorldSourceScout } from './world-source-control.ts'
+import { findWorldSourceCoverageScoutPlans, isMarketDomainActive, runWorldSourceScout } from './world-source-control.ts'
 import { auditWorldSourceHealth } from './world-source-health.ts'
 import { collectGovernedWorldSourceDocuments } from './world-source-collector.ts'
 import { triageCapturedWorldObservationProposals } from './world-observation-proposals.ts'
@@ -69,6 +69,7 @@ export const AGENT_JOB_TYPES = [
   'collect-world-source-documents',
   'triage-world-observation-proposals',
   'scout-world-sources',
+  'review-world-source-coverage',
   'compile-world-baseline',
   'correlate-market-signals',
   'synthesize-market-hypotheses',
@@ -241,6 +242,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     }
     return `${jobType}:${payload.domainId}:${now.toISOString().slice(0, 10)}`
   }
+  if (jobType === 'review-world-source-coverage') return `${jobType}:${now.toISOString().slice(0, 10)}`
   if ((jobType === 'materialize-market-leadership' || jobType === 'run-candidate-scout') && typeof payload.tradingDate === 'string') {
     return `${jobType}:${payload.tradingDate}`
   }
@@ -272,6 +274,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
     || jobType === 'monitor-market-theses'
     || jobType === 'refresh-market-hypothesis-research'
     || jobType === 'route-market-research-frontiers'
+    || jobType === 'review-world-source-coverage'
     || jobType === 'evaluate-market-predictions'
     || jobType === 'prune-market-data'
   ) return 'market-data'
@@ -661,6 +664,14 @@ async function executeJob(
     const run = await runWorldSourceScout({ domainId, reason, trigger, frontierIds })
     await reportProgress(100, 'candidate sources preserved for contract review')
     return { discoveryRunId: run.id, domainId: run.domainId, candidateCount: run.candidates.length, status: run.status }
+  }
+
+  if (job.job_type === 'review-world-source-coverage') {
+    const plans = await findWorldSourceCoverageScoutPlans()
+    const queued = await Promise.all(plans.map((plan) => enqueueAgentJob('scout-world-sources', {
+      domainId: plan.domainId, reason: plan.reason, trigger: 'coverage_review',
+    })))
+    return { planned: plans.length, queued: queued.filter((item) => !item.deduplicated).length, domainIds: plans.map((plan) => plan.domainId) }
   }
 
   if (job.job_type === 'compile-world-baseline') {

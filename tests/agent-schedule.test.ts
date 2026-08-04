@@ -123,6 +123,13 @@ test('generic governed-document collection runs after source adapters', () => {
   assert.equal(collection.includes('collect-world-source-documents'), true)
 })
 
+test('weekly source coverage review is a bounded planner, separate from source admission', () => {
+  const scheduled = buildDueAgentJobs(new Date('2026-08-02T23:05:00Z'), { worldSourceAdapters: [] })
+  assert.ok(scheduled.some((job) => job.jobType === 'review-world-source-coverage'))
+  const outsideWindow = buildDueAgentJobs(new Date('2026-08-02T22:05:00Z'), { worldSourceAdapters: [] })
+  assert.equal(outsideWindow.some((job) => job.jobType === 'review-world-source-coverage'), false)
+})
+
 test('worker schedules weekly and semimonthly intelligence on due dates', () => {
   const monday = jobTypes('2026-07-27T14:00:00Z')
   assert.ok(monday.includes('generate-weekly-overview'))
