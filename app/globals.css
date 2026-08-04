@@ -3372,6 +3372,13 @@
 }
 
 .market-source-proposals { grid-column: 1 / -1; }
+.market-source-triage { grid-column: 1 / -1; }
+.market-source-triage > p:not(.markets-eyebrow) { color: var(--market-text-muted); font-size: 12px; line-height: 1.5; margin: -5px 0 18px; max-width: 760px; }
+.market-source-triage article > div { max-width: 780px; }
+.market-source-triage article p { color: var(--market-text); font-family: var(--font-ibm-plex-sans), sans-serif; font-size: 12px; line-height: 1.5; margin: 9px 0; }
+.market-source-triage article a { color: var(--market-text); font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 10px; }
+.market-source-triage article[data-status="failed"] strong { color: var(--market-negative); }
+.market-source-triage article[data-status="skipped"] strong { color: var(--market-text-muted); }
 .market-source-proposals > p:not(.markets-eyebrow) { color: var(--market-text-muted); font-size: 12px; line-height: 1.5; margin: -5px 0 18px; max-width: 760px; }
 .market-source-proposals article > div { max-width: 780px; }
 .market-source-proposals article p { color: var(--market-text); font-family: var(--font-ibm-plex-sans), sans-serif; font-size: 12px; line-height: 1.5; margin: 9px 0; }

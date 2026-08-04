@@ -69,6 +69,9 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const [contract, setContract] = useState<ContractDraft | null>(null)
   const [reviewingProposal, setReviewingProposal] = useState<string | null>(null)
   const [proposalRationale, setProposalRationale] = useState('')
+  const [revisingCanonicalSlug, setRevisingCanonicalSlug] = useState<string | null>(null)
+  const [canonicalUrl, setCanonicalUrl] = useState('')
+  const [canonicalRationale, setCanonicalRationale] = useState('')
   const selectedDomain = useMemo(() => workspace?.domains.find((domain) => domain.id === selectedDomainId) ?? null, [workspace, selectedDomainId])
 
   if (!workspace) {
@@ -84,6 +87,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const candidates = workspace.sources.filter((source) => source.status === 'candidate')
   const failedRuns = workspace.discoveryRuns.filter((run) => run.status === 'failed')
   const health = workspace.sources.flatMap((source) => source.health ? [source.health] : [])
+  const triageAttention = workspace.triageRuns.filter((run) => run.status !== 'succeeded')
   const requestScout = async () => {
     if (!selectedDomain || !reason.trim() || pending) return
     setPending(true)
@@ -176,6 +180,36 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     }
   }
 
+  const startCanonicalRevision = (source: WorldSourceRegistryEntry) => {
+    setRevisingCanonicalSlug(source.slug)
+    setCanonicalUrl(source.canonicalUrl)
+    setCanonicalRationale('Replace an operationally unsuitable canonical target with a direct, contract-permitted source URL.')
+    setNotice(null)
+  }
+
+  const reviseCanonicalUrl = async (source: WorldSourceRegistryEntry) => {
+    if (!canonicalUrl.trim() || !canonicalRationale.trim() || pending) return
+    setPending(true)
+    setNotice(null)
+    try {
+      const response = await fetch('/api/markets/world-sources', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'revise-canonical-url', slug: source.slug, canonicalUrl: canonicalUrl.trim(), rationale: canonicalRationale.trim() }),
+      })
+      const payload = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to revise canonical source URL')
+      setNotice(`${source.label}'s canonical URL was revised and audit-recorded. The collector will use it only within the existing active contract.`)
+      setRevisingCanonicalSlug(null)
+      setCanonicalUrl('')
+      setCanonicalRationale('')
+      router.refresh()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to revise canonical source URL')
+    } finally {
+      setPending(false)
+    }
+  }
+
   return (
     <section className="market-source-control" aria-labelledby="source-control-heading">
       <div className="market-source-control-heading">
@@ -189,6 +223,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           <div><dt>Latest healthy</dt><dd>{health.filter((check) => check.status === 'healthy').length}/{health.length || '—'}</dd></div>
           <div><dt>Pending review</dt><dd>{candidates.length}</dd></div>
           <div><dt>Evidence proposals</dt><dd>{workspace.observationProposals.length}</dd></div>
+          <div><dt>Triage attention</dt><dd>{triageAttention.length}</dd></div>
           <div><dt>Failed scouts</dt><dd>{failedRuns.length}</dd></div>
         </dl>
       </div>
@@ -269,6 +304,33 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
               <time>{formatDate(run.generatedAt ?? run.createdAt)}</time>
             </article>
           )) : <p>No source-scout runs have been recorded.</p>}
+        </div>
+        <div className="market-source-triage">
+          <p className="markets-eyebrow">Operational telemetry</p>
+          <h3>Capture and triage outcomes</h3>
+          <p>Failures and short extracts remain raw-source telemetry. They do not create evidence, change admission, or trigger a source revision automatically.</p>
+          {workspace.triageRuns.length ? workspace.triageRuns.slice(0, 12).map((run) => {
+            const source = workspace.sources.find((item) => item.slug === run.sourceSlug) ?? null
+            return (
+              <article key={run.id} data-status={run.status}>
+                <div>
+                  <strong>{run.sourceLabel}</strong>
+                  <span>{run.status} · {run.proposalCount} proposals · {run.model ?? 'no model recorded'}</span>
+                  {run.error ? <p>{run.error}</p> : null}
+                  <a href={run.sourceUrl} target="_blank" rel="noreferrer">Open canonical source</a>
+                  {source && run.status !== 'succeeded' ? revisingCanonicalSlug === source.slug ? (
+                    <form className="market-source-contract-review" onSubmit={(event) => { event.preventDefault(); void reviseCanonicalUrl(source) }}>
+                      <p>Changing a canonical target is a human action. This form permits only an HTTPS URL already allowed by the active host/path contract; it never broadens collection authority.</p>
+                      <label>Replacement canonical URL<input type="url" value={canonicalUrl} onChange={(event) => setCanonicalUrl(event.target.value)} required /></label>
+                      <label>Revision rationale<textarea value={canonicalRationale} onChange={(event) => setCanonicalRationale(event.target.value)} required maxLength={1000} /></label>
+                      <footer><button type="submit" disabled={pending || !canonicalUrl.trim() || !canonicalRationale.trim()}>{pending ? 'Recording…' : 'Record canonical revision'}</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setRevisingCanonicalSlug(null); setCanonicalUrl(''); setCanonicalRationale('') }}>Cancel</button></footer>
+                    </form>
+                  ) : <button type="button" className="market-source-review-button" disabled={pending} onClick={() => startCanonicalRevision(source)}>Revise canonical URL</button> : null}
+                </div>
+                <time>{formatDate(run.completedAt)}</time>
+              </article>
+            )
+          }) : <p>No triage attempts have been recorded yet.</p>}
         </div>
         <div className="market-source-proposals">
           <p className="markets-eyebrow">Proposal ledger</p>

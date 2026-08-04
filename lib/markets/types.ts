@@ -1253,6 +1253,7 @@ export interface WorldSourceControlWorkspaceData {
   sources: WorldSourceRegistryEntry[]
   discoveryRuns: WorldSourceDiscoveryRun[]
   observationProposals: WorldObservationProposal[]
+  triageRuns: WorldObservationProposalTriageRun[]
 }
 
 /** Quote-bound cheap-model output. It is deliberately not a WorldObservation
@@ -1271,6 +1272,22 @@ export interface WorldObservationProposal {
   sourceUrl: string
   generatedAt: string
   review: { decision: 'accepted' | 'rejected'; rationale: string; reviewedAt: string; observationId: string | null } | null
+}
+
+/** Operational telemetry for a low-cost proposal extraction attempt. It is
+ * neither a proposal nor evidence and never changes source admission. */
+export interface WorldObservationProposalTriageRun {
+  id: string
+  sourceId: string
+  sourceSlug: string
+  sourceLabel: string
+  sourceUrl: string
+  status: 'succeeded' | 'failed' | 'skipped'
+  proposalCount: number
+  provider: string | null
+  model: string | null
+  error: string | null
+  completedAt: string
 }
 
 export interface MarketDomainPackEvent {

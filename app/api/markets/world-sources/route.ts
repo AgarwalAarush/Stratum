@@ -6,6 +6,7 @@ import {
   activateMarketDomainPack,
   blockWorldSource,
   fetchWorldSourceControlWorkspace,
+  reviseWorldSourceCanonicalUrl,
   validateWorldSourceContract,
 } from '@/lib/server/world-source-control'
 import { reviewWorldObservationProposal } from '@/lib/server/world-observation-review'
@@ -59,6 +60,13 @@ export async function POST(request: NextRequest) {
       }
       const review = await reviewWorldObservationProposal({ proposalId: body.proposalId, reviewerId: user.id, decision: body.decision, rationale: body.rationale })
       return NextResponse.json({ review })
+    }
+    if (body.action === 'revise-canonical-url') {
+      if (typeof body.slug !== 'string' || typeof body.canonicalUrl !== 'string' || typeof body.rationale !== 'string') {
+        return NextResponse.json({ error: 'A source, canonical URL, and revision rationale are required.' }, { status: 400 })
+      }
+      const source = await reviseWorldSourceCanonicalUrl({ slug: body.slug, canonicalUrl: body.canonicalUrl, rationale: body.rationale, reviewerId: user.id })
+      return NextResponse.json({ source })
     }
     return NextResponse.json({ error: 'Unsupported source-control action.' }, { status: 400 })
   } catch (error) {

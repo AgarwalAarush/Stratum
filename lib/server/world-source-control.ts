@@ -14,6 +14,7 @@ import type {
   WorldSourceStatus,
   WorldSourceTier,
   WorldObservationProposal,
+  WorldObservationProposalTriageRun,
 } from '../markets/types.ts'
 import { runCodexJson, type CodexExecResult } from './codex-exec.ts'
 import { getSupabaseClient } from './supabase.ts'
@@ -31,6 +32,10 @@ const OBSERVATION_KINDS = new Set(['fact', 'estimate', 'claim', 'inference'])
 
 function record(value: unknown): RecordValue {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as RecordValue : {}
+}
+
+function relatedRecord(value: unknown): RecordValue {
+  return Array.isArray(value) ? record(value[0]) : record(value)
 }
 
 function strings(value: unknown): string[] {
@@ -297,15 +302,28 @@ function normalizeDiscoveryRun(row: RecordValue): WorldSourceDiscoveryRun {
 }
 
 function normalizeObservationProposal(row: RecordValue): WorldObservationProposal {
-  const source = record(row.world_source_registry)
-  const document = record(row.world_documents)
-  const review = record(row.world_observation_proposal_reviews)
+  const source = relatedRecord(row.world_source_registry)
+  const document = relatedRecord(row.world_documents)
+  const review = relatedRecord(row.world_observation_proposal_reviews)
   return {
     id: String(row.id), domainId: String(row.domain_id), mechanism: String(row.mechanism), assertion: String(row.assertion),
     kind: row.observation_kind as WorldObservationProposal['kind'], evidenceQuote: String(row.evidence_quote),
     confidence: Number(row.confidence), materiality: Number(row.materiality), novelty: Number(row.novelty),
     sourceLabel: String(source.label ?? document.title ?? 'Governed source'), sourceUrl: String(document.canonical_url ?? source.canonical_url ?? ''), generatedAt: String(row.generated_at),
     review: review.decision === 'accepted' || review.decision === 'rejected' ? { decision: review.decision, rationale: String(review.rationale ?? ''), reviewedAt: String(review.reviewed_at), observationId: review.observation_id === null ? null : String(review.observation_id ?? '') } : null,
+  }
+}
+
+function normalizeTriageRun(row: RecordValue): WorldObservationProposalTriageRun {
+  const capture = relatedRecord(row.world_source_document_captures)
+  const source = relatedRecord(capture.world_source_registry)
+  const status = String(row.status)
+  if (status !== 'succeeded' && status !== 'failed' && status !== 'skipped') throw new Error(`Invalid persisted proposal triage status: ${status}`)
+  return {
+    id: String(row.id), sourceId: String(capture.source_id), sourceSlug: String(source.slug ?? 'unknown-source'),
+    sourceLabel: String(source.label ?? 'Governed source'), sourceUrl: String(source.canonical_url ?? ''), status,
+    proposalCount: Number(row.proposal_count ?? 0), provider: row.provider === null ? null : String(row.provider ?? ''),
+    model: row.model === null ? null : String(row.model ?? ''), error: row.error === null ? null : String(row.error ?? ''), completedAt: String(row.completed_at),
   }
 }
 
@@ -367,18 +385,41 @@ export async function blockWorldSource(slug: string, reason: string): Promise<vo
   if (error) throw new Error(`Unable to block source ${normalizedSlug}: ${error.message}`)
 }
 
+function validMarketUserId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+/** A human may correct an admitted source's direct fetch target only inside
+ * its active contract. Cross-host/path changes require a separate contract
+ * review rather than silently broadening collection authority. */
+export async function reviseWorldSourceCanonicalUrl(input: { slug: string; canonicalUrl: string; rationale: string; reviewerId: string }): Promise<WorldSourceRegistryEntry> {
+  if (!validMarketUserId(input.reviewerId)) throw new Error('A persisted authenticated reviewer is required')
+  const canonicalUrl = safeHttpsUrl(input.canonicalUrl, 'canonical source').toString()
+  const rationale = requiredString(input.rationale, 'canonical revision rationale')
+  if (rationale.length > 1_000) throw new Error('Canonical revision rationale exceeds limit')
+  const { source } = await resolveApprovedWorldSource(input.slug, canonicalUrl)
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data, error } = await supabase.rpc('revise_world_source_canonical_url', {
+    p_source_id: source.id, p_reviewer_id: input.reviewerId, p_canonical_url: canonicalUrl, p_rationale: rationale,
+  }).single()
+  if (error || !data) throw new Error(`Unable to revise source canonical URL: ${error?.message ?? 'unknown error'}`)
+  return normalizeRegistryEntry(data as RecordValue)
+}
+
 export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceControlWorkspaceData> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const [domains, sources, runs, mappings, healthChecks, proposals] = await Promise.all([
+  const [domains, sources, runs, mappings, healthChecks, proposals, triageRuns] = await Promise.all([
     supabase.from('market_domain_packs').select('*').order('id'),
     supabase.from('world_source_registry').select('*').order('updated_at', { ascending: false }).limit(200),
     supabase.from('world_source_discovery_runs').select('*').order('created_at', { ascending: false }).limit(60),
     supabase.from('world_source_domains').select('source_id,domain_id'),
     supabase.from('world_source_health_checks').select('*').order('checked_at', { ascending: false }).limit(500),
     supabase.from('world_observation_proposals').select('*,world_source_registry(label,canonical_url),world_documents(title,canonical_url),world_observation_proposal_reviews(decision,rationale,reviewed_at,observation_id)').order('generated_at', { ascending: false }).limit(60),
+    supabase.from('world_observation_proposal_triage_runs').select('*,world_source_document_captures(source_id,world_source_registry(slug,label,canonical_url))').order('completed_at', { ascending: false }).limit(60),
   ])
-  const error = domains.error ?? sources.error ?? runs.error ?? mappings.error ?? healthChecks.error ?? proposals.error
+  const error = domains.error ?? sources.error ?? runs.error ?? mappings.error ?? healthChecks.error ?? proposals.error ?? triageRuns.error
   if (error) throw new Error(`Unable to load source-control workspace: ${error.message}`)
   const domainIdsBySourceId = new Map<string, string[]>()
   for (const mapping of mappings.data ?? []) {
@@ -406,6 +447,7 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
     )),
     discoveryRuns: (runs.data ?? []).map((row) => normalizeDiscoveryRun(row as RecordValue)),
     observationProposals: (proposals.data ?? []).map((row) => normalizeObservationProposal(row as RecordValue)),
+    triageRuns: (triageRuns.data ?? []).map((row) => normalizeTriageRun(row as RecordValue)),
   }
 }
 
