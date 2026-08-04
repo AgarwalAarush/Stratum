@@ -197,6 +197,11 @@ test('agent jobs recognize a database missing the dedupe index', () => {
   assert.equal(isMissingDedupeConstraint('permission denied'), false)
 })
 
+test('a recovered job clears stale failure text when its latest attempt succeeds', async () => {
+  const source = await readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8')
+  assert.match(source, /status: 'succeeded', last_error: null, updated_at:/)
+})
+
 test('closed markets refresh stale publications once instead of preserving old data', () => {
   const now = new Date('2026-07-29T02:00:00Z')
   assert.equal(shouldRefreshClosedMarket(null, now), true)

@@ -777,7 +777,9 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
       supabase.from('agent_runs').update({
         status: 'succeeded', output, finished_at: new Date().toISOString(), duration_ms: Date.now() - startedAt,
       }).eq('id', run.id),
-      supabase.from('agent_jobs').update({ status: 'succeeded', updated_at: new Date().toISOString() }).eq('id', job.id),
+      // A retried job can recover. Its current terminal state must not carry a
+      // prior attempt's failure forward as though the latest run still failed.
+      supabase.from('agent_jobs').update({ status: 'succeeded', last_error: null, updated_at: new Date().toISOString() }).eq('id', job.id),
     ])
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
