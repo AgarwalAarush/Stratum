@@ -166,6 +166,8 @@ test('bounded market-research jobs persist their actual routed model policy', as
   const source = await readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8')
   assert.match(source, /marketModelRouting: modelRouting/)
   assert.match(source, /input_refs: \[job\.payload/)
+  assert.match(source, /scheduledMarketResearchRunLimit/)
+  assert.match(source, /findDueMarketHypothesisResearch\(undefined, scheduledResearchLimit\)/)
 })
 
 test('observation-triage work deduplicates the immutable capture set', () => {

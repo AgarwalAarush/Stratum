@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { selectMarketModel } from '../lib/server/market-model-policy.ts'
+import { scheduledMarketResearchRunLimit, selectMarketModel } from '../lib/server/market-model-policy.ts'
 
 test('market model policy reserves cheap models for non-authoritative routing', () => {
   const environment = {
@@ -16,4 +16,11 @@ test('market model policy reserves cheap models for non-authoritative routing', 
   assert.equal(selectMarketModel('prediction_evaluation', environment).model, 'standard-model')
   assert.equal(selectMarketModel('hypothesis_analysis', environment).tier, 'strong')
   assert.equal(selectMarketModel('hypothesis_critic', environment).model, 'strong-model')
+})
+
+test('scheduled strong research has a central bounded run cap', () => {
+  assert.equal(scheduledMarketResearchRunLimit({ STRATUM_MARKET_RESEARCH_RUN_LIMIT: '3' }), 3)
+  assert.equal(scheduledMarketResearchRunLimit({ STRATUM_MARKET_RESEARCH_RUN_LIMIT: '0' }), 2)
+  assert.equal(scheduledMarketResearchRunLimit({ STRATUM_MARKET_RESEARCH_RUN_LIMIT: '99' }), 2)
+  assert.equal(scheduledMarketResearchRunLimit({}), 2)
 })

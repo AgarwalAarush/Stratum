@@ -16,6 +16,16 @@ export interface MarketModelSelection {
   rationale: string
 }
 
+/**
+ * A strong research pass is an analyst-plus-critic pair. Keep unattended
+ * scheduler spend bounded independently of source and evaluation work; an
+ * explicit user-requested deepening is not subject to this planner cap.
+ */
+export function scheduledMarketResearchRunLimit(environment: NodeJS.ProcessEnv = process.env): number {
+  const configured = Number(environment.STRATUM_MARKET_RESEARCH_RUN_LIMIT ?? 2)
+  return Number.isInteger(configured) && configured >= 1 && configured <= 12 ? configured : 2
+}
+
 export function selectMarketModel(task: MarketModelTask, environment: NodeJS.ProcessEnv = process.env): MarketModelSelection {
   const cheap = environment.STRATUM_SOURCE_SCOUT_MODEL ?? AI_MODELS.sourceScout
   const standard = environment.STRATUM_MARKET_STANDARD_MODEL ?? environment.CODEX_SYNTHESIS_MODEL ?? AI_MODELS.scheduledSynthesis

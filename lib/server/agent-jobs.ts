@@ -33,7 +33,7 @@ import { auditWorldSourceHealth } from './world-source-health.ts'
 import { collectGovernedWorldSourceDocuments } from './world-source-collector.ts'
 import { triageCapturedWorldObservationProposals } from './world-observation-proposals.ts'
 import { AI_MODELS } from '../ai/config.ts'
-import { selectMarketModel, type MarketModelSelection } from './market-model-policy.ts'
+import { scheduledMarketResearchRunLimit, selectMarketModel, type MarketModelSelection } from './market-model-policy.ts'
 import { evaluateMarketPrediction, findDueMarketPredictionEvaluations } from './market-prediction-evaluation.ts'
 import {
   fetchPersistedMarketAssets,
@@ -690,9 +690,10 @@ async function executeJob(
     if (!isMarketWorldModelEnabled()) return { skipped: 'MARKET_WORLD_MODEL_ENABLED is false' }
     const result = await runMarketWorldCycle()
     const { findDueMarketHypothesisResearch } = await import('./market-thesis-research.ts')
-    const due = await findDueMarketHypothesisResearch(typeof job.payload.ownerId === 'string' ? job.payload.ownerId : undefined)
+    const scheduledResearchLimit = scheduledMarketResearchRunLimit()
+    const due = await findDueMarketHypothesisResearch(typeof job.payload.ownerId === 'string' ? job.payload.ownerId : undefined, scheduledResearchLimit)
     const queued = await Promise.all(due.map((item) => enqueueAgentJob('deepen-market-hypothesis', item)))
-    return { ...result, queuedResearch: queued.length }
+    return { ...result, queuedResearch: queued.length, scheduledResearchLimit }
   }
 
   if (job.job_type === 'deepen-market-hypothesis') {
@@ -713,9 +714,10 @@ async function executeJob(
 
   if (job.job_type === 'refresh-market-hypothesis-research') {
     const { findDueMarketHypothesisResearch } = await import('./market-thesis-research.ts')
-    const due = await findDueMarketHypothesisResearch()
+    const scheduledResearchLimit = scheduledMarketResearchRunLimit()
+    const due = await findDueMarketHypothesisResearch(undefined, scheduledResearchLimit)
     const queued = await Promise.all(due.map((item) => enqueueAgentJob('deepen-market-hypothesis', item)))
-    return { queued: queued.length, hypothesisIds: due.map((item) => item.hypothesisId) }
+    return { queued: queued.length, hypothesisIds: due.map((item) => item.hypothesisId), scheduledResearchLimit }
   }
 
   if (job.job_type === 'route-market-research-frontiers') {
