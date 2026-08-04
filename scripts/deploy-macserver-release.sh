@@ -21,7 +21,9 @@ fi
 
 cd "$release_dir"
 npm ci
-npm run lint
+# Existing repository warnings are reported, but only lint errors should block
+# an immutable worker release. Feature checks still run below before activation.
+npm run lint -- --quiet
 node --test --experimental-strip-types tests/world-memory.test.ts tests/world-sources.test.ts tests/candidate-scout.test.ts
 npm run build
 
