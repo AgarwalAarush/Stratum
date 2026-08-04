@@ -102,6 +102,9 @@ npm run dev
 | `FMP_API_KEY` | No | Finance earnings/deals enrichment |
 | `ALPACA_API_KEY` / `ALPACA_API_SECRET` | Worker | Server-side US-equity snapshots and bars |
 | `CODEX_API_KEY` | Worker | Scoped key for background schema-constrained research synthesis |
+| `STRATUM_SOURCE_SCOUT_MODEL` | Worker | Cheap model tier for non-authoritative source candidates |
+| `STRATUM_MARKET_STANDARD_MODEL` | Worker | Bounded planning and prediction-evaluation tier |
+| `STRATUM_MARKET_RESEARCH_MODEL` | Worker | Strong analyst/critic tier for durable market artifacts |
 | `FRED_API_KEY` | No | Macro indicators from FRED |
 | `SEC_API_USER_AGENT` | No | SEC EDGAR requests |
 | `GITHUB_TOKEN` | No | Higher GitHub API rate limits |

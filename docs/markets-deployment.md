@@ -33,6 +33,12 @@ With `MARKET_WORLD_MODEL_ENABLED=true`, the worker fetches the curated `ai-power
 
 Keep `MARKET_AUTO_THESIS_ENABLED=false` through the first real end-to-end validation. The first run may form a hypothesis; it cannot create a capital decision and auto-promotion is a separate, later gate.
 
+### Source control and scout policy
+
+Sources are governed independently from the documents they emit. `world_source_registry` records candidate, probation, approved, blocked, and retired sources; every newly governed source needs an immutable active contract that constrains hosts, paths, MIME types, cadence, and observation kinds. The worker rejects a source outside that contract before it can create a `world_document` or observation.
+
+`scout-world-sources` is an explicit, bounded worker job rather than a broad daily crawl. It uses `STRATUM_SOURCE_SCOUT_MODEL` to propose at most twelve **candidate** source-level URLs for one domain and one stated coverage gap. It cannot approve a source or publish evidence. Approval must create a contract through the authenticated source-control API; use `STRATUM_MARKET_RESEARCH_MODEL` for durable analyst/critic runs and `STRATUM_MARKET_STANDARD_MODEL` only for bounded planning/evaluation. Keep those variables worker-only.
+
 For boot persistence, replace the login-dependent LaunchAgent with the LaunchDaemon installer. Pass the stable production symlink rather than a release path:
 
 ```bash
@@ -80,7 +86,7 @@ The worker process needs Supabase and Alpaca credentials to execute jobs. When c
 
 Migrations are an ordered, durable record. Before any `supabase db push`, run `supabase migration list` from the repository root and make sure the local and remote histories agree. Do not run `migration repair` merely to silence unknown historical versions; reconcile the actual source history first.
 
-The current Markets migration set ends with `202607300006_research_revision_lineage.sql`, which adds an optional foreign-key link between immutable research versions. The application remains backward-compatible if that column is absent: the structured revision information is stored inside the research artifact itself. Do not let an unreconciled legacy migration ledger block the read path or worker.
+The current Markets migration set includes `202608040001_world_source_control_plane.sql`, which adds governed source registry, contract versions, candidate discovery runs, and domain-pack records. The application remains backward-compatible with legacy documents that predate a source registry ID, but all new governed adapters must provide an approved source slug. Do not let an unreconciled legacy migration ledger block the read path or worker.
 
 Configure Supabase, QStash signing keys, and read-side cache values in Vercel. Keep Alpaca, FMP, and Codex credentials on macserver unless direct OpenAI Responses generation is intentionally enabled on Vercel.
 
@@ -95,6 +101,7 @@ The worker scheduler is enabled by default and checks once per minute. It create
 | Every fifteen minutes | `refresh-fmp-intelligence` | `/api/cron/agent-jobs` with `{"jobType":"refresh-fmp-intelligence"}` |
 | After market-leadership materialization | `run-candidate-scout` | Enqueued by the materializer with a trading-date dedupe key |
 | Every five minutes while relevant | `monitor-investment-theses` | `/api/cron/agent-jobs` with the monitored-thesis payload |
+| Explicit coverage request only | `scout-world-sources` | `/api/cron/agent-jobs` with a bounded domain and source-gap reason |
 | Daily after 12:00 UTC | `generate-morning-brief` | `/api/cron/morning-brief` |
 | Mondays after 13:00 UTC | `generate-weekly-overview` | `/api/cron/weekly-overview` |
 | 1st and 15th after 14:00 UTC | `generate-monthly-overview` | `/api/cron/monthly-overview` |
