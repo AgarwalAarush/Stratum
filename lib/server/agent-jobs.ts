@@ -61,6 +61,8 @@ export const AGENT_JOB_TYPES = [
   'compile-world-baseline',
   'correlate-market-signals',
   'synthesize-market-hypotheses',
+  'deepen-market-hypothesis',
+  'refresh-market-hypothesis-research',
   'monitor-market-theses',
   'backup-market-corpus',
   'verify-market-corpus',
@@ -182,6 +184,14 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
       : ''
     return `${jobType}:${scope}:${bucket.toISOString()}`
   }
+  if (jobType === 'deepen-market-hypothesis' && typeof payload.ownerId === 'string' && typeof payload.hypothesisId === 'string') {
+    return `${jobType}:${payload.ownerId}:${payload.hypothesisId}:${now.toISOString().slice(0, 10)}`
+  }
+  if (jobType === 'refresh-market-hypothesis-research') {
+    const bucket = new Date(now)
+    bucket.setUTCHours(Math.floor(bucket.getUTCHours() / 6) * 6, 0, 0, 0)
+    return `${jobType}:${bucket.toISOString()}`
+  }
   if (jobType === 'backup-market-corpus' || jobType === 'verify-market-corpus') return `${jobType}:${now.toISOString().slice(0, 10)}`
   if (jobType === 'ingest-world-source') {
     if (typeof payload.fingerprint === 'string') return `${jobType}:${payload.fingerprint}`
@@ -215,6 +225,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
     || jobType === 'compile-world-baseline'
     || jobType === 'correlate-market-signals'
     || jobType === 'monitor-market-theses'
+    || jobType === 'refresh-market-hypothesis-research'
     || jobType === 'prune-market-data'
   ) return 'market-data'
   if (jobType === 'backup-market-corpus' || jobType === 'verify-market-corpus') return 'market-data'
@@ -548,7 +559,30 @@ async function executeJob(
 
   if (job.job_type === 'synthesize-market-hypotheses') {
     if (!isMarketWorldModelEnabled()) return { skipped: 'MARKET_WORLD_MODEL_ENABLED is false' }
-    return runMarketWorldCycle()
+    const result = await runMarketWorldCycle()
+    const { findDueMarketHypothesisResearch } = await import('./market-thesis-research.ts')
+    const due = await findDueMarketHypothesisResearch(typeof job.payload.ownerId === 'string' ? job.payload.ownerId : undefined)
+    const queued = await Promise.all(due.map((item) => enqueueAgentJob('deepen-market-hypothesis', item)))
+    return { ...result, queuedResearch: queued.length }
+  }
+
+  if (job.job_type === 'deepen-market-hypothesis') {
+    const ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : ''
+    const hypothesisId = typeof job.payload.hypothesisId === 'string' ? job.payload.hypothesisId : ''
+    if (!ownerId || !hypothesisId) throw new Error('Market research requires ownerId and hypothesisId')
+    const { deepenMarketHypothesis } = await import('./market-thesis-research.ts')
+    await reportProgress(5, 'loading bounded source ledger')
+    const research = await deepenMarketHypothesis({ ownerId, hypothesisId, reason: typeof job.payload.reason === 'string' ? job.payload.reason : 'scheduled deepening' })
+    await reportProgress(100, research.status === 'complete' ? 'validated research published' : 'research requires revision')
+    const marketThesis = research.status === 'complete' ? await import('./world-memory.ts').then(({ promoteEligibleMarketHypothesis }) => promoteEligibleMarketHypothesis(ownerId)) : null
+    return { hypothesisId, researchVersionId: research.id, version: research.version, status: research.status, marketThesisId: marketThesis?.id ?? null }
+  }
+
+  if (job.job_type === 'refresh-market-hypothesis-research') {
+    const { findDueMarketHypothesisResearch } = await import('./market-thesis-research.ts')
+    const due = await findDueMarketHypothesisResearch()
+    const queued = await Promise.all(due.map((item) => enqueueAgentJob('deepen-market-hypothesis', item)))
+    return { queued: queued.length, hypothesisIds: due.map((item) => item.hypothesisId) }
   }
 
   if (job.job_type === 'monitor-market-theses') {

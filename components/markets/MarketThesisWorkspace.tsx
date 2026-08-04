@@ -86,10 +86,19 @@ export function MarketThesisWorkspace({ initialData }: { initialData: MarketThes
 
 function HypothesisCard({ hypothesis, busy, onAction }: { hypothesis: MarketHypothesis; busy: string | null; onAction: (hypothesis: MarketHypothesis, action: Action) => Promise<void> }) {
   const primary = actionLabel(hypothesis)
+  const research = hypothesis.latestResearch
   return <article className="market-hypothesis-card" data-status={hypothesis.status}>
     <header><span>{hypothesis.status} · {Math.round(hypothesis.confidence)}% confidence</span><h3>{hypothesis.title}</h3></header>
     <p>{hypothesis.coreMechanism}</p>
     <div><span>Counter-thesis</span><p>{hypothesis.counterThesis}</p></div>
+    {research ? <div className="market-hypothesis-research" data-status={research.status}>
+      <span>Analytical research · v{research.version} · {research.status.replace('_', ' ')}</span>
+      {research.content ? <>
+        <p>{research.content.thesisStatement}</p>
+        <small>{research.content.predictions.length} predictions · {research.content.evidenceGaps.length} open evidence gap{research.content.evidenceGaps.length === 1 ? '' : 's'} · {research.sourceIds.length} linked sources</small>
+      </> : <p>{research.error || 'The bounded research run is still preparing its source ledger.'}</p>}
+      {research.critique?.verdict === 'needs_revision' ? <small>Critic requires revision: {research.critique.summary}</small> : null}
+    </div> : <div className="market-hypothesis-research" data-status="pending"><span>Analytical research</span><p>No durable analysis yet; it will queue only when the source gate is met.</p></div>}
     <footer><span>{hypothesis.evidence.length} linked observation{hypothesis.evidence.length === 1 ? '' : 's'} · {hypothesis.unresolvedNodes.length} unresolved node{hypothesis.unresolvedNodes.length === 1 ? '' : 's'}</span><div><button type="button" disabled={busy !== null} onClick={() => onAction(hypothesis, primary.action)}>{busy === `${hypothesis.id}:${primary.action}` ? 'Saving…' : primary.label}</button>{!['rejected', 'archived'].includes(hypothesis.status) ? <button type="button" disabled={busy !== null} onClick={() => onAction(hypothesis, 'archive')}>Archive</button> : null}</div></footer>
   </article>
 }

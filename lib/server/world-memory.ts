@@ -396,7 +396,23 @@ export async function promoteEligibleMarketHypothesis(ownerId: string): Promise<
   const { data: priorRows, error: priorError } = await supabase.from('market_thesis_versions').select('*').eq('hypothesis_id', hypothesis.id).order('version', { ascending: false }).limit(1)
   if (priorError) throw new Error(`Unable to inspect prior market thesis: ${priorError.message}`)
   const prior = priorRows?.[0] as RecordValue | undefined
-  if (prior) {
+  const { data: researchRows, error: researchError } = await supabase
+    .from('market_hypothesis_research_versions')
+    .select('*')
+    .eq('hypothesis_id', hypothesis.id)
+    .eq('status', 'complete')
+    .order('version', { ascending: false })
+    .limit(1)
+  if (researchError) throw new Error(`Unable to load validated market research: ${researchError.message}`)
+  const researchRow = researchRows?.[0] as RecordValue | undefined
+  // The deterministic evidence gate is necessary but not sufficient. A
+  // publishable market thesis must also have a completed analyst/critic pass.
+  if (!researchRow) return null
+  const { normalizeResearchVersion } = await import('./market-thesis-research.ts')
+  const research = normalizeResearchVersion(researchRow)
+  if (!research.content || research.critique?.verdict !== 'pass') return null
+  const researchContent = research.content
+  if (prior && String(prior.research_version_id ?? '') === research.id) {
     const [predictionResult, exposureResult] = await Promise.all([
       supabase.from('market_thesis_predictions').select('*').eq('market_thesis_version_id', prior.id),
       supabase.from('market_thesis_exposures').select('*').eq('market_thesis_version_id', prior.id),
@@ -409,29 +425,40 @@ export async function promoteEligibleMarketHypothesis(ownerId: string): Promise<
     const document = record(observation.world_documents)
     return document.id ? [{ documentId: String(document.id), label: String(document.title), url: String(document.canonical_url), tier: document.source_tier as WorldSourceTier }] : []
   })
-  const version = 1
+  const sourceLedger = ledger.filter((item) => research.sourceIds.includes(item.documentId))
+  const version = Number(prior?.version ?? 0) + 1
   const now = new Date().toISOString()
   const content = {
-    whyNow: hypothesis.coreMechanism,
-    economics: 'The thesis is investable only where a participant has constrained supply, durable customer need, and a demonstrated mechanism to capture scarcity rents rather than merely narrative exposure.',
-    expectations: 'Security selection remains separate: company research must test materiality, competition, valuation, and what is already discounted.',
-    falsifiers: ['AI/data-center capital spending materially slows.', 'Firm generation or grid capacity arrives faster than demand.', 'Flexible load, efficiency, or policy reform removes the bottleneck.'],
-    counterThesis: hypothesis.counterThesis,
-    sourceLedger: ledger,
+    whyNow: researchContent.whyNow,
+    economics: `${researchContent.economics.valueChain} ${researchContent.economics.scarcityRentCapture}`,
+    expectations: `${researchContent.expectations.currentNarrative} ${researchContent.expectations.whatAppearsPriced} Variant view: ${researchContent.expectations.variantView}`,
+    falsifiers: researchContent.falsifiers.map((item) => `${item.condition}: ${item.thesisImpact}`),
+    counterThesis: researchContent.counterThesis.statement,
+    sourceLedger,
   }
   const { data, error } = await supabase.from('market_thesis_versions').insert({
     hypothesis_id: hypothesis.id, version, state: 'active', title: hypothesis.title, content, confidence: hypothesis.confidence,
-    data_as_of: now, generated_at: now, revision_diff: ['Initial automatic promotion from the AI/power evidence cluster.'],
+    research_version_id: research.id, data_as_of: research.dataAsOf, generated_at: now,
+    revision_diff: prior ? research.revisionDiff : ['Initial promotion after source-backed analyst and critic validation.'],
   }).select('*').single()
   if (error || !data) throw new Error(`Unable to promote market thesis: ${error?.message ?? 'unknown error'}`)
-  const predictions = [
-    { prediction: 'Firm power and grid-access lead times remain a disclosed constraint for large-load projects.', expected_direction: 'remain elevated', deadline: null, evidence_needed: 'Utility, ISO, equipment-maker, or customer primary disclosures.', result: 'pending' },
-    { prediction: 'Companies with verified capacity or enabling equipment show backlog, pricing, or contracted-demand evidence.', expected_direction: 'increase', deadline: null, evidence_needed: 'Company filings, earnings calls, or primary contract disclosures.', result: 'pending' },
-  ]
+  const predictions = researchContent.predictions.map((item) => ({
+    prediction: item.prediction, expected_direction: `Confirm: ${item.confirmation}; disconfirm: ${item.disconfirmation}`,
+    deadline: null, evidence_needed: item.leadingIndicator, result: 'pending',
+  }))
   const { data: predictionRows, error: predictionError } = await supabase.from('market_thesis_predictions').insert(predictions.map((item) => ({ ...item, market_thesis_version_id: data.id }))).select('*')
   if (predictionError) throw new Error(`Unable to persist market thesis predictions: ${predictionError.message}`)
+  const exposureRows = researchContent.economics.beneficiaries.map((entityName) => ({
+    market_thesis_version_id: data.id, value_chain_layer: researchContent.economics.valueChain, entity_name: entityName,
+    symbol: null, role: 'beneficiary', mechanism: researchContent.economics.scarcityRentCapture,
+    materiality: Math.round(researchContent.confidence), confidence: Math.round(researchContent.confidence), verification_status: 'needs_company_research',
+  }))
+  const { data: persistedExposures, error: exposureError } = exposureRows.length > 0
+    ? await supabase.from('market_thesis_exposures').insert(exposureRows).select('*')
+    : { data: [], error: null }
+  if (exposureError) throw new Error(`Unable to persist market thesis exposures: ${exposureError.message}`)
   await supabase.from('market_hypotheses').update({ status: 'active', updated_at: now }).eq('id', hypothesis.id)
-  return normalizeThesis(data as RecordValue, (predictionRows ?? []) as RecordValue[], [])
+  return normalizeThesis(data as RecordValue, (predictionRows ?? []) as RecordValue[], (persistedExposures ?? []) as RecordValue[])
 }
 
 function normalizeThesis(row: RecordValue, predictionRows: RecordValue[], exposureRows: RecordValue[]): MarketThesisVersion {
@@ -442,7 +469,7 @@ function normalizeThesis(row: RecordValue, predictionRows: RecordValue[], exposu
       whyNow: String(content.whyNow ?? ''), economics: String(content.economics ?? ''), expectations: String(content.expectations ?? ''), falsifiers: strings(content.falsifiers), counterThesis: String(content.counterThesis ?? ''),
       sourceLedger: Array.isArray(content.sourceLedger) ? content.sourceLedger.map(record).map((item) => ({ documentId: String(item.documentId ?? ''), label: String(item.label ?? ''), url: String(item.url ?? ''), tier: item.tier as WorldSourceTier })) : [],
     },
-    confidence: number(row.confidence), dataAsOf: String(row.data_as_of), generatedAt: String(row.generated_at), revisionDiff: strings(row.revision_diff),
+    confidence: number(row.confidence), dataAsOf: String(row.data_as_of), generatedAt: String(row.generated_at), revisionDiff: strings(row.revision_diff), researchVersionId: row.research_version_id === null ? null : String(row.research_version_id ?? ''),
     predictions: predictionRows.map((item): ThesisPrediction => ({ id: String(item.id), prediction: String(item.prediction), expectedDirection: String(item.expected_direction), deadline: iso(item.deadline), evidenceNeeded: String(item.evidence_needed), result: item.result as ThesisPrediction['result'], evaluatedAt: iso(item.evaluated_at) })),
     exposures: exposureRows.map((item) => ({ id: String(item.id), valueChainLayer: String(item.value_chain_layer), entityName: String(item.entity_name), symbol: item.symbol === null ? null : String(item.symbol ?? ''), role: item.role as 'beneficiary' | 'loser' | 'substitute', mechanism: String(item.mechanism), materiality: number(item.materiality), confidence: number(item.confidence), verificationStatus: item.verification_status as 'verified' | 'needs_company_research' | 'unverified' })),
   }
@@ -467,13 +494,32 @@ export async function fetchMarketThesisWorkspace(ownerId: string): Promise<Marke
     supabase.from('market_thesis_exposures').select('*').in('market_thesis_version_id', thesisIds),
   ]) : [{ data: [], error: null }, { data: [], error: null }]
   if (predictionResult.error || exposureResult.error) throw new Error(`Unable to load market thesis details: ${predictionResult.error?.message ?? exposureResult.error?.message}`)
+  const researchResult = hypothesisIds.length > 0
+    ? await supabase.from('market_hypothesis_research_versions').select('*').in('hypothesis_id', hypothesisIds).order('version', { ascending: false })
+    : { data: [], error: null }
+  // Production can briefly be behind the additive migration. Keep the existing
+  // thesis workspace readable until that schema and the worker are aligned.
+  if (researchResult.error && !/market_hypothesis_research_versions|schema cache/i.test(researchResult.error.message)) {
+    throw new Error(`Unable to load market research versions: ${researchResult.error.message}`)
+  }
   const predictionsByThesis = new Map<string, RecordValue[]>()
   for (const item of predictionResult.data ?? []) predictionsByThesis.set(item.market_thesis_version_id, [...(predictionsByThesis.get(item.market_thesis_version_id) ?? []), item as RecordValue])
   const exposuresByThesis = new Map<string, RecordValue[]>()
   for (const item of exposureResult.data ?? []) exposuresByThesis.set(item.market_thesis_version_id, [...(exposuresByThesis.get(item.market_thesis_version_id) ?? []), item as RecordValue])
+  const latestResearchByHypothesis = new Map<string, import('../markets/types.ts').MarketHypothesisResearchVersion>()
+  if (!researchResult.error) {
+    const { normalizeResearchVersion } = await import('./market-thesis-research.ts')
+    for (const item of researchResult.data ?? []) {
+      const normalized = normalizeResearchVersion(item as RecordValue)
+      if (!latestResearchByHypothesis.has(normalized.hypothesisId)) latestResearchByHypothesis.set(normalized.hypothesisId, normalized)
+    }
+  }
   return {
     baseline: baselineRow ? normalizeBaseline(baselineRow) : null,
-    hypotheses: (hypothesisResult.data ?? []).map((item) => normalizeHypothesis(item as RecordValue)),
+    hypotheses: (hypothesisResult.data ?? []).map((item) => {
+      const hypothesis = normalizeHypothesis(item as RecordValue)
+      return { ...hypothesis, latestResearch: latestResearchByHypothesis.get(hypothesis.id) ?? null }
+    }),
     theses: (thesisResult.data ?? []).map((item) => normalizeThesis(item as RecordValue, predictionsByThesis.get(item.id) ?? [], exposuresByThesis.get(item.id) ?? [])),
   }
 }

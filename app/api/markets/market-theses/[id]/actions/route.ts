@@ -19,11 +19,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       : null
     if (!action) return NextResponse.json({ error: 'Unsupported market thesis action' }, { status: 400 })
     if (action === 'request_deepening') {
-      const job = await enqueueAgentJob('synthesize-market-hypotheses', {
+      const job = await enqueueAgentJob('deepen-market-hypothesis', {
         ownerId: user.id,
         hypothesisId: id,
-        requestedBy: 'user',
-      }, `synthesize-market-hypotheses:deepening:${user.id}:${id}:${new Date().toISOString().slice(0, 10)}`)
+        reason: 'user-requested deepening',
+      })
       return NextResponse.json({ queued: true, jobId: job.id })
     }
     if (user.id !== 'local-development-user') await setMarketThesisAction(user.id, id, action)

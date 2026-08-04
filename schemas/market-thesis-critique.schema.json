@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "summary", "unsupportedClaims", "contradictoryEvidence", "missingAlternatives", "requiredResearch", "confidenceAdjustment", "sourceIds"],
+  "properties": {
+    "verdict": { "enum": ["pass", "needs_revision"] },
+    "summary": { "type": "string", "minLength": 1 },
+    "unsupportedClaims": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
+    "contradictoryEvidence": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
+    "missingAlternatives": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
+    "requiredResearch": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
+    "confidenceAdjustment": { "type": "number", "minimum": -50, "maximum": 20 },
+    "sourceIds": { "type": "array", "items": { "type": "string" } }
+  }
+}

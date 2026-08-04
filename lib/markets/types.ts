@@ -1189,6 +1189,73 @@ export interface MarketHypothesis {
   parentHypothesisId: string | null
   createdAt: string
   updatedAt: string
+  latestResearch?: MarketHypothesisResearchVersion | null
+}
+
+export type MarketHypothesisResearchStatus = 'running' | 'complete' | 'needs_revision' | 'failed'
+export type MarketResearchEvidenceStatus = 'observed' | 'estimate' | 'claim' | 'inference' | 'unverified'
+
+export interface MarketHypothesisResearchContent {
+  thesisStatement: string
+  whyNow: string
+  causalChain: Array<{ from: string; to: string; mechanism: string; evidenceStatus: MarketResearchEvidenceStatus; sourceIds: string[] }>
+  demand: { currentState: string; changeMechanism: string; sourceIds: string[] }
+  supply: { currentState: string; changeMechanism: string; sourceIds: string[] }
+  bottlenecks: Array<{ name: string; mechanism: string; severity: 'binding' | 'important' | 'watch' | 'not_established'; whoCapturesEconomics: string; resolutionSignals: string[]; sourceIds: string[] }>
+  economics: { valueChain: string; scarcityRentCapture: string; beneficiaries: string[]; substitutes: string[]; sourceIds: string[] }
+  expectations: { currentNarrative: string; whatAppearsPriced: string; variantView: string; sourceIds: string[] }
+  counterThesis: { statement: string; mechanisms: string[]; decisiveTests: string[]; sourceIds: string[] }
+  predictions: Array<{ prediction: string; horizon: string; leadingIndicator: string; confirmation: string; disconfirmation: string; sourceIds: string[] }>
+  falsifiers: Array<{ condition: string; observable: string; thesisImpact: string; sourceIds: string[] }>
+  researchFrontier: Array<{ question: string; causalNode: string; priority: 1 | 2 | 3 | 4 | 5; sourceTypes: string[]; evidenceNeeded: string }>
+  evidenceGaps: string[]
+  confidence: number
+  sourceIds: string[]
+}
+
+export interface MarketHypothesisCritique {
+  verdict: 'pass' | 'needs_revision'
+  summary: string
+  unsupportedClaims: string[]
+  contradictoryEvidence: string[]
+  missingAlternatives: string[]
+  requiredResearch: string[]
+  confidenceAdjustment: number
+  sourceIds: string[]
+}
+
+export interface MarketHypothesisResearchVersion {
+  id: string
+  hypothesisId: string
+  version: number
+  status: MarketHypothesisResearchStatus
+  content: MarketHypothesisResearchContent | null
+  critique: MarketHypothesisCritique | null
+  sourceIds: string[]
+  observationIds: string[]
+  priorResearchVersionId: string | null
+  revisionDiff: string[]
+  provider: string | null
+  model: string | null
+  dataAsOf: string
+  generatedAt: string | null
+  error: string | null
+}
+
+export interface MarketResearchFrontierItem {
+  id: string
+  hypothesisId: string
+  researchVersionId: string | null
+  question: string
+  causalNode: string
+  priority: number
+  sourceTypes: string[]
+  adapterId: string | null
+  status: 'queued' | 'complete' | 'blocked' | 'deferred'
+  evidenceNeeded: string
+  attemptCount: number
+  lastError: string | null
+  nextRunAt: string | null
 }
 
 export interface ThesisPrediction {
@@ -1231,6 +1298,7 @@ export interface MarketThesisVersion {
   dataAsOf: string
   generatedAt: string
   revisionDiff: string[]
+  researchVersionId: string | null
   predictions: ThesisPrediction[]
   exposures: MarketThesisExposure[]
 }

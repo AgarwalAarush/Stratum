@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["thesisStatement", "whyNow", "causalChain", "demand", "supply", "bottlenecks", "economics", "expectations", "counterThesis", "predictions", "falsifiers", "researchFrontier", "evidenceGaps", "confidence", "sourceIds"],
+  "properties": {
+    "thesisStatement": { "type": "string", "minLength": 1 },
+    "whyNow": { "type": "string", "minLength": 1 },
+    "causalChain": { "type": "array", "minItems": 3, "maxItems": 10, "items": { "$ref": "#/$defs/causalLink" } },
+    "demand": { "$ref": "#/$defs/analysisBlock" },
+    "supply": { "$ref": "#/$defs/analysisBlock" },
+    "bottlenecks": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "$ref": "#/$defs/bottleneck" } },
+    "economics": { "$ref": "#/$defs/economics" },
+    "expectations": { "$ref": "#/$defs/expectations" },
+    "counterThesis": { "$ref": "#/$defs/counterThesis" },
+    "predictions": { "type": "array", "minItems": 2, "maxItems": 6, "items": { "$ref": "#/$defs/prediction" } },
+    "falsifiers": { "type": "array", "minItems": 2, "maxItems": 8, "items": { "$ref": "#/$defs/falsifier" } },
+    "researchFrontier": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/frontier" } },
+    "evidenceGaps": { "type": "array", "minItems": 1, "maxItems": 12, "items": { "type": "string", "minLength": 1 } },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 100 },
+    "sourceIds": { "$ref": "#/$defs/sourceIds" }
+  },
+  "$defs": {
+    "sourceIds": { "type": "array", "items": { "type": "string" } },
+    "evidenceStatus": { "enum": ["observed", "estimate", "claim", "inference", "unverified"] },
+    "causalLink": { "type": "object", "additionalProperties": false, "required": ["from", "to", "mechanism", "evidenceStatus", "sourceIds"], "properties": { "from": { "type": "string", "minLength": 1 }, "to": { "type": "string", "minLength": 1 }, "mechanism": { "type": "string", "minLength": 1 }, "evidenceStatus": { "$ref": "#/$defs/evidenceStatus" }, "sourceIds": { "$ref": "#/$defs/sourceIds" } } },
+    "analysisBlock": { "type": "object", "additionalProperties": false, "required": ["currentState", "changeMechanism", "sourceIds"], "properties": { "currentState": { "type": "string", "minLength": 1 }, "changeMechanism": { "type": "string", "minLength": 1 }, "sourceIds": { "$ref": "#/$defs/sourceIds" } } },
+    "bottleneck": { "type": "object", "additionalProperties": false, "required": ["name", "mechanism", "severity", "whoCapturesEconomics", "resolutionSignals", "sourceIds"], "properties": { "name": { "type": "string", "minLength": 1 }, "mechanism": { "type": "string", "minLength": 1 }, "severity": { "enum": ["binding", "important", "watch", "not_established"] }, "whoCapturesEconomics": { "type": "string", "minLength": 1 }, "resolutionSignals": { "type": "array", "minItems": 1, "maxItems": 6, "items": { "type": "string", "minLength": 1 } }, "sourceIds": { "$ref": "#/$defs/sourceIds" } } },
+    "economics": { "type": "object", "additionalProperties": false, "required": ["valueChain", "scarcityRentCapture", "beneficiaries", "substitutes", "sourceIds"], "properties": { "valueChain": { "type": "string", "minLength": 1 }, "scarcityRentCapture": { "type": "string", "minLength": 1 }, "beneficiaries": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 1 } }, "substitutes": { "type": "array", "maxItems": 8, "items": { "type": "string", "minLength": 1 } }, "sourceIds": { "$ref": "#/$defs/sourceIds" } } },
+    "expectations": { "type": "object", "additionalProperties": false, "required": ["currentNarrative", "whatAppearsPriced", "variantView", "sourceIds"], "properties": { "currentNarrative": { "type": "string", "minLength": 1 }, "whatAppearsPriced": { "type": "string", "minLength": 1 }, "variantView": { "type": "string", "minLength": 1 }, "sourceIds": { "$ref": "#/$defs/sourceIds" } } },
+    "counterThesis": { "type": "object", "additionalProperties": false, "required": ["statement", "mechanisms", "decisiveTests", "sourceIds"], "properties": { "statement": { "type": "string", "minLength": 1 }, "mechanisms": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 1 } }, "decisiveTests": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 1 } }, "sourceIds": { "$ref": "#/$defs/sourceIds" } } },
+    "prediction": { "type": "object", "additionalProperties": false, "required": ["prediction", "horizon", "leadingIndicator", "confirmation", "disconfirmation", "sourceIds"], "properties": { "prediction": { "type": "string", "minLength": 1 }, "horizon": { "type": "string", "minLength": 1 }, "leadingIndicator": { "type": "string", "minLength": 1 }, "confirmation": { "type": "string", "minLength": 1 }, "disconfirmation": { "type": "string", "minLength": 1 }, "sourceIds": { "$ref": "#/$defs/sourceIds" } } },
+    "falsifier": { "type": "object", "additionalProperties": false, "required": ["condition", "observable", "thesisImpact", "sourceIds"], "properties": { "condition": { "type": "string", "minLength": 1 }, "observable": { "type": "string", "minLength": 1 }, "thesisImpact": { "type": "string", "minLength": 1 }, "sourceIds": { "$ref": "#/$defs/sourceIds" } } },
+    "frontier": { "type": "object", "additionalProperties": false, "required": ["question", "causalNode", "priority", "sourceTypes", "evidenceNeeded"], "properties": { "question": { "type": "string", "minLength": 1 }, "causalNode": { "type": "string", "minLength": 1 }, "priority": { "type": "integer", "minimum": 1, "maximum": 5 }, "sourceTypes": { "type": "array", "maxItems": 6, "items": { "type": "string", "minLength": 1 } }, "evidenceNeeded": { "type": "string", "minLength": 1 } } }
+  }
+}

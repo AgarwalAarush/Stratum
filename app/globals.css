@@ -1703,6 +1703,9 @@
 .market-thesis-card h3 { font-size: 17px; line-height: 1.25; margin-top: 7px; }
 .market-hypothesis-card > div { border-top: 1px solid var(--market-border); margin-top: 14px; padding-top: 12px; }
 .market-hypothesis-card > div > span { color: var(--market-text-muted); font-size: 10px; text-transform: uppercase; }
+.market-hypothesis-research[data-status="complete"] > span { color: var(--market-positive); }
+.market-hypothesis-research[data-status="needs_revision"] > span { color: var(--market-negative); }
+.market-hypothesis-research small { color: var(--market-text-muted); display: block; font-size: 11px; line-height: 1.45; margin-top: 8px; }
 .market-hypothesis-card footer { border-top: 1px solid var(--market-border); margin-top: 15px; padding-top: 11px; }
 .market-hypothesis-card footer > div { border: 0; display: flex; gap: 7px; margin: 0; padding: 0; }
 .market-hypothesis-card button { background: transparent; border: 1px solid var(--market-border); color: var(--market-text); cursor: pointer; font-size: 10px; padding: 7px 8px; }

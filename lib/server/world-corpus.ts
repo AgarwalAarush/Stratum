@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readdir, stat, statfs, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, statfs, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 
@@ -40,6 +40,15 @@ export interface StoredWorldCorpusDocument {
 
 function dataRoot(environment: NodeJS.ProcessEnv = process.env): string {
   return environment.STRATUM_DATA_ROOT?.trim() || DEFAULT_MARKET_DATA_ROOT
+}
+
+function corpusPath(key: string, environment: NodeJS.ProcessEnv = process.env): string {
+  const root = dataRoot(environment)
+  const resolved = join(root, key)
+  // Archive keys originate in this module. Keep the extra boundary here because
+  // research jobs read paths returned from persisted metadata.
+  if (!resolved.startsWith(`${root}/`)) throw new Error('Invalid market corpus key')
+  return resolved
 }
 
 function safePathPart(value: string): string {
@@ -124,6 +133,19 @@ export async function storeWorldCorpusDocument(
     await writeFile(extractedPath, metadata, { mode: 0o600 })
   }
   return { contentHash, archiveKey, extractedKey, byteCount: bytes.byteLength }
+}
+
+/** Read a bounded, extracted source excerpt for a private research job. */
+export async function readWorldCorpusExtract(
+  extractedKey: string,
+  maxCharacters = 12_000,
+  environment: NodeJS.ProcessEnv = process.env,
+): Promise<string> {
+  if (!extractedKey.startsWith('sources/extracted/') || !extractedKey.endsWith('.md')) {
+    throw new Error('Invalid market corpus extract key')
+  }
+  const content = await readFile(corpusPath(extractedKey, environment), 'utf8')
+  return content.slice(0, Math.max(1, Math.min(maxCharacters, 40_000)))
 }
 
 interface WarehouseObservation {
