@@ -197,7 +197,7 @@ function normalizeHypothesis(row: RecordValue): MarketHypothesis {
 export function normalizeResearchVersion(row: RecordValue): MarketHypothesisResearchVersion {
   const content = row.content && Object.keys(record(row.content)).length > 0 ? validateMarketThesisResearch(row.content) : null
   const critique = row.critique && Object.keys(record(row.critique)).length > 0 ? validateMarketThesisCritique(row.critique) : null
-  return { id: String(row.id), hypothesisId: String(row.hypothesis_id), version: number(row.version), status: row.status as MarketHypothesisResearchVersion['status'], content, critique, sourceIds: strings(row.source_ids), observationIds: strings(row.observation_ids), priorResearchVersionId: row.prior_research_version_id === null ? null : String(row.prior_research_version_id ?? ''), revisionDiff: strings(row.revision_diff), provider: row.provider === null ? null : String(row.provider ?? ''), model: row.model === null ? null : String(row.model ?? ''), dataAsOf: String(row.data_as_of), generatedAt: row.generated_at === null ? null : String(row.generated_at ?? ''), error: row.error === null ? null : String(row.error ?? '') }
+  return { id: String(row.id), hypothesisId: String(row.hypothesis_id), version: number(row.version), status: row.status as MarketHypothesisResearchVersion['status'], content, critique, sourceIds: strings(row.source_ids), observationIds: strings(row.observation_ids), priorResearchVersionId: row.prior_research_version_id === null ? null : String(row.prior_research_version_id ?? ''), revisionDiff: strings(row.revision_diff), provider: row.provider === null ? null : String(row.provider ?? ''), model: row.model === null ? null : String(row.model ?? ''), criticProvider: row.critic_provider === null ? null : String(row.critic_provider ?? ''), criticModel: row.critic_model === null ? null : String(row.critic_model ?? ''), criticGeneratedAt: row.critic_generated_at === null ? null : String(row.critic_generated_at ?? ''), dataAsOf: String(row.data_as_of), generatedAt: row.generated_at === null ? null : String(row.generated_at ?? ''), error: row.error === null ? null : String(row.error ?? '') }
 }
 
 function researchPrompt(hypothesis: MarketHypothesis, sources: Array<ResearchSource & { excerpt: string }>, prior: MarketHypothesisResearchVersion | null, reason: string): string {
@@ -428,11 +428,12 @@ export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOpti
     const status = critique.verdict === 'pass' ? 'complete' : 'needs_revision'
     const generatedAt = new Date().toISOString()
     const { error: updateError } = await supabase.from('market_hypothesis_research_versions').update({
-      status, content: research, critique, source_ids: research.sourceIds, revision_diff: revisionDiff(prior, research), provider: researchResult.metadata.provider, model: researchResult.metadata.model, generated_at: generatedAt, error: null,
+      status, content: research, critique, source_ids: research.sourceIds, revision_diff: revisionDiff(prior, research), provider: researchResult.metadata.provider, model: researchResult.metadata.model,
+      critic_provider: critiqueResult.metadata.provider, critic_model: critiqueResult.metadata.model, critic_generated_at: generatedAt, generated_at: generatedAt, error: null,
     }).eq('id', row.id).eq('status', 'running')
     if (updateError) throw new Error(`Unable to publish market research artifact: ${updateError.message}`)
     await persistFrontier(hypothesis.id, row.id, buildPersistedResearchFrontier(research.researchFrontier, critique))
-    return { id: row.id, hypothesisId: hypothesis.id, version, status, content: research, critique, sourceIds: research.sourceIds, observationIds: sources.map((source) => source.observationId), priorResearchVersionId: prior?.id ?? null, revisionDiff: revisionDiff(prior, research), provider: researchResult.metadata.provider, model: researchResult.metadata.model, dataAsOf: now, generatedAt, error: null }
+    return { id: row.id, hypothesisId: hypothesis.id, version, status, content: research, critique, sourceIds: research.sourceIds, observationIds: sources.map((source) => source.observationId), priorResearchVersionId: prior?.id ?? null, revisionDiff: revisionDiff(prior, research), provider: researchResult.metadata.provider, model: researchResult.metadata.model, criticProvider: critiqueResult.metadata.provider, criticModel: critiqueResult.metadata.model, criticGeneratedAt: generatedAt, dataAsOf: now, generatedAt, error: null }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     await supabase.from('market_hypothesis_research_versions').update({ status: 'failed', error: message }).eq('id', row.id)

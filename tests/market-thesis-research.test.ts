@@ -127,10 +127,12 @@ test('agent jobs and thesis workspace preserve a bounded research frontier', asy
 })
 
 test('market-thesis promotion requires a completed analyst and critic artifact', async () => {
-  const [worldMemory, migration, criticFrontierMigration] = await Promise.all([
+  const [worldMemory, migration, criticFrontierMigration, criticProvenanceMigration, research] = await Promise.all([
     readFile(new URL('../lib/server/world-memory.ts', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/202608030003_market_hypothesis_research.sql', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/202608040017_backfill_critic_research_frontiers.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/202608040018_market_research_critic_provenance.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/server/market-thesis-research.ts', import.meta.url), 'utf8'),
   ])
   assert.match(worldMemory, /eq\('status', 'complete'\)/)
   assert.match(worldMemory, /research\.critique\?\.verdict !== 'pass'/)
@@ -140,4 +142,8 @@ test('market-thesis promotion requires a completed analyst and critic artifact',
   assert.match(criticFrontierMigration, /jsonb_array_elements_text/)
   assert.match(criticFrontierMigration, /adapter_id\s*,[\s\S]*'critic'/)
   assert.match(criticFrontierMigration, /not exists/)
+  assert.match(criticProvenanceMigration, /critic_provider/)
+  assert.match(criticProvenanceMigration, /critic_model/)
+  assert.match(research, /critic_provider: critiqueResult\.metadata\.provider/)
+  assert.match(research, /criticModel: critiqueResult\.metadata\.model/)
 })

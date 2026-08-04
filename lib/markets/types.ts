@@ -1429,6 +1429,9 @@ export interface MarketHypothesisResearchVersion {
   revisionDiff: string[]
   provider: string | null
   model: string | null
+  criticProvider: string | null
+  criticModel: string | null
+  criticGeneratedAt: string | null
   dataAsOf: string
   generatedAt: string | null
   error: string | null
