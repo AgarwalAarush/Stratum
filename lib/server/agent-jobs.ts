@@ -605,7 +605,7 @@ async function executeJob(
     const captureIds = Array.isArray(job.payload.captureIds) ? job.payload.captureIds.filter((item): item is string => typeof item === 'string') : undefined
     await reportProgress(5, 'creating quote-verified observation proposals')
     const result = await triageCapturedWorldObservationProposals({ captureIds })
-    await reportProgress(100, `${result.proposals} reviewable proposals from ${result.documents} documents`)
+    await reportProgress(100, `${result.proposals} reviewable proposals from ${result.documents} documents; ${result.failures.length} isolated failures`)
     return result
   }
 

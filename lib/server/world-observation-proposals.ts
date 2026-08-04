@@ -142,36 +142,69 @@ export interface TriageWorldObservationProposalsOptions {
   runner?: (prompt: string) => Promise<CodexExecResult<WorldObservationProposalContent>>
 }
 
+async function recordTriageRun(input: {
+  captureId: string
+  status: 'succeeded' | 'failed' | 'skipped'
+  proposalCount?: number
+  provider?: string | null
+  model?: string | null
+  error?: string | null
+}): Promise<void> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { error } = await supabase.from('world_observation_proposal_triage_runs').insert({
+    source_capture_id: input.captureId, status: input.status, proposal_count: input.proposalCount ?? 0,
+    provider: input.provider ?? null, model: input.model ?? null, error: input.error ?? null,
+  })
+  if (error) throw new Error(`Unable to persist observation triage telemetry: ${error.message}`)
+}
+
 /** Cheap, bounded proposal extraction. It never writes world_observations and
  * the rest of the market model never reads this proposal table directly. */
-export async function triageCapturedWorldObservationProposals(options: TriageWorldObservationProposalsOptions = {}): Promise<{ documents: number; proposals: number; captureIds: string[] }> {
+export async function triageCapturedWorldObservationProposals(options: TriageWorldObservationProposalsOptions = {}): Promise<{
+  documents: number
+  proposals: number
+  captureIds: string[]
+  failures: Array<{ captureId: string; sourceSlug: string; error: string }>
+}> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const contexts = await loadCapturedDocumentContexts(options.captureIds)
   let proposalCount = 0
   const completedCaptureIds: string[] = []
+  const failures: Array<{ captureId: string; sourceSlug: string; error: string }> = []
   for (const context of contexts) {
-    const { contract } = await resolveApprovedWorldSource(context.sourceSlug, context.canonicalUrl)
-    const excerpt = await readWorldCorpusExtract(context.extractedKey, 12_000)
-    if (excerpt.trim().length < 240) continue
-    const runner = options.runner ?? ((prompt: string) => runCodexJson({
-      prompt, schemaPath: 'schemas/world-observation-proposals.schema.json', model: selectMarketModel('observation_triage').model,
-      validate: (value) => validateWorldObservationProposals(value, { domainId: context.domainId, contract, extractedText: excerpt }), timeoutMs: 8 * 60 * 1_000,
-    }))
-    const result = await runner(proposalPrompt(context, excerpt, contract.assertionsAllowed))
-    const content = validateWorldObservationProposals(result.data, { domainId: context.domainId, contract, extractedText: excerpt })
-    const generatedAt = new Date().toISOString()
-    const rows = content.proposals.map((proposal) => ({
-      source_capture_id: context.captureId, document_id: context.documentId, source_id: context.sourceId, domain_id: context.domainId,
-      mechanism: proposal.mechanism, assertion: proposal.assertion, observation_kind: proposal.kind, evidence_quote: proposal.evidenceQuote,
-      confidence: proposal.confidence, materiality: proposal.materiality, novelty: proposal.novelty, fingerprint: proposalFingerprint(context, proposal),
-      provider: result.metadata.provider, model: result.metadata.model, generated_at: generatedAt,
-      metadata: { proposalOnly: true, sourceContractVersion: contract.version },
-    }))
-    const { error } = await supabase.from('world_observation_proposals').upsert(rows, { onConflict: 'fingerprint', ignoreDuplicates: true })
-    if (error) throw new Error(`Unable to persist observation proposals: ${error.message}`)
-    proposalCount += rows.length
-    completedCaptureIds.push(context.captureId)
+    try {
+      const { contract } = await resolveApprovedWorldSource(context.sourceSlug, context.canonicalUrl)
+      const excerpt = await readWorldCorpusExtract(context.extractedKey, 12_000)
+      if (excerpt.trim().length < 240) {
+        await recordTriageRun({ captureId: context.captureId, status: 'skipped', error: 'Extracted source text is too short for bounded triage' })
+        continue
+      }
+      const runner = options.runner ?? ((prompt: string) => runCodexJson({
+        prompt, schemaPath: 'schemas/world-observation-proposals.schema.json', model: selectMarketModel('observation_triage').model,
+        validate: (value) => validateWorldObservationProposals(value, { domainId: context.domainId, contract, extractedText: excerpt }), timeoutMs: 8 * 60 * 1_000,
+      }))
+      const result = await runner(proposalPrompt(context, excerpt, contract.assertionsAllowed))
+      const content = validateWorldObservationProposals(result.data, { domainId: context.domainId, contract, extractedText: excerpt })
+      const generatedAt = new Date().toISOString()
+      const rows = content.proposals.map((proposal) => ({
+        source_capture_id: context.captureId, document_id: context.documentId, source_id: context.sourceId, domain_id: context.domainId,
+        mechanism: proposal.mechanism, assertion: proposal.assertion, observation_kind: proposal.kind, evidence_quote: proposal.evidenceQuote,
+        confidence: proposal.confidence, materiality: proposal.materiality, novelty: proposal.novelty, fingerprint: proposalFingerprint(context, proposal),
+        provider: result.metadata.provider, model: result.metadata.model, generated_at: generatedAt,
+        metadata: { proposalOnly: true, sourceContractVersion: contract.version },
+      }))
+      const { error } = await supabase.from('world_observation_proposals').upsert(rows, { onConflict: 'fingerprint', ignoreDuplicates: true })
+      if (error) throw new Error(`Unable to persist observation proposals: ${error.message}`)
+      await recordTriageRun({ captureId: context.captureId, status: 'succeeded', proposalCount: rows.length, provider: result.metadata.provider, model: result.metadata.model })
+      proposalCount += rows.length
+      completedCaptureIds.push(context.captureId)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      await recordTriageRun({ captureId: context.captureId, status: 'failed', error: message })
+      failures.push({ captureId: context.captureId, sourceSlug: context.sourceSlug, error: message })
+    }
   }
-  return { documents: completedCaptureIds.length, proposals: proposalCount, captureIds: completedCaptureIds }
+  return { documents: contexts.length, proposals: proposalCount, captureIds: completedCaptureIds, failures }
 }
