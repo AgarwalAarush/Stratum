@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { aiPowerV1SourceAdapter, semicapDataCenterV1SourceAdapter } from '../lib/server/world-sources.ts'
+import { aiPowerV1SourceAdapter, criticalMaterialsV1SourceAdapter, semicapDataCenterV1SourceAdapter } from '../lib/server/world-sources.ts'
 
 function html(title: string) {
   return `<!doctype html><html><head><title>${title}</title><script>ignore()</script></head><body><main>${'Evidence about AI data centers, electricity demand, reliability, interconnection, capacity and equipment. '.repeat(8)}</main></body></html>`
@@ -44,4 +44,14 @@ test('semicap/data-center packet maps primary evidence to the generic domain mec
   assert.equal(result.observations.length, 4)
   assert.deepEqual(new Set(result.observations.map((item) => item.mechanism)), new Set(['compute_demand', 'component_lead_time', 'fabrication_capacity', 'supply_chain_capture']))
   assert.ok(result.observations.every((item) => item.domain === 'semicap-data-center-equipment' && Boolean(item.sourceSlug)))
+})
+
+test('critical-materials packet maps supply, processing, trade, and substitution evidence without a price call', async () => {
+  const result = await criticalMaterialsV1SourceAdapter.ingest({
+    fetchImpl: async () => new Response(html('critical materials source'), { status: 200, headers: { 'content-type': 'text/html' } }),
+  })
+  assert.equal(result.observations.length, 4)
+  assert.deepEqual(new Set(result.observations.map((item) => item.mechanism)), new Set(['resource_supply', 'processing_concentration', 'trade_constraint', 'substitution']))
+  assert.ok(result.observations.every((item) => item.domain === 'critical-materials' && Boolean(item.sourceSlug)))
+  assert.ok(result.observations.every((item) => !/price target|buy|sell/i.test(item.assertion)))
 })

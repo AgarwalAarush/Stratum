@@ -223,7 +223,59 @@ export const semicapDataCenterV1SourceAdapter: WorldSourceAdapter = {
   },
 }
 
-const WORLD_SOURCE_ADAPTERS: WorldSourceAdapter[] = [aiPowerV1SourceAdapter, semicapDataCenterV1SourceAdapter]
+/**
+ * Critical materials is deliberately a supply-chain packet, not a commodity
+ * price call. The four documents map the domain's independent mechanisms and
+ * retain the limits of government assessments and issuer disclosures.
+ */
+export const CRITICAL_MATERIALS_SOURCE_SPECS: WorldDocumentSourceSpec[] = [
+  {
+    id: 'usgs-mcs-2026', sourceSlug: 'usgs-mcs-2026', domain: 'critical-materials',
+    title: 'U.S. Geological Survey Mineral Commodity Summaries 2026', url: 'https://pubs.usgs.gov/periodicals/mcs2026/mcs2026.pdf',
+    publisher: 'U.S. Geological Survey', sourceTier: 'regulatory',
+    assertion: 'USGS Mineral Commodity Summaries 2026 provides the government\'s early production, reserve, import-reliance, and trade context for critical minerals, including rare earth materials.',
+    kind: 'fact', mechanism: 'trade_constraint', entities: [{ kind: 'regulator', name: 'U.S. Geological Survey', aliases: ['USGS'] }, { kind: 'industry', name: 'Critical minerals' }, { kind: 'jurisdiction', name: 'United States' }],
+    geography: 'United States and global', publishedAt: '2026-02-06T00:00:00.000Z', confidence: 90, materiality: 87, novelty: 70,
+  },
+  {
+    id: 'doe-critical-materials-assessment', sourceSlug: 'doe-critical-materials-assessment', domain: 'critical-materials',
+    title: 'Department of Energy critical minerals and materials assessment', url: 'https://www.energy.gov/cmm/what-are-critical-minerals-and-materials',
+    publisher: 'U.S. Department of Energy', sourceTier: 'regulatory',
+    assertion: 'DOE\'s critical-materials methodology assesses supply-disruption risk alongside energy-technology importance and explicitly includes substitutability in its supply-risk framing.',
+    kind: 'fact', mechanism: 'substitution', entities: [{ kind: 'regulator', name: 'U.S. Department of Energy', aliases: ['DOE'] }, { kind: 'industry', name: 'Critical materials' }, { kind: 'technology', name: 'Energy technologies' }],
+    geography: 'Global', publishedAt: '2026-06-02T00:00:00.000Z', confidence: 86, materiality: 80, novelty: 65,
+  },
+  {
+    id: 'mp-materials-2025-10k', sourceSlug: 'sec-mp-materials-2025-10k', domain: 'critical-materials',
+    title: 'MP Materials fiscal 2025 annual report', url: 'https://www.sec.gov/Archives/edgar/data/1801368/000180136826000008/mp-20251231.htm',
+    publisher: 'MP Materials Corp.', sourceTier: 'primary',
+    assertion: 'MP Materials reports record upstream concentrate production in 2025 and continued investment in Mountain Pass and downstream rare-earth and magnet capacity.',
+    kind: 'fact', mechanism: 'resource_supply', entities: [{ kind: 'company', name: 'MP Materials', aliases: ['MP'] }, { kind: 'facility', name: 'Mountain Pass' }, { kind: 'commodity', name: 'Rare earth materials' }],
+    geography: 'United States', publishedAt: '2026-02-26T00:00:00.000Z', confidence: 89, materiality: 84, novelty: 72,
+  },
+  {
+    id: 'lynas-fy2025-annual-report', sourceSlug: 'lynas-fy2025-annual-report', domain: 'critical-materials',
+    title: 'Lynas Rare Earths FY2025 annual report', url: 'https://announcements.asx.com.au/asxpdf/20250828/pdf/06ngtkbmf2fb5g.pdf',
+    publisher: 'Lynas Rare Earths Limited', sourceTier: 'primary',
+    assertion: 'Lynas reports separated heavy-rare-earth oxide production and expansion of rare-earth processing capacity outside China, while noting the market and execution limits around the build-out.',
+    kind: 'fact', mechanism: 'processing_concentration', entities: [{ kind: 'company', name: 'Lynas Rare Earths', aliases: ['LYC'] }, { kind: 'commodity', name: 'Rare earth oxides' }, { kind: 'industry', name: 'Rare earth processing' }],
+    geography: 'Australia and Malaysia', publishedAt: '2025-08-28T00:00:00.000Z', confidence: 86, materiality: 82, novelty: 66,
+  },
+]
+
+export const criticalMaterialsV1SourceAdapter: WorldSourceAdapter = {
+  id: 'critical-materials-v1', label: 'Critical materials primary source packet', domain: 'critical-materials', cadence: 'weekly', sourceIds: CRITICAL_MATERIALS_SOURCE_SPECS.map((item) => item.id),
+  async ingest(options = {}) {
+    const fetchImpl = options.fetchImpl ?? fetch
+    const results = await Promise.allSettled(CRITICAL_MATERIALS_SOURCE_SPECS.map((spec) => fetchWorldSourceSpec(spec, fetchImpl)))
+    const observations = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
+    const failures = results.flatMap((result, index) => result.status === 'rejected' ? [{ sourceId: CRITICAL_MATERIALS_SOURCE_SPECS[index]!.id, message: result.reason instanceof Error ? result.reason.message : String(result.reason) }] : [])
+    if (observations.length === 0) throw new Error(`Critical-materials source adapter did not ingest any documents: ${failures.map((item) => item.message).join('; ')}`)
+    return { observations, failures }
+  },
+}
+
+const WORLD_SOURCE_ADAPTERS: WorldSourceAdapter[] = [aiPowerV1SourceAdapter, semicapDataCenterV1SourceAdapter, criticalMaterialsV1SourceAdapter]
 
 export function getWorldSourceAdapter(id: string): WorldSourceAdapter | null {
   return WORLD_SOURCE_ADAPTERS.find((adapter) => adapter.id === id) ?? null

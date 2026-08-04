@@ -33,6 +33,10 @@ With `MARKET_WORLD_MODEL_ENABLED=true`, the worker fetches the curated `ai-power
 
 Keep `MARKET_AUTO_THESIS_ENABLED=false` through the first real end-to-end validation. The first run may form a hypothesis; it cannot create a capital decision and auto-promotion is a separate, later gate.
 
+### Candidate critical-materials vertical
+
+`critical-materials-v1` is the next governed packet. Its USGS Mineral Commodity Summaries, DOE critical-material assessment, MP Materials filing, and Lynas annual report map resource supply, processing concentration, trade constraints, and substitution without making a commodity-price or security call. The domain stays `candidate` until its approved sources have been durably ingested by the private worker and the governed activation path records a successful coverage review.
+
 ### Source control and scout policy
 
 Sources are governed independently from the documents they emit. `world_source_registry` records candidate, probation, approved, blocked, and retired sources; every newly governed source needs an immutable active contract that constrains hosts, paths, MIME types, cadence, and observation kinds. The worker rejects a source outside that contract before it can create a `world_document` or observation.
