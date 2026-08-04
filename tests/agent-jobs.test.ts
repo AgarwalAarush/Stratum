@@ -137,6 +137,14 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('monitor-investment-theses'), 'market-data')
   assert.equal(agentJobProvider('scout-world-sources'), 'codex')
   assert.equal(agentJobProvider('verify-world-source-health'), 'market-data')
+  assert.equal(agentJobProvider('triage-world-observation-proposals'), 'codex')
+})
+
+test('observation-triage work deduplicates the immutable capture set', () => {
+  assert.equal(
+    buildAgentJobDedupeKey('triage-world-observation-proposals', new Date('2026-08-04T00:00:00Z'), { captureIds: ['capture-b', 'capture-a'] }),
+    'triage-world-observation-proposals:capture-a,capture-b',
+  )
 })
 
 test('stock coverage requests refresh the materialized screener through the existing Alpaca worker', async () => {

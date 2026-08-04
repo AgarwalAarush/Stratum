@@ -124,4 +124,5 @@ test('source-control migration makes contracts mandatory for newly governed obse
   assert.match(controlService, /world_source_domains/)
   assert.match(controlService, /domainIdsBySourceId/)
   assert.match(await readFile(new URL('../supabase/migrations/202608040008_world_source_document_captures.sql', import.meta.url), 'utf8'), /world_source_document_captures/)
+  assert.match(await readFile(new URL('../supabase/migrations/202608040009_world_observation_proposals.sql', import.meta.url), 'utf8'), /world_observation_proposals/)
 })

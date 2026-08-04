@@ -31,6 +31,7 @@ import { getWorldSourceAdapter } from './world-sources.ts'
 import { isMarketDomainActive, runWorldSourceScout } from './world-source-control.ts'
 import { auditWorldSourceHealth } from './world-source-health.ts'
 import { collectGovernedWorldSourceDocuments } from './world-source-collector.ts'
+import { triageCapturedWorldObservationProposals } from './world-observation-proposals.ts'
 import { AI_MODELS } from '../ai/config.ts'
 import { selectMarketModel } from './market-model-policy.ts'
 import { evaluateMarketPrediction, findDueMarketPredictionEvaluations } from './market-prediction-evaluation.ts'
@@ -66,6 +67,7 @@ export const AGENT_JOB_TYPES = [
   'ingest-world-source',
   'verify-world-source-health',
   'collect-world-source-documents',
+  'triage-world-observation-proposals',
   'scout-world-sources',
   'compile-world-baseline',
   'correlate-market-signals',
@@ -222,6 +224,10 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     if (typeof payload.fingerprint === 'string') return `${jobType}:${payload.fingerprint}`
     if (typeof payload.adapterId === 'string') return `${jobType}:${payload.adapterId}:${now.toISOString().slice(0, 10)}`
   }
+  if (jobType === 'triage-world-observation-proposals' && Array.isArray(payload.captureIds)) {
+    const captures = payload.captureIds.filter((item): item is string => typeof item === 'string').sort().join(',')
+    if (captures) return `${jobType}:${captures}`
+  }
   if (jobType === 'verify-world-source-health') return `${jobType}:${now.toISOString().slice(0, 10)}`
   if (jobType === 'scout-world-sources' && typeof payload.domainId === 'string') {
     return `${jobType}:${payload.domainId}:${now.toISOString().slice(0, 10)}`
@@ -245,6 +251,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'fetch-stock-price-history' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
   if (jobType === 'ingest-world-source' || jobType === 'verify-world-source-health' || jobType === 'collect-world-source-documents') return 'market-data'
+  if (jobType === 'triage-world-observation-proposals') return 'codex'
   if (
     jobType === 'refresh-cross-asset'
     || jobType === 'materialize-market-leadership'
@@ -589,7 +596,16 @@ async function executeJob(
   if (job.job_type === 'collect-world-source-documents') {
     await reportProgress(5, 'collecting bounded governed source documents')
     const result = await collectGovernedWorldSourceDocuments()
+    if (result.captureIds.length > 0) await enqueueAgentJob('triage-world-observation-proposals', { captureIds: result.captureIds })
     await reportProgress(100, `${result.captured} captured, ${result.rejected} rejected, ${result.failed} failed`)
+    return result
+  }
+
+  if (job.job_type === 'triage-world-observation-proposals') {
+    const captureIds = Array.isArray(job.payload.captureIds) ? job.payload.captureIds.filter((item): item is string => typeof item === 'string') : undefined
+    await reportProgress(5, 'creating quote-verified observation proposals')
+    const result = await triageCapturedWorldObservationProposals({ captureIds })
+    await reportProgress(100, `${result.proposals} reviewable proposals from ${result.documents} documents`)
     return result
   }
 
@@ -730,7 +746,9 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
     ? 'market-data'
     : agentJobProvider(job.job_type)
   const model = provider === 'codex'
-    ? (job.job_type === 'scout-world-sources' ? selectMarketModel('source_scout').model : (process.env.CODEX_SYNTHESIS_MODEL ?? AI_MODELS.scheduledSynthesis))
+    ? (job.job_type === 'scout-world-sources' ? selectMarketModel('source_scout').model
+      : job.job_type === 'triage-world-observation-proposals' ? selectMarketModel('observation_triage').model
+        : (process.env.CODEX_SYNTHESIS_MODEL ?? AI_MODELS.scheduledSynthesis))
     : null
   const { data: run, error: runError } = await supabase
     .from('agent_runs')
