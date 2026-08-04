@@ -3,7 +3,14 @@ import { fetchWorldSourceControlWorkspace, resolveApprovedWorldSource } from './
 import { getSupabaseClient } from './supabase.ts'
 
 const HEALTH_TIMEOUT_MS = 15_000
-const FALLBACK_HEAD_STATUSES = new Set([405, 501])
+// Several public authorities reject HEAD (or route it differently) while
+// allowing a bounded GET. Treat those method-specific results as inconclusive,
+// not as a source outage; the GET still validates the active contract.
+const FALLBACK_HEAD_STATUSES = new Set([403, 405, 501, 503])
+const SOURCE_HEALTH_HEADERS = {
+  'User-Agent': 'StratumMarketMemory/1.0 (+private research worker)',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.7',
+}
 
 export interface WorldSourceHealthProbe {
   status: WorldSourceHealthStatus
@@ -33,11 +40,11 @@ function allowedMime(contract: WorldSourceContract, mimeType: string | null): bo
 }
 
 async function healthResponse(fetchImpl: typeof fetch, canonicalUrl: string, signal: AbortSignal): Promise<Response> {
-  let response = await fetchImpl(canonicalUrl, { method: 'HEAD', redirect: 'follow', signal })
+  let response = await fetchImpl(canonicalUrl, { method: 'HEAD', redirect: 'follow', signal, headers: SOURCE_HEALTH_HEADERS })
   if (FALLBACK_HEAD_STATUSES.has(response.status)) {
     response = await fetchImpl(canonicalUrl, {
       method: 'GET', redirect: 'follow', signal,
-      headers: { Range: 'bytes=0-1024', Accept: 'text/html,application/pdf;q=0.9,*/*;q=0.1' },
+      headers: { ...SOURCE_HEALTH_HEADERS, Range: 'bytes=0-1024' },
     })
   }
   return response

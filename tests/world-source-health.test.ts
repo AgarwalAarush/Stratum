@@ -20,7 +20,7 @@ test('source health accepts a reachable source that matches its active contract'
   assert.equal(health.error, null)
 })
 
-test('source health falls back to a bounded GET when HEAD is unsupported', async () => {
+test('source health falls back to a bounded GET when HEAD is unsupported or rejected by a source edge', async () => {
   const methods: string[] = []
   const health = await probeWorldSourceHealth(source, contract, {
     fetchImpl: async (_url, init) => {
@@ -32,6 +32,14 @@ test('source health falls back to a bounded GET when HEAD is unsupported', async
   })
   assert.deepEqual(methods, ['HEAD', 'GET'])
   assert.equal(health.status, 'healthy')
+
+  const rejectedByHead = await probeWorldSourceHealth(source, contract, {
+    fetchImpl: async (_url, init) => String(init?.method) === 'HEAD'
+      ? new Response('', { status: 403 })
+      : new Response('', { status: 206, headers: { 'content-type': 'text/html' } }),
+  })
+  assert.equal(rejectedByHead.status, 'healthy')
+  assert.equal(rejectedByHead.httpStatus, 206)
 })
 
 test('source health preserves a failed contract shape for review instead of changing admission', async () => {
