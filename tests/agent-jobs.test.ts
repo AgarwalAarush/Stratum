@@ -279,6 +279,9 @@ test('worker startup recovers stale claimed jobs after a hard stop', async () =>
   assert.match(agentJobsSource, /Recovered after the worker stopped/)
   assert.match(workerSource, /await recoverStaleAgentJobs\(\)/)
   assert.match(workerSource, /nextRecoveryAt/)
+  assert.match(workerSource, /WORKER_SHUTDOWN_GRACE_MS/)
+  assert.match(workerSource, /shutdown_forced_after_grace/)
+  assert.match(workerSource, /process\.exit\(0\)/)
   assert.match(workerSource, /stale_jobs_recovered/)
 })
 

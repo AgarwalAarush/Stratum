@@ -8,6 +8,7 @@ import { isRobinhoodPortfolioSyncConfigured } from '../lib/server/robinhood-port
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 5_000)
 const SCHEDULER_INTERVAL_MS = Number(process.env.WORKER_SCHEDULER_INTERVAL_MS ?? 60_000)
 const HEARTBEAT_INTERVAL_MS = Number(process.env.WORKER_HEARTBEAT_INTERVAL_MS ?? 60_000)
+const WORKER_SHUTDOWN_GRACE_MS = Math.max(1_000, Math.min(60_000, Number(process.env.WORKER_SHUTDOWN_GRACE_MS ?? 15_000)))
 const schedulerEnabled = process.env.WORKER_SCHEDULER_ENABLED !== 'false'
 const fmpEnabled = Boolean(process.env.FMP_API_KEY)
 const codexEnabled = process.env.CODEX_SYNTHESIS_ENABLED !== 'false'
@@ -19,9 +20,24 @@ let stopping = false
 let nextScheduleAt = 0
 let nextHeartbeatAt = 0
 let nextRecoveryAt = 0
+let shutdownTimer: NodeJS.Timeout | null = null
 
-process.on('SIGINT', () => { stopping = true })
-process.on('SIGTERM', () => { stopping = true })
+function requestStop(signal: 'SIGINT' | 'SIGTERM') {
+  if (stopping) return
+  stopping = true
+  console.info(JSON.stringify({ level: 'info', workerId, event: 'shutdown_requested', signal, graceMs: WORKER_SHUTDOWN_GRACE_MS }))
+  // A network call can ignore cancellation. Leave the persistent job in its
+  // recoverable running state rather than letting a release hang forever;
+  // launchd restarts the stable wrapper and startup recovery records the retry.
+  shutdownTimer = setTimeout(() => {
+    console.error(JSON.stringify({ level: 'error', workerId, event: 'shutdown_forced_after_grace' }))
+    process.exit(0)
+  }, WORKER_SHUTDOWN_GRACE_MS)
+  shutdownTimer.unref()
+}
+
+process.on('SIGINT', () => requestStop('SIGINT'))
+process.on('SIGTERM', () => requestStop('SIGTERM'))
 
 async function heartbeat(): Promise<void> {
   if (Date.now() < nextHeartbeatAt) return
@@ -111,6 +127,7 @@ async function main() {
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
     }
   } while (!stopping)
+  if (shutdownTimer) clearTimeout(shutdownTimer)
 }
 
 await main()
