@@ -3079,6 +3079,274 @@
   margin: 0;
 }
 
+.market-source-control {
+  border-top: 1px solid var(--market-border);
+  padding: 56px 28px;
+}
+
+.market-source-control h2,
+.market-source-control h3 {
+  font-weight: 500;
+  margin: 10px 0 0;
+}
+
+.market-source-control h2 {
+  font-size: 30px;
+}
+
+.market-source-control h3 {
+  font-size: 21px;
+}
+
+.market-source-control-heading {
+  display: grid;
+  gap: 64px;
+  grid-template-columns: minmax(300px, 1.2fr) minmax(360px, 0.8fr);
+}
+
+.market-source-control-heading > div > p:last-child,
+.market-source-control-detail > div > p:last-of-type {
+  color: var(--market-text-muted);
+  line-height: 1.6;
+  margin: 16px 0 0;
+  max-width: 680px;
+}
+
+.market-source-control-heading dl {
+  border-top: 1px solid var(--market-border);
+  margin: 0;
+}
+
+.market-source-control-heading dl > div {
+  align-items: baseline;
+  border-bottom: 1px solid var(--market-border);
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+}
+
+.market-source-control-heading dt,
+.market-source-control-heading dd {
+  margin: 0;
+}
+
+.market-source-control-heading dt {
+  color: var(--market-text-muted);
+}
+
+.market-source-control-heading dd,
+.market-source-requirements dd {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+}
+
+.market-domain-control-grid {
+  border-bottom: 1px solid var(--market-border);
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 40px;
+}
+
+.market-domain-control-card {
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--market-border);
+  color: inherit;
+  cursor: pointer;
+  min-height: 190px;
+  padding: 20px;
+  text-align: left;
+}
+
+.market-domain-control-card:last-child {
+  border-right: 0;
+}
+
+.market-domain-control-card[data-selected="true"] {
+  background: var(--market-surface);
+  box-shadow: inset 0 3px 0 var(--market-text);
+}
+
+.market-domain-control-card > span,
+.market-domain-control-card small,
+.market-domain-control-card em {
+  color: var(--market-text-muted);
+  display: block;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.market-domain-control-card > span[data-status="active"] {
+  color: var(--market-positive);
+}
+
+.market-domain-control-card > span[data-status="archived"] {
+  color: var(--market-negative);
+}
+
+.market-domain-control-card strong {
+  display: block;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.2;
+  margin: 22px 0;
+}
+
+.market-domain-control-card em {
+  margin-top: 8px;
+}
+
+.market-source-control-detail {
+  border-bottom: 1px solid var(--market-border);
+  display: grid;
+  gap: 64px;
+  grid-template-columns: minmax(320px, 1.2fr) minmax(360px, 0.8fr);
+  padding: 42px 0;
+}
+
+.market-source-requirements {
+  border-top: 1px solid var(--market-border);
+  margin: 28px 0 0;
+}
+
+.market-source-requirements > div {
+  border-bottom: 1px solid var(--market-border);
+  display: grid;
+  gap: 8px 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 12px 0;
+}
+
+.market-source-requirements > div[data-complete="true"] dd {
+  color: var(--market-positive);
+}
+
+.market-source-requirements dt {
+  text-transform: capitalize;
+}
+
+.market-source-requirements dd {
+  margin: 0;
+}
+
+.market-source-requirements small {
+  color: var(--market-text-muted);
+  grid-column: 1 / -1;
+}
+
+.market-source-scout-form {
+  background: var(--market-surface);
+  padding: 22px;
+}
+
+.market-source-scout-form label,
+.market-source-scout-form textarea,
+.market-source-scout-form button,
+.market-source-scout-form output {
+  display: block;
+  width: 100%;
+}
+
+.market-source-scout-form label {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.market-source-scout-form textarea {
+  background: var(--market-bg);
+  border: 1px solid var(--market-border);
+  color: inherit;
+  margin-top: 10px;
+  min-height: 92px;
+  padding: 10px;
+  resize: vertical;
+}
+
+.market-source-scout-form button {
+  background: var(--market-text);
+  border: 1px solid var(--market-text);
+  color: var(--market-bg);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 11px;
+  margin-top: 12px;
+  padding: 11px;
+}
+
+.market-source-scout-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.market-source-scout-form p,
+.market-source-scout-form output {
+  color: var(--market-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 14px 0 0;
+}
+
+.market-source-scout-form output {
+  color: var(--market-text);
+}
+
+.market-source-control-ledger {
+  display: grid;
+  gap: 64px;
+  grid-template-columns: 1fr 1fr;
+  padding-top: 42px;
+}
+
+.market-source-control-ledger h3 {
+  margin-bottom: 18px;
+}
+
+.market-source-control-ledger article {
+  align-items: baseline;
+  border-top: 1px solid var(--market-border);
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding: 13px 0;
+}
+
+.market-source-control-ledger article:last-child {
+  border-bottom: 1px solid var(--market-border);
+}
+
+.market-source-control-ledger article strong,
+.market-source-control-ledger article span,
+.market-source-control-ledger article time {
+  display: block;
+}
+
+.market-source-control-ledger article strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.market-source-control-ledger article span,
+.market-source-control-ledger article time,
+.market-source-control-ledger > div > p:last-child {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.market-source-control-ledger article span {
+  margin-top: 4px;
+}
+
+.market-source-control-ledger article time {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
 @media (max-width: 767px) {
   .equity-research-note {
     padding: 0 20px 45px;
@@ -3174,6 +3442,39 @@
   .market-system-failures article {
     gap: 8px;
     grid-template-columns: 1fr;
+  }
+
+  .market-source-control {
+    padding: 40px 0;
+  }
+
+  .market-source-control-heading,
+  .market-source-control-detail,
+  .market-source-control-ledger {
+    gap: 32px;
+    grid-template-columns: 1fr;
+  }
+
+  .market-domain-control-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .market-domain-control-card:nth-child(2) {
+    border-right: 0;
+  }
+
+  .market-domain-control-card:nth-child(n + 3) {
+    border-top: 1px solid var(--market-border);
+  }
+
+  .market-source-control-ledger article {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .market-source-control-ledger article time {
+    text-align: left;
   }
 }
 

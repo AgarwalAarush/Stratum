@@ -1,5 +1,7 @@
 import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { fetchMarketSystemStatus } from '@/lib/server/market-system-status'
+import { fetchWorldSourceControlWorkspace } from '@/lib/server/world-source-control'
+import { WorldSourceControlPanel } from '@/components/markets/WorldSourceControlPanel'
 
 function formatBytes(value: number): string {
   if (value < 1024) return `${value} B`
@@ -19,7 +21,12 @@ function formatTime(value: string | null): string {
 
 export default async function MarketsSystemPage() {
   await requireAllowedMarketUser()
-  const status = await fetchMarketSystemStatus()
+  const [statusResult, sourceControlResult] = await Promise.allSettled([
+    fetchMarketSystemStatus(),
+    fetchWorldSourceControlWorkspace(),
+  ])
+  const status = statusResult.status === 'fulfilled' ? statusResult.value : null
+  const sourceControl = sourceControlResult.status === 'fulfilled' ? sourceControlResult.value : null
   return (
     <div className="market-system-page">
       <header className="market-system-heading">
@@ -86,8 +93,10 @@ export default async function MarketsSystemPage() {
               ))}
             </section>
           ) : null}
+
         </>
       )}
+      <WorldSourceControlPanel workspace={sourceControl} unavailableReason={sourceControlResult.status === 'rejected' ? 'Source-control persistence is unavailable.' : null} />
     </div>
   )
 }

@@ -1140,6 +1140,8 @@ export interface WorldSourceRegistryEntry {
   discoveryRunId: string | null
   approvedAt: string | null
   blockedReason: string | null
+  /** Domains this source is registered to cover. Present in the control workspace. */
+  domainIds: string[]
   createdAt: string
   updatedAt: string
 }

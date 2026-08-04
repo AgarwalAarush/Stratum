@@ -172,7 +172,7 @@ export function buildWorldSourceScoutPrompt(domainId: string, reason: string): s
   ].join('\n\n')
 }
 
-function normalizeRegistryEntry(row: RecordValue): WorldSourceRegistryEntry {
+function normalizeRegistryEntry(row: RecordValue, domainIds: string[] = []): WorldSourceRegistryEntry {
   const status = String(row.status) as WorldSourceStatus
   if (!SOURCE_STATUSES.has(status)) throw new Error(`Invalid persisted source status: ${status}`)
   return {
@@ -180,7 +180,8 @@ function normalizeRegistryEntry(row: RecordValue): WorldSourceRegistryEntry {
     sourceTier: String(row.source_tier) as WorldSourceTier, sourceKind: String(row.source_kind) as WorldSourceKind, status,
     evidenceClasses: strings(row.evidence_classes) as WorldSourceEvidenceClass[], discoveredBy: row.discovered_by as WorldSourceRegistryEntry['discoveredBy'],
     discoveryRunId: row.discovery_run_id === null ? null : String(row.discovery_run_id ?? ''), approvedAt: row.approved_at === null ? null : String(row.approved_at ?? ''),
-    blockedReason: row.blocked_reason === null ? null : String(row.blocked_reason ?? ''), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+    blockedReason: row.blocked_reason === null ? null : String(row.blocked_reason ?? ''), domainIds: [...new Set(domainIds)].sort(),
+    createdAt: String(row.created_at), updatedAt: String(row.updated_at),
   }
 }
 
@@ -333,20 +334,29 @@ export async function blockWorldSource(slug: string, reason: string): Promise<vo
 export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceControlWorkspaceData> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const [domains, sources, runs] = await Promise.all([
+  const [domains, sources, runs, mappings] = await Promise.all([
     supabase.from('market_domain_packs').select('*').order('id'),
     supabase.from('world_source_registry').select('*').order('updated_at', { ascending: false }).limit(200),
     supabase.from('world_source_discovery_runs').select('*').order('created_at', { ascending: false }).limit(60),
+    supabase.from('world_source_domains').select('source_id,domain_id'),
   ])
-  const error = domains.error ?? sources.error ?? runs.error
+  const error = domains.error ?? sources.error ?? runs.error ?? mappings.error
   if (error) throw new Error(`Unable to load source-control workspace: ${error.message}`)
+  const domainIdsBySourceId = new Map<string, string[]>()
+  for (const mapping of mappings.data ?? []) {
+    const sourceId = String(mapping.source_id)
+    const domainId = String(mapping.domain_id)
+    domainIdsBySourceId.set(sourceId, [...(domainIdsBySourceId.get(sourceId) ?? []), domainId])
+  }
   return {
     domains: (domains.data ?? []).map((row) => {
       const pack = getMarketDomainPack(String(row.id))
       if (!pack) throw new Error(`Persisted unknown domain pack ${String(row.id)}`)
-      return pack
+      const status = String(row.status)
+      if (status !== 'candidate' && status !== 'active' && status !== 'archived') throw new Error(`Invalid persisted domain status: ${status}`)
+      return { ...pack, status }
     }),
-    sources: (sources.data ?? []).map((row) => normalizeRegistryEntry(row as RecordValue)),
+    sources: (sources.data ?? []).map((row) => normalizeRegistryEntry(row as RecordValue, domainIdsBySourceId.get(String(row.id)) ?? [])),
     discoveryRuns: (runs.data ?? []).map((row) => normalizeDiscoveryRun(row as RecordValue)),
   }
 }
