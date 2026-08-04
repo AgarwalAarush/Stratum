@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { WorldSourceContract, WorldSourceRegistryEntry } from '../lib/markets/types.ts'
-import { fetchGovernedSourceDocument, isSourceCollectionDue } from '../lib/server/world-source-collector.ts'
+import { fetchGovernedSourceDocument, isSourceCollectionDue, shouldCollectGovernedSource } from '../lib/server/world-source-collector.ts'
 
 const source = {
   id: 'source-id', slug: 'official-source', label: 'Official source', publisher: 'Official publisher', canonicalUrl: 'https://official.example/data',
@@ -54,4 +54,12 @@ test('collector rejects MIME types outside the source contract and leaves event 
   assert.equal(isSourceCollectionDue('weekly', new Date('2026-08-02T00:00:00Z')), true)
   assert.equal(isSourceCollectionDue('monthly', new Date('2026-08-01T00:00:00Z')), true)
   assert.equal(isSourceCollectionDue('event', new Date('2026-08-02T00:00:00Z')), false)
+})
+
+test('a newly admitted source gets one governed capture before its normal refresh cadence', () => {
+  const monday = new Date('2026-08-03T00:00:00Z')
+  assert.equal(shouldCollectGovernedSource('weekly', false, monday), true)
+  assert.equal(shouldCollectGovernedSource('weekly', true, monday), false)
+  assert.equal(shouldCollectGovernedSource('weekly', true, new Date('2026-08-02T00:00:00Z')), true)
+  assert.equal(shouldCollectGovernedSource('event', false, monday), false)
 })

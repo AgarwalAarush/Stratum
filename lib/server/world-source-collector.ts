@@ -158,17 +158,40 @@ export function isSourceCollectionDue(cadence: WorldSourceContract['cadence'], n
   return now.getUTCDate() === 1
 }
 
+/** An approved non-event source receives one prompt immutable capture after
+ * admission. Subsequent collection follows its contracted cadence, so a
+ * weekly filing admitted on Monday does not sit unevidenced until Sunday. */
+export function shouldCollectGovernedSource(
+  cadence: WorldSourceContract['cadence'],
+  hasCaptureForActiveContract: boolean,
+  now = new Date(),
+): boolean {
+  return cadence !== 'event' && (!hasCaptureForActiveContract || isSourceCollectionDue(cadence, now))
+}
+
 async function fetchCollectionTargets(now: Date): Promise<GovernedSourceFetchTarget[]> {
   const [workspace, activePacks] = await Promise.all([fetchWorldSourceControlWorkspace(), fetchActiveMarketDomainPacks()])
   const activeDomainIds = new Set(activePacks.map((pack) => pack.id))
-  const targets: GovernedSourceFetchTarget[] = []
+  const eligible: GovernedSourceFetchTarget[] = []
   for (const source of workspace.sources) {
     if (source.status !== 'approved' && source.status !== 'probation') continue
     const domainIds = source.domainIds.filter((id) => activeDomainIds.has(id))
     if (domainIds.length === 0) continue
     const { contract } = await resolveApprovedWorldSource(source.slug, source.canonicalUrl)
-    if (isSourceCollectionDue(contract.cadence, now)) targets.push({ source, contract, domainIds })
+    eligible.push({ source, contract, domainIds })
   }
+  if (eligible.length === 0) return []
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data: captures, error } = await supabase.from('world_source_document_captures')
+    .select('source_id,contract_version').in('source_id', eligible.map((target) => target.source.id))
+  if (error) throw new Error(`Unable to determine source collection coverage: ${error.message}`)
+  const capturedContracts = new Set((captures ?? []).map((capture) => `${String(capture.source_id)}:${Number(capture.contract_version)}`))
+  const targets = eligible.filter((target) => shouldCollectGovernedSource(
+    target.contract.cadence,
+    capturedContracts.has(`${target.source.id}:${target.contract.version}`),
+    now,
+  ))
   return targets.sort((left, right) => left.source.slug.localeCompare(right.source.slug))
 }
 
