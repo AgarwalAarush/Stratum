@@ -5,6 +5,7 @@ const DEFAULT_TRADING_URL = 'https://api.alpaca.markets'
 const DEFAULT_TIMEOUT_MS = 12_000
 const DEFAULT_MAX_ATTEMPTS = 3
 const SYMBOL_BATCH_SIZE = 100
+const SNAPSHOT_BATCH_CONCURRENCY = 4
 
 type AlpacaFeed = Exclude<MarketFeed, 'illustrative'>
 
@@ -106,6 +107,25 @@ function splitIntoBatches<T>(items: T[], batchSize = SYMBOL_BATCH_SIZE): T[][] {
   const batches: T[][] = []
   for (let index = 0; index < items.length; index += batchSize) batches.push(items.slice(index, index + batchSize))
   return batches
+}
+
+async function mapWithConcurrency<T, Result>(
+  items: T[],
+  limit: number,
+  operation: (item: T) => Promise<Result>,
+): Promise<Result[]> {
+  const results = new Array<Result>(items.length)
+  let nextIndex = 0
+  const worker = async () => {
+    while (true) {
+      const index = nextIndex
+      nextIndex += 1
+      if (index >= items.length) return
+      results[index] = await operation(items[index]!)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
 }
 
 function finiteNumber(value: unknown): number | null {
@@ -241,17 +261,19 @@ export class AlpacaClient {
     if (symbols.length === 0) return { data: [], feed: requestedFeed }
 
     return this.withFeedFallback(async (feed) => {
-      const snapshots: MarketSnapshot[] = []
-      for (const batch of splitIntoBatches(symbols)) {
+      const snapshotBatches = await mapWithConcurrency(
+        splitIntoBatches(symbols),
+        SNAPSHOT_BATCH_CONCURRENCY,
+        async (batch) => {
         const parameters = new URLSearchParams({ symbols: batch.join(','), feed })
         const payload = await this.requestJson<AlpacaSnapshotsResponse>(this.dataUrl, '/v2/stocks/snapshots', parameters)
         const snapshotMap: Record<string, AlpacaSnapshotPayload> = 'snapshots' in payload
           ? (payload as { snapshots: Record<string, AlpacaSnapshotPayload> }).snapshots
           : payload as Record<string, AlpacaSnapshotPayload>
 
-        for (const symbol of batch) {
+        return batch.flatMap((symbol) => {
           const snapshot = snapshotMap[symbol]
-          if (!snapshot) continue
+          if (!snapshot) return []
           const price = finiteNumber(snapshot.latestTrade?.p) ?? finiteNumber(snapshot.dailyBar?.c)
           const previousClose = finiteNumber(snapshot.prevDailyBar?.c)
           const open = finiteNumber(snapshot.dailyBar?.o)
@@ -259,9 +281,9 @@ export class AlpacaClient {
           const low = finiteNumber(snapshot.dailyBar?.l)
           const volume = finiteNumber(snapshot.dailyBar?.v)
           const asOf = snapshot.latestTrade?.t ?? snapshot.dailyBar?.t
-          if ([price, previousClose, open, high, low, volume].some((value) => value === null) || !asOf) continue
+          if ([price, previousClose, open, high, low, volume].some((value) => value === null) || !asOf) return []
 
-          snapshots.push({
+          return [{
             symbol,
             price: price as number,
             previousClose: previousClose as number,
@@ -271,10 +293,11 @@ export class AlpacaClient {
             volume: volume as number,
             asOf,
             feed,
-          })
-        }
-      }
-      return snapshots
+          }]
+        })
+        },
+      )
+      return snapshotBatches.flat()
     }, requestedFeed)
   }
 

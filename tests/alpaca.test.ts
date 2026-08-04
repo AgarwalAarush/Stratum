@@ -35,6 +35,33 @@ test('AlpacaClient retries rate limits and preserves feed provenance', async () 
   assert.equal(result.data[0]?.previousClose, 218)
 })
 
+test('AlpacaClient uses a bounded pool for multi-symbol snapshots instead of serially timing out every batch', async () => {
+  let active = 0
+  let maximumActive = 0
+  const symbols = Array.from({ length: 201 }, (_, index) => `T${index}`)
+  const client = new AlpacaClient({
+    keyId: 'key',
+    secretKey: 'secret',
+    fetchImpl: async (input) => {
+      active += 1
+      maximumActive = Math.max(maximumActive, active)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      active -= 1
+      const requested = new URL(String(input)).searchParams.get('symbols')?.split(',') ?? []
+      return jsonResponse({ snapshots: Object.fromEntries(requested.map((symbol) => [symbol, {
+        latestTrade: { p: 100, t: '2026-07-15T20:00:00Z' },
+        dailyBar: { o: 99, h: 101, l: 98, c: 100, v: 1_000, t: '2026-07-15T20:00:00Z' },
+        prevDailyBar: { c: 99 },
+      }])) })
+    },
+  })
+
+  const result = await client.fetchSnapshots(symbols)
+  assert.equal(result.data.length, symbols.length)
+  assert.ok(maximumActive > 1)
+  assert.ok(maximumActive <= 4)
+})
+
 test('AlpacaClient falls back to IEX only for feed entitlement errors', async () => {
   const requestedFeeds: string[] = []
   const client = new AlpacaClient({
