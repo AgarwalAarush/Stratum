@@ -338,7 +338,19 @@ function normalizeTriageRun(row: RecordValue): WorldObservationProposalTriageRun
 }
 
 /** Resolve an already-approved source against its immutable active contract. */
-export async function resolveApprovedWorldSource(slug: string, canonicalUrl: string, mimeType?: string): Promise<{ source: WorldSourceRegistryEntry; contract: WorldSourceContract }> {
+export function validateWorldSourceContractTarget(contract: WorldSourceContract, canonicalUrl: string, mimeType?: string): void {
+  const url = safeHttpsUrl(canonicalUrl, 'observation')
+  const hostAllowed = contract.allowedHosts.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))
+  if (!hostAllowed) throw new Error(`Source contract does not permit host ${url.hostname}`)
+  if (contract.allowedPaths.length > 0 && !contract.allowedPaths.some((path) => url.pathname.startsWith(path))) {
+    throw new Error(`Source contract does not permit path ${url.pathname}`)
+  }
+  if (mimeType && contract.acceptedMimeTypes.length > 0 && !contract.acceptedMimeTypes.some((accepted) => mimeType.toLowerCase().startsWith(accepted.toLowerCase()))) {
+    throw new Error(`Source contract does not permit MIME type ${mimeType}`)
+  }
+}
+
+async function loadApprovedWorldSource(slug: string): Promise<WorldSourceRegistryEntry> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const normalizedSlug = normalizeSlug(slug)
@@ -346,18 +358,41 @@ export async function resolveApprovedWorldSource(slug: string, canonicalUrl: str
   if (sourceError || !sourceRow) throw new Error(`Unknown governed source ${normalizedSlug}`)
   const source = normalizeRegistryEntry(sourceRow as RecordValue)
   if (source.status !== 'approved' && source.status !== 'probation') throw new Error(`Source ${normalizedSlug} is ${source.status}, not approved for ingestion`)
+  return source
+}
+
+/** Resolve a source against the contract that is active at the time of use. */
+export async function resolveApprovedWorldSource(slug: string, canonicalUrl: string, mimeType?: string): Promise<{ source: WorldSourceRegistryEntry; contract: WorldSourceContract }> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const source = await loadApprovedWorldSource(slug)
   const { data: contractRow, error: contractError } = await supabase.from('world_source_contract_versions').select('*').eq('source_id', source.id).eq('status', 'active').order('version', { ascending: false }).limit(1).maybeSingle()
-  if (contractError || !contractRow) throw new Error(`Source ${normalizedSlug} has no active source contract`)
+  if (contractError || !contractRow) throw new Error(`Source ${source.slug} has no active source contract`)
   const contract = normalizeContract(contractRow as RecordValue)
-  const url = safeHttpsUrl(canonicalUrl, 'observation')
-  const hostAllowed = contract.allowedHosts.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))
-  if (!hostAllowed) throw new Error(`Source ${normalizedSlug} contract does not permit host ${url.hostname}`)
-  if (contract.allowedPaths.length > 0 && !contract.allowedPaths.some((path) => url.pathname.startsWith(path))) {
-    throw new Error(`Source ${normalizedSlug} contract does not permit path ${url.pathname}`)
-  }
-  if (mimeType && contract.acceptedMimeTypes.length > 0 && !contract.acceptedMimeTypes.some((accepted) => mimeType.toLowerCase().startsWith(accepted.toLowerCase()))) {
-    throw new Error(`Source ${normalizedSlug} contract does not permit MIME type ${mimeType}`)
-  }
+  validateWorldSourceContractTarget(contract, canonicalUrl, mimeType)
+  return { source, contract }
+}
+
+/**
+ * Captures retain their governing contract version. Re-checking a historical
+ * capture against the newest contract would let a later contract revision
+ * silently alter the authority under which evidence is triaged or accepted.
+ */
+export async function resolveApprovedWorldSourceContractVersion(
+  slug: string,
+  canonicalUrl: string,
+  contractVersion: number,
+  mimeType?: string,
+): Promise<{ source: WorldSourceRegistryEntry; contract: WorldSourceContract }> {
+  if (!Number.isInteger(contractVersion) || contractVersion < 1) throw new Error('A captured source contract version is required')
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const source = await loadApprovedWorldSource(slug)
+  const { data: contractRow, error: contractError } = await supabase
+    .from('world_source_contract_versions').select('*').eq('source_id', source.id).eq('version', contractVersion).maybeSingle()
+  if (contractError || !contractRow) throw new Error(`Source ${source.slug} is missing captured contract version ${contractVersion}`)
+  const contract = normalizeContract(contractRow as RecordValue)
+  validateWorldSourceContractTarget(contract, canonicalUrl, mimeType)
   return { source, contract }
 }
 

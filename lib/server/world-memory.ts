@@ -126,7 +126,7 @@ export async function ingestWorldObservation(input: WorldObservationInput): Prom
     publishedAt: input.publishedAt,
   })
   const now = new Date().toISOString()
-  const { data: documentRow, error: documentError } = await supabase.from('world_documents').upsert({
+  const documentPayload = {
     content_hash: stored.contentHash,
     canonical_url: input.canonicalUrl,
     title: input.title,
@@ -141,12 +141,21 @@ export async function ingestWorldObservation(input: WorldObservationInput): Prom
     ingested_at: now,
     backup_state: process.env.RESTIC_REPOSITORY ? 'pending' : 'not_configured',
     metadata: { byteCount: stored.byteCount, sourceContractVersion: governedSource?.contract.version ?? null },
-  }, { onConflict: 'content_hash' }).select('*').single()
+  }
+  const { data: insertedDocument, error: documentError } = await supabase.from('world_documents').upsert(
+    documentPayload, { onConflict: 'content_hash', ignoreDuplicates: true },
+  ).select('*').maybeSingle()
+  let documentRow = insertedDocument
+  if (!documentRow && !documentError) {
+    const { data: existingDocument, error: existingDocumentError } = await supabase.from('world_documents').select('*').eq('content_hash', stored.contentHash).maybeSingle()
+    if (existingDocumentError) throw new Error(`Unable to resolve immutable world document: ${existingDocumentError.message}`)
+    documentRow = existingDocument
+  }
   if (documentError || !documentRow) throw new Error(`Unable to persist world document: ${documentError?.message ?? 'unknown error'}`)
 
   const entityIds = await resolveEntities(input.entities ?? [])
   const fingerprint = observationFingerprint(input, stored.contentHash)
-  const { data: observationRow, error: observationError } = await supabase.from('world_observations').upsert({
+  const observationPayload = {
     document_id: documentRow.id,
     assertion: input.assertion.trim(),
     observation_kind: input.kind,
@@ -166,7 +175,16 @@ export async function ingestWorldObservation(input: WorldObservationInput): Prom
     decay_hours: input.decayHours ?? null,
     supersedes_id: input.supersedesId ?? null,
     fingerprint,
-  }, { onConflict: 'fingerprint' }).select('*').single()
+  }
+  const { data: insertedObservation, error: observationError } = await supabase.from('world_observations').upsert(
+    observationPayload, { onConflict: 'fingerprint', ignoreDuplicates: true },
+  ).select('*').maybeSingle()
+  let observationRow = insertedObservation
+  if (!observationRow && !observationError) {
+    const { data: existingObservation, error: existingObservationError } = await supabase.from('world_observations').select('*').eq('fingerprint', fingerprint).maybeSingle()
+    if (existingObservationError) throw new Error(`Unable to resolve immutable world observation: ${existingObservationError.message}`)
+    observationRow = existingObservation
+  }
   if (observationError || !observationRow) throw new Error(`Unable to persist world observation: ${observationError?.message ?? 'unknown error'}`)
   if (entityIds.length > 0) {
     const { error } = await supabase.from('world_observation_entities').upsert(entityIds.map((entityId) => ({

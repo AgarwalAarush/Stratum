@@ -40,6 +40,25 @@ test('content-addressed corpus archives identical source bytes once while retain
   }
 })
 
+test('world-memory ingestion treats duplicate document and observation fingerprints as immutable records', async () => {
+  const source = await readFile(new URL('../lib/server/world-memory.ts', import.meta.url), 'utf8')
+  assert.match(source, /onConflict: 'content_hash', ignoreDuplicates: true/)
+  assert.match(source, /onConflict: 'fingerprint', ignoreDuplicates: true/)
+  assert.match(source, /select\('\*'\)\.eq\('content_hash', stored\.contentHash\)/)
+  assert.match(source, /select\('\*'\)\.eq\('fingerprint', fingerprint\)/)
+})
+
+test('database enforces append-only immutable evidence and review records', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/202608040015_immutable_world_evidence.sql', import.meta.url), 'utf8')
+  for (const table of [
+    'world_documents', 'world_observations', 'world_source_document_captures',
+    'world_observation_proposals', 'world_observation_proposal_reviews', 'world_observation_proposal_triage_runs',
+  ]) {
+    assert.match(migration, new RegExp(`before update or delete on public\\.${table}`))
+  }
+  assert.match(migration, /create a new provenance-linked artifact instead/)
+})
+
 test('balanced automatic promotion accepts one non-core gap but blocks missing official or independent evidence', () => {
   const now = new Date('2026-08-03T00:00:00.000Z')
   const official = ['data_center_load', 'firm_capacity_constraint', 'interconnection_constraint'].map((causalNode) => ({

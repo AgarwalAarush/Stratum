@@ -4,7 +4,7 @@ import { getMarketDomainPack } from '../markets/domain-packs.ts'
 import { runCodexJson, type CodexExecResult } from './codex-exec.ts'
 import { selectMarketModel } from './market-model-policy.ts'
 import { readWorldCorpusExtract } from './world-corpus.ts'
-import { resolveApprovedWorldSource } from './world-source-control.ts'
+import { resolveApprovedWorldSourceContractVersion } from './world-source-control.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 type RecordValue = Record<string, unknown>
@@ -87,6 +87,9 @@ interface CapturedDocumentContext {
   sourceLabel: string
   publisher: string
   canonicalUrl: string
+  captureCanonicalUrl: string
+  contractVersion: number
+  mimeType: string | null
   domainId: string
   extractedKey: string
 }
@@ -95,7 +98,7 @@ async function loadCapturedDocumentContexts(captureIds?: string[]): Promise<Capt
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   let query = supabase.from('world_source_document_captures')
-    .select('id,source_id,document_id,domain_ids,world_source_registry(slug,label,publisher,canonical_url),world_documents(id,extracted_key,extraction_status)')
+    .select('id,source_id,document_id,domain_ids,canonical_url,contract_version,mime_type,world_source_registry(slug,label,publisher,canonical_url),world_documents(id,canonical_url,extracted_key,extraction_status)')
     .eq('status', 'captured').not('document_id', 'is', null).order('captured_at', { ascending: true }).limit(20)
   if (captureIds && captureIds.length > 0) query = query.in('id', captureIds.slice(0, 20))
   const { data: captures, error } = await query
@@ -112,7 +115,8 @@ async function loadCapturedDocumentContexts(captureIds?: string[]): Promise<Capt
     if ((count ?? 0) > 0) continue
     contexts.push({
       captureId: String(row.id), documentId: String(document.id), sourceId: String(row.source_id), sourceSlug: String(source.slug), sourceLabel: String(source.label),
-      publisher: String(source.publisher), canonicalUrl: String(source.canonical_url), domainId, extractedKey: document.extracted_key,
+      publisher: String(source.publisher), canonicalUrl: String(document.canonical_url ?? row.canonical_url), captureCanonicalUrl: String(row.canonical_url),
+      contractVersion: Number(row.contract_version), mimeType: typeof row.mime_type === 'string' ? row.mime_type : null, domainId, extractedKey: document.extracted_key,
     })
   }
   return contexts
@@ -175,7 +179,9 @@ export async function triageCapturedWorldObservationProposals(options: TriageWor
   const failures: Array<{ captureId: string; sourceSlug: string; error: string }> = []
   for (const context of contexts) {
     try {
-      const { contract } = await resolveApprovedWorldSource(context.sourceSlug, context.canonicalUrl)
+      const { contract } = await resolveApprovedWorldSourceContractVersion(
+        context.sourceSlug, context.captureCanonicalUrl, context.contractVersion, context.mimeType ?? undefined,
+      )
       const excerpt = await readWorldCorpusExtract(context.extractedKey, 12_000)
       if (excerpt.trim().length < 240) {
         await recordTriageRun({ captureId: context.captureId, status: 'skipped', error: 'Extracted source text is too short for bounded triage' })

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { getMarketDomainPack } from '../markets/domain-packs.ts'
-import { resolveApprovedWorldSource } from './world-source-control.ts'
+import { resolveApprovedWorldSourceContractVersion } from './world-source-control.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 type RecordValue = Record<string, unknown>
@@ -15,7 +15,7 @@ export async function reviewWorldObservationProposal(input: { proposalId: string
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const { data: row, error } = await supabase.from('world_observation_proposals')
-    .select('*,world_source_registry(slug,canonical_url),world_documents(id,content_hash)').eq('id', input.proposalId).maybeSingle()
+    .select('*,world_source_registry(slug,canonical_url),world_documents(id,content_hash),world_source_document_captures(contract_version,canonical_url,mime_type)').eq('id', input.proposalId).maybeSingle()
   if (error || !row) throw new Error(`Observation proposal was not found: ${error?.message ?? 'unknown error'}`)
   const proposal = record(row)
   const { data: existing } = await supabase.from('world_observation_proposal_reviews').select('decision,observation_id').eq('proposal_id', input.proposalId).maybeSingle()
@@ -27,12 +27,16 @@ export async function reviewWorldObservationProposal(input: { proposalId: string
   }
   const source = record(row.world_source_registry)
   const document = record(row.world_documents)
+  const capture = record(row.world_source_document_captures)
   const domainId = String(proposal.domain_id)
   const mechanism = String(proposal.mechanism)
   const kind = String(proposal.observation_kind)
   const domain = getMarketDomainPack(domainId)
   if (!domain?.mechanisms.some((item) => item.id === mechanism)) throw new Error('Proposal mechanism is no longer valid for its domain')
-  const { contract } = await resolveApprovedWorldSource(String(source.slug), String(source.canonical_url))
+  const { contract } = await resolveApprovedWorldSourceContractVersion(
+    String(source.slug), String(capture.canonical_url), Number(capture.contract_version),
+    typeof capture.mime_type === 'string' ? capture.mime_type : undefined,
+  )
   if (!contract.assertionsAllowed.includes(kind)) throw new Error(`Current source contract does not permit ${kind} observations`)
   const fingerprint = createHash('sha256').update(JSON.stringify({ proposalId: input.proposalId, documentId: document.id, assertion: proposal.assertion, mechanism, kind })).digest('hex')
   const { data: observationId, error: acceptanceError } = await supabase.rpc('accept_world_observation_proposal', {
@@ -40,7 +44,7 @@ export async function reviewWorldObservationProposal(input: { proposalId: string
     p_reviewer_id: input.reviewerId,
     p_rationale: rationale,
     p_fingerprint: fingerprint,
-    p_metadata: { sourceContractVersion: contract.version },
+    p_metadata: { sourceContractVersion: contract.version, sourceCaptureId: proposal.source_capture_id },
   })
   if (acceptanceError || typeof observationId !== 'string') {
     throw new Error(`Unable to accept observation proposal: ${acceptanceError?.message ?? 'unknown error'}`)

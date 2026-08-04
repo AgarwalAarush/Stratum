@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import {
   buildWorldSourceScoutPrompt,
   scoreWorldSourceCandidate,
+  validateWorldSourceContractTarget,
   validateWorldSourceContract,
   validateWorldSourceScoutCandidates,
 } from '../lib/server/world-source-control.ts'
@@ -54,6 +55,16 @@ test('source contracts constrain hosts, paths, MIME types, and allowed observati
   assert.deepEqual(contract.assertionsAllowed, ['fact', 'estimate'])
   assert.throws(() => validateWorldSourceContract({ ...contract, allowedHosts: ['https://example.org'] }), /invalid allowed host/)
   assert.throws(() => validateWorldSourceContract({ ...contract, assertionsAllowed: ['recommendation'] }), /invalid observation kinds/)
+})
+
+test('a captured document remains bounded by its recorded contract target', () => {
+  const strictContract = {
+    id: 'contract', sourceId: 'source', version: 1, status: 'retired' as const,
+    allowedHosts: ['official.example'], allowedPaths: ['/releases'], acceptedMimeTypes: ['application/pdf'],
+    cadence: 'weekly' as const, assertionsAllowed: ['fact' as const], retentionDays: null, notes: 'Historical contract.', createdAt: '2026-08-01T00:00:00.000Z',
+  }
+  assert.doesNotThrow(() => validateWorldSourceContractTarget(strictContract, 'https://official.example/releases/2026.pdf', 'application/pdf'))
+  assert.throws(() => validateWorldSourceContractTarget(strictContract, 'https://official.example/current', 'application/pdf'), /does not permit path/)
 })
 
 test('domain packs describe economic systems and source requirements', () => {

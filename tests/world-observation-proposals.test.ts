@@ -24,6 +24,8 @@ test('triage isolates an invalid document output and records immutable failure t
     readFile(new URL('../supabase/migrations/202608040012_world_observation_proposal_triage_runs.sql', import.meta.url), 'utf8'),
   ])
   assert.match(service, /await recordTriageRun\(\{ captureId: context\.captureId, status: 'failed', error: message \}\)/)
+  assert.match(service, /resolveApprovedWorldSourceContractVersion/)
+  assert.match(service, /context\.captureCanonicalUrl, context\.contractVersion/)
   assert.match(service, /failures\.push\(\{ captureId: context\.captureId/)
   assert.match(migration, /status in \('succeeded', 'failed', 'skipped'\)/)
   assert.match(migration, /world_observation_proposal_triage_runs/)
