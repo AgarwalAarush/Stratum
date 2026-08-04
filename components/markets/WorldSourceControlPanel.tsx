@@ -106,9 +106,11 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'scout', domainId: selectedDomain.id, reason: reason.trim() }),
       })
-      const payload = await response.json() as { error?: string }
+      const payload = await response.json() as { error?: string; deduplicated?: boolean }
       if (!response.ok) throw new Error(payload.error ?? 'Unable to queue source scout')
-      setNotice(`Scout queued for ${selectedDomain.label}. It can only create candidate sources; a reviewed contract is still required before ingestion.`)
+      setNotice(payload.deduplicated
+        ? `A bounded scout for ${selectedDomain.label} is already queued or completed today. No additional model run was started.`
+        : `Scout queued for ${selectedDomain.label}. It can only create candidate sources; a reviewed contract is still required before ingestion.`)
       router.refresh()
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to queue source scout')
@@ -125,9 +127,11 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
       const response = await fetch('/api/markets/world-sources', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'audit-health' }),
       })
-      const payload = await response.json() as { error?: string }
+      const payload = await response.json() as { error?: string; deduplicated?: boolean }
       if (!response.ok) throw new Error(payload.error ?? 'Unable to queue source health audit')
-      setNotice('Source health audit queued. It probes approved contracts only and records review telemetry; it does not change source admission.')
+      setNotice(payload.deduplicated
+        ? 'A source health audit is already queued or completed today. No additional probe run was started.'
+        : 'Source health audit queued. It probes approved contracts only and records review telemetry; it does not change source admission.')
       router.refresh()
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to queue source health audit')
