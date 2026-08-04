@@ -112,6 +112,10 @@ async function loadScreenerHistoryMetrics(
   }))
 }
 
+function hasUsableScreenerHistory(metrics: ReadonlyMap<string, ScreenerHistoryMetrics>): boolean {
+  return [...metrics.values()].some((metric) => metric.barCount >= 50)
+}
+
 export function mergeMarketDailyBars(
   current: MarketDailyBar[],
   updates: MarketDailyBar[],
@@ -413,7 +417,7 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
   // Alpaca can return delayed-SIP snapshots even where our durable daily bars
   // are IEX. Never blend those feeds: explicitly re-fetch the snapshots on
   // IEX when it is the only feed with usable persisted history.
-  if (historyMetrics.size === 0 && feed === 'delayed_sip') {
+  if (!hasUsableScreenerHistory(historyMetrics) && feed === 'delayed_sip') {
     const iexMetrics = await loadScreenerHistoryMetrics(supabase, symbols, 'iex', dataAsOf)
     if (iexMetrics.size > 0) {
       snapshotsResult = await client.fetchSnapshots(symbols, 'iex')
@@ -425,7 +429,7 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
   // A fresh database has no compact metrics yet. Preserve the existing
   // bootstrap path, but do not reload an established full bar archive on each
   // routine refresh.
-  if (historyMetrics.size === 0) {
+  if (!hasUsableScreenerHistory(historyMetrics)) {
     historyResult = await loadScreenerHistory(client, supabase, symbols, feed, now)
     if (historyResult.feed !== feed) {
       snapshotsResult = await client.fetchSnapshots(symbols, historyResult.feed)

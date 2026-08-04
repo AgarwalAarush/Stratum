@@ -75,7 +75,8 @@ test('history backfill suppresses young symbols already attempted today', () => 
 
 test('screener refresh explicitly aligns snapshots to the durable history feed instead of mixing delayed SIP and IEX', () => {
   const source = readFileSync(join(process.cwd(), 'lib/server/markets-ingestion.ts'), 'utf8')
-  assert.match(source, /historyMetrics\.size === 0 && feed === 'delayed_sip'/)
+  assert.match(source, /!hasUsableScreenerHistory\(historyMetrics\) && feed === 'delayed_sip'/)
   assert.match(source, /client\.fetchSnapshots\(symbols, 'iex'\)/)
   assert.match(source, /Never blend those feeds/)
+  assert.match(source, /metric\.barCount >= 50/)
 })
