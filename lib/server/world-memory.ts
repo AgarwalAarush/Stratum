@@ -711,3 +711,15 @@ export function isMarketWorldModelEnabled(environment: NodeJS.ProcessEnv = proce
 export function isMarketAutoThesisEnabled(environment: NodeJS.ProcessEnv = process.env): boolean {
   return environment.MARKET_AUTO_THESIS_ENABLED === 'true'
 }
+
+/**
+ * Completing a bounded analyst/critic pass is not itself publication
+ * authority. Every asynchronous path must honor the same explicit
+ * auto-promotion switch as the scheduled world cycle.
+ */
+export function shouldAutoPromoteMarketResearch(
+  researchStatus: string,
+  environment: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return researchStatus === 'complete' && isMarketAutoThesisEnabled(environment)
+}

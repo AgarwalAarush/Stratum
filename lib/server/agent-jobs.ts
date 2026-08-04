@@ -659,8 +659,12 @@ async function executeJob(
     const { deepenMarketHypothesis } = await import('./market-thesis-research.ts')
     await reportProgress(5, 'loading bounded source ledger')
     const research = await deepenMarketHypothesis({ ownerId, hypothesisId, reason: typeof job.payload.reason === 'string' ? job.payload.reason : 'scheduled deepening' })
-    await reportProgress(100, research.status === 'complete' ? 'validated research published' : 'research requires revision')
-    const marketThesis = research.status === 'complete' ? await import('./world-memory.ts').then(({ promoteEligibleMarketHypothesis }) => promoteEligibleMarketHypothesis(ownerId, hypothesisId)) : null
+    const { promoteEligibleMarketHypothesis, shouldAutoPromoteMarketResearch } = await import('./world-memory.ts')
+    const autoPromotionEnabled = shouldAutoPromoteMarketResearch(research.status)
+    await reportProgress(100, research.status === 'complete'
+      ? (autoPromotionEnabled ? 'validated research published' : 'validated research awaits promotion authorization')
+      : 'research requires revision')
+    const marketThesis = autoPromotionEnabled ? await promoteEligibleMarketHypothesis(ownerId, hypothesisId) : null
     return { hypothesisId, researchVersionId: research.id, version: research.version, status: research.status, marketThesisId: marketThesis?.id ?? null }
   }
 

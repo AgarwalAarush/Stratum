@@ -27,21 +27,23 @@ The worker must run from an immutable release checkout, not a development checko
 
 The corpus root is `STRATUM_DATA_ROOT=/Users/Shared/StratumData`. It contains content-addressed raw/extracted evidence, DuckDB, Parquet observations, and rendered artifacts. The worker reserves 60 GiB free disk, caps its own managed corpus at 120 GiB, pauses optional downloads below 50 GiB free, and pauses non-critical ingestion below 40 GiB. DuckDB is private-worker-only; Vercel consumes normalized Supabase artifacts.
 
-### First real market-memory vertical: AI/power
+### Initial governed market-memory verticals
 
-With `MARKET_WORLD_MODEL_ENABLED=true`, the worker fetches the curated `ai-power-v1` packet at 17:00 ET, archives the original source bytes before storing extracted text, and queues fresh global plus `ai-power` baselines and hypothesis synthesis. The initial packet is intentionally primary-source-heavy: EIA demand and deliverable-capacity material, FERC large-load interconnection action, DOE transformer supply-chain evidence, and NERC's independent reliability cross-check. Failed sources are retained in the job result as explicit gaps; a partial packet is never presented as complete diligence.
+With `MARKET_WORLD_MODEL_ENABLED=true`, the worker fetches only declared adapters for active domain packs, archives original source bytes before storing extracted text, and queues fresh global plus domain baselines and hypothesis synthesis. The initial high-signal packs are AI infrastructure and power, semicap/data-center equipment, and critical materials. Each expresses mechanisms and coverage requirements declaratively, so adding a further vertical starts from the same governed pipeline rather than a broad classifier or unrestricted market crawl.
 
-Keep `MARKET_AUTO_THESIS_ENABLED=false` through the first real end-to-end validation. The first run may form a hypothesis; it cannot create a capital decision and auto-promotion is a separate, later gate.
+The packets are intentionally primary/regulatory-heavy: AI/power uses EIA, FERC, DOE, and NERC material; semicap combines company filings with relevant technical and policy evidence; critical materials uses USGS, DOE, and direct company disclosures. Failed captures are retained as explicit gaps; a partial packet is never presented as complete diligence.
 
-### Candidate critical-materials vertical
+Keep `MARKET_AUTO_THESIS_ENABLED=false` through end-to-end validation. A bounded analyst/critic pass may complete, but it cannot publish a market thesis through any worker path unless that explicit switch is enabled. Even a published thesis remains research evidence: it creates no capital decision, broker action, or trading authority.
 
-`critical-materials-v1` is the next governed packet. Its USGS Mineral Commodity Summaries, DOE critical-material assessment, MP Materials filing, and Lynas annual report map resource supply, processing concentration, trade constraints, and substitution without making a commodity-price or security call. The domain stays `candidate` until its approved sources have been durably ingested by the private worker and the governed activation path records a successful coverage review.
+Macro, policy, and geopolitics is deliberately left as a candidate pack until source coverage is reviewed and activated through the same control plane. Candidate sources, proposed observations, hypotheses needing revision, and forming cross-domain mechanisms never count as validated theses.
 
 ### Source control and scout policy
 
 Sources are governed independently from the documents they emit. `world_source_registry` records candidate, probation, approved, blocked, and retired sources; every newly governed source needs an immutable active contract that constrains hosts, paths, MIME types, cadence, and observation kinds. The worker rejects a source outside that contract before it can create a `world_document` or observation.
 
 `scout-world-sources` is an explicit, bounded worker job rather than a broad daily crawl. It uses `STRATUM_SOURCE_SCOUT_MODEL` to propose at most twelve **candidate** source-level URLs for one domain and one stated coverage gap. It cannot approve a source or publish evidence. Approval must create a contract through the authenticated source-control API; use `STRATUM_MARKET_RESEARCH_MODEL` for durable analyst/critic runs and `STRATUM_MARKET_STANDARD_MODEL` only for bounded planning/evaluation. Keep those variables worker-only.
+
+When a critic requests missing evidence, the worker routes at most three frontier questions per domain to a distinct scout job and marks them `deferred` for contract review. Discovery does not resolve a frontier. Only a reviewed source contract, governed capture, quote-bound proposal, and accepted observation can cause a new bounded research revision.
 
 The worker also runs `verify-world-source-health` at 16:00 ET. It records reachability, final redirect destination, HTTP status, MIME type, and latency in `world_source_health_checks`, validating the result against each source's active contract. A health failure is review telemetry only: it does not auto-approve, block, retire, ingest, activate a domain, form a thesis, or trigger a capital action.
 
@@ -109,6 +111,7 @@ The worker scheduler is enabled by default and checks once per minute. It create
 | Every five minutes while relevant | `monitor-investment-theses` | `/api/cron/agent-jobs` with the monitored-thesis payload |
 | Explicit coverage request only | `scout-world-sources` | `/api/cron/agent-jobs` with a bounded domain and source-gap reason |
 | Daily at 16:00 ET when the market-world model is enabled | `verify-world-source-health` | `/api/cron/agent-jobs` with `{"jobType":"verify-world-source-health"}` |
+| Every six hours when the market-world model is enabled | `refresh-market-hypothesis-research`, `route-market-research-frontiers`, `evaluate-market-predictions` | `/api/cron/agent-jobs` with the corresponding job type |
 | Daily after 12:00 UTC | `generate-morning-brief` | `/api/cron/morning-brief` |
 | Mondays after 13:00 UTC | `generate-weekly-overview` | `/api/cron/weekly-overview` |
 | 1st and 15th after 14:00 UTC | `generate-monthly-overview` | `/api/cron/monthly-overview` |
