@@ -3,6 +3,7 @@ import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 import {
   predictionDeadlineFromHorizon,
+  shouldResolvePredictionDeadlineWithoutModel,
   validateMarketPredictionEvaluation,
 } from '../lib/server/market-prediction-evaluation.ts'
 
@@ -12,6 +13,14 @@ test('prediction horizons become bounded deterministic deadlines', () => {
   assert.equal(predictionDeadlineFromHorizon('2 quarters', start), '2027-02-02T15:00:00.000Z')
   assert.equal(predictionDeadlineFromHorizon('eventually', start), null)
   assert.equal(predictionDeadlineFromHorizon('50 years', start), null)
+})
+
+test('an elapsed deadline without new governed evidence expires deterministically', () => {
+  const now = Date.parse('2026-08-04T00:00:00.000Z')
+  assert.equal(shouldResolvePredictionDeadlineWithoutModel('2026-08-03T23:59:59.000Z', 0, now), true)
+  assert.equal(shouldResolvePredictionDeadlineWithoutModel('2026-08-03T23:59:59.000Z', 1, now), false)
+  assert.equal(shouldResolvePredictionDeadlineWithoutModel('2026-08-05T00:00:00.000Z', 0, now), false)
+  assert.equal(shouldResolvePredictionDeadlineWithoutModel(null, 0, now), false)
 })
 
 test('prediction evaluations cannot turn unsupported evidence into a verdict', () => {
@@ -38,6 +47,8 @@ test('prediction evaluations are versioned and disconfirmation only queues resea
   assert.match(migration, /market_thesis_prediction_evaluations/i)
   assert.match(migration, /unique \(prediction_id, version\)/i)
   assert.match(evaluator, /A scheduler tick by itself cannot/i)
+  assert.match(evaluator, /without any new linked governed observation/i)
+  assert.match(evaluator, /shouldResolvePredictionDeadlineWithoutModel/)
   assert.match(jobs, /'evaluate-market-prediction'/)
   assert.match(jobs, /prediction disconfirmed/)
   assert.match(jobs, /'deepen-market-hypothesis'/)

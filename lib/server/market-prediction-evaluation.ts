@@ -31,6 +31,14 @@ export function predictionDeadlineFromHorizon(horizon: string, startAt: Date): s
   return new Date(startAt.getTime() + Math.round(days * 24 * 60 * 60 * 1_000)).toISOString()
 }
 
+/** A missed deadline with no new governed evidence is a durable, deterministic
+ * inconclusive outcome. Do not spend a model call to manufacture that fact. */
+export function shouldResolvePredictionDeadlineWithoutModel(deadline: string | null, evidenceCount: number, now = Date.now()): boolean {
+  if (evidenceCount !== 0 || deadline === null) return false
+  const deadlineAt = Date.parse(deadline)
+  return Number.isFinite(deadlineAt) && deadlineAt <= now
+}
+
 export interface MarketPredictionEvaluationContent {
   verdict: 'confirmed' | 'disconfirmed' | 'inconclusive'
   rationale: string
@@ -152,6 +160,17 @@ export async function evaluateMarketPrediction(options: EvaluateMarketPrediction
   }).select('*').single()
   if (createError || !row) throw new Error(`Unable to create prediction evaluation: ${createError?.message ?? 'unknown error'}`)
   try {
+    if (shouldResolvePredictionDeadlineWithoutModel(context.deadline, context.sources.length)) {
+      const generatedAt = new Date().toISOString()
+      const rationale = 'The prediction deadline elapsed without any new linked governed observation, so the outcome is inconclusive rather than inferred.'
+      const { data: updated, error: updateError } = await supabase.from('market_thesis_prediction_evaluations').update({
+        status: 'complete', verdict: 'inconclusive', rationale, generated_at: generatedAt, error: null,
+      }).eq('id', row.id).eq('status', 'running').select('*').single()
+      if (updateError || !updated) throw new Error(`Unable to publish deterministic prediction expiry: ${updateError?.message ?? 'unknown error'}`)
+      const { error: predictionUpdateError } = await supabase.from('market_thesis_predictions').update({ result: 'expired', evaluated_at: generatedAt }).eq('id', context.predictionId)
+      if (predictionUpdateError) throw new Error(`Unable to expire prediction: ${predictionUpdateError.message}`)
+      return { evaluation: normalizeEvaluation(updated as RecordValue), hypothesisId: context.hypothesisId, ownerId: context.ownerId }
+    }
     const sourceWithExcerpt = await Promise.all(context.sources.slice(0, 10).map(async (source) => ({
       ...source, excerpt: source.extractedKey ? await readWorldCorpusExtract(source.extractedKey, 5_000).catch(() => `${source.title}\n${source.assertion}`) : `${source.title}\n${source.assertion}`,
     })))
