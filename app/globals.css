@@ -3353,6 +3353,7 @@
 .market-source-candidate-context b { font-weight: 500; }
 .market-source-candidate-context small { color: var(--market-text-muted); display: block; font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 10px; line-height: 1.45; margin-top: 7px; }
 .market-source-coverage-priority { color: var(--market-text-muted); display: block; font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 10px; line-height: 1.45; margin-top: 8px; }
+.market-source-frontier-priority { color: var(--market-text-muted); display: block; font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 10px; line-height: 1.45; margin-top: 5px; }
 .market-source-candidate-summary { color: var(--market-text-muted); font-size: 12px; line-height: 1.5; margin: -8px 0 18px; max-width: 680px; }
 
 .market-source-control-ledger article strong {

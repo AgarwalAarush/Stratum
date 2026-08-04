@@ -1248,6 +1248,8 @@ export interface WorldSourceDiscoveryRun {
   status: 'running' | 'complete' | 'failed'
   trigger: 'bootstrap' | 'frontier_gap' | 'coverage_review' | 'manual'
   reason: string
+  /** Durable research-frontier provenance for a bounded frontier scout. */
+  frontierIds: string[]
   candidates: WorldSourceScoutCandidate[]
   provider: string | null
   model: string | null
@@ -1260,6 +1262,7 @@ export interface WorldSourceControlWorkspaceData {
   domains: MarketDomainPack[]
   sources: WorldSourceRegistryEntry[]
   discoveryRuns: WorldSourceDiscoveryRun[]
+  researchFrontiers: MarketResearchFrontierItem[]
   observationProposals: WorldObservationProposal[]
   triageRuns: WorldObservationProposalTriageRun[]
 }

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { getMarketDomainPack } from '../lib/markets/domain-packs.ts'
-import { prioritizeWorldSourceCandidates } from '../lib/markets/source-review-priority.ts'
-import type { WorldSourceRegistryEntry } from '../lib/markets/types.ts'
+import { candidateResearchFrontiers, prioritizeWorldSourceCandidates } from '../lib/markets/source-review-priority.ts'
+import type { MarketResearchFrontierItem, WorldSourceDiscoveryRun, WorldSourceRegistryEntry } from '../lib/markets/types.ts'
 
 function source(input: Partial<WorldSourceRegistryEntry> & Pick<WorldSourceRegistryEntry, 'id' | 'label' | 'status' | 'evidenceClasses'>): WorldSourceRegistryEntry {
   return {
@@ -44,4 +44,18 @@ test('review priority becomes deterministic score ordering after all coverage cl
   ], domain)
   assert.deepEqual(ordered.map((item) => item.source.id), ['higher', 'lower'])
   assert.deepEqual(ordered[0]?.closesCoverageGaps, [])
+})
+
+test('candidate frontier provenance includes every matching bounded discovery run', () => {
+  const candidate = source({ id: 'candidate', label: 'Candidate', status: 'candidate', evidenceClasses: ['company_disclosure'] })
+  const discoveryRun: WorldSourceDiscoveryRun = {
+    id: 'run', domainId: 'ai-power', status: 'complete', trigger: 'frontier_gap', reason: 'Bounded frontier source discovery.', frontierIds: ['lower', 'higher'],
+    candidates: [{ slug: 'candidate', label: 'Candidate', publisher: 'Primary publisher', canonicalUrl: 'https://example.com/candidate', sourceTier: 'regulatory', sourceKind: 'dataset', evidenceClasses: ['company_disclosure'], domains: ['ai-power'], coverage: 'Coverage', whyThisSource: 'Why', limitations: [], candidateScore: 80 }],
+    provider: 'openai', model: 'cheap-model', generatedAt: '2026-08-04T00:00:00.000Z', error: null, createdAt: '2026-08-04T00:00:00.000Z',
+  }
+  const frontiers: MarketResearchFrontierItem[] = [
+    { id: 'lower', hypothesisId: 'hypothesis', researchVersionId: 'version', question: 'Lower', causalNode: 'lower-priority node', priority: 2, sourceTypes: [], adapterId: null, status: 'deferred', evidenceNeeded: 'Evidence', attemptCount: 0, lastError: null, nextRunAt: null },
+    { id: 'higher', hypothesisId: 'hypothesis', researchVersionId: 'version', question: 'Higher', causalNode: 'higher-priority node', priority: 5, sourceTypes: [], adapterId: null, status: 'deferred', evidenceNeeded: 'Evidence', attemptCount: 0, lastError: null, nextRunAt: null },
+  ]
+  assert.deepEqual(candidateResearchFrontiers(candidate, [discoveryRun], frontiers).map((item) => item.id), ['higher', 'lower'])
 })

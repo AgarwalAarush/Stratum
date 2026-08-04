@@ -624,9 +624,12 @@ async function executeJob(
     const trigger = job.payload.trigger === 'bootstrap' || job.payload.trigger === 'frontier_gap' || job.payload.trigger === 'coverage_review'
       ? job.payload.trigger
       : 'manual'
+    const frontierIds = Array.isArray(job.payload.frontierIds)
+      ? job.payload.frontierIds.filter((item): item is string => typeof item === 'string')
+      : []
     if (!domainId || !reason) throw new Error('World-source scout requires a domain and reason')
     await reportProgress(5, 'scouting bounded source candidates')
-    const run = await runWorldSourceScout({ domainId, reason, trigger })
+    const run = await runWorldSourceScout({ domainId, reason, trigger, frontierIds })
     await reportProgress(100, 'candidate sources preserved for contract review')
     return { discoveryRunId: run.id, domainId: run.domainId, candidateCount: run.candidates.length, status: run.status }
   }

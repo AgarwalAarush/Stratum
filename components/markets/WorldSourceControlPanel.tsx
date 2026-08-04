@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import type { MarketDomainPack, WorldSourceControlWorkspaceData, WorldSourceRegistryEntry } from '@/lib/markets/types'
-import { prioritizeWorldSourceCandidates } from '@/lib/markets/source-review-priority'
+import { candidateResearchFrontiers, prioritizeWorldSourceCandidates } from '@/lib/markets/source-review-priority'
 
 type SourceStatus = 'approved' | 'probation'
 
@@ -292,10 +292,13 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           <p className="markets-eyebrow">Review ledger</p>
           <h3>{selectedDomain ? `${selectedDomain.label} source candidates` : 'Source candidates'}</h3>
           <p className="market-source-candidate-summary">Showing {visibleCandidates.length} of {scopedCandidates.length} candidate{scopedCandidates.length === 1 ? '' : 's'} mapped to the selected domain. Candidates may support more than one domain.</p>
-          {scopedCandidates.length ? visibleCandidates.map(({ source, closesCoverageGaps }) => (
+          {scopedCandidates.length ? visibleCandidates.map(({ source, closesCoverageGaps }) => {
+            const frontiers = candidateResearchFrontiers(source, workspace.discoveryRuns, workspace.researchFrontiers)
+            return (
             <article key={source.id}>
               <div><strong>{source.label}</strong><span>{source.publisher} · {source.evidenceClasses.join(', ').replaceAll('_', ' ')}</span>
                 {closesCoverageGaps.length ? <small className="market-source-coverage-priority">Closes coverage gap: {closesCoverageGaps.join(', ').replaceAll('_', ' ')}</small> : null}
+                {frontiers.length ? <small className="market-source-frontier-priority">Research frontier: {frontiers[0]?.causalNode}{frontiers.length > 1 ? ` +${frontiers.length - 1} related gap${frontiers.length === 2 ? '' : 's'}` : ''}</small> : null}
                 {source.candidateContext ? <div className="market-source-candidate-context"><p><b>Coverage:</b> {source.candidateContext.coverage || 'Not supplied'}</p><p><b>Why this source:</b> {source.candidateContext.whyThisSource || 'Not supplied'}</p><small>Deterministic score {source.candidateContext.deterministicScore ?? '—'} · scout score {source.candidateContext.scoutScore ?? '—'}{source.candidateContext.limitations.length ? ` · limitations: ${source.candidateContext.limitations.join('; ')}` : ''}</small></div> : null}
                 <a href={source.canonicalUrl} target="_blank" rel="noreferrer">Open canonical source</a></div>
               <time>{formatDate(source.updatedAt)}</time>
@@ -312,7 +315,8 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
                 <footer><button type="submit" disabled={pending}>{pending ? 'Activating contract…' : 'Approve reviewed contract'}</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setReviewing(null); setContract(null) }}>Cancel</button></footer>
               </form> : <button type="button" className="market-source-review-button" onClick={() => startReview(source)} disabled={pending}>Review contract</button>}
             </article>
-          )) : <p>No candidate sources are awaiting review for this domain.</p>}
+            )
+          }) : <p>No candidate sources are awaiting review for this domain.</p>}
           {hasMoreCandidates ? <button type="button" className="market-source-review-button" onClick={() => setCandidateLimit((limit) => Math.min(limit + 12, scopedCandidates.length))} disabled={pending}>Show 12 more candidates</button> : null}
         </div>
         <div>

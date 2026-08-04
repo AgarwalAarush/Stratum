@@ -1,6 +1,7 @@
 import { getMarketDomainPack, isKnownMarketDomain } from '../markets/domain-packs.ts'
 import type {
   MarketDomainPack,
+  MarketResearchFrontierItem,
   MarketDomainPackEvent,
   WorldSourceContract,
   WorldSourceControlWorkspaceData,
@@ -253,6 +254,7 @@ export interface RunWorldSourceScoutOptions {
   domainId: string
   reason: string
   trigger?: WorldSourceDiscoveryRun['trigger']
+  frontierIds?: string[]
   runner?: (prompt: string) => Promise<CodexExecResult<{ candidates: WorldSourceScoutCandidate[] }>>
 }
 
@@ -268,8 +270,11 @@ export async function runWorldSourceScout(options: RunWorldSourceScoutOptions): 
   if (!domain) throw new Error(`Unknown market domain: ${options.domainId}`)
   const now = new Date().toISOString()
   const trigger = options.trigger ?? 'manual'
+  const frontierIds = trigger === 'frontier_gap'
+    ? [...new Set((options.frontierIds ?? []).filter((id): id is string => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id)))].slice(0, 12)
+    : []
   const { data: run, error: createError } = await supabase.from('world_source_discovery_runs').insert({
-    domain_id: domain.id, status: 'running', trigger, reason: options.reason, requested_at: now,
+    domain_id: domain.id, status: 'running', trigger, reason: options.reason, frontier_ids: frontierIds, requested_at: now,
   }).select('*').single()
   if (createError || !run) throw new Error(`Unable to create source-scout run: ${createError?.message ?? 'unknown error'}`)
   try {
@@ -306,6 +311,7 @@ function normalizeDiscoveryRun(row: RecordValue): WorldSourceDiscoveryRun {
     : []
   return {
     id: String(row.id), domainId: String(row.domain_id), status, trigger: row.trigger as WorldSourceDiscoveryRun['trigger'], reason: String(row.reason),
+    frontierIds: strings(row.frontier_ids),
     candidates, provider: row.provider === null ? null : String(row.provider ?? ''), model: row.model === null ? null : String(row.model ?? ''),
     generatedAt: row.generated_at === null ? null : String(row.generated_at ?? ''), error: row.error === null ? null : String(row.error ?? ''), createdAt: String(row.created_at),
   }
@@ -334,6 +340,17 @@ function normalizeTriageRun(row: RecordValue): WorldObservationProposalTriageRun
     sourceLabel: String(source.label ?? 'Governed source'), sourceUrl: String(source.canonical_url ?? ''), status,
     proposalCount: Number(row.proposal_count ?? 0), provider: row.provider === null ? null : String(row.provider ?? ''),
     model: row.model === null ? null : String(row.model ?? ''), error: row.error === null ? null : String(row.error ?? ''), completedAt: String(row.completed_at),
+  }
+}
+
+function normalizeResearchFrontier(row: RecordValue): MarketResearchFrontierItem {
+  const status = String(row.status)
+  if (status !== 'queued' && status !== 'complete' && status !== 'blocked' && status !== 'deferred') throw new Error(`Invalid research frontier status: ${status}`)
+  return {
+    id: String(row.id), hypothesisId: String(row.hypothesis_id), researchVersionId: row.research_version_id === null ? null : String(row.research_version_id ?? ''),
+    question: String(row.question), causalNode: String(row.causal_node), priority: Number(row.priority), sourceTypes: strings(row.source_types), adapterId: row.adapter_id === null ? null : String(row.adapter_id ?? ''),
+    status, evidenceNeeded: String(row.evidence_needed), attemptCount: Number(row.attempt_count), lastError: row.last_error === null ? null : String(row.last_error ?? ''),
+    nextRunAt: row.next_run_at === null ? null : String(row.next_run_at ?? ''),
   }
 }
 
@@ -455,7 +472,7 @@ export async function reviseWorldSourceCanonicalUrl(input: { slug: string; canon
 export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceControlWorkspaceData> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const [domains, sources, runs, mappings, healthChecks, proposals, triageRuns] = await Promise.all([
+  const [domains, sources, runs, mappings, healthChecks, proposals, triageRuns, researchFrontiers] = await Promise.all([
     supabase.from('market_domain_packs').select('*').order('id'),
     supabase.from('world_source_registry').select('*').order('updated_at', { ascending: false }).limit(200),
     supabase.from('world_source_discovery_runs').select('*').order('created_at', { ascending: false }).limit(60),
@@ -463,8 +480,9 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
     supabase.from('world_source_health_checks').select('*').order('checked_at', { ascending: false }).limit(500),
     supabase.from('world_observation_proposals').select('*,world_source_registry(label,canonical_url),world_documents(title,canonical_url),world_observation_proposal_reviews(decision,rationale,reviewed_at,observation_id)').order('generated_at', { ascending: false }).limit(60),
     supabase.from('world_observation_proposal_triage_runs').select('*,world_source_document_captures(source_id,world_source_registry(slug,label,canonical_url))').order('completed_at', { ascending: false }).limit(60),
+    supabase.from('market_hypothesis_research_frontier').select('*').order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(120),
   ])
-  const error = domains.error ?? sources.error ?? runs.error ?? mappings.error ?? healthChecks.error ?? proposals.error ?? triageRuns.error
+  const error = domains.error ?? sources.error ?? runs.error ?? mappings.error ?? healthChecks.error ?? proposals.error ?? triageRuns.error ?? researchFrontiers.error
   if (error) throw new Error(`Unable to load source-control workspace: ${error.message}`)
   const domainIdsBySourceId = new Map<string, string[]>()
   for (const mapping of mappings.data ?? []) {
@@ -491,6 +509,7 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
       latestHealthBySourceId.get(String(row.id)) ?? null,
     )),
     discoveryRuns: (runs.data ?? []).map((row) => normalizeDiscoveryRun(row as RecordValue)),
+    researchFrontiers: (researchFrontiers.data ?? []).map((row) => normalizeResearchFrontier(row as RecordValue)),
     observationProposals: (proposals.data ?? []).map((row) => normalizeObservationProposal(row as RecordValue)),
     triageRuns: (triageRuns.data ?? []).map((row) => normalizeTriageRun(row as RecordValue)),
   }
