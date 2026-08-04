@@ -3386,6 +3386,7 @@
 .market-source-triage article[data-status="failed"] strong { color: var(--market-negative); }
 .market-source-triage article[data-status="skipped"] strong { color: var(--market-text-muted); }
 .market-source-proposals > p:not(.markets-eyebrow) { color: var(--market-text-muted); font-size: 12px; line-height: 1.5; margin: -5px 0 18px; max-width: 760px; }
+.market-source-proposal-summary { margin: 0 0 18px !important; }
 .market-source-proposals article > div { max-width: 780px; }
 .market-source-proposals article p { color: var(--market-text); font-family: var(--font-ibm-plex-sans), sans-serif; font-size: 12px; line-height: 1.5; margin: 9px 0; }
 .market-source-proposals blockquote { border-left: 2px solid var(--market-border); color: var(--market-text-muted); font-size: 11px; line-height: 1.45; margin: 9px 0; padding-left: 9px; }

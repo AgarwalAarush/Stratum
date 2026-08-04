@@ -63,6 +63,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const router = useRouter()
   const [selectedDomainId, setSelectedDomainId] = useState(workspace?.domains[0]?.id ?? '')
   const [candidateLimit, setCandidateLimit] = useState(12)
+  const [proposalLimit, setProposalLimit] = useState(12)
   const [reason, setReason] = useState('Review source coverage gaps before expanding this domain.')
   const [pending, setPending] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -89,6 +90,9 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const scopedCandidates = selectedDomain ? candidates.filter((source) => source.domainIds.includes(selectedDomain.id)) : candidates
   const visibleCandidates = scopedCandidates.slice(0, candidateLimit)
   const hasMoreCandidates = visibleCandidates.length < scopedCandidates.length
+  const scopedProposals = selectedDomain ? workspace.observationProposals.filter((proposal) => proposal.domainId === selectedDomain.id) : workspace.observationProposals
+  const visibleProposals = scopedProposals.slice(0, proposalLimit)
+  const hasMoreProposals = visibleProposals.length < scopedProposals.length
   const failedRuns = workspace.discoveryRuns.filter((run) => run.status === 'failed')
   const health = workspace.sources.flatMap((source) => source.health ? [source.health] : [])
   const triageAttention = workspace.triageRuns.filter((run) => run.status !== 'succeeded')
@@ -238,7 +242,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           const complete = coverage.every((item) => item.current >= item.minimumSources)
           const selected = selectedDomainId === domain.id
           return (
-              <button key={domain.id} type="button" className="market-domain-control-card" data-selected={selected} onClick={() => { setSelectedDomainId(domain.id); setCandidateLimit(12) }} role="listitem">
+              <button key={domain.id} type="button" className="market-domain-control-card" data-selected={selected} onClick={() => { setSelectedDomainId(domain.id); setCandidateLimit(12); setProposalLimit(12); setReviewingProposal(null); setProposalRationale('') }} role="listitem">
               <span data-status={domain.status}>{domain.status}</span>
               <strong>{domain.label}</strong>
               <small>{complete ? 'Coverage requirement met' : 'Coverage gap remains'}</small>
@@ -342,9 +346,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
         </div>
         <div className="market-source-proposals">
           <p className="markets-eyebrow">Proposal ledger</p>
-          <h3>Quote-bound observation proposals</h3>
+          <h3>{selectedDomain ? `${selectedDomain.label} quote-bound proposals` : 'Quote-bound observation proposals'}</h3>
           <p>Low-cost extraction proposals are not accepted observations. They never enter baselines, hypotheses, predictions, or capital decisions without a separate evidence-review gate.</p>
-          {workspace.observationProposals.length ? workspace.observationProposals.slice(0, 12).map((proposal) => (
+          <p className="market-source-proposal-summary">Showing {visibleProposals.length} of {scopedProposals.length} proposal{scopedProposals.length === 1 ? '' : 's'} mapped to the selected domain.</p>
+          {scopedProposals.length ? visibleProposals.map((proposal) => (
             <article key={proposal.id}>
               <div><strong>{proposal.domainId.replaceAll('-', ' ')} · {proposal.mechanism.replaceAll('_', ' ')}</strong><span>{proposal.kind} · confidence {proposal.confidence} · materiality {proposal.materiality}</span><p>{proposal.assertion}</p><blockquote>{proposal.evidenceQuote}</blockquote><a href={proposal.sourceUrl} target="_blank" rel="noreferrer">{proposal.sourceLabel}</a>
                 {proposal.review ? <small className="market-proposal-review" data-decision={proposal.review.decision}>{proposal.review.decision} · {proposal.review.rationale}</small>
@@ -353,7 +358,8 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
               </div>
               <time>{formatDate(proposal.generatedAt)}</time>
             </article>
-          )) : <p>No extracted observation proposals are awaiting review.</p>}
+          )) : <p>No extracted observation proposals are awaiting review for this domain.</p>}
+          {hasMoreProposals ? <button type="button" className="market-source-review-button" onClick={() => setProposalLimit((limit) => Math.min(limit + 12, scopedProposals.length))} disabled={pending}>Show 12 more proposals</button> : null}
         </div>
       </div>
     </section>
