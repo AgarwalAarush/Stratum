@@ -400,28 +400,13 @@ interface StaleAgentJob {
   claimed_at: string | null
 }
 
-export async function recoverStaleAgentJobs(
-  now = new Date(),
-  defaultStaleAfterMs = 45 * 60 * 1_000,
-): Promise<number> {
+async function recoverClaimedAgentJobs(jobs: StaleAgentJob[], now: Date, recoveryError: string): Promise<number> {
+  if (jobs.length === 0) return 0
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const { data, error } = await supabase
-    .from('agent_jobs')
-    .select('id,job_type,attempts,max_attempts,claimed_at')
-    .eq('status', 'running')
-  if (error) throw new Error(`Unable to inspect stale agent jobs: ${error.message}`)
-  const jobs = ((data ?? []) as StaleAgentJob[]).filter((job) => {
-    const jobType = parseAgentJobType(job.job_type)
-    const claimedAt = job.claimed_at ? Date.parse(job.claimed_at) : Number.NaN
-    return jobType !== null && Number.isFinite(claimedAt) && claimedAt < now.getTime() - agentJobStaleAfterMs(jobType, defaultStaleAfterMs)
-  })
-  if (jobs.length === 0) return 0
-
   const retryableIds = jobs.filter((job) => job.attempts < job.max_attempts).map((job) => job.id)
   const exhaustedIds = jobs.filter((job) => job.attempts >= job.max_attempts).map((job) => job.id)
   const recoveredAt = now.toISOString()
-  const recoveryError = 'Recovered after the worker stopped while this job was running.'
   const updates = [
     supabase.from('agent_runs').update({
       status: 'failed',
@@ -450,8 +435,50 @@ export async function recoverStaleAgentJobs(
   }
   const results = await Promise.all(updates)
   const updateError = results.find((result) => result.error)?.error
-  if (updateError) throw new Error(`Unable to recover stale agent jobs: ${updateError.message}`)
+  if (updateError) throw new Error(`Unable to recover interrupted agent jobs: ${updateError.message}`)
   return jobs.length
+}
+
+/**
+ * A fresh worker process can only reclaim jobs that the same durable worker ID
+ * claimed before it stopped. This makes deployments recover promptly without
+ * stealing live work from another worker process.
+ */
+export async function recoverInterruptedAgentJobs(workerId: string, now = new Date()): Promise<number> {
+  const claimedBy = workerId.trim()
+  if (!claimedBy) return 0
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data, error } = await supabase
+    .from('agent_jobs')
+    .select('id,job_type,attempts,max_attempts,claimed_at')
+    .eq('status', 'running')
+    .eq('claimed_by', claimedBy)
+  if (error) throw new Error(`Unable to inspect interrupted agent jobs: ${error.message}`)
+  return recoverClaimedAgentJobs(
+    (data ?? []) as StaleAgentJob[],
+    now,
+    'Recovered immediately after the same worker restarted.',
+  )
+}
+
+export async function recoverStaleAgentJobs(
+  now = new Date(),
+  defaultStaleAfterMs = 45 * 60 * 1_000,
+): Promise<number> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data, error } = await supabase
+    .from('agent_jobs')
+    .select('id,job_type,attempts,max_attempts,claimed_at')
+    .eq('status', 'running')
+  if (error) throw new Error(`Unable to inspect stale agent jobs: ${error.message}`)
+  const jobs = ((data ?? []) as StaleAgentJob[]).filter((job) => {
+    const jobType = parseAgentJobType(job.job_type)
+    const claimedAt = job.claimed_at ? Date.parse(job.claimed_at) : Number.NaN
+    return jobType !== null && Number.isFinite(claimedAt) && claimedAt < now.getTime() - agentJobStaleAfterMs(jobType, defaultStaleAfterMs)
+  })
+  return recoverClaimedAgentJobs(jobs, now, 'Recovered after the worker stopped while this job was running.')
 }
 
 export async function enqueueAgentJob(

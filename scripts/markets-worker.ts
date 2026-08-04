@@ -1,5 +1,5 @@
 import { hostname } from 'node:os'
-import { processOneAgentJob, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
+import { processOneAgentJob, recoverInterruptedAgentJobs, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
 import { enqueueDueAgentJobs } from '../lib/server/agent-schedule.ts'
 import { recordWorkerHeartbeat } from '../lib/server/worker-heartbeat.ts'
 import type { AgentJobType } from '../lib/server/agent-jobs.ts'
@@ -83,15 +83,17 @@ async function main() {
       reason: 'Robinhood sync is enabled but its private worker credentials are incomplete',
     }))
   }
-  const recoveredJobs = await recoverStaleAgentJobs()
-  if (recoveredJobs > 0) {
+  const restartedJobs = await recoverInterruptedAgentJobs(workerId)
+  if (restartedJobs > 0) {
     console.info(JSON.stringify({
       level: 'info',
       workerId,
-      event: 'stale_jobs_recovered',
-      count: recoveredJobs,
+      event: 'interrupted_jobs_recovered',
+      count: restartedJobs,
     }))
   }
+  const recoveredJobs = await recoverStaleAgentJobs()
+  if (recoveredJobs > 0) console.info(JSON.stringify({ level: 'info', workerId, event: 'stale_jobs_recovered', count: recoveredJobs }))
   const supersededJobs = await supersedeQueuedRoutineAgentJobs()
   if (supersededJobs > 0) console.info(JSON.stringify({ level: 'info', workerId, event: 'routine_queue_superseded', count: supersededJobs }))
 
