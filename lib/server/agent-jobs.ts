@@ -28,7 +28,7 @@ import {
 } from './world-memory.ts'
 import { backupMarketCorpus, verifyMarketCorpusBackup } from './world-backup.ts'
 import { getWorldSourceAdapter } from './world-sources.ts'
-import { findWorldSourceCoverageScoutPlans, isMarketDomainActive, runWorldSourceScout } from './world-source-control.ts'
+import { findCandidateSourcePreflights, findWorldSourceCoverageScoutPlans, isMarketDomainActive, runWorldSourceScout } from './world-source-control.ts'
 import { auditWorldSourceHealth, preflightWorldSourceCandidate } from './world-source-health.ts'
 import { collectGovernedWorldSourceDocuments } from './world-source-collector.ts'
 import { triageCapturedWorldObservationProposals } from './world-observation-proposals.ts'
@@ -756,8 +756,19 @@ async function executeJob(
     if (!domainId || !reason) throw new Error('World-source scout requires a domain and reason')
     await reportProgress(5, 'scouting bounded source candidates')
     const run = await runWorldSourceScout({ domainId, reason, trigger, frontierIds })
-    await reportProgress(100, 'candidate sources preserved for contract review')
-    return { discoveryRunId: run.id, domainId: run.domainId, candidateCount: run.candidates.length, status: run.status }
+    // Preflight records only direct-target reachability and contract shape. It
+    // cannot approve, ingest, activate a domain, or otherwise change source
+    // authority; the reviewer remains the sole admission gate.
+    const preflightSlugs = await findCandidateSourcePreflights(run.candidates.map((candidate) => candidate.slug))
+    const preflights = await Promise.all(preflightSlugs.map((slug) => enqueueAgentJob('preflight-world-source-candidate', {
+      slug, trigger: 'scout-follow-up', discoveryRunId: run.id,
+    })))
+    await reportProgress(100, 'candidate sources preserved and direct targets queued for preflight')
+    return {
+      discoveryRunId: run.id, domainId: run.domainId, candidateCount: run.candidates.length, status: run.status,
+      preflightQueued: preflights.filter((item) => !item.deduplicated).length,
+      preflightDeduplicated: preflights.filter((item) => item.deduplicated).length,
+    }
   }
 
   if (job.job_type === 'review-world-source-coverage') {

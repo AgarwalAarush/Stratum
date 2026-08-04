@@ -291,6 +291,40 @@ export interface RunWorldSourceScoutOptions {
 }
 
 /**
+ * A scout can create candidate records, never source authority. Direct-target
+ * preflight is a separate, low-risk operational check that makes review
+ * faster; it must never be scheduled for a source that is already approved,
+ * blocked, or retired.
+ */
+export function selectCandidateSourcePreflights(
+  candidateSlugs: readonly string[],
+  sources: ReadonlyArray<Pick<WorldSourceRegistryEntry, 'slug' | 'status'>>,
+  limit = 12,
+): string[] {
+  const candidateSet = new Set(sources.filter((source) => source.status === 'candidate').map((source) => source.slug))
+  const selected: string[] = []
+  for (const value of candidateSlugs) {
+    const slug = value.trim().toLowerCase()
+    if (!slug || !candidateSet.has(slug) || selected.includes(slug)) continue
+    selected.push(slug)
+    if (selected.length >= Math.max(1, Math.min(limit, 12))) break
+  }
+  return selected
+}
+
+/** Load only the just-scouted rows that remain eligible for a candidate probe. */
+export async function findCandidateSourcePreflights(candidateSlugs: readonly string[], limit = 12): Promise<string[]> {
+  const normalized = [...new Set(candidateSlugs.map((value) => value.trim().toLowerCase()).filter(Boolean))].slice(0, 24)
+  if (normalized.length === 0) return []
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data, error } = await supabase.from('world_source_registry').select('slug,status').in('slug', normalized)
+  if (error) throw new Error(`Unable to inspect source candidates for preflight: ${error.message}`)
+  const sources = (data ?? []).map((row) => ({ slug: String(row.slug), status: row.status as WorldSourceStatus }))
+  return selectCandidateSourcePreflights(normalized, sources, limit)
+}
+
+/**
  * Scout work is low-cost, bounded, and non-authoritative. It may create only
  * `candidate` rows; a separate source-contract/approval operation is required
  * before observations can cite the source.

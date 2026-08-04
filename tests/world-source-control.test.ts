@@ -5,6 +5,7 @@ import {
   buildWorldSourceCoverageScoutPlan,
   buildWorldSourceScoutPrompt,
   scoreWorldSourceCandidate,
+  selectCandidateSourcePreflights,
   validateWorldSourceContractTarget,
   validateWorldSourceContract,
   validatePersistedWorldSourceScoutCandidates,
@@ -54,6 +55,18 @@ test('source score is deterministic and does not treat discovery sources as auth
   const discovery = scoreWorldSourceCandidate({ ...candidate, sourceTier: 'discovery', sourceKind: 'html', evidenceClasses: ['discovery'], limitations: ['Opinion-led', 'No primary data'] })
   assert.ok(regulatory > discovery)
   assert.equal(regulatory, scoreWorldSourceCandidate(candidate))
+})
+
+test('scout follow-up preflights only still-candidate direct targets', () => {
+  const selected = selectCandidateSourcePreflights(
+    ['Official-Data', 'approved-source', 'official-data', 'blocked-source', 'missing-source'],
+    [
+      { slug: 'official-data', status: 'candidate' },
+      { slug: 'approved-source', status: 'approved' },
+      { slug: 'blocked-source', status: 'blocked' },
+    ],
+  )
+  assert.deepEqual(selected, ['official-data'])
 })
 
 test('weekly coverage discovery targets only declared gaps without candidate coverage', () => {
