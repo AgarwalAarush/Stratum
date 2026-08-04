@@ -33,7 +33,7 @@ import { auditWorldSourceHealth } from './world-source-health.ts'
 import { collectGovernedWorldSourceDocuments } from './world-source-collector.ts'
 import { triageCapturedWorldObservationProposals } from './world-observation-proposals.ts'
 import { AI_MODELS } from '../ai/config.ts'
-import { selectMarketModel } from './market-model-policy.ts'
+import { selectMarketModel, type MarketModelSelection } from './market-model-policy.ts'
 import { evaluateMarketPrediction, findDueMarketPredictionEvaluations } from './market-prediction-evaluation.ts'
 import {
   fetchPersistedMarketAssets,
@@ -277,6 +277,35 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   ) return 'market-data'
   if (jobType === 'backup-market-corpus' || jobType === 'verify-market-corpus') return 'market-data'
   return 'codex'
+}
+
+/**
+ * Durable worker telemetry must describe the exact policy choices used by a
+ * job, not merely the generic fallback model. A deepening pass invokes both
+ * an analyst and a critic; each remains visible in the immutable run input.
+ */
+export function marketModelRoutingForAgentJob(
+  jobType: AgentJobType,
+  environment: NodeJS.ProcessEnv = process.env,
+): MarketModelSelection[] {
+  const tasks = jobType === 'scout-world-sources'
+    ? ['source_scout'] as const
+    : jobType === 'triage-world-observation-proposals'
+      ? ['observation_triage'] as const
+      : jobType === 'deepen-market-hypothesis'
+        ? ['hypothesis_analysis', 'hypothesis_critic'] as const
+        : jobType === 'evaluate-market-prediction'
+          ? ['prediction_evaluation'] as const
+          : []
+  return tasks.map((task) => selectMarketModel(task, environment))
+}
+
+export function modelForAgentJob(jobType: AgentJobType, environment: NodeJS.ProcessEnv = process.env): string | null {
+  const routed = marketModelRoutingForAgentJob(jobType, environment)
+  if (routed.length > 0) return routed[0]!.model
+  return agentJobProvider(jobType) === 'codex'
+    ? environment.CODEX_SYNTHESIS_MODEL ?? AI_MODELS.scheduledSynthesis
+    : null
 }
 
 export function isMissingDedupeConstraint(message: string): boolean {
@@ -761,14 +790,14 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
   const provider = job.job_type === 'generate-market-memo' && job.payload.synthesize === false
     ? 'market-data'
     : agentJobProvider(job.job_type)
-  const model = provider === 'codex'
-    ? (job.job_type === 'scout-world-sources' ? selectMarketModel('source_scout').model
-      : job.job_type === 'triage-world-observation-proposals' ? selectMarketModel('observation_triage').model
-        : (process.env.CODEX_SYNTHESIS_MODEL ?? AI_MODELS.scheduledSynthesis))
-    : null
+  const modelRouting = marketModelRoutingForAgentJob(job.job_type)
+  const model = modelForAgentJob(job.job_type)
   const { data: run, error: runError } = await supabase
     .from('agent_runs')
-    .insert({ job_id: job.id, worker_id: workerId, status: 'running', provider, model, input_refs: [job.payload] })
+    .insert({
+      job_id: job.id, worker_id: workerId, status: 'running', provider, model,
+      input_refs: [job.payload, ...(modelRouting.length > 0 ? [{ marketModelRouting: modelRouting }] : [])],
+    })
     .select('id')
     .single()
   if (runError || !run) throw new Error(`Unable to create agent run: ${runError?.message ?? 'unknown error'}`)

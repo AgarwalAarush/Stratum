@@ -6,6 +6,8 @@ import {
   agentJobProvider,
   buildAgentJobDedupeKey,
   isMissingDedupeConstraint,
+  marketModelRoutingForAgentJob,
+  modelForAgentJob,
   normalizeClaimedAgentJob,
   parseAgentJobType,
   shouldRefreshClosedMarket,
@@ -144,6 +146,21 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('scout-world-sources'), 'codex')
   assert.equal(agentJobProvider('verify-world-source-health'), 'market-data')
   assert.equal(agentJobProvider('triage-world-observation-proposals'), 'codex')
+})
+
+test('bounded market-research jobs persist their actual routed model policy', async () => {
+  const environment = {
+    STRATUM_SOURCE_SCOUT_MODEL: 'cheap-model',
+    STRATUM_MARKET_STANDARD_MODEL: 'standard-model',
+    STRATUM_MARKET_RESEARCH_MODEL: 'strong-model',
+  } as NodeJS.ProcessEnv
+  assert.deepEqual(marketModelRoutingForAgentJob('scout-world-sources', environment).map((item) => item.model), ['cheap-model'])
+  assert.deepEqual(marketModelRoutingForAgentJob('deepen-market-hypothesis', environment).map((item) => item.task), ['hypothesis_analysis', 'hypothesis_critic'])
+  assert.equal(modelForAgentJob('deepen-market-hypothesis', environment), 'strong-model')
+  assert.equal(modelForAgentJob('evaluate-market-prediction', environment), 'standard-model')
+  const source = await readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8')
+  assert.match(source, /marketModelRouting: modelRouting/)
+  assert.match(source, /input_refs: \[job\.payload/)
 })
 
 test('observation-triage work deduplicates the immutable capture set', () => {
