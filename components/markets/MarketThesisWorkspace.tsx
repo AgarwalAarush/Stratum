@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { MarketHypothesis, MarketResearchFrontierItem, MarketThesisWorkspaceData } from '@/lib/markets/types'
+import type { MarketHypothesis, MarketHypothesisCrossDomainLink, MarketResearchFrontierItem, MarketThesisWorkspaceData, ThesisPrediction } from '@/lib/markets/types'
 
 type Action = 'freeze' | 'reject' | 'archive' | 'reactivate' | 'request_deepening'
 
@@ -46,6 +46,7 @@ export function MarketThesisWorkspace({ initialData }: { initialData: MarketThes
   const forming = data.hypotheses.filter((item) => ['dormant', 'forming', 'proposed'].includes(item.status))
   const history = data.hypotheses.filter((item) => ['rejected', 'archived'].includes(item.status))
   const active = data.theses.filter((item) => item.state === 'active' || item.state === 'weakened')
+  const hypothesesById = new Map(data.hypotheses.map((item) => [item.id, item]))
 
   return <div className="market-thesis-workspace">
     <p className="thesis-intro">These are market models, not capital decisions. They connect demand, supply, constraints, economic capture, and falsifiers; company research must still test whether a security actually captures the economics.</p>
@@ -67,13 +68,15 @@ export function MarketThesisWorkspace({ initialData }: { initialData: MarketThes
       {forming.length === 0 ? <p className="thesis-empty">No cluster has enough causal evidence to propose a market thesis yet.</p> : <div className="market-hypothesis-grid">{forming.map((hypothesis) => <HypothesisCard key={hypothesis.id} hypothesis={hypothesis} frontiers={data.frontiers.filter((item) => item.hypothesisId === hypothesis.id)} busy={busy} onAction={takeAction} />)}</div>}
     </section>
 
+    <CrossDomainMap links={data.crossDomainLinks} hypothesesById={hypothesesById} />
+
     <section className="market-thesis-section" aria-labelledby="active-market-theses-title">
       <header><div><p className="markets-eyebrow">Versioned market models</p><h2 id="active-market-theses-title">Market theses</h2></div><span>{active.length} active or weakened</span></header>
       {active.length === 0 ? <p className="thesis-empty">No thesis has passed the promotion gate. A plausible narrative is deliberately insufficient: the factual core needs fresh official evidence, an independent cross-check, a counter-case, and predictions.</p> : <div className="market-thesis-grid">{active.map((thesis) => <article className="market-thesis-card" key={thesis.id} data-state={thesis.state}>
         <header><div><span>{thesis.state} · v{thesis.version}</span><h3>{thesis.title}</h3></div><strong>{Math.round(thesis.confidence)}%<small> confidence</small></strong></header>
         <p>{thesis.content.whyNow}</p>
         <div className="market-thesis-copy"><div><span>Economic capture</span><p>{thesis.content.economics}</p></div><div><span>What may be priced</span><p>{thesis.content.expectations}</p></div></div>
-        <div className="market-thesis-copy"><div><span>Falsifiers</span>{thesis.content.falsifiers.map((item) => <p key={item}>{item}</p>)}</div><div><span>Predictions</span>{thesis.predictions.map((item) => <p key={item.id}>{item.prediction}</p>)}</div></div>
+        <div className="market-thesis-copy"><div><span>Falsifiers</span>{thesis.content.falsifiers.map((item) => <p key={item}>{item}</p>)}</div><div><span>Predictions</span>{thesis.predictions.map((item) => <PredictionLedgerEntry key={item.id} prediction={item} />)}</div></div>
         {thesis.exposures.length > 0 ? <div className="market-exposure-list"><span>Value-chain exposures</span>{thesis.exposures.map((item) => <p key={item.id}>{item.symbol ?? item.entityName} · {item.role} · {item.mechanism} <small>{item.verificationStatus}</small></p>)}</div> : null}
         <footer>{thesis.content.sourceLedger.length} source{thesis.content.sourceLedger.length === 1 ? '' : 's'} · generated {dateLabel(thesis.generatedAt)} {thesis.revisionDiff.length ? `· ${thesis.revisionDiff[0]}` : ''}</footer>
       </article>)}</div>}
@@ -81,6 +84,34 @@ export function MarketThesisWorkspace({ initialData }: { initialData: MarketThes
 
     {history.length > 0 ? <section className="market-thesis-section market-thesis-history"><header><div><p className="markets-eyebrow">Preserved history</p><h2>Rejected and archived</h2></div><span>{history.length}</span></header><div className="market-hypothesis-grid">{history.map((hypothesis) => <HypothesisCard key={hypothesis.id} hypothesis={hypothesis} frontiers={data.frontiers.filter((item) => item.hypothesisId === hypothesis.id)} busy={busy} onAction={takeAction} />)}</div></section> : null}
     {notice ? <p className="thesis-notice" role="status">{notice}</p> : null}
+  </div>
+}
+
+function CrossDomainMap({ links, hypothesesById }: { links: MarketHypothesisCrossDomainLink[]; hypothesesById: Map<string, MarketHypothesis> }) {
+  if (links.length === 0) return null
+  return <section className="market-thesis-section market-cross-domain-section" aria-labelledby="cross-domain-map-title">
+    <header><div><p className="markets-eyebrow">Directional transmission</p><h2 id="cross-domain-map-title">Cross-domain mechanism map</h2></div><span>{links.length} retained link{links.length === 1 ? '' : 's'}</span></header>
+    <p className="market-cross-domain-intro">A link maps an independently sourced mechanism between two market models. Forming links are research context only; they cannot promote a thesis, establish causality, or create an exposure.</p>
+    <div className="market-cross-domain-ledger">
+      {links.map((link) => {
+        const from = hypothesesById.get(link.fromHypothesisId)
+        const to = hypothesesById.get(link.toHypothesisId)
+        return <article key={link.id} data-status={link.status}>
+          <header><span>{link.status} · {link.relationship}</span><small>{link.sourceObservationIds.length} independently linked observation{link.sourceObservationIds.length === 1 ? '' : 's'} · {Math.round(link.confidence)}% confidence</small></header>
+          <div className="market-cross-domain-route"><strong>{from?.title ?? 'Source model'}</strong><i aria-hidden="true">→</i><strong>{to?.title ?? 'Destination model'}</strong></div>
+          <p>{link.explanation}</p>
+        </article>
+      })}
+    </div>
+  </section>
+}
+
+function PredictionLedgerEntry({ prediction }: { prediction: ThesisPrediction }) {
+  const evaluation = prediction.latestEvaluation
+  return <div className="market-prediction-ledger-entry" data-result={prediction.result}>
+    <p>{prediction.prediction}</p>
+    <small>{prediction.result}{prediction.deadline ? ` · deadline ${dateLabel(prediction.deadline)}` : ''}</small>
+    {evaluation ? <small data-status={evaluation.status}>{evaluation.status === 'complete' ? `${evaluation.verdict} · evaluator v${evaluation.version} · ${evaluation.sourceIds.length} source${evaluation.sourceIds.length === 1 ? '' : 's'}` : evaluation.error || 'Evaluator is processing the bounded evidence ledger.'}</small> : <small>Awaiting a due date or new linked evidence before evaluation.</small>}
   </div>
 }
 

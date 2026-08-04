@@ -1517,4 +1517,6 @@ export interface MarketThesisWorkspaceData {
   hypotheses: MarketHypothesis[]
   theses: MarketThesisVersion[]
   frontiers: MarketResearchFrontierItem[]
+  /** Independently evidenced transmission links; forming links are never thesis or capital authority. */
+  crossDomainLinks: MarketHypothesisCrossDomainLink[]
 }

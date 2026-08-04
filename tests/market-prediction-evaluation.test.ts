@@ -27,11 +27,13 @@ test('prediction evaluations cannot turn unsupported evidence into a verdict', (
 })
 
 test('prediction evaluations are versioned and disconfirmation only queues research revision', async () => {
-  const [migration, evaluator, jobs, schedule] = await Promise.all([
+  const [migration, evaluator, jobs, schedule, workspace, presentation] = await Promise.all([
     readFile(new URL('../supabase/migrations/202608040002_market_prediction_evaluations.sql', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/market-prediction-evaluation.ts', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/agent-schedule.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/server/world-memory.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../components/markets/MarketThesisWorkspace.tsx', import.meta.url), 'utf8'),
   ])
   assert.match(migration, /market_thesis_prediction_evaluations/i)
   assert.match(migration, /unique \(prediction_id, version\)/i)
@@ -40,4 +42,7 @@ test('prediction evaluations are versioned and disconfirmation only queues resea
   assert.match(jobs, /prediction disconfirmed/)
   assert.match(jobs, /'deepen-market-hypothesis'/)
   assert.match(schedule, /'evaluate-market-predictions'/)
+  assert.match(workspace, /market_thesis_prediction_evaluations/)
+  assert.match(workspace, /latestEvaluation/)
+  assert.match(presentation, /Awaiting a due date or new linked evidence before evaluation/)
 })

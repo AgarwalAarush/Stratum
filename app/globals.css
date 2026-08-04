@@ -1736,6 +1736,82 @@
 .market-thesis-card footer { border-top: 1px solid var(--market-border); margin-top: 16px; padding-top: 11px; }
 .market-thesis-card[data-state="weakened"] { background: color-mix(in srgb, #c89e3c 7%, var(--market-bg)); }
 
+.market-cross-domain-intro {
+  color: var(--market-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 14px 0 0;
+  max-width: 760px;
+}
+
+.market-cross-domain-ledger {
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  margin-top: 16px;
+}
+
+.market-cross-domain-ledger article {
+  border-bottom: 1px solid var(--market-border);
+  padding: 14px 0;
+}
+
+.market-cross-domain-ledger article > header {
+  align-items: baseline;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.market-cross-domain-ledger article > header > span,
+.market-cross-domain-ledger article > header > small,
+.market-prediction-ledger-entry small {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .03em;
+  line-height: 1.45;
+}
+
+.market-cross-domain-ledger article[data-status="active"] > header > span { color: var(--market-positive); }
+
+.market-cross-domain-route {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 14px minmax(0, 1fr);
+  margin-top: 10px;
+}
+
+.market-cross-domain-route strong {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.market-cross-domain-route i {
+  color: var(--market-text-muted);
+  font-style: normal;
+  text-align: center;
+}
+
+.market-cross-domain-ledger article > p {
+  color: var(--market-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 8px 0 0;
+}
+
+.market-prediction-ledger-entry + .market-prediction-ledger-entry {
+  border-top: 1px solid var(--market-border);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.market-prediction-ledger-entry > p { margin-top: 6px; }
+.market-prediction-ledger-entry small { display: block; margin-top: 4px; }
+.market-prediction-ledger-entry[data-result="confirmed"] > small:first-of-type { color: var(--market-positive); }
+.market-prediction-ledger-entry[data-result="disconfirmed"] > small:first-of-type { color: var(--market-negative); }
+
 .thesis-intake {
   background: var(--market-surface);
   border: 1px solid var(--market-border);
@@ -2256,6 +2332,7 @@
   .market-baseline-columns,
   .market-thesis-copy,
   .market-hypothesis-grid { grid-template-columns: minmax(0, 1fr); }
+  .market-cross-domain-ledger article > header { align-items: flex-start; flex-direction: column; gap: 4px; }
   .market-hypothesis-card footer { align-items: flex-start; flex-direction: column; }
   .thesis-intro { margin-bottom: 28px; }
   .thesis-heading-actions { align-items: flex-start; flex-direction: column; }
