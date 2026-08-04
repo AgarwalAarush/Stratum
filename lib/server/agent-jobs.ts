@@ -29,7 +29,7 @@ import {
 import { backupMarketCorpus, verifyMarketCorpusBackup } from './world-backup.ts'
 import { getWorldSourceAdapter } from './world-sources.ts'
 import { findWorldSourceCoverageScoutPlans, isMarketDomainActive, runWorldSourceScout } from './world-source-control.ts'
-import { auditWorldSourceHealth } from './world-source-health.ts'
+import { auditWorldSourceHealth, preflightWorldSourceCandidate } from './world-source-health.ts'
 import { collectGovernedWorldSourceDocuments } from './world-source-collector.ts'
 import { triageCapturedWorldObservationProposals } from './world-observation-proposals.ts'
 import { AI_MODELS } from '../ai/config.ts'
@@ -66,6 +66,7 @@ export const AGENT_JOB_TYPES = [
   'generate-monthly-overview',
   'ingest-world-source',
   'verify-world-source-health',
+  'preflight-world-source-candidate',
   'collect-world-source-documents',
   'triage-world-observation-proposals',
   'scout-world-sources',
@@ -230,6 +231,9 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     if (captures) return `${jobType}:${captures}`
   }
   if (jobType === 'verify-world-source-health') return `${jobType}:${now.toISOString().slice(0, 10)}`
+  if (jobType === 'preflight-world-source-candidate' && typeof payload.slug === 'string') {
+    return `${jobType}:${payload.slug.trim().toLowerCase()}:${now.toISOString().slice(0, 10)}`
+  }
   if (jobType === 'scout-world-sources' && typeof payload.domainId === 'string') {
     // A frontier pass is deliberately capped to a few questions. Including its
     // stable frontier set lets the next bounded pass cover the remaining gap
@@ -261,7 +265,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-robinhood-portfolio') return 'robinhood'
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'fetch-stock-price-history' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
-  if (jobType === 'ingest-world-source' || jobType === 'verify-world-source-health' || jobType === 'collect-world-source-documents') return 'market-data'
+  if (jobType === 'ingest-world-source' || jobType === 'verify-world-source-health' || jobType === 'preflight-world-source-candidate' || jobType === 'collect-world-source-documents') return 'market-data'
   if (jobType === 'triage-world-observation-proposals') return 'codex'
   if (
     jobType === 'refresh-cross-asset'
@@ -632,6 +636,15 @@ async function executeJob(
     const audit = await auditWorldSourceHealth()
     await reportProgress(100, `${audit.healthy} healthy, ${audit.degraded} degraded, ${audit.failed} failed`)
     return { checked: audit.checks.length, healthy: audit.healthy, degraded: audit.degraded, failed: audit.failed }
+  }
+
+  if (job.job_type === 'preflight-world-source-candidate') {
+    const slug = typeof job.payload.slug === 'string' ? job.payload.slug.trim().toLowerCase() : ''
+    if (!slug) throw new Error('Candidate preflight requires a source slug')
+    await reportProgress(5, 'probing the candidate direct target')
+    const check = await preflightWorldSourceCandidate(slug)
+    await reportProgress(100, `${check.status} candidate target check recorded`)
+    return { sourceId: check.sourceId, slug, status: check.status, resolvedUrl: check.resolvedUrl, mimeType: check.mimeType }
   }
 
   if (job.job_type === 'collect-world-source-documents') {

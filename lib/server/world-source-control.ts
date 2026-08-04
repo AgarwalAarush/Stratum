@@ -455,6 +455,24 @@ export async function approveWorldSource(slug: string, contractInput: WorldSourc
   if (sourceError || !sourceRow) throw new Error(`Unknown source ${normalizedSlug}`)
   const current = normalizeRegistryEntry(sourceRow as RecordValue)
   if (current.status === 'blocked' || current.status === 'retired') throw new Error(`Source ${normalizedSlug} cannot be approved from ${current.status}`)
+  if (current.status === 'candidate') {
+    const { data: preflightRow, error: preflightError } = await supabase
+      .from('world_source_health_checks')
+      .select('*')
+      .eq('source_id', current.id)
+      .eq('canonical_url', current.canonicalUrl)
+      .order('checked_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (preflightError) throw new Error(`Unable to verify candidate preflight: ${preflightError.message}`)
+    if (!preflightRow) throw new Error(`Source ${normalizedSlug} needs a successful worker preflight before approval`)
+    const preflight = normalizeHealthCheck(preflightRow as RecordValue)
+    if (preflight.status !== 'healthy') throw new Error(`Source ${normalizedSlug} needs a healthy worker preflight before approval`)
+    if (new Date(preflight.checkedAt).getTime() < new Date(current.updatedAt).getTime()) {
+      throw new Error(`Source ${normalizedSlug} needs a preflight after its latest candidate update`)
+    }
+    validateWorldSourceContractTarget(contract as WorldSourceContract, preflight.resolvedUrl ?? preflight.canonicalUrl, preflight.mimeType ?? undefined)
+  }
   const { data, error } = await supabase.rpc('activate_world_source_contract', {
     p_source_id: current.id,
     p_allowed_hosts: contract.allowedHosts,

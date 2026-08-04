@@ -177,6 +177,27 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setNotice(null)
   }
 
+  const preflightCandidate = async (source: WorldSourceRegistryEntry) => {
+    if (pending) return
+    setPending(true)
+    setNotice(null)
+    try {
+      const response = await fetch('/api/markets/world-sources', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'preflight-candidate', slug: source.slug }),
+      })
+      const payload = await response.json() as { error?: string; deduplicated?: boolean }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue candidate preflight')
+      setNotice(payload.deduplicated
+        ? `${source.label} already has a candidate preflight queued or completed today.`
+        : `${source.label} preflight queued on the worker. It records only reachability, redirect, and MIME telemetry; it cannot approve the source.`)
+      router.refresh()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to queue candidate preflight')
+    } finally {
+      setPending(false)
+    }
+  }
+
   const blockCandidate = async (source: WorldSourceRegistryEntry) => {
     if (!blockRationale.trim() || pending) return
     setPending(true)
@@ -354,10 +375,11 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
                 {closesCoverageGaps.length ? <small className="market-source-coverage-priority">Closes coverage gap: {closesCoverageGaps.join(', ').replaceAll('_', ' ')}</small> : null}
                 {frontiers.length ? <small className="market-source-frontier-priority">Research frontier: {frontiers[0]?.causalNode}{frontiers.length > 1 ? ` +${frontiers.length - 1} related gap${frontiers.length === 2 ? '' : 's'}` : ''}</small> : null}
                 {source.candidateContext ? <div className="market-source-candidate-context"><p><b>Coverage:</b> {source.candidateContext.coverage || 'Not supplied'}</p><p><b>Why this source:</b> {source.candidateContext.whyThisSource || 'Not supplied'}</p><small>Deterministic score {source.candidateContext.deterministicScore ?? '—'} · scout score {source.candidateContext.scoutScore ?? '—'}{source.candidateContext.limitations.length ? ` · limitations: ${source.candidateContext.limitations.join('; ')}` : ''}</small></div> : null}
+                {source.health ? <small className="market-source-preflight-status">Latest target preflight: {source.health.status} · {formatDate(source.health.checkedAt)}{source.health.error ? ` · ${source.health.error}` : ''}</small> : <small className="market-source-preflight-status">No worker preflight recorded yet.</small>}
                 <a href={source.canonicalUrl} target="_blank" rel="noreferrer">Open canonical source</a></div>
               <time>{formatDate(source.updatedAt)}</time>
               {reviewing === source.id && contract ? <form className="market-source-contract-review" onSubmit={(event) => { event.preventDefault(); void approveCandidate(source) }}>
-                <p>Review every boundary below. Approval activates this contract; it does not ingest evidence or activate a domain.</p>
+                <p>Review every boundary below. Candidate approval requires a fresh healthy worker preflight whose resolved target and MIME type fit this exact contract. Approval activates this contract; it does not ingest evidence or activate a domain.</p>
                 <label>Allowed hosts<input value={contract.allowedHosts} onChange={(event) => setContract({ ...contract, allowedHosts: event.target.value })} required /></label>
                 <label>Allowed paths (comma separated; blank allows any path on the approved host)<input value={contract.allowedPaths} onChange={(event) => setContract({ ...contract, allowedPaths: event.target.value })} /></label>
                 <label>Accepted MIME types (comma separated)<input value={contract.acceptedMimeTypes} onChange={(event) => setContract({ ...contract, acceptedMimeTypes: event.target.value })} required /></label>
@@ -371,7 +393,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
                 <p>Blocking preserves this candidate and its discovery trail, but permanently prevents approval and collection. Use it for an invalid, overly broad, or unsuitable source.</p>
                 <label>Block rationale<textarea value={blockRationale} onChange={(event) => setBlockRationale(event.target.value)} required maxLength={1000} /></label>
                 <footer><button type="submit" className="market-source-block-button" disabled={pending || !blockRationale.trim()}>{pending ? 'Blocking…' : 'Block candidate'}</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setBlockingCandidate(null); setBlockRationale('') }}>Cancel</button></footer>
-              </form> : <footer className="market-source-candidate-actions"><button type="button" className="market-source-review-button" onClick={() => startReview(source)} disabled={pending}>Review contract</button><button type="button" className="market-source-secondary-button market-source-block-button" onClick={() => { setBlockingCandidate(source.id); setReviewing(null); setContract(null); setBlockRationale(''); setNotice(null) }} disabled={pending}>Block candidate</button></footer>}
+              </form> : <footer className="market-source-candidate-actions"><button type="button" className="market-source-secondary-button" onClick={() => preflightCandidate(source)} disabled={pending}>{pending ? 'Queuing preflight…' : 'Preflight direct target'}</button><button type="button" className="market-source-review-button" onClick={() => startReview(source)} disabled={pending}>Review contract</button><button type="button" className="market-source-secondary-button market-source-block-button" onClick={() => { setBlockingCandidate(source.id); setReviewing(null); setContract(null); setBlockRationale(''); setNotice(null) }} disabled={pending}>Block candidate</button></footer>}
             </article>
             )
           }) : <p>No candidate sources are awaiting review for this domain.</p>}

@@ -32,6 +32,11 @@ export async function POST(request: NextRequest) {
       const queued = await enqueueAgentJob('verify-world-source-health', { trigger: 'manual' })
       return NextResponse.json({ queued: true, ...queued })
     }
+    if (body.action === 'preflight-candidate') {
+      if (typeof body.slug !== 'string' || !body.slug.trim()) return NextResponse.json({ error: 'A candidate source is required.' }, { status: 400 })
+      const queued = await enqueueAgentJob('preflight-world-source-candidate', { slug: body.slug.trim().toLowerCase(), trigger: 'manual' })
+      return NextResponse.json({ queued: true, ...queued })
+    }
     if (body.action === 'scout') {
       if (typeof body.domainId !== 'string' || typeof body.reason !== 'string' || !body.reason.trim()) {
         return NextResponse.json({ error: 'A domain and source-coverage reason are required.' }, { status: 400 })

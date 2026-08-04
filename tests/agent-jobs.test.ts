@@ -21,6 +21,7 @@ test('agent job parser rejects unknown work', () => {
   assert.equal(parseAgentJobType('scout-world-sources'), 'scout-world-sources')
   assert.equal(parseAgentJobType('review-world-source-coverage'), 'review-world-source-coverage')
   assert.equal(parseAgentJobType('verify-world-source-health'), 'verify-world-source-health')
+  assert.equal(parseAgentJobType('preflight-world-source-candidate'), 'preflight-world-source-candidate')
   assert.equal(parseAgentJobType('evaluate-market-prediction'), 'evaluate-market-prediction')
   assert.throws(() => parseAgentJobType('place-order'), /Unsupported agent job type/)
 })
@@ -115,6 +116,10 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
     'verify-world-source-health:2026-08-03',
   )
   assert.equal(
+    buildAgentJobDedupeKey('preflight-world-source-candidate', new Date('2026-08-03T21:03:00Z'), { slug: 'FERC-QUEUE' }),
+    'preflight-world-source-candidate:ferc-queue:2026-08-03',
+  )
+  assert.equal(
     buildAgentJobDedupeKey('review-world-source-coverage', new Date('2026-08-03T21:03:00Z')),
     'review-world-source-coverage:2026-08-03',
   )
@@ -150,6 +155,7 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('monitor-investment-theses'), 'market-data')
   assert.equal(agentJobProvider('scout-world-sources'), 'codex')
   assert.equal(agentJobProvider('verify-world-source-health'), 'market-data')
+  assert.equal(agentJobProvider('preflight-world-source-candidate'), 'market-data')
   assert.equal(agentJobProvider('triage-world-observation-proposals'), 'codex')
 })
 

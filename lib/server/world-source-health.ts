@@ -96,6 +96,26 @@ function activeSource(source: WorldSourceRegistryEntry): boolean {
   return source.status === 'approved' || source.status === 'probation'
 }
 
+function candidateProbeContract(source: Pick<WorldSourceRegistryEntry, 'id' | 'canonicalUrl'>): WorldSourceContract {
+  const url = new URL(source.canonicalUrl)
+  return {
+    id: `candidate-preflight:${source.id}`,
+    sourceId: source.id,
+    version: 0,
+    status: 'active',
+    allowedHosts: [url.hostname],
+    // A candidate preflight should establish that the proposed *direct* target
+    // is reachable. It must not silently validate the rest of a host.
+    allowedPaths: url.pathname === '/' ? [] : [url.pathname],
+    acceptedMimeTypes: [],
+    cadence: 'event',
+    assertionsAllowed: [],
+    retentionDays: null,
+    notes: 'Temporary candidate reachability boundary; not an admitted source contract.',
+    createdAt: new Date(0).toISOString(),
+  }
+}
+
 async function persistHealthCheck(sourceId: string, probe: WorldSourceHealthProbe): Promise<WorldSourceHealthCheck> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
@@ -110,6 +130,20 @@ async function persistHealthCheck(sourceId: string, probe: WorldSourceHealthProb
     httpStatus: data.http_status === null ? null : Number(data.http_status), mimeType: data.mime_type === null ? null : String(data.mime_type),
     latencyMs: data.latency_ms === null ? null : Number(data.latency_ms), error: data.error === null ? null : String(data.error), checkedAt: String(data.checked_at),
   }
+}
+
+/**
+ * Verify a candidate's exact direct URL on the worker before a human admits
+ * it. This records only operational telemetry; it cannot approve, block, or
+ * collect the source. The reviewer still supplies and owns the final contract.
+ */
+export async function preflightWorldSourceCandidate(slug: string): Promise<WorldSourceHealthCheck> {
+  const workspace = await fetchWorldSourceControlWorkspace()
+  const source = workspace.sources.find((item) => item.slug === slug)
+  if (!source) throw new Error(`Unknown source ${slug}`)
+  if (source.status !== 'candidate') throw new Error(`Only candidate sources can be preflighted (received ${source.status})`)
+  const probe = await probeWorldSourceHealth(source, candidateProbeContract(source))
+  return persistHealthCheck(source.id, probe)
 }
 
 export interface WorldSourceHealthAudit {
