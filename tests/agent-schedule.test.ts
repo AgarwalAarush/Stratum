@@ -115,6 +115,14 @@ test('active-domain source adapters schedule by declared cadence', () => {
   assert.deepEqual(none, [])
 })
 
+test('generic governed-document collection runs after source adapters', () => {
+  const options = { worldSourceAdapters: [] }
+  const before = buildDueAgentJobs(new Date('2026-07-28T21:05:00Z'), options).map((job) => job.jobType)
+  const collection = buildDueAgentJobs(new Date('2026-07-28T21:25:00Z'), options).map((job) => job.jobType)
+  assert.equal(before.includes('collect-world-source-documents'), false)
+  assert.equal(collection.includes('collect-world-source-documents'), true)
+})
+
 test('worker schedules weekly and semimonthly intelligence on due dates', () => {
   const monday = jobTypes('2026-07-27T14:00:00Z')
   assert.ok(monday.includes('generate-weekly-overview'))

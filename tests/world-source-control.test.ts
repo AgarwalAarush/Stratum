@@ -117,4 +117,5 @@ test('source-control migration makes contracts mandatory for newly governed obse
   assert.match(controlPanel, /cannot approve a source, ingest evidence, activate a domain, create a thesis, or move capital/i)
   assert.match(controlService, /world_source_domains/)
   assert.match(controlService, /domainIdsBySourceId/)
+  assert.match(await readFile(new URL('../supabase/migrations/202608040008_world_source_document_captures.sql', import.meta.url), 'utf8'), /world_source_document_captures/)
 })

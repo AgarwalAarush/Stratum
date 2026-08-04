@@ -30,6 +30,7 @@ import { backupMarketCorpus, verifyMarketCorpusBackup } from './world-backup.ts'
 import { getWorldSourceAdapter } from './world-sources.ts'
 import { isMarketDomainActive, runWorldSourceScout } from './world-source-control.ts'
 import { auditWorldSourceHealth } from './world-source-health.ts'
+import { collectGovernedWorldSourceDocuments } from './world-source-collector.ts'
 import { AI_MODELS } from '../ai/config.ts'
 import { selectMarketModel } from './market-model-policy.ts'
 import { evaluateMarketPrediction, findDueMarketPredictionEvaluations } from './market-prediction-evaluation.ts'
@@ -64,6 +65,7 @@ export const AGENT_JOB_TYPES = [
   'generate-monthly-overview',
   'ingest-world-source',
   'verify-world-source-health',
+  'collect-world-source-documents',
   'scout-world-sources',
   'compile-world-baseline',
   'correlate-market-signals',
@@ -242,7 +244,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-robinhood-portfolio') return 'robinhood'
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'fetch-stock-price-history' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
-  if (jobType === 'ingest-world-source' || jobType === 'verify-world-source-health') return 'market-data'
+  if (jobType === 'ingest-world-source' || jobType === 'verify-world-source-health' || jobType === 'collect-world-source-documents') return 'market-data'
   if (
     jobType === 'refresh-cross-asset'
     || jobType === 'materialize-market-leadership'
@@ -582,6 +584,13 @@ async function executeJob(
     const audit = await auditWorldSourceHealth()
     await reportProgress(100, `${audit.healthy} healthy, ${audit.degraded} degraded, ${audit.failed} failed`)
     return { checked: audit.checks.length, healthy: audit.healthy, degraded: audit.degraded, failed: audit.failed }
+  }
+
+  if (job.job_type === 'collect-world-source-documents') {
+    await reportProgress(5, 'collecting bounded governed source documents')
+    const result = await collectGovernedWorldSourceDocuments()
+    await reportProgress(100, `${result.captured} captured, ${result.rejected} rejected, ${result.failed} failed`)
+    return result
   }
 
   if (job.job_type === 'scout-world-sources') {
