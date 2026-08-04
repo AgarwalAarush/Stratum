@@ -90,7 +90,7 @@ test('the macserver schedule captures the private account at open, midday, close
 })
 
 test('brokerage snapshots are durable, private, and distinct from the transaction ledger', async () => {
-  const sql = await readFile(new URL('../supabase/migrations/202608010001_private_brokerage_sync.sql', import.meta.url), 'utf8')
+  const sql = await readFile(new URL('../supabase/migrations/202608010004_private_brokerage_sync.sql', import.meta.url), 'utf8')
   assert.match(sql, /create table if not exists public\.brokerage_sync_runs/i)
   assert.match(sql, /create table if not exists public\.brokerage_account_snapshots/i)
   assert.match(sql, /create table if not exists public\.brokerage_position_snapshots/i)
