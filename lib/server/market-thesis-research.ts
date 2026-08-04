@@ -143,6 +143,12 @@ export function validateMarketThesisCritique(value: unknown, allowedSourceIds?: 
     verdict, summary: requiredString(output.summary, 'critique summary'), unsupportedClaims: strings(output.unsupportedClaims), contradictoryEvidence: strings(output.contradictoryEvidence), missingAlternatives: strings(output.missingAlternatives), requiredResearch: strings(output.requiredResearch), confidenceAdjustment: number(output.confidenceAdjustment), sourceIds: sourceIds(output.sourceIds, 'critique'),
   }
   if (critique.confidenceAdjustment < -50 || critique.confidenceAdjustment > 20) throw new Error('Invalid critique confidence adjustment')
+  if (critique.verdict === 'pass' && critique.requiredResearch.length > 0) {
+    throw new Error('A passing critique cannot require additional research')
+  }
+  if (critique.verdict === 'needs_revision' && (critique.requiredResearch.length < 1 || critique.requiredResearch.length > 8)) {
+    throw new Error('A revision critique needs 1-8 bounded research requirements')
+  }
   if (allowedSourceIds) {
     const unknown = critique.sourceIds.filter((id) => !allowedSourceIds.has(id))
     if (unknown.length) throw new Error(`Market critique referenced unknown source IDs: ${unknown.join(', ')}`)
@@ -212,7 +218,7 @@ function researchPrompt(hypothesis: MarketHypothesis, sources: Array<ResearchSou
 function critiquePrompt(hypothesis: MarketHypothesis, research: MarketHypothesisResearchContent, sources: ResearchSource[]): string {
   return [
     'You are the adversarial critic for a bounded market-research system. Audit the proposed analysis for causal leaps, unsupported facts, missing alternatives, and false certainty.',
-    'Do not make a stock recommendation. Use only source IDs in the supplied ledger. A methodological critique may use no source ID. Set needs_revision if a core claim lacks support, the counter-case is cosmetic, predictions are not observable, or economic capture is not established.',
+    'Do not make a stock recommendation. Use only source IDs in the supplied ledger. A methodological critique may use no source ID. Set needs_revision if a core claim lacks support, the counter-case is cosmetic, predictions are not observable, or economic capture is not established. A needs_revision verdict must include 1-8 precise, bounded evidence questions in requiredResearch; each question becomes governed source-discovery work, not permission to browse. A pass verdict must leave requiredResearch empty.',
     `HYPOTHESIS:\n${JSON.stringify(hypothesis)}`,
     `RESEARCH:\n${JSON.stringify(research)}`,
     `SOURCE LEDGER:\n${JSON.stringify(sources.map(({ documentId, title, publisher, tier, mechanism, assertion }) => ({ documentId, title, publisher, tier, mechanism, assertion })))} `,
@@ -229,11 +235,51 @@ function revisionDiff(prior: MarketHypothesisResearchVersion | null, next: Marke
   return changes.length > 0 ? changes : ['Evidence was reviewed; no material analytical conclusion changed.']
 }
 
-async function persistFrontier(hypothesisId: string, researchVersionId: string, frontier: MarketHypothesisResearchContent['researchFrontier']): Promise<void> {
+type ResearchFrontierOrigin = 'analyst' | 'critic'
+type PersistedResearchFrontierInput = MarketHypothesisResearchContent['researchFrontier'][number] & { origin: ResearchFrontierOrigin }
+
+/**
+ * The analyst and critic have distinct responsibilities, but both can identify
+ * a missing causal node. A critic may not merely reject an artifact: its
+ * concrete requirements become governed frontier work. This preserves the
+ * feedback loop without allowing an unbounded retry or direct web retrieval.
+ */
+export function buildPersistedResearchFrontier(
+  analystFrontier: MarketHypothesisResearchContent['researchFrontier'],
+  critique: MarketHypothesisCritique,
+): PersistedResearchFrontierInput[] {
+  const seen = new Set<string>()
+  const add = (item: Omit<PersistedResearchFrontierInput, 'origin'>, origin: ResearchFrontierOrigin) => {
+    const key = `${item.causalNode}\u0000${item.question}`.trim().toLocaleLowerCase()
+    if (!key || seen.has(key)) return null
+    seen.add(key)
+    return { ...item, origin }
+  }
+  const analyst = analystFrontier.flatMap((item) => {
+    const next = add(item, 'analyst')
+    return next ? [next] : []
+  })
+  if (critique.verdict !== 'needs_revision') return analyst
+  const critic = critique.requiredResearch.flatMap((requirement) => {
+    const question = requirement.trim()
+    const next = add({
+      question,
+      causalNode: 'adversarial review',
+      priority: 5,
+      sourceTypes: ['primary or regulatory source'],
+      evidenceNeeded: `Resolve the critic requirement: ${question}`,
+    }, 'critic')
+    return next ? [next] : []
+  })
+  return [...analyst, ...critic].slice(0, 16)
+}
+
+async function persistFrontier(hypothesisId: string, researchVersionId: string, frontier: PersistedResearchFrontierInput[]): Promise<void> {
   if (frontier.length === 0) return
   const supabase = getSupabaseClient()!
   const { error } = await supabase.from('market_hypothesis_research_frontier').insert(frontier.map((item) => ({
     hypothesis_id: hypothesisId, research_version_id: researchVersionId, question: item.question, causal_node: item.causalNode, priority: item.priority, source_types: item.sourceTypes, status: 'queued', evidence_needed: item.evidenceNeeded,
+    adapter_id: item.origin === 'critic' ? 'critic' : null,
   })))
   if (error) throw new Error(`Unable to persist market research frontier: ${error.message}`)
 }
@@ -385,7 +431,7 @@ export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOpti
       status, content: research, critique, source_ids: research.sourceIds, revision_diff: revisionDiff(prior, research), provider: researchResult.metadata.provider, model: researchResult.metadata.model, generated_at: generatedAt, error: null,
     }).eq('id', row.id).eq('status', 'running')
     if (updateError) throw new Error(`Unable to publish market research artifact: ${updateError.message}`)
-    await persistFrontier(hypothesis.id, row.id, research.researchFrontier)
+    await persistFrontier(hypothesis.id, row.id, buildPersistedResearchFrontier(research.researchFrontier, critique))
     return { id: row.id, hypothesisId: hypothesis.id, version, status, content: research, critique, sourceIds: research.sourceIds, observationIds: sources.map((source) => source.observationId), priorResearchVersionId: prior?.id ?? null, revisionDiff: revisionDiff(prior, research), provider: researchResult.metadata.provider, model: researchResult.metadata.model, dataAsOf: now, generatedAt, error: null }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

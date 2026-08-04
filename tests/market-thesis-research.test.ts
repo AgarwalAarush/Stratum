@@ -3,6 +3,7 @@ import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
 import {
+  buildPersistedResearchFrontier,
   buildResearchFrontierScoutPlan,
   shouldQueueMarketHypothesisResearch,
   validateMarketThesisCritique,
@@ -57,8 +58,28 @@ test('market thesis research requires a source-backed, internally complete ledge
 
 test('critic output is constrained to the same source ledger', () => {
   assert.throws(() => validateMarketThesisCritique({
-    verdict: 'needs_revision', summary: 'The causal bridge needs support.', unsupportedClaims: [], contradictoryEvidence: [], missingAlternatives: [], requiredResearch: [], confidenceAdjustment: -10, sourceIds: ['not-in-ledger'],
+    verdict: 'needs_revision', summary: 'The causal bridge needs support.', unsupportedClaims: [], contradictoryEvidence: [], missingAlternatives: [], requiredResearch: ['Find direct capacity evidence for the bridge.'], confidenceAdjustment: -10, sourceIds: ['not-in-ledger'],
   }, new Set(sourceIds)), /unknown source IDs/)
+})
+
+test('a revision critique creates bounded governed frontier work instead of an unrestricted retry', () => {
+  const critique = validateMarketThesisCritique({
+    verdict: 'needs_revision', summary: 'The scarcity-rent bridge needs direct capacity evidence.', unsupportedClaims: ['Capture is inferred too broadly.'], contradictoryEvidence: [], missingAlternatives: [],
+    requiredResearch: ['Which approved regional operator or regulator source can establish deliverable capacity by region?'], confidenceAdjustment: -12, sourceIds: [],
+  }, new Set(sourceIds))
+  const frontier = buildPersistedResearchFrontier(researchFixture().researchFrontier, critique)
+  assert.equal(frontier.length, 2)
+  assert.deepEqual(frontier[1], {
+    question: 'Which approved regional operator or regulator source can establish deliverable capacity by region?',
+    causalNode: 'adversarial review', priority: 5, sourceTypes: ['primary or regulatory source'],
+    evidenceNeeded: 'Resolve the critic requirement: Which approved regional operator or regulator source can establish deliverable capacity by region?', origin: 'critic',
+  })
+  assert.throws(() => validateMarketThesisCritique({
+    verdict: 'needs_revision', summary: 'Missing support.', unsupportedClaims: [], contradictoryEvidence: [], missingAlternatives: [], requiredResearch: [], confidenceAdjustment: -10, sourceIds: [],
+  }, new Set(sourceIds)), /needs 1-8 bounded research requirements/)
+  assert.throws(() => validateMarketThesisCritique({
+    verdict: 'pass', summary: 'The source ledger supports the analysis.', unsupportedClaims: [], contradictoryEvidence: [], missingAlternatives: [], requiredResearch: ['Unneeded extra work'], confidenceAdjustment: 0, sourceIds: [],
+  }, new Set(sourceIds)), /passing critique cannot require additional research/)
 })
 
 test('scheduled research does not repeat an unchanged revision frontier', () => {
@@ -95,6 +116,8 @@ test('agent jobs and thesis workspace preserve a bounded research frontier', asy
   assert.match(jobs, /findDueMarketHypothesisResearch/)
   assert.match(jobs, /route-market-research-frontiers/)
   assert.match(research, /findQueuedResearchFrontierScoutPlans/)
+  assert.match(research, /buildPersistedResearchFrontier/)
+  assert.match(research, /Resolve the critic requirement/)
   assert.match(research, /linked observation/)
   assert.match(actions, /enqueueAgentJob\('deepen-market-hypothesis'/)
   assert.match(schedule, /refresh-market-hypothesis-research/)
