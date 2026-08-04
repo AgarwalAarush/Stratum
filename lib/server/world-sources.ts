@@ -17,6 +17,7 @@ export interface WorldSourceIngestResult {
 
 interface AiPowerSourceSpec {
   id: string
+  sourceSlug: string
   title: string
   url: string
   publisher: string
@@ -42,7 +43,7 @@ interface AiPowerSourceSpec {
  */
 export const AI_POWER_SOURCE_SPECS: AiPowerSourceSpec[] = [
   {
-    id: 'eia-data-center-load',
+    id: 'eia-data-center-load', sourceSlug: 'eia',
     title: 'Data center server energy use grows across the commercial building stock',
     url: 'https://www.eia.gov/todayinenergy/detail.php?id=67704',
     publisher: 'U.S. Energy Information Administration', sourceTier: 'regulatory',
@@ -53,7 +54,7 @@ export const AI_POWER_SOURCE_SPECS: AiPowerSourceSpec[] = [
     confidence: 88, materiality: 92, novelty: 78,
   },
   {
-    id: 'eia-deliverable-capacity',
+    id: 'eia-deliverable-capacity', sourceSlug: 'eia',
     title: 'Fossil generation could rise with faster-than-expected growth in data center power demand',
     url: 'https://www.eia.gov/TODAYINENERGY/detail.php?id=67344',
     publisher: 'U.S. Energy Information Administration', sourceTier: 'regulatory',
@@ -63,7 +64,7 @@ export const AI_POWER_SOURCE_SPECS: AiPowerSourceSpec[] = [
     publishedAt: '2026-03-12T00:00:00.000Z', confidence: 86, materiality: 89, novelty: 76,
   },
   {
-    id: 'ferc-large-load-integration',
+    id: 'ferc-large-load-integration', sourceSlug: 'ferc',
     title: 'FERC order on large-load interconnection',
     url: 'https://www.ferc.gov/sites/default/files/2026-06/EL26-68-000.pdf',
     publisher: 'Federal Energy Regulatory Commission', sourceTier: 'regulatory',
@@ -73,7 +74,7 @@ export const AI_POWER_SOURCE_SPECS: AiPowerSourceSpec[] = [
     publishedAt: '2026-06-18T00:00:00.000Z', confidence: 92, materiality: 90, novelty: 85,
   },
   {
-    id: 'doe-transformer-supply',
+    id: 'doe-transformer-supply', sourceSlug: 'doe',
     title: 'Department of Energy supply chain and market analysis',
     url: 'https://www.energy.gov/oe/supply-chain-and-market-analysis',
     publisher: 'U.S. Department of Energy', sourceTier: 'regulatory',
@@ -84,7 +85,7 @@ export const AI_POWER_SOURCE_SPECS: AiPowerSourceSpec[] = [
     confidence: 84, materiality: 80, novelty: 65,
   },
   {
-    id: 'nerc-ltra-large-loads',
+    id: 'nerc-ltra-large-loads', sourceSlug: 'nerc',
     title: 'NERC 2025 Long-Term Reliability Assessment',
     url: 'https://www.nerc.com/globalassets/our-work/assessments/nerc_ltra_2025.pdf',
     publisher: 'North American Electric Reliability Corporation', sourceTier: 'independent',
@@ -144,6 +145,7 @@ async function fetchAiPowerSpec(spec: AiPowerSourceSpec, fetchImpl: typeof fetch
   if (text.length < 240) throw new Error(`${spec.id} yielded too little readable source text`)
   return {
     title: spec.title, canonicalUrl: response.url || spec.url, publisher: spec.publisher, sourceTier: spec.sourceTier,
+    sourceSlug: spec.sourceSlug,
     body: text, rawBody: raw, mimeType: type, sourceExtension: extension(type), publishedAt: spec.publishedAt ?? null,
     assertion: spec.assertion, kind: spec.kind, domain: 'ai-power', mechanism: spec.mechanism, entities: spec.entities,
     geography: spec.geography ?? 'United States', numericValue: spec.numericValue ?? null, numericUnit: spec.numericUnit ?? null,

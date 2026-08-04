@@ -1095,6 +1095,9 @@ export interface ScreenerResponse {
 // World-memory artifacts intentionally sit above company research. They retain
 // sourced market context even before there is a security-level conclusion.
 export type WorldSourceTier = 'primary' | 'regulatory' | 'independent' | 'discovery'
+export type WorldSourceStatus = 'candidate' | 'probation' | 'approved' | 'blocked' | 'retired'
+export type WorldSourceKind = 'api' | 'rss' | 'html' | 'pdf' | 'dataset' | 'filing' | 'transcript'
+export type WorldSourceEvidenceClass = 'regulatory_data' | 'company_disclosure' | 'operational_data' | 'technical_research' | 'industry_research' | 'market_expectations' | 'discovery'
 export type WorldObservationKind = 'fact' | 'estimate' | 'claim' | 'inference'
 export type WorldEntityKind = 'company' | 'technology' | 'facility' | 'commodity' | 'jurisdiction' | 'regulator' | 'industry' | 'dataset'
 export type WorldRelationshipType = 'requires' | 'supplies' | 'constrains' | 'substitutes_for' | 'benefits_from' | 'operates'
@@ -1116,6 +1119,91 @@ export interface WorldDocument {
   ingestedAt: string
   backupState: 'pending' | 'verified' | 'failed' | 'not_configured'
   metadata: Record<string, unknown>
+}
+
+/**
+ * A source is governed independently from the documents it emits. Discovery is
+ * deliberately not approval: only sources with an active contract may become
+ * evidence for the market model.
+ */
+export interface WorldSourceRegistryEntry {
+  id: string
+  slug: string
+  label: string
+  publisher: string
+  canonicalUrl: string
+  sourceTier: WorldSourceTier
+  sourceKind: WorldSourceKind
+  status: WorldSourceStatus
+  evidenceClasses: WorldSourceEvidenceClass[]
+  discoveredBy: 'seed' | 'scout' | 'user'
+  discoveryRunId: string | null
+  approvedAt: string | null
+  blockedReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WorldSourceContract {
+  id: string
+  sourceId: string
+  version: number
+  status: 'draft' | 'active' | 'retired'
+  allowedHosts: string[]
+  allowedPaths: string[]
+  acceptedMimeTypes: string[]
+  cadence: 'event' | 'daily' | 'weekly' | 'monthly'
+  assertionsAllowed: string[]
+  retentionDays: number | null
+  notes: string
+  createdAt: string
+}
+
+export interface MarketDomainPack {
+  id: string
+  version: number
+  label: string
+  description: string
+  status: 'candidate' | 'active' | 'archived'
+  parentDomainId: string | null
+  mechanisms: Array<{ id: string; label: string; required: boolean }>
+  sourceRequirements: Array<{ evidenceClass: WorldSourceEvidenceClass; purpose: string; minimumSources: number }>
+  entityKinds: WorldEntityKind[]
+}
+
+export interface WorldSourceScoutCandidate {
+  slug: string
+  label: string
+  publisher: string
+  canonicalUrl: string
+  sourceTier: WorldSourceTier
+  sourceKind: WorldSourceKind
+  evidenceClasses: WorldSourceEvidenceClass[]
+  domains: string[]
+  coverage: string
+  whyThisSource: string
+  limitations: string[]
+  candidateScore: number
+}
+
+export interface WorldSourceDiscoveryRun {
+  id: string
+  domainId: string
+  status: 'running' | 'complete' | 'failed'
+  trigger: 'bootstrap' | 'frontier_gap' | 'coverage_review' | 'manual'
+  reason: string
+  candidates: WorldSourceScoutCandidate[]
+  provider: string | null
+  model: string | null
+  generatedAt: string | null
+  error: string | null
+  createdAt: string
+}
+
+export interface WorldSourceControlWorkspaceData {
+  domains: MarketDomainPack[]
+  sources: WorldSourceRegistryEntry[]
+  discoveryRuns: WorldSourceDiscoveryRun[]
 }
 
 export interface WorldObservation {

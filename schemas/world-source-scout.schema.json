@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidates"],
+  "properties": {
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["slug", "label", "publisher", "canonicalUrl", "sourceTier", "sourceKind", "evidenceClasses", "domains", "coverage", "whyThisSource", "limitations", "candidateScore"],
+        "properties": {
+          "slug": { "type": "string", "minLength": 3, "maxLength": 80 },
+          "label": { "type": "string", "minLength": 3, "maxLength": 180 },
+          "publisher": { "type": "string", "minLength": 2, "maxLength": 180 },
+          "canonicalUrl": { "type": "string", "format": "uri", "maxLength": 1000 },
+          "sourceTier": { "enum": ["primary", "regulatory", "independent", "discovery"] },
+          "sourceKind": { "enum": ["api", "rss", "html", "pdf", "dataset", "filing", "transcript"] },
+          "evidenceClasses": { "type": "array", "minItems": 1, "maxItems": 4, "items": { "enum": ["regulatory_data", "company_disclosure", "operational_data", "technical_research", "industry_research", "market_expectations", "discovery"] } },
+          "domains": { "type": "array", "minItems": 1, "maxItems": 4, "items": { "type": "string", "minLength": 2, "maxLength": 80 } },
+          "coverage": { "type": "string", "minLength": 10, "maxLength": 800 },
+          "whyThisSource": { "type": "string", "minLength": 10, "maxLength": 800 },
+          "limitations": { "type": "array", "maxItems": 6, "items": { "type": "string", "minLength": 2, "maxLength": 300 } },
+          "candidateScore": { "type": "integer", "minimum": 0, "maximum": 100 }
+        }
+      }
+    }
+  }
+}

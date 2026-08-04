@@ -13,6 +13,7 @@ import type {
 } from '../markets/types.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { mirrorObservationToWarehouse, storeWorldCorpusDocument } from './world-corpus.ts'
+import { resolveApprovedWorldSource } from './world-source-control.ts'
 
 const CORE_POWER_MECHANISMS = ['data_center_load', 'firm_capacity_constraint', 'interconnection_constraint', 'equipment_lead_time'] as const
 
@@ -21,6 +22,8 @@ export interface WorldObservationInput {
   canonicalUrl: string
   publisher: string
   sourceTier: WorldSourceTier
+  /** Optional for legacy evidence; required for all newly governed adapters. */
+  sourceSlug?: string
   body: string
   /** Original source bytes when `body` is a cleaned extraction. */
   rawBody?: string | Buffer
@@ -104,6 +107,12 @@ export async function ingestWorldObservation(input: WorldObservationInput): Prom
   }
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const governedSource = input.sourceSlug
+    ? await resolveApprovedWorldSource(input.sourceSlug, input.canonicalUrl, input.mimeType)
+    : null
+  if (governedSource && !governedSource.contract.assertionsAllowed.includes(input.kind)) {
+    throw new Error(`Source ${governedSource.source.slug} contract does not permit ${input.kind} observations`)
+  }
   const stored = await storeWorldCorpusDocument({
     body: input.rawBody ?? input.body,
     extractedText: input.body,
@@ -121,6 +130,7 @@ export async function ingestWorldObservation(input: WorldObservationInput): Prom
     canonical_url: input.canonicalUrl,
     title: input.title,
     publisher: input.publisher,
+    source_registry_id: governedSource?.source.id ?? null,
     source_tier: input.sourceTier,
     mime_type: input.mimeType ?? 'text/plain',
     archive_key: stored.archiveKey,
@@ -129,7 +139,7 @@ export async function ingestWorldObservation(input: WorldObservationInput): Prom
     published_at: iso(input.publishedAt),
     ingested_at: now,
     backup_state: process.env.RESTIC_REPOSITORY ? 'pending' : 'not_configured',
-    metadata: { byteCount: stored.byteCount },
+    metadata: { byteCount: stored.byteCount, sourceContractVersion: governedSource?.contract.version ?? null },
   }, { onConflict: 'content_hash' }).select('*').single()
   if (documentError || !documentRow) throw new Error(`Unable to persist world document: ${documentError?.message ?? 'unknown error'}`)
 

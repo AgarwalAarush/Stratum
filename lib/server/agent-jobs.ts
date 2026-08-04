@@ -28,6 +28,8 @@ import {
 } from './world-memory.ts'
 import { backupMarketCorpus, verifyMarketCorpusBackup } from './world-backup.ts'
 import { getWorldSourceAdapter } from './world-sources.ts'
+import { runWorldSourceScout } from './world-source-control.ts'
+import { AI_MODELS } from '../ai/config.ts'
 import {
   fetchPersistedMarketAssets,
   materializeAlpacaScreener,
@@ -58,6 +60,7 @@ export const AGENT_JOB_TYPES = [
   'generate-weekly-overview',
   'generate-monthly-overview',
   'ingest-world-source',
+  'scout-world-sources',
   'compile-world-baseline',
   'correlate-market-signals',
   'synthesize-market-hypotheses',
@@ -196,6 +199,9 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
   if (jobType === 'ingest-world-source') {
     if (typeof payload.fingerprint === 'string') return `${jobType}:${payload.fingerprint}`
     if (typeof payload.adapterId === 'string') return `${jobType}:${payload.adapterId}:${now.toISOString().slice(0, 10)}`
+  }
+  if (jobType === 'scout-world-sources' && typeof payload.domainId === 'string') {
+    return `${jobType}:${payload.domainId}:${now.toISOString().slice(0, 10)}`
   }
   if ((jobType === 'materialize-market-leadership' || jobType === 'run-candidate-scout') && typeof payload.tradingDate === 'string') {
     return `${jobType}:${payload.tradingDate}`
@@ -545,6 +551,19 @@ async function executeJob(
     return ingestWorldObservation(payload as Parameters<typeof ingestWorldObservation>[0])
   }
 
+  if (job.job_type === 'scout-world-sources') {
+    const domainId = typeof job.payload.domainId === 'string' ? job.payload.domainId : ''
+    const reason = typeof job.payload.reason === 'string' ? job.payload.reason : ''
+    const trigger = job.payload.trigger === 'bootstrap' || job.payload.trigger === 'frontier_gap' || job.payload.trigger === 'coverage_review'
+      ? job.payload.trigger
+      : 'manual'
+    if (!domainId || !reason) throw new Error('World-source scout requires a domain and reason')
+    await reportProgress(5, 'scouting bounded source candidates')
+    const run = await runWorldSourceScout({ domainId, reason, trigger })
+    await reportProgress(100, 'candidate sources preserved for contract review')
+    return { discoveryRunId: run.id, domainId: run.domainId, candidateCount: run.candidates.length, status: run.status }
+  }
+
   if (job.job_type === 'compile-world-baseline') {
     const scopeType = job.payload.scopeType === 'domain' ? 'domain' : 'global'
     const scopeKey = typeof job.payload.scopeKey === 'string' ? job.payload.scopeKey : 'global'
@@ -631,7 +650,9 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
   const provider = job.job_type === 'generate-market-memo' && job.payload.synthesize === false
     ? 'market-data'
     : agentJobProvider(job.job_type)
-  const model = provider === 'codex' ? (process.env.CODEX_SYNTHESIS_MODEL ?? 'gpt-5.6-terra') : null
+  const model = provider === 'codex'
+    ? (job.job_type === 'scout-world-sources' ? AI_MODELS.sourceScout : (process.env.CODEX_SYNTHESIS_MODEL ?? 'gpt-5.6-terra'))
+    : null
   const { data: run, error: runError } = await supabase
     .from('agent_runs')
     .insert({ job_id: job.id, worker_id: workerId, status: 'running', provider, model, input_refs: [job.payload] })

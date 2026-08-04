@@ -16,6 +16,7 @@ test('agent job parser rejects unknown work', () => {
   assert.equal(parseAgentJobType('refresh-company-packet'), 'refresh-company-packet')
   assert.equal(parseAgentJobType('generate-etf-research'), 'generate-etf-research')
   assert.equal(parseAgentJobType('fetch-stock-price-history'), 'fetch-stock-price-history')
+  assert.equal(parseAgentJobType('scout-world-sources'), 'scout-world-sources')
   assert.throws(() => parseAgentJobType('place-order'), /Unsupported agent job type/)
 })
 
@@ -94,6 +95,10 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
     }),
     'synthesize-market-hypotheses::evidence:observation-a-observation-b',
   )
+  assert.equal(
+    buildAgentJobDedupeKey('scout-world-sources', new Date('2026-08-03T21:03:00Z'), { domainId: 'critical-materials' }),
+    'scout-world-sources:critical-materials:2026-08-03',
+  )
 })
 
 test('market memo jobs deduplicate by immutable screener snapshot', async () => {
@@ -120,6 +125,7 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('event-refresh-company-research'), 'codex')
   assert.equal(agentJobProvider('scan-research-refreshes'), 'market-data')
   assert.equal(agentJobProvider('monitor-investment-theses'), 'market-data')
+  assert.equal(agentJobProvider('scout-world-sources'), 'codex')
 })
 
 test('stock coverage requests refresh the materialized screener through the existing Alpaca worker', async () => {
