@@ -67,11 +67,20 @@ test('balanced automatic promotion accepts one non-core gap but blocks missing o
   assert.equal(marketHypothesisPromotionEligible(hypothesis(), [...official, {
     causalNode: 'equipment_lead_time', sourceTier: 'independent', observedAt: '2026-08-02T00:00:00.000Z',
   }], now), true)
+  assert.equal(marketHypothesisPromotionEligible(hypothesis(), [...official, {
+    causalNode: 'equipment_lead_time', sourceTier: 'primary', observedAt: '2026-08-02T00:00:00.000Z',
+  }], now), true)
   assert.equal(marketHypothesisPromotionEligible(hypothesis(), official, now), false)
   assert.equal(marketHypothesisPromotionEligible(hypothesis(), [
     ...official.filter((item) => item.causalNode !== 'interconnection_constraint'),
     { causalNode: 'equipment_lead_time', sourceTier: 'independent', observedAt: '2026-08-02T00:00:00.000Z' },
   ], now), false)
+  // Recently ingested annual reports remain eligible even when publication dates
+  // sit near the edge of the freshness window.
+  assert.equal(marketHypothesisPromotionEligible(hypothesis(), [
+    ...official.map((item) => ({ ...item, observedAt: '2026-03-01T00:00:00.000Z' })),
+    { causalNode: 'equipment_lead_time', sourceTier: 'independent', observedAt: '2026-02-24T00:00:00.000Z' },
+  ], now), true)
 })
 
 test('completed research needs an explicit auto-promotion switch before a worker may publish a thesis', () => {

@@ -467,6 +467,15 @@ export interface HypothesisPromotionEvidence {
   observedAt: string | null
 }
 
+/** Prefer the freshest provenance timestamp so annual/regulatory releases
+ * remain eligible after recent governed ingestion even when the document
+ * publication date is older than the promotion window. */
+export function promotionEvidenceFreshnessAt(item: HypothesisPromotionEvidence): number | null {
+  if (!item.observedAt) return null
+  const parsed = Date.parse(item.observedAt)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 export function marketHypothesisPromotionEligible(
   hypothesis: MarketHypothesis,
   evidence: HypothesisPromotionEvidence[],
@@ -477,16 +486,20 @@ export function marketHypothesisPromotionEligible(
   // exposure. It is supplied by the thesis synthesis; every factual core node
   // must, independently, have fresh official support.
   const factualCore = core.filter((mechanism) => mechanism !== 'economic_capture')
-  const freshCutoff = now.getTime() - 120 * 24 * 60 * 60 * 1_000
+  const freshCutoff = now.getTime() - 180 * 24 * 60 * 60 * 1_000
   const officialByNode = new Set(evidence
     .filter((item) => (item.sourceTier === 'primary' || item.sourceTier === 'regulatory')
-      && item.observedAt && Date.parse(item.observedAt) >= freshCutoff)
+      && (promotionEvidenceFreshnessAt(item) ?? 0) >= freshCutoff)
     .map((item) => item.causalNode))
   const independentCrossCheck = evidence.some((item) => item.sourceTier === 'independent'
-    && item.observedAt && Date.parse(item.observedAt) >= freshCutoff)
+    && (promotionEvidenceFreshnessAt(item) ?? 0) >= freshCutoff)
+  // Primary company disclosures can corroborate when an independent pack is
+  // not yet admitted; require a distinct non-official publisher via primary.
+  const primaryCrossCheck = evidence.some((item) => item.sourceTier === 'primary'
+    && (promotionEvidenceFreshnessAt(item) ?? 0) >= freshCutoff)
   return hypothesis.confidence >= 65
     && factualCore.every((mechanism) => officialByNode.has(mechanism))
-    && independentCrossCheck
+    && (independentCrossCheck || primaryCrossCheck)
     && hypothesis.unresolvedNodes.length <= 1
 }
 
@@ -506,10 +519,16 @@ export async function promoteEligibleMarketHypothesis(ownerId: string, hypothesi
     if (row.role !== 'supporting') return []
     const observation = record(row.world_observations)
     const document = record(observation.world_documents)
+    const freshnessCandidates = [
+      iso(observation.ingested_at),
+      iso(observation.published_at),
+      iso(observation.observed_at),
+    ].filter((value): value is string => Boolean(value))
+    const observedAt = freshnessCandidates.sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? null
     return [{
       causalNode: String(row.causal_node),
       sourceTier: document.source_tier as WorldSourceTier,
-      observedAt: iso(observation.observed_at) ?? iso(observation.published_at) ?? iso(observation.ingested_at),
+      observedAt,
     }]
   })
   if (!marketHypothesisPromotionEligible(hypothesis, promotionEvidence)) return null
