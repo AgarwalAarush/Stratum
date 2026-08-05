@@ -73,7 +73,7 @@ export function MarketThesisWorkspace({ initialData }: { initialData: MarketThes
     <section className="market-thesis-section" aria-labelledby="active-market-theses-title">
       <header><div><p className="markets-eyebrow">Versioned market models</p><h2 id="active-market-theses-title">Market theses</h2></div><span>{active.length} active or weakened</span></header>
       {active.length === 0 ? <p className="thesis-empty">No thesis has passed the promotion gate. A plausible narrative is deliberately insufficient: the factual core needs fresh official evidence, an independent cross-check, a counter-case, and predictions.</p> : <div className="market-thesis-grid">{active.map((thesis) => <article className="market-thesis-card" key={thesis.id} data-state={thesis.state}>
-        <header><div><span>{thesis.state} · v{thesis.version}</span><h3>{thesis.title}</h3></div><strong>{Math.round(thesis.confidence)}%<small> confidence</small></strong></header>
+        <header><div><span>{thesis.state} · v{thesis.version}</span><h3>{thesis.title}</h3></div><strong>{Math.round(thesis.confidence)}%<small> research confidence</small></strong></header>
         <p>{thesis.content.whyNow}</p>
         <div className="market-thesis-copy"><div><span>Economic capture</span><p>{thesis.content.economics}</p></div><div><span>What may be priced</span><p>{thesis.content.expectations}</p></div></div>
         <div className="market-thesis-copy"><div><span>Falsifiers</span>{thesis.content.falsifiers.map((item) => <p key={item}>{item}</p>)}</div><div><span>Predictions</span>{thesis.predictions.map((item) => <PredictionLedgerEntry key={item.id} prediction={item} />)}</div></div>

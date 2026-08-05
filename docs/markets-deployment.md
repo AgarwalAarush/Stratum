@@ -33,7 +33,7 @@ With `MARKET_WORLD_MODEL_ENABLED=true`, the worker fetches only declared adapter
 
 The packets are intentionally primary/regulatory-heavy: AI/power uses EIA, FERC, DOE, and NERC material; semicap combines company filings with relevant technical and policy evidence; critical materials uses USGS, DOE, and direct company disclosures. Failed captures are retained as explicit gaps; a partial packet is never presented as complete diligence.
 
-Keep `MARKET_AUTO_THESIS_ENABLED=false` through end-to-end validation. A bounded analyst/critic pass may complete, but it cannot publish a market thesis through any worker path unless that explicit switch is enabled. Even a published thesis remains research evidence: it creates no capital decision, broker action, or trading authority.
+After end-to-end validation, `MARKET_AUTO_THESIS_ENABLED=true` lets a completed analyst/critic pass publish a market thesis through the deepen worker path. Keep the switch explicit in `.env.worker`. Even a published thesis remains research evidence: it creates no capital decision, broker action, or trading authority. Thesis confidence is the validated research confidence, not the earlier correlation score.
 
 Macro, policy, and geopolitics is deliberately left as a candidate pack until source coverage is reviewed and activated through the same control plane. Candidate sources, proposed observations, hypotheses needing revision, and forming cross-domain mechanisms never count as validated theses.
 

@@ -89,6 +89,13 @@ test('completed research needs an explicit auto-promotion switch before a worker
   assert.equal(shouldAutoPromoteMarketResearch('complete', { MARKET_AUTO_THESIS_ENABLED: 'true' }), true)
 })
 
+test('promoted thesis confidence comes from validated research, not correlation score', async () => {
+  const source = await readFile(new URL('../lib/server/world-memory.ts', import.meta.url), 'utf8')
+  assert.match(source, /publishedConfidence = Math\.round\(researchContent\.confidence\)/)
+  assert.match(source, /confidence: publishedConfidence/)
+  assert.match(source, /!\/\^\(none\|no beneficiary\)\\b\/i/)
+})
+
 test('all market domain packs use the same bounded correlation threshold', () => {
   assert.equal(minimumMechanismsForDomainHypothesis('ai-power'), 3)
   assert.equal(minimumMechanismsForDomainHypothesis('semicap-data-center-equipment'), 3)

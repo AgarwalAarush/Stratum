@@ -575,8 +575,11 @@ export async function promoteEligibleMarketHypothesis(ownerId: string, hypothesi
     counterThesis: researchContent.counterThesis.statement,
     sourceLedger,
   }
+  // Thesis confidence is the validated research confidence. Correlation
+  // confidence on the hypothesis row remains a separate formation signal.
+  const publishedConfidence = Math.round(researchContent.confidence)
   const { data, error } = await supabase.from('market_thesis_versions').insert({
-    hypothesis_id: hypothesis.id, version, state: 'active', title: hypothesis.title, content, confidence: hypothesis.confidence,
+    hypothesis_id: hypothesis.id, version, state: 'active', title: hypothesis.title, content, confidence: publishedConfidence,
     research_version_id: research.id, data_as_of: research.dataAsOf, generated_at: now,
     revision_diff: prior ? research.revisionDiff : ['Initial promotion after source-backed analyst and critic validation.'],
   }).select('*').single()
@@ -587,16 +590,27 @@ export async function promoteEligibleMarketHypothesis(ownerId: string, hypothesi
   }))
   const { data: predictionRows, error: predictionError } = await supabase.from('market_thesis_predictions').insert(predictions.map((item) => ({ ...item, market_thesis_version_id: data.id }))).select('*')
   if (predictionError) throw new Error(`Unable to persist market thesis predictions: ${predictionError.message}`)
-  const exposureRows = researchContent.economics.beneficiaries.map((entityName) => ({
-    market_thesis_version_id: data.id, value_chain_layer: researchContent.economics.valueChain, entity_name: entityName,
-    symbol: null, role: 'beneficiary', mechanism: researchContent.economics.scarcityRentCapture,
-    materiality: Math.round(researchContent.confidence), confidence: Math.round(researchContent.confidence), verification_status: 'needs_company_research',
-  }))
+  const exposureRows = researchContent.economics.beneficiaries
+    .map((entityName) => entityName.trim())
+    .filter((entityName) => entityName.length > 0 && !/^(none|no beneficiary)\b/i.test(entityName))
+    .map((entityName) => ({
+      market_thesis_version_id: data.id, value_chain_layer: researchContent.economics.valueChain, entity_name: entityName,
+      symbol: null, role: 'beneficiary', mechanism: researchContent.economics.scarcityRentCapture,
+      materiality: publishedConfidence, confidence: publishedConfidence, verification_status: 'needs_company_research',
+    }))
   const { data: persistedExposures, error: exposureError } = exposureRows.length > 0
     ? await supabase.from('market_thesis_exposures').insert(exposureRows).select('*')
     : { data: [], error: null }
   if (exposureError) throw new Error(`Unable to persist market thesis exposures: ${exposureError.message}`)
-  await supabase.from('market_hypotheses').update({ status: 'active', updated_at: now }).eq('id', hypothesis.id)
+  const unresolvedNodes = [...new Set([
+    ...hypothesis.unresolvedNodes,
+    ...(researchContent.evidenceGaps.some((gap) => /economic capture|rent capture|scarcity rent/i.test(gap)) ? ['economic_capture'] : []),
+  ])].slice(0, 8)
+  await supabase.from('market_hypotheses').update({
+    status: 'active',
+    unresolved_nodes: unresolvedNodes,
+    updated_at: now,
+  }).eq('id', hypothesis.id)
   return normalizeThesis(data as RecordValue, (predictionRows ?? []) as RecordValue[], (persistedExposures ?? []) as RecordValue[])
 }
 

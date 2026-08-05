@@ -1,10 +1,15 @@
 import type { MarketDomainPack } from './types.ts'
 
 /**
- * Domain packs model economic systems, not arbitrary equity sectors. Most
- * runtime behavior is declarative so every new vertical inherits the same
- * source-governance and research gates; a pack earns bespoke code only for a
- * genuinely domain-specific deterministic calculation.
+ * Domain packs model economic systems, not arbitrary equity sectors or a
+ * complete map of the economy. The checked-in set is a deliberate starter
+ * coverage of high-signal transmission systems (power, compute equipment,
+ * materials, macro/policy, automation, defense capacity). Broader economy
+ * coverage means adding more packs over time with the same governance gates;
+ * it is not implied by activating these six. Most runtime behavior is
+ * declarative so every new vertical inherits the same source-governance and
+ * research gates; a pack earns bespoke code only for a genuinely
+ * domain-specific deterministic calculation.
  */
 export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
   {
