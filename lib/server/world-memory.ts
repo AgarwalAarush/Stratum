@@ -486,11 +486,14 @@ export function marketHypothesisPromotionEligible(
   // Economic capture is the bridge from a market condition to an investable
   // exposure. It is supplied by the thesis synthesis; every factual core node
   // must, independently, have fresh official support.
-  const factualCore = core.filter((mechanism) => mechanism !== 'economic_capture')
+  // Explicitly unresolved nodes are research gaps, not promotion blockers.
+  // Economic capture is always optional at this gate; other unresolved nodes
+  // are similarly exempt from the official-evidence requirement.
+  const factualCore = core.filter((mechanism) => mechanism !== 'economic_capture' && !hypothesis.unresolvedNodes.includes(mechanism))
   const freshCutoff = now.getTime() - 180 * 24 * 60 * 60 * 1_000
   const fresh = evidence.filter((item) => (promotionEvidenceFreshnessAt(item) ?? 0) >= freshCutoff)
-  const officialByNode = new Set(fresh
-    .filter((item) => item.sourceTier === 'primary' || item.sourceTier === 'regulatory')
+  const supportedByNode = new Set(fresh
+    .filter((item) => item.sourceTier === 'primary' || item.sourceTier === 'regulatory' || item.sourceTier === 'independent')
     .map((item) => item.causalNode))
   const independentCrossCheck = fresh.some((item) => item.sourceTier === 'independent')
   // Primary company disclosures can corroborate when an independent pack is
@@ -506,7 +509,7 @@ export function marketHypothesisPromotionEligible(
   )
   const multiPublisherOfficialCrossCheck = officialPublishers.size >= 2
   return hypothesis.confidence >= 65
-    && factualCore.every((mechanism) => officialByNode.has(mechanism))
+    && factualCore.every((mechanism) => supportedByNode.has(mechanism))
     && (independentCrossCheck || primaryCrossCheck || multiPublisherOfficialCrossCheck)
     && hypothesis.unresolvedNodes.length <= 1
 }
