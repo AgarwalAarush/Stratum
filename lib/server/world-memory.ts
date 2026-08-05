@@ -465,6 +465,7 @@ export interface HypothesisPromotionEvidence {
   causalNode: string
   sourceTier: WorldSourceTier
   observedAt: string | null
+  publisher?: string | null
 }
 
 /** Prefer the freshest provenance timestamp so annual/regulatory releases
@@ -487,19 +488,26 @@ export function marketHypothesisPromotionEligible(
   // must, independently, have fresh official support.
   const factualCore = core.filter((mechanism) => mechanism !== 'economic_capture')
   const freshCutoff = now.getTime() - 180 * 24 * 60 * 60 * 1_000
-  const officialByNode = new Set(evidence
-    .filter((item) => (item.sourceTier === 'primary' || item.sourceTier === 'regulatory')
-      && (promotionEvidenceFreshnessAt(item) ?? 0) >= freshCutoff)
+  const fresh = evidence.filter((item) => (promotionEvidenceFreshnessAt(item) ?? 0) >= freshCutoff)
+  const officialByNode = new Set(fresh
+    .filter((item) => item.sourceTier === 'primary' || item.sourceTier === 'regulatory')
     .map((item) => item.causalNode))
-  const independentCrossCheck = evidence.some((item) => item.sourceTier === 'independent'
-    && (promotionEvidenceFreshnessAt(item) ?? 0) >= freshCutoff)
+  const independentCrossCheck = fresh.some((item) => item.sourceTier === 'independent')
   // Primary company disclosures can corroborate when an independent pack is
   // not yet admitted; require a distinct non-official publisher via primary.
-  const primaryCrossCheck = evidence.some((item) => item.sourceTier === 'primary'
-    && (promotionEvidenceFreshnessAt(item) ?? 0) >= freshCutoff)
+  const primaryCrossCheck = fresh.some((item) => item.sourceTier === 'primary')
+  // Macro/policy packs are often entirely regulatory. Distinct publishers in
+  // the official ledger count as the independent-style cross-check there.
+  const officialPublishers = new Set(
+    fresh
+      .filter((item) => item.sourceTier === 'primary' || item.sourceTier === 'regulatory')
+      .map((item) => (item.publisher ?? '').trim().toLowerCase())
+      .filter(Boolean),
+  )
+  const multiPublisherOfficialCrossCheck = officialPublishers.size >= 2
   return hypothesis.confidence >= 65
     && factualCore.every((mechanism) => officialByNode.has(mechanism))
-    && (independentCrossCheck || primaryCrossCheck)
+    && (independentCrossCheck || primaryCrossCheck || multiPublisherOfficialCrossCheck)
     && hypothesis.unresolvedNodes.length <= 1
 }
 
@@ -529,6 +537,7 @@ export async function promoteEligibleMarketHypothesis(ownerId: string, hypothesi
       causalNode: String(row.causal_node),
       sourceTier: document.source_tier as WorldSourceTier,
       observedAt,
+      publisher: document.publisher === null || document.publisher === undefined ? null : String(document.publisher),
     }]
   })
   if (!marketHypothesisPromotionEligible(hypothesis, promotionEvidence)) return null

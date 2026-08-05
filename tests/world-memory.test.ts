@@ -61,25 +61,27 @@ test('database enforces append-only immutable evidence and review records', asyn
 
 test('balanced automatic promotion accepts one non-core gap but blocks missing official or independent evidence', () => {
   const now = new Date('2026-08-03T00:00:00.000Z')
-  const official = ['data_center_load', 'firm_capacity_constraint', 'interconnection_constraint'].map((causalNode) => ({
-    causalNode, sourceTier: 'regulatory' as const, observedAt: '2026-08-01T00:00:00.000Z',
+  const official = ['data_center_load', 'firm_capacity_constraint', 'interconnection_constraint'].map((causalNode, index) => ({
+    causalNode, sourceTier: 'regulatory' as const, observedAt: '2026-08-01T00:00:00.000Z', publisher: `Agency ${index}`,
   }))
   assert.equal(marketHypothesisPromotionEligible(hypothesis(), [...official, {
-    causalNode: 'equipment_lead_time', sourceTier: 'independent', observedAt: '2026-08-02T00:00:00.000Z',
+    causalNode: 'equipment_lead_time', sourceTier: 'independent', observedAt: '2026-08-02T00:00:00.000Z', publisher: 'NERC',
   }], now), true)
   assert.equal(marketHypothesisPromotionEligible(hypothesis(), [...official, {
-    causalNode: 'equipment_lead_time', sourceTier: 'primary', observedAt: '2026-08-02T00:00:00.000Z',
+    causalNode: 'equipment_lead_time', sourceTier: 'primary', observedAt: '2026-08-02T00:00:00.000Z', publisher: 'Company',
   }], now), true)
-  assert.equal(marketHypothesisPromotionEligible(hypothesis(), official, now), false)
+  // Distinct regulatory publishers can satisfy the cross-check for policy-heavy packs.
+  assert.equal(marketHypothesisPromotionEligible(hypothesis(), official, now), true)
+  assert.equal(marketHypothesisPromotionEligible(hypothesis(), official.map((item) => ({ ...item, publisher: 'Same Agency' })), now), false)
   assert.equal(marketHypothesisPromotionEligible(hypothesis(), [
     ...official.filter((item) => item.causalNode !== 'interconnection_constraint'),
-    { causalNode: 'equipment_lead_time', sourceTier: 'independent', observedAt: '2026-08-02T00:00:00.000Z' },
+    { causalNode: 'equipment_lead_time', sourceTier: 'independent', observedAt: '2026-08-02T00:00:00.000Z', publisher: 'NERC' },
   ], now), false)
   // Recently ingested annual reports remain eligible even when publication dates
   // sit near the edge of the freshness window.
   assert.equal(marketHypothesisPromotionEligible(hypothesis(), [
     ...official.map((item) => ({ ...item, observedAt: '2026-03-01T00:00:00.000Z' })),
-    { causalNode: 'equipment_lead_time', sourceTier: 'independent', observedAt: '2026-02-24T00:00:00.000Z' },
+    { causalNode: 'equipment_lead_time', sourceTier: 'independent', observedAt: '2026-02-24T00:00:00.000Z', publisher: 'NERC' },
   ], now), true)
 })
 
