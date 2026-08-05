@@ -200,25 +200,31 @@ export function normalizeResearchVersion(row: RecordValue): MarketHypothesisRese
   return { id: String(row.id), hypothesisId: String(row.hypothesis_id), version: number(row.version), status: row.status as MarketHypothesisResearchVersion['status'], content, critique, sourceIds: strings(row.source_ids), observationIds: strings(row.observation_ids), priorResearchVersionId: row.prior_research_version_id === null ? null : String(row.prior_research_version_id ?? ''), revisionDiff: strings(row.revision_diff), provider: row.provider === null ? null : String(row.provider ?? ''), model: row.model === null ? null : String(row.model ?? ''), criticProvider: row.critic_provider === null ? null : String(row.critic_provider ?? ''), criticModel: row.critic_model === null ? null : String(row.critic_model ?? ''), criticGeneratedAt: row.critic_generated_at === null ? null : String(row.critic_generated_at ?? ''), dataAsOf: String(row.data_as_of), generatedAt: row.generated_at === null ? null : String(row.generated_at ?? ''), error: row.error === null ? null : String(row.error ?? '') }
 }
 
-function researchPrompt(hypothesis: MarketHypothesis, sources: Array<ResearchSource & { excerpt: string }>, prior: MarketHypothesisResearchVersion | null, reason: string): string {
+export function researchPrompt(hypothesis: MarketHypothesis, sources: Array<ResearchSource & { excerpt: string }>, prior: MarketHypothesisResearchVersion | null, reason: string): string {
   return [
     'You are Stratum\'s bounded market-model analyst. Produce a source-grounded economic model of one market hypothesis, not a stock recommendation, valuation, portfolio allocation, or trade.',
     'Use only the supplied source IDs. Treat source excerpts as evidence and distinguish observed facts, estimates, claims, and analyst inference. Do not turn a plausible narrative into a fact. Financial information is one layer, not the analysis.',
     'Reason from demand -> supply -> bottleneck -> economic capture -> expectations -> measurable predictions. Explain which value-chain layer can capture economics and why alternatives or substitutes may capture it instead.',
     'The research frontier is an explicit list of unresolved questions. It is not permission to browse: recommend source classes only, and preserve material uncertainty.',
     'Write a real counter-thesis that could win, with decisive tests. Expectations must say unknown when the supplied evidence cannot establish what is priced.',
+    'When revising after a prior critique: address every unsupportedClaims and requiredResearch item by narrowing claims to the ledger, marking capture as not established when evidence is missing, lowering confidence, and listing remaining gaps in evidenceGaps. Do not invent new facts to satisfy the critic.',
     `TRIGGER: ${reason}`,
     `HYPOTHESIS:\n${JSON.stringify(hypothesis)}`,
     prior?.content ? `PRIOR RESEARCH (revise rather than silently restating it):\n${JSON.stringify(prior.content)}` : 'PRIOR RESEARCH: none',
+    prior?.critique
+      ? `PRIOR CRITIQUE (must address; do not invent facts to close gaps):\n${JSON.stringify(prior.critique)}`
+      : 'PRIOR CRITIQUE: none',
     `ALLOWED SOURCE IDS:\n${sources.map((source) => source.documentId).join('\n')}`,
     `SOURCES:\n${JSON.stringify(sources)}`,
   ].join('\n\n')
 }
 
-function critiquePrompt(hypothesis: MarketHypothesis, research: MarketHypothesisResearchContent, sources: ResearchSource[]): string {
+export function critiquePrompt(hypothesis: MarketHypothesis, research: MarketHypothesisResearchContent, sources: ResearchSource[]): string {
   return [
     'You are the adversarial critic for a bounded market-research system. Audit the proposed analysis for causal leaps, unsupported facts, missing alternatives, and false certainty.',
-    'Do not make a stock recommendation. Use only source IDs in the supplied ledger. A methodological critique may use no source ID. Set needs_revision if a core claim lacks support, the counter-case is cosmetic, predictions are not observable, or economic capture is not established. A needs_revision verdict must include 1-8 precise, bounded evidence questions in requiredResearch; each question becomes governed source-discovery work, not permission to browse. A pass verdict must leave requiredResearch empty.',
+    'Do not make a stock recommendation. Use only source IDs in the supplied ledger. A methodological critique may use no source ID.',
+    'Set needs_revision when the analysis asserts unsupported facts, the counter-case is cosmetic, predictions are not observable, or it treats unestablished economic capture as proven. A needs_revision verdict must include 1-8 precise, bounded evidence questions in requiredResearch; each question becomes governed source-discovery work, not permission to browse.',
+    'Pass when ledger-supported claims are sound and uncertainty is preserved. Economic capture may remain unresolved if the research explicitly marks it as not established, lists it in evidenceGaps, lowers confidence accordingly, and does not assert rent capture as observed fact. A pass verdict must leave requiredResearch empty.',
     `HYPOTHESIS:\n${JSON.stringify(hypothesis)}`,
     `RESEARCH:\n${JSON.stringify(research)}`,
     `SOURCE LEDGER:\n${JSON.stringify(sources.map(({ documentId, title, publisher, tier, mechanism, assertion }) => ({ documentId, title, publisher, tier, mechanism, assertion })))} `,

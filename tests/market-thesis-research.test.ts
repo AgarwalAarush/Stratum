@@ -5,6 +5,8 @@ import { readFile } from 'node:fs/promises'
 import {
   buildPersistedResearchFrontier,
   buildResearchFrontierScoutPlan,
+  critiquePrompt,
+  researchPrompt,
   shouldQueueMarketHypothesisResearch,
   validateMarketThesisCritique,
   validateMarketThesisResearch,
@@ -88,6 +90,34 @@ test('scheduled research does not repeat an unchanged revision frontier', () => 
   assert.equal(shouldQueueMarketHypothesisResearch('needs_revision', 0), false)
   assert.equal(shouldQueueMarketHypothesisResearch('failed', 0), false)
   assert.equal(shouldQueueMarketHypothesisResearch('needs_revision', 1), true)
+})
+
+test('revision prompts feed the prior critique and allow unresolved capture on pass', () => {
+  const hypothesis = {
+    id: 'hyp-1', ownerId: 'owner-1', title: 'Test', status: 'proposed' as const, scope: 'ai-power', horizon: '2-4y',
+    coreMechanism: 'firm_capacity_constraint', causalGraph: [], confidence: 70, unresolvedNodes: ['economic_capture'],
+    counterThesis: 'Supply arrives first.', evidence: [], parentHypothesisId: null, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+  }
+  const sources = [{
+    documentId: 'source-a', observationId: 'obs-a', title: 'EIA', publisher: 'EIA', url: 'https://example.com/a',
+    tier: 'regulatory', mechanism: 'data_center_load', assertion: 'Load is rising.', extractedKey: null, excerpt: 'Load is rising.',
+  }]
+  const priorCritique = validateMarketThesisCritique({
+    verdict: 'needs_revision', summary: 'Capture is not established.', unsupportedClaims: ['Rents are asserted without contracts.'],
+    contradictoryEvidence: [], missingAlternatives: [], requiredResearch: ['Find contractual capture evidence.'], confidenceAdjustment: -20, sourceIds: [],
+  }, new Set(sourceIds))
+  const revision = researchPrompt(hypothesis, sources, {
+    id: 'rv-1', hypothesisId: 'hyp-1', version: 1, status: 'needs_revision', content: validateMarketThesisResearch(researchFixture(), new Set(sourceIds)),
+    critique: priorCritique, sourceIds, observationIds: ['obs-a'], priorResearchVersionId: null, revisionDiff: [], provider: 'codex',
+    model: 'test', criticProvider: 'codex', criticModel: 'test', criticGeneratedAt: '2026-01-01T00:00:00Z', dataAsOf: '2026-01-01T00:00:00Z',
+    generatedAt: '2026-01-01T00:00:00Z', error: null,
+  }, 'operator revision after critic')
+  assert.match(revision, /PRIOR CRITIQUE/)
+  assert.match(revision, /Find contractual capture evidence/)
+  assert.match(revision, /Do not invent new facts/)
+  const critic = critiquePrompt(hypothesis, validateMarketThesisResearch(researchFixture(), new Set(sourceIds)), sources)
+  assert.match(critic, /Economic capture may remain unresolved/)
+  assert.match(critic, /treats unestablished economic capture as proven/)
 })
 
 test('research frontiers route to bounded broad research leads for a known domain', () => {
