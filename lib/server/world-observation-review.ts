@@ -91,7 +91,7 @@ async function assertProposalEligibleForAcceptance(row: RecordValue): Promise<vo
   const evidenceQuote = String(proposal.evidence_quote ?? '').trim()
   if (evidenceQuote.length < 20) throw new Error('Proposal evidence quote is missing or too short')
   const extractedKey = typeof document.extracted_key === 'string' ? document.extracted_key : ''
-  if (!extractedKey || document.extraction_status !== 'extracted') {
+  if (!extractedKey || document.extraction_status !== 'complete') {
     throw new Error('Proposal document extract is unavailable for quote verification')
   }
   const extractedText = await readWorldCorpusExtract(extractedKey)

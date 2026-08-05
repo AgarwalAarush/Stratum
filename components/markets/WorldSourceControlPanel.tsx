@@ -148,13 +148,14 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'auto-accept-observation-proposals', domainId: selectedDomain?.id }),
       })
-      const payload = await response.json() as { error?: string; result?: { accepted: number; failed: number; remainingByDomain: Record<string, number> } }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to auto-accept proposals')
-      const remaining = Object.values(payload.result?.remainingByDomain ?? {}).reduce((sum, count) => sum + count, 0)
-      setNotice(`Policy auto-accept finished: ${payload.result?.accepted ?? 0} accepted, ${payload.result?.failed ?? 0} failed checks, ${remaining} still awaiting human review.`)
+      const payload = await response.json() as { error?: string; deduplicated?: boolean }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue proposal auto-accept')
+      setNotice(payload.deduplicated
+        ? 'A proposal auto-accept pass is already queued or completed in this window.'
+        : 'Proposal auto-accept queued on the worker. It re-checks verbatim quotes against the private corpus; it cannot invent evidence or create a thesis.')
       router.refresh()
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Unable to auto-accept proposals')
+      setNotice(error instanceof Error ? error.message : 'Unable to queue proposal auto-accept')
     } finally {
       setPending(false)
     }
@@ -413,7 +414,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
         </div>
         <div className="market-source-scout-form">
           <button type="button" onClick={requestOrchestration} disabled={pending}>{pending ? 'Queuing planner…' : 'Queue market-wide orchestration'}</button>
-          <button type="button" className="market-source-secondary-button" onClick={requestAutoAccept} disabled={pending}>{pending ? 'Auto-accepting…' : 'Run proposal auto-accept now'}</button>
+          <button type="button" className="market-source-secondary-button" onClick={requestAutoAccept} disabled={pending}>{pending ? 'Queuing auto-accept…' : 'Run proposal auto-accept now'}</button>
           <p>Deterministic eligibility always gates work. A standard-tier model ranks only when expensive jobs exceed the research-run budget. Auto-accept still requires an approved/probation source, live contract, and verbatim quote.</p>
         </div>
       </section>

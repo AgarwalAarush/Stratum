@@ -205,6 +205,14 @@ test('market-wide orchestration uses a six-hour durable dedupe bucket', () => {
   assert.equal(agentJobProvider('orchestrate-market-research'), 'market-data')
 })
 
+test('proposal auto-accept runs as market-data worker work with a short dedupe window', () => {
+  assert.equal(
+    buildAgentJobDedupeKey('auto-accept-observation-proposals', new Date('2026-08-04T09:58:00Z'), { domainId: 'ai-power' }),
+    'auto-accept-observation-proposals:ai-power:2026-08-04T09:45:00.000Z',
+  )
+  assert.equal(agentJobProvider('auto-accept-observation-proposals'), 'market-data')
+})
+
 test('observation-triage work deduplicates the immutable capture set', () => {
   assert.equal(
     buildAgentJobDedupeKey('triage-world-observation-proposals', new Date('2026-08-04T00:00:00Z'), { captureIds: ['capture-b', 'capture-a'] }),

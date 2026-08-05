@@ -70,6 +70,7 @@ export const AGENT_JOB_TYPES = [
   'preflight-world-source-candidate',
   'collect-world-source-documents',
   'triage-world-observation-proposals',
+  'auto-accept-observation-proposals',
   'scout-market-research',
   'scout-world-sources',
   'review-world-source-coverage',
@@ -221,6 +222,12 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     bucket.setUTCHours(Math.floor(bucket.getUTCHours() / 6) * 6, 0, 0, 0)
     return `${jobType}:${bucket.toISOString()}`
   }
+  if (jobType === 'auto-accept-observation-proposals') {
+    const domain = typeof payload.domainId === 'string' ? payload.domainId : 'all'
+    const bucket = new Date(now)
+    bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
+    return `${jobType}:${domain}:${bucket.toISOString()}`
+  }
   if (jobType === 'evaluate-market-prediction' && typeof payload.predictionId === 'string') {
     return `${jobType}:${payload.predictionId}:${now.toISOString().slice(0, 10)}`
   }
@@ -293,6 +300,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
     || jobType === 'refresh-market-hypothesis-research'
     || jobType === 'route-market-research-frontiers'
     || jobType === 'orchestrate-market-research'
+    || jobType === 'auto-accept-observation-proposals'
     || jobType === 'review-world-source-coverage'
     || jobType === 'evaluate-market-predictions'
     || jobType === 'prune-market-data'
@@ -351,7 +359,7 @@ export function shouldRefreshClosedMarket(
 export function agentJobPriority(jobType: AgentJobType): number {
   if (jobType === 'preflight-world-source-candidate') return 20
   if (jobType === 'verify-world-source-health') return 30
-  if (jobType === 'scout-world-sources' || jobType === 'scout-market-research' || jobType === 'review-world-source-coverage' || jobType === 'route-market-research-frontiers' || jobType === 'orchestrate-market-research') return 40
+  if (jobType === 'scout-world-sources' || jobType === 'scout-market-research' || jobType === 'review-world-source-coverage' || jobType === 'route-market-research-frontiers' || jobType === 'orchestrate-market-research' || jobType === 'auto-accept-observation-proposals') return 40
   if (jobType === 'collect-world-source-documents' || jobType === 'triage-world-observation-proposals') return 50
   if (jobType === 'refresh-market-screener' || jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence') return 140
   return 100
@@ -903,6 +911,23 @@ async function executeJob(
     await reportProgress(5, 'reading governed evidence, frontier, and lead signals across active domains')
     const result = await runMarketResearchOrchestration({ trigger: job.payload.trigger === 'manual' ? 'manual' : 'scheduled' })
     await reportProgress(100, `${result.planned} durable actions planned; ${result.enqueued} worker jobs enqueued; ${result.autoAccepted} auto-accepted; ${result.awaitingReview} review waits; ${result.deferred} budget-deferred`)
+    return result
+  }
+
+  if (job.job_type === 'auto-accept-observation-proposals') {
+    const { autoAcceptEligibleWorldObservationProposals } = await import('./world-observation-review.ts')
+    await reportProgress(5, 're-checking quote-bound proposals against worker corpus extracts')
+    const result = await autoAcceptEligibleWorldObservationProposals({
+      domainId: typeof job.payload.domainId === 'string' ? job.payload.domainId : undefined,
+      limit: typeof job.payload.limit === 'number' ? job.payload.limit : 40,
+    })
+    if (result.accepted > 0) {
+      await enqueueAgentJob('synthesize-market-hypotheses', {
+        reason: `policy auto-accept:${result.accepted}`,
+        evidenceFingerprint: result.observationIds[0] ?? 'auto-accept',
+      })
+    }
+    await reportProgress(100, `${result.accepted} accepted; ${result.failed} failed checks; ${Object.values(result.remainingByDomain).reduce((sum, count) => sum + count, 0)} still awaiting human review`)
     return result
   }
 

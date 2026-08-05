@@ -9,7 +9,7 @@ import {
   reviseWorldSourceCanonicalUrl,
   validateWorldSourceContract,
 } from '@/lib/server/world-source-control'
-import { reviewWorldObservationProposal, autoAcceptEligibleWorldObservationProposals } from '@/lib/server/world-observation-review'
+import { reviewWorldObservationProposal } from '@/lib/server/world-observation-review'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,17 +37,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ queued: true, ...queued })
     }
     if (body.action === 'auto-accept-observation-proposals') {
-      const result = await autoAcceptEligibleWorldObservationProposals({
+      // Quote re-verification reads STRATUM_DATA_ROOT extracts on the worker.
+      // Do not run acceptance on Vercel where the private corpus is absent.
+      const queued = await enqueueAgentJob('auto-accept-observation-proposals', {
+        trigger: 'manual',
         domainId: typeof body.domainId === 'string' ? body.domainId : undefined,
         limit: typeof body.limit === 'number' ? body.limit : 40,
       })
-      if (result.accepted > 0) {
-        await enqueueAgentJob('synthesize-market-hypotheses', {
-          reason: `policy auto-accept:${result.accepted}`,
-          evidenceFingerprint: result.observationIds[0] ?? 'auto-accept',
-        })
-      }
-      return NextResponse.json({ result })
+      return NextResponse.json({ queued: true, ...queued })
     }
     if (body.action === 'preflight-candidate') {
       if (typeof body.slug !== 'string' || !body.slug.trim()) return NextResponse.json({ error: 'A candidate source is required.' }, { status: 400 })
