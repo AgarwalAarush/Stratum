@@ -123,6 +123,14 @@ test('generic governed-document collection runs after source adapters', () => {
   assert.equal(collection.includes('collect-world-source-documents'), true)
 })
 
+test('six-hour research bucket schedules only the market orchestrator', () => {
+  const scheduled = buildDueAgentJobs(new Date('2026-08-04T04:05:00Z'), { worldSourceAdapters: [] }).map((job) => job.jobType)
+  assert.equal(scheduled.includes('orchestrate-market-research'), true)
+  assert.equal(scheduled.includes('refresh-market-hypothesis-research'), false)
+  assert.equal(scheduled.includes('route-market-research-frontiers'), false)
+  assert.equal(scheduled.includes('evaluate-market-predictions'), false)
+})
+
 test('weekly source coverage review is a bounded planner, separate from source admission', () => {
   const scheduled = buildDueAgentJobs(new Date('2026-08-02T23:05:00Z'), { worldSourceAdapters: [] })
   assert.ok(scheduled.some((job) => job.jobType === 'review-world-source-coverage'))

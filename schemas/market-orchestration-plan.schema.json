@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["selectedKeys", "rationale"],
+  "properties": {
+    "selectedKeys": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": { "type": "string", "minLength": 3, "maxLength": 160 }
+    },
+    "rationale": { "type": "string", "minLength": 8, "maxLength": 1200 }
+  }
+}

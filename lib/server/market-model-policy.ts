@@ -26,6 +26,13 @@ export function scheduledMarketResearchRunLimit(environment: NodeJS.ProcessEnv =
   return Number.isInteger(configured) && configured >= 1 && configured <= 12 ? configured : 2
 }
 
+/** Concurrent cheap/standard worker slots. Strong research stays effectively serial
+ * because orchestration caps expensive jobs and the pool is small. */
+export function workerJobConcurrency(environment: NodeJS.ProcessEnv = process.env): number {
+  const configured = Number(environment.STRATUM_WORKER_CONCURRENCY ?? 2)
+  return Number.isInteger(configured) && configured >= 1 && configured <= 4 ? configured : 2
+}
+
 export function selectMarketModel(task: MarketModelTask, environment: NodeJS.ProcessEnv = process.env): MarketModelSelection {
   const cheap = environment.STRATUM_SOURCE_SCOUT_MODEL ?? AI_MODELS.sourceScout
   const standard = environment.STRATUM_MARKET_STANDARD_MODEL ?? environment.CODEX_SYNTHESIS_MODEL ?? AI_MODELS.scheduledSynthesis

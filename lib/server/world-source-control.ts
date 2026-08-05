@@ -416,7 +416,10 @@ function normalizeOrchestrationRun(row: RecordValue): MarketOrchestrationRun {
 function normalizeOrchestrationAction(row: RecordValue): MarketOrchestrationAction {
   const actionType = String(row.action_type)
   const state = String(row.state)
-  const actionTypes = new Set(['investigate_broad', 'verify_recurring_source', 'critic_revision', 'collect_known_source', 'awaiting_review', 'no_action'])
+  const actionTypes = new Set([
+    'investigate_broad', 'investigate_counter_evidence', 'verify_recurring_source', 'critic_revision',
+    'collect_known_source', 'evaluate_prediction', 'awaiting_review', 'no_action',
+  ])
   const states = new Set(['planned', 'enqueued', 'awaiting_review', 'no_action', 'skipped', 'failed'])
   if (!actionTypes.has(actionType) || !states.has(state)) throw new Error('Invalid persisted orchestration action')
   return {
@@ -435,7 +438,13 @@ function normalizeObservationProposal(row: RecordValue): WorldObservationProposa
     kind: row.observation_kind as WorldObservationProposal['kind'], evidenceQuote: String(row.evidence_quote),
     confidence: Number(row.confidence), materiality: Number(row.materiality), novelty: Number(row.novelty),
     sourceLabel: String(source.label ?? document.title ?? 'Governed source'), sourceUrl: String(document.canonical_url ?? source.canonical_url ?? ''), generatedAt: String(row.generated_at),
-    review: review.decision === 'accepted' || review.decision === 'rejected' ? { decision: review.decision, rationale: String(review.rationale ?? ''), reviewedAt: String(review.reviewed_at), observationId: review.observation_id === null ? null : String(review.observation_id ?? '') } : null,
+    review: review.decision === 'accepted' || review.decision === 'rejected' ? {
+      decision: review.decision,
+      rationale: String(review.rationale ?? ''),
+      reviewedAt: String(review.reviewed_at),
+      observationId: review.observation_id === null ? null : String(review.observation_id ?? ''),
+      reviewerKind: review.reviewer_kind === 'policy_auto' ? 'policy_auto' : 'human',
+    } : null,
   }
 }
 
@@ -606,7 +615,7 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
     supabase.from('market_research_scout_runs').select('*').order('created_at', { ascending: false }).limit(40),
     supabase.from('world_source_domains').select('source_id,domain_id'),
     supabase.from('world_source_health_checks').select('*').order('checked_at', { ascending: false }).limit(500),
-    supabase.from('world_observation_proposals').select('*,world_source_registry(label,canonical_url),world_documents(title,canonical_url),world_observation_proposal_reviews(decision,rationale,reviewed_at,observation_id)').order('generated_at', { ascending: false }).limit(60),
+    supabase.from('world_observation_proposals').select('*,world_source_registry(label,canonical_url),world_documents(title,canonical_url),world_observation_proposal_reviews(decision,rationale,reviewed_at,observation_id,reviewer_kind)').order('generated_at', { ascending: false }).limit(60),
     supabase.from('world_observation_proposal_triage_runs').select('*,world_source_document_captures(source_id,world_source_registry(slug,label,canonical_url))').order('completed_at', { ascending: false }).limit(60),
     supabase.from('market_hypothesis_research_frontier').select('*').order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(120),
     supabase.from('market_orchestration_runs').select('*').order('created_at', { ascending: false }).limit(20),

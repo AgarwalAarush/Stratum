@@ -1,8 +1,9 @@
 import { hostname } from 'node:os'
-import { enqueueAgentJob, processOneAgentJob, recoverInterruptedAgentJobs, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
+import { enqueueAgentJob, processAgentJobs, recoverInterruptedAgentJobs, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
 import { enqueueDueAgentJobs } from '../lib/server/agent-schedule.ts'
 import { recordWorkerHeartbeat } from '../lib/server/worker-heartbeat.ts'
 import type { AgentJobType } from '../lib/server/agent-jobs.ts'
+import { workerJobConcurrency } from '../lib/server/market-model-policy.ts'
 import { isRobinhoodPortfolioSyncConfigured } from '../lib/server/robinhood-portfolio-sync.ts'
 import { ensureDeclaredMarketDomainPacks } from '../lib/server/world-source-control.ts'
 
@@ -10,6 +11,7 @@ const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 5_000)
 const SCHEDULER_INTERVAL_MS = Number(process.env.WORKER_SCHEDULER_INTERVAL_MS ?? 60_000)
 const HEARTBEAT_INTERVAL_MS = Number(process.env.WORKER_HEARTBEAT_INTERVAL_MS ?? 60_000)
 const WORKER_SHUTDOWN_GRACE_MS = Math.max(1_000, Math.min(60_000, Number(process.env.WORKER_SHUTDOWN_GRACE_MS ?? 15_000)))
+const WORKER_CONCURRENCY = workerJobConcurrency()
 const schedulerEnabled = process.env.WORKER_SCHEDULER_ENABLED !== 'false'
 const fmpEnabled = Boolean(process.env.FMP_API_KEY)
 const codexEnabled = process.env.CODEX_SYNTHESIS_ENABLED !== 'false'
@@ -84,6 +86,7 @@ async function main() {
       reason: 'Robinhood sync is enabled but its private worker credentials are incomplete',
     }))
   }
+  console.info(JSON.stringify({ level: 'info', workerId, event: 'worker_concurrency', concurrency: WORKER_CONCURRENCY }))
   const domainSync = await ensureDeclaredMarketDomainPacks()
   if (domainSync.inserted.length > 0 || domainSync.upgraded.length > 0) {
     console.info(JSON.stringify({ level: 'info', workerId, event: 'market_domain_packs_synchronized', ...domainSync }))
@@ -145,7 +148,7 @@ async function main() {
           }))
         }
       }
-      const processed = await processOneAgentJob(workerId)
+      const processed = await processAgentJobs(workerId, runOnce ? 1 : WORKER_CONCURRENCY)
       if (runOnce) return
       if (!processed) await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
     } catch (error) {

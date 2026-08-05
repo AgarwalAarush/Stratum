@@ -116,9 +116,9 @@ export function buildDueAgentJobs(
       jobs.push(scheduledJob('synthesize-market-hypotheses', now))
     }
     if (newYork.hour % 6 === 0 && newYork.minute < 10) {
-      jobs.push(scheduledJob('refresh-market-hypothesis-research', now))
-      jobs.push(scheduledJob('route-market-research-frontiers', now))
-      jobs.push(scheduledJob('evaluate-market-predictions', now))
+      // The orchestrator is the sole 6h research control plane. It auto-accepts
+      // eligible proposals, then enqueues bounded child jobs (scout, collect,
+      // critic, prediction eval) under explicit cost caps.
       jobs.push(scheduledJob('orchestrate-market-research', now))
     }
     if (newYork.weekday === 'Sun' && newYork.hour === 18 && newYork.minute < 10) {

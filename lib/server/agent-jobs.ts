@@ -902,7 +902,7 @@ async function executeJob(
     const { runMarketResearchOrchestration } = await import('./market-research-orchestrator.ts')
     await reportProgress(5, 'reading governed evidence, frontier, and lead signals across active domains')
     const result = await runMarketResearchOrchestration({ trigger: job.payload.trigger === 'manual' ? 'manual' : 'scheduled' })
-    await reportProgress(100, `${result.planned} durable actions planned; ${result.enqueued} worker jobs enqueued; ${result.awaitingReview} review waits`)
+    await reportProgress(100, `${result.planned} durable actions planned; ${result.enqueued} worker jobs enqueued; ${result.autoAccepted} auto-accepted; ${result.awaitingReview} review waits; ${result.deferred} budget-deferred`)
     return result
   }
 
@@ -1024,4 +1024,13 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
   }
 
   return true
+}
+
+/** Drain up to `concurrency` jobs in parallel. Used by the macserver worker so
+ * cheap/standard orchestration children can progress together without opening
+ * an unbounded multi-process farm. */
+export async function processAgentJobs(workerId: string, concurrency = 1): Promise<number> {
+  const slots = Math.max(1, Math.min(4, Math.floor(concurrency)))
+  const results = await Promise.all(Array.from({ length: slots }, () => processOneAgentJob(workerId)))
+  return results.filter(Boolean).length
 }

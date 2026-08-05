@@ -1292,9 +1292,11 @@ export interface MarketResearchScoutRun {
  * orchestration action is not evidence, a hypothesis, a thesis, or a trade. */
 export type MarketOrchestrationActionType =
   | 'investigate_broad'
+  | 'investigate_counter_evidence'
   | 'verify_recurring_source'
   | 'critic_revision'
   | 'collect_known_source'
+  | 'evaluate_prediction'
   | 'awaiting_review'
   | 'no_action'
 
@@ -1350,7 +1352,13 @@ export interface WorldObservationProposal {
   sourceLabel: string
   sourceUrl: string
   generatedAt: string
-  review: { decision: 'accepted' | 'rejected'; rationale: string; reviewedAt: string; observationId: string | null } | null
+  review: {
+    decision: 'accepted' | 'rejected'
+    rationale: string
+    reviewedAt: string
+    observationId: string | null
+    reviewerKind: 'human' | 'policy_auto'
+  } | null
 }
 
 /** Operational telemetry for a low-cost proposal extraction attempt. It is

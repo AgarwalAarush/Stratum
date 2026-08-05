@@ -113,6 +113,12 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     .flatMap((run) => run.leads.map((lead) => ({ run, lead }))).slice(0, 12)
   const recentOrchestration = workspace.orchestrationRuns[0] ?? null
   const orchestrationActions = workspace.orchestrationActions.slice(0, 18)
+  const pendingProposalCount = workspace.observationProposals.filter((proposal) => !proposal.review).length
+  const autoAcceptedCount = workspace.observationProposals.filter((proposal) => proposal.review?.reviewerKind === 'policy_auto').length
+  const contradictingLeads = researchLeads.filter(({ lead }) => lead.supports === 'contradicts').slice(0, 6)
+  const costEstimate = recentOrchestration && typeof recentOrchestration.inputSummary.costEstimate === 'object' && recentOrchestration.inputSummary.costEstimate
+    ? recentOrchestration.inputSummary.costEstimate as Record<string, number>
+    : null
   const requestOrchestration = async () => {
     if (pending) return
     setPending(true)
@@ -125,10 +131,30 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
       if (!response.ok) throw new Error(payload.error ?? 'Unable to queue market orchestration')
       setNotice(payload.deduplicated
         ? 'A market-wide orchestration run is already queued or completed in this planning window.'
-        : 'Market-wide orchestration queued. It records deterministic signals and queues only bounded worker jobs; it cannot create evidence, a thesis, or a capital decision.')
+        : 'Market-wide orchestration queued. It auto-accepts eligible quote-bound proposals, records deterministic signals, optionally ranks contested expensive work, and queues only bounded worker jobs.')
       router.refresh()
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to queue market orchestration')
+    } finally {
+      setPending(false)
+    }
+  }
+  const requestAutoAccept = async () => {
+    if (pending) return
+    setPending(true)
+    setNotice(null)
+    try {
+      const response = await fetch('/api/markets/world-sources', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'auto-accept-observation-proposals', domainId: selectedDomain?.id }),
+      })
+      const payload = await response.json() as { error?: string; result?: { accepted: number; failed: number; remainingByDomain: Record<string, number> } }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to auto-accept proposals')
+      const remaining = Object.values(payload.result?.remainingByDomain ?? {}).reduce((sum, count) => sum + count, 0)
+      setNotice(`Policy auto-accept finished: ${payload.result?.accepted ?? 0} accepted, ${payload.result?.failed ?? 0} failed checks, ${remaining} still awaiting human review.`)
+      router.refresh()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to auto-accept proposals')
     } finally {
       setPending(false)
     }
@@ -368,12 +394,27 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
         <div>
           <p className="markets-eyebrow">Market-wide work queue</p>
           <h3 id="orchestration-board-heading">Research orchestration</h3>
-          <p>Plans read governed evidence, review waits, research frontiers, provisional lead dossiers, source coverage, and market regime. They select bounded follow-up—not a market recommendation.</p>
-          {recentOrchestration ? <small>Latest {recentOrchestration.status} run · {formatDate(recentOrchestration.completedAt ?? recentOrchestration.createdAt)}{recentOrchestration.marketRegime ? ` · regime: ${recentOrchestration.marketRegime}` : ''}</small> : <small>No orchestration run has been recorded.</small>}
+          <p>The 6h control plane auto-accepts eligible quote-bound proposals, then chooses bounded collect / investigate / counter-evidence / critic / prediction work under cost caps. It cannot publish a thesis or move capital.</p>
+          {recentOrchestration ? (
+            <small>
+              Latest {recentOrchestration.status} run · {formatDate(recentOrchestration.completedAt ?? recentOrchestration.createdAt)}
+              {recentOrchestration.marketRegime ? ` · regime: ${recentOrchestration.marketRegime}` : ''}
+              {typeof recentOrchestration.inputSummary.planner === 'string' ? ` · ${recentOrchestration.inputSummary.planner}` : ''}
+              {costEstimate ? ` · spend shape none ${costEstimate.none ?? 0} / cheap ${costEstimate.cheap ?? 0} / standard ${costEstimate.standard ?? 0} / strong ${costEstimate.strong ?? 0} / deferred ${costEstimate.deferred ?? 0}` : ''}
+            </small>
+          ) : <small>No orchestration run has been recorded.</small>}
+          <dl className="market-source-requirements">
+            <div><dt>Pending human review</dt><dd>{pendingProposalCount}</dd></div>
+            <div><dt>Policy auto-accepted</dt><dd>{autoAcceptedCount}</dd></div>
+            <div><dt>Contradicting leads</dt><dd>{contradictingLeads.length}</dd></div>
+            <div><dt>Open frontiers</dt><dd>{workspace.researchFrontiers.filter((item) => item.status === 'queued' || item.status === 'evidence_received').length}</dd></div>
+          </dl>
+          {contradictingLeads[0] ? <p><b>Strongest recent dissent:</b> {contradictingLeads[0].lead.claim}</p> : null}
         </div>
         <div className="market-source-scout-form">
           <button type="button" onClick={requestOrchestration} disabled={pending}>{pending ? 'Queuing planner…' : 'Queue market-wide orchestration'}</button>
-          <p>The initial planner is deterministic and cooldown-bounded so every action is auditable. A planned broad lead remains provisional; accepted review is still required before it becomes governed evidence.</p>
+          <button type="button" className="market-source-secondary-button" onClick={requestAutoAccept} disabled={pending}>{pending ? 'Auto-accepting…' : 'Run proposal auto-accept now'}</button>
+          <p>Deterministic eligibility always gates work. A standard-tier model ranks only when expensive jobs exceed the research-run budget. Auto-accept still requires an approved/probation source, live contract, and verbatim quote.</p>
         </div>
       </section>
 
@@ -383,7 +424,13 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           <h3>Recent orchestration actions</h3>
           {orchestrationActions.length ? orchestrationActions.map((action) => (
             <article key={action.id} data-status={action.state}>
-              <div><strong>{action.domainId.replaceAll('-', ' ')} · {action.actionType.replaceAll('_', ' ')}</strong><span>{action.state} · priority {action.priority}{action.jobType ? ` · ${action.jobType}` : ''}</span><p>{action.rationale}</p></div>
+              <div>
+                <strong>{action.domainId.replaceAll('-', ' ')} · {action.actionType.replaceAll('_', ' ')}</strong>
+                <span>{action.state} · priority {action.priority}{action.jobType ? ` · ${action.jobType}` : ''}</span>
+                <p>{action.rationale}</p>
+                {action.state === 'skipped' ? <small>Budget-deferred or cooldown-preserved</small> : null}
+                {typeof action.deterministicSignals.strongestDisconfirmingClaim === 'string' ? <small>Disconfirming signal: {action.deterministicSignals.strongestDisconfirmingClaim}</small> : null}
+              </div>
               <time>{formatDate(action.createdAt)}</time>
             </article>
           )) : <p>No durable orchestration decisions yet.</p>}
@@ -526,12 +573,12 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
         <div className="market-source-proposals">
           <p className="markets-eyebrow">Proposal ledger</p>
           <h3>{selectedDomain ? `${selectedDomain.label} quote-bound proposals` : 'Quote-bound observation proposals'}</h3>
-          <p>Low-cost extraction proposals are not accepted observations. They never enter baselines, hypotheses, predictions, or capital decisions without a separate evidence-review gate.</p>
+          <p>Quote-bound proposals become evidence only after policy auto-accept or human review. Auto-accept still requires an approved/probation source, live contract, and verbatim quote; it cannot create a thesis or investment decision.</p>
           <p className="market-source-proposal-summary">Showing {visibleProposals.length} of {scopedProposals.length} proposal{scopedProposals.length === 1 ? '' : 's'} mapped to the selected domain.</p>
           {scopedProposals.length ? visibleProposals.map(({ proposal, advancesFrontiers }) => (
             <article key={proposal.id}>
               <div><strong>{proposal.domainId.replaceAll('-', ' ')} · {proposal.mechanism.replaceAll('_', ' ')}</strong><span>{proposal.kind} · confidence {proposal.confidence} · materiality {proposal.materiality}</span>{advancesFrontiers.length ? <small className="market-source-frontier-priority">Addresses research frontier: {advancesFrontiers[0]?.causalNode}{advancesFrontiers.length > 1 ? ` +${advancesFrontiers.length - 1} related gap${advancesFrontiers.length === 2 ? '' : 's'}` : ''} · review still decides whether the quote is evidence</small> : null}<p>{proposal.assertion}</p><blockquote>{proposal.evidenceQuote}</blockquote><a href={proposal.sourceUrl} target="_blank" rel="noreferrer">{proposal.sourceLabel}</a>
-                {proposal.review ? <small className="market-proposal-review" data-decision={proposal.review.decision}>{proposal.review.decision} · {proposal.review.rationale}</small>
+                {proposal.review ? <small className="market-proposal-review" data-decision={proposal.review.decision}>{proposal.review.decision} · {proposal.review.reviewerKind === 'policy_auto' ? 'policy auto-accept' : 'human'} · {proposal.review.rationale}</small>
                   : reviewingProposal === proposal.id ? <form className="market-source-contract-review" onSubmit={(event) => { event.preventDefault(); void reviewProposal(proposal.id, 'accepted') }}><p>Accepting creates one governed observation from this exact quote. It does not create a thesis or investment decision.</p><label>Review rationale<textarea value={proposalRationale} onChange={(event) => setProposalRationale(event.target.value)} required maxLength={1000} /></label><footer><button type="submit" disabled={pending || !proposalRationale.trim()}>{pending ? 'Recording…' : 'Accept as observation'}</button><button type="button" className="market-source-secondary-button" disabled={pending || !proposalRationale.trim()} onClick={() => void reviewProposal(proposal.id, 'rejected')}>Reject proposal</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setReviewingProposal(null); setProposalRationale('') }}>Cancel</button></footer></form>
                     : <button type="button" className="market-source-review-button" disabled={pending} onClick={() => { setReviewingProposal(proposal.id); setProposalRationale('') }}>Review proposal</button>}
               </div>

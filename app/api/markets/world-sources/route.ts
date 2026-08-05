@@ -9,7 +9,7 @@ import {
   reviseWorldSourceCanonicalUrl,
   validateWorldSourceContract,
 } from '@/lib/server/world-source-control'
-import { reviewWorldObservationProposal } from '@/lib/server/world-observation-review'
+import { reviewWorldObservationProposal, autoAcceptEligibleWorldObservationProposals } from '@/lib/server/world-observation-review'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +35,19 @@ export async function POST(request: NextRequest) {
     if (body.action === 'orchestrate-market-research') {
       const queued = await enqueueAgentJob('orchestrate-market-research', { trigger: 'manual' })
       return NextResponse.json({ queued: true, ...queued })
+    }
+    if (body.action === 'auto-accept-observation-proposals') {
+      const result = await autoAcceptEligibleWorldObservationProposals({
+        domainId: typeof body.domainId === 'string' ? body.domainId : undefined,
+        limit: typeof body.limit === 'number' ? body.limit : 40,
+      })
+      if (result.accepted > 0) {
+        await enqueueAgentJob('synthesize-market-hypotheses', {
+          reason: `policy auto-accept:${result.accepted}`,
+          evidenceFingerprint: result.observationIds[0] ?? 'auto-accept',
+        })
+      }
+      return NextResponse.json({ result })
     }
     if (body.action === 'preflight-candidate') {
       if (typeof body.slug !== 'string' || !body.slug.trim()) return NextResponse.json({ error: 'A candidate source is required.' }, { status: 400 })
