@@ -100,7 +100,7 @@ test('revision prompts feed the prior critique and allow unresolved capture on p
   }
   const sources = [{
     documentId: 'source-a', observationId: 'obs-a', title: 'EIA', publisher: 'EIA', url: 'https://example.com/a',
-    tier: 'regulatory', mechanism: 'data_center_load', assertion: 'Load is rising.', extractedKey: null, excerpt: 'Load is rising.',
+    tier: 'regulatory', mechanism: 'data_center_load', assertion: 'Load is rising.', extractedKey: null, excerpt: 'Load is rising. Servers were 7% of commercial electricity.',
   }]
   const priorCritique = validateMarketThesisCritique({
     verdict: 'needs_revision', summary: 'Capture is not established.', unsupportedClaims: ['Rents are asserted without contracts.'],
@@ -115,9 +115,17 @@ test('revision prompts feed the prior critique and allow unresolved capture on p
   assert.match(revision, /PRIOR CRITIQUE/)
   assert.match(revision, /Find contractual capture evidence/)
   assert.match(revision, /Do not invent new facts/)
+  assert.match(revision, /integer percent from 0 to 100/)
   const critic = critiquePrompt(hypothesis, validateMarketThesisResearch(researchFixture(), new Set(sourceIds)), sources)
   assert.match(critic, /Economic capture may remain unresolved/)
-  assert.match(critic, /treats unestablished economic capture as proven/)
+  assert.match(critic, /assertion and excerpt together/)
+  assert.match(critic, /research confidence and evidenceGaps are authoritative/)
+})
+
+test('research confidence normalizes 0-1 model fractions into percent', () => {
+  const fractional = researchFixture()
+  fractional.confidence = 0.22
+  assert.equal(validateMarketThesisResearch(fractional, new Set(sourceIds)).confidence, 22)
 })
 
 test('research frontiers route to bounded broad research leads for a known domain', () => {

@@ -53,8 +53,10 @@ function number(value: unknown, fallback = 0): number {
 }
 
 function score(value: unknown, label: string): number {
-  const parsed = number(value, Number.NaN)
+  let parsed = number(value, Number.NaN)
   if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) throw new Error(`Invalid ${label}`)
+  // Models sometimes emit 0-1 fractions for a 0-100 percent confidence field.
+  if (parsed > 0 && parsed <= 1) parsed = Math.round(parsed * 100)
   return parsed
 }
 
@@ -204,6 +206,8 @@ export function researchPrompt(hypothesis: MarketHypothesis, sources: Array<Rese
   return [
     'You are Stratum\'s bounded market-model analyst. Produce a source-grounded economic model of one market hypothesis, not a stock recommendation, valuation, portfolio allocation, or trade.',
     'Use only the supplied source IDs. Treat source excerpts as evidence and distinguish observed facts, estimates, claims, and analyst inference. Do not turn a plausible narrative into a fact. Financial information is one layer, not the analysis.',
+    'Concrete numbers, dates, percentages, and uniqueness claims must appear in the source assertion or excerpt for the cited source ID. If a detail is missing from those fields, omit it or list it in evidenceGaps — do not reconstruct it from prior knowledge.',
+    'Confidence is an integer percent from 0 to 100, not a 0-1 fraction.',
     'Reason from demand -> supply -> bottleneck -> economic capture -> expectations -> measurable predictions. Explain which value-chain layer can capture economics and why alternatives or substitutes may capture it instead.',
     'The research frontier is an explicit list of unresolved questions. It is not permission to browse: recommend source classes only, and preserve material uncertainty.',
     'Write a real counter-thesis that could win, with decisive tests. Expectations must say unknown when the supplied evidence cannot establish what is priced.',
@@ -219,15 +223,21 @@ export function researchPrompt(hypothesis: MarketHypothesis, sources: Array<Rese
   ].join('\n\n')
 }
 
-export function critiquePrompt(hypothesis: MarketHypothesis, research: MarketHypothesisResearchContent, sources: ResearchSource[]): string {
+export function critiquePrompt(
+  hypothesis: MarketHypothesis,
+  research: MarketHypothesisResearchContent,
+  sources: Array<ResearchSource & { excerpt?: string }>,
+): string {
   return [
     'You are the adversarial critic for a bounded market-research system. Audit the proposed analysis for causal leaps, unsupported facts, missing alternatives, and false certainty.',
     'Do not make a stock recommendation. Use only source IDs in the supplied ledger. A methodological critique may use no source ID.',
+    'Judge claims against each source\'s assertion and excerpt together. A number present in the excerpt for a cited source ID is ledger-supported even if the short assertion omits it.',
+    'Do not fail solely because the hypothesis row confidence or unresolvedNodes differ from the research artifact; the research confidence and evidenceGaps are authoritative for this pass.',
     'Set needs_revision when the analysis asserts unsupported facts, the counter-case is cosmetic, predictions are not observable, or it treats unestablished economic capture as proven. A needs_revision verdict must include 1-8 precise, bounded evidence questions in requiredResearch; each question becomes governed source-discovery work, not permission to browse.',
     'Pass when ledger-supported claims are sound and uncertainty is preserved. Economic capture may remain unresolved if the research explicitly marks it as not established, lists it in evidenceGaps, lowers confidence accordingly, and does not assert rent capture as observed fact. A pass verdict must leave requiredResearch empty.',
     `HYPOTHESIS:\n${JSON.stringify(hypothesis)}`,
     `RESEARCH:\n${JSON.stringify(research)}`,
-    `SOURCE LEDGER:\n${JSON.stringify(sources.map(({ documentId, title, publisher, tier, mechanism, assertion }) => ({ documentId, title, publisher, tier, mechanism, assertion })))} `,
+    `SOURCE LEDGER:\n${JSON.stringify(sources.map(({ documentId, title, publisher, tier, mechanism, assertion, excerpt }) => ({ documentId, title, publisher, tier, mechanism, assertion, excerpt: excerpt ?? null })))} `,
   ].join('\n\n')
 }
 
@@ -445,7 +455,7 @@ export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOpti
     const criticRunner = options.criticRunner ?? ((prompt) => runCodexJson({ prompt, schemaPath: 'schemas/market-thesis-critique.schema.json', validate: (value) => validateMarketThesisCritique(value, allowedSourceIds), model: selectMarketModel('hypothesis_critic').model, timeoutMs: 12 * 60 * 1_000 }))
     const researchResult = await researchRunner(researchPrompt(hypothesis, sourceWithExcerpt, prior, options.reason ?? 'scheduled deepening'))
     const research = validateMarketThesisResearch(researchResult.data, allowedSourceIds)
-    const critiqueResult = await criticRunner(critiquePrompt(hypothesis, research, sources))
+    const critiqueResult = await criticRunner(critiquePrompt(hypothesis, research, sourceWithExcerpt))
     const critique = validateMarketThesisCritique(critiqueResult.data, allowedSourceIds)
     const status = critique.verdict === 'pass' ? 'complete' : 'needs_revision'
     const generatedAt = new Date().toISOString()
@@ -456,6 +466,15 @@ export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOpti
     if (updateError) throw new Error(`Unable to publish market research artifact: ${updateError.message}`)
     await persistFrontier(hypothesis.id, row.id, buildPersistedResearchFrontier(research.researchFrontier, critique))
     await completeEvidenceReceivedResearchFrontiers(hypothesis.id, String(row.id))
+    // Keep unresolved capture visible on the live hypothesis without rewriting
+    // correlation confidence used by the deterministic promotion evidence gate.
+    if (research.evidenceGaps.some((gap) => /economic capture|rent capture|scarcity rent/i.test(gap))) {
+      const unresolvedNodes = [...new Set([...hypothesis.unresolvedNodes, 'economic_capture'])].slice(0, 8)
+      await supabase.from('market_hypotheses').update({
+        unresolved_nodes: unresolvedNodes,
+        updated_at: generatedAt,
+      }).eq('id', hypothesis.id).eq('owner_id', options.ownerId)
+    }
     return { id: row.id, hypothesisId: hypothesis.id, version, status, content: research, critique, sourceIds: research.sourceIds, observationIds: sources.map((source) => source.observationId), priorResearchVersionId: prior?.id ?? null, revisionDiff: revisionDiff(prior, research), provider: researchResult.metadata.provider, model: researchResult.metadata.model, criticProvider: critiqueResult.metadata.provider, criticModel: critiqueResult.metadata.model, criticGeneratedAt: generatedAt, dataAsOf: now, generatedAt, error: null }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
