@@ -51,6 +51,8 @@ Tests use Node's built-in test runner (`node:test` + `node:assert/strict`), not 
 
 The core abstraction is **Scopes** (top-level nav tabs like "AI Research", "Finance") containing **Sections** (individual feed panels like "Papers", "Earnings"). All scope/section definitions live in `lib/scopes.ts` as a static registry (`SCOPES` array of `ScopeDef`). Each section declares its `apiPath`, `itemType`, and data sources.
 
+Market **domain packs** (`lib/markets/domain-packs.ts`) are separate: curated economic-system models (power, semicap, materials, macro/policy, automation, defense), not a full GICS map of the economy. Broader coverage means adding packs over time under the same governance gates.
+
 ### Data flow
 
 1. **Client**: `ScopeFeed` (client component) uses SWR to fetch all sections for a scope in parallel, keyed by scope ID. Refresh interval is 1 hour.
