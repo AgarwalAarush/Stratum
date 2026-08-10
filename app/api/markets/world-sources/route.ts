@@ -36,6 +36,10 @@ export async function POST(request: NextRequest) {
       const queued = await enqueueAgentJob('orchestrate-market-research', { trigger: 'manual' })
       return NextResponse.json({ queued: true, ...queued })
     }
+    if (body.action === 'scan-intelligence-source-referrals') {
+      const queued = await enqueueAgentJob('scan-intelligence-source-referrals', { trigger: 'manual' })
+      return NextResponse.json({ queued: true, ...queued })
+    }
     if (body.action === 'auto-accept-observation-proposals') {
       // Quote re-verification reads STRATUM_DATA_ROOT extracts on the worker.
       // Do not run acceptance on Vercel where the private corpus is absent.

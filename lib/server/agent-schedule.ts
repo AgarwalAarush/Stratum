@@ -109,6 +109,12 @@ export function buildDueAgentJobs(
     if (newYork.hour === 17 && newYork.minute >= 20 && newYork.minute < 30) {
       jobs.push(scheduledJob('collect-world-source-documents', now))
     }
+    if (newYork.hour === 17 && newYork.minute >= 35 && newYork.minute < 45) {
+      // Feed items may suggest a place to investigate, but the resulting
+      // referral remains outside governed evidence until a human starts a
+      // separate candidate/contract review.
+      jobs.push(scheduledJob('scan-intelligence-source-referrals', now))
+    }
     if (newYork.hour === 18 && newYork.minute < 10) {
       jobs.push(scheduledJob('compile-world-baseline', now, { scopeType: 'global', scopeKey: 'global' }))
     }
