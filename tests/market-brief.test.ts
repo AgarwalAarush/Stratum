@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildMarketDailyBrief } from '../lib/markets/brief.ts'
+import { buildMarketDailyBrief, withoutParticipationLanguage } from '../lib/markets/brief.ts'
 import { ILLUSTRATIVE_MARKET_OVERVIEW } from '../lib/markets/fixtures.ts'
 
 test('daily market brief prioritizes leadership, weakness, and the decisive watch item', () => {
@@ -24,4 +24,12 @@ test('daily market brief prioritizes leadership, weakness, and the decisive watc
   assert.match(brief.lines[1]?.text ?? '', /Energy Equipment is the weakest group at -2.2%/)
   assert.equal(brief.lines[2]?.text, 'Semiconductors are cooling against the longer-term trend.')
   assert.doesNotMatch(brief.lines.join(' '), /participation/i)
+})
+
+test('overview analysis omits participation diagnostics', () => {
+  assert.deepEqual(withoutParticipationLanguage([
+    'Downside leadership is concentrated in suppliers.',
+    'Breadth resilience remains despite the negative average daily change.',
+    'Only 39% of advancing stocks are confirming the move.',
+  ]), ['Downside leadership is concentrated in suppliers.'])
 })

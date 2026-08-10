@@ -1,12 +1,14 @@
 'use client'
 
-import { ArrowSquareOut } from '@phosphor-icons/react'
+import { ArrowRight, ArrowSquareOut } from '@phosphor-icons/react'
 import { MarketsIntentLink } from './MarketsIntentLink'
-import { buildMarketDailyBrief } from '@/lib/markets/brief'
+import { buildMarketDailyBrief, withoutParticipationLanguage } from '@/lib/markets/brief'
 import type { MarketOverviewResponse } from '@/lib/markets/types'
+import type { NewsItem } from '@/lib/types'
 
 interface MarketsOverviewProps {
   overview: MarketOverviewResponse
+  news: NewsItem[]
 }
 
 const CANDIDATE_LANE_LABEL = {
@@ -72,9 +74,18 @@ function dataStatusLabel(value: MarketOverviewResponse['instruments'][number]['d
   return 'Delayed'
 }
 
-export function MarketsOverview({ overview }: MarketsOverviewProps) {
+function conciseRegime(regime: string): string {
+  return regime.split(/[,;·]/)[0]?.trim() || regime
+}
+
+export function MarketsOverview({ overview, news }: MarketsOverviewProps) {
   const sessionLabel = tradingSessionLabel(overview.leadership?.tradingDate)
   const brief = buildMarketDailyBrief(overview)
+  const memoImplications = withoutParticipationLanguage(overview.memo.sectorImplications.map((item) => item.text))
+  const currentCase = memoImplications.length > 0 ? memoImplications.slice(0, 3) : [brief.summary]
+  const catalysts = withoutParticipationLanguage(overview.memo.catalysts).slice(0, 2)
+  const risks = withoutParticipationLanguage(overview.memo.risks).slice(0, 2)
+  const hasConditions = catalysts.length > 0 || risks.length > 0
 
   return (
     <article className="market-overview">
@@ -85,7 +96,7 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
         </h1>
         <p className="market-overview-deck">{brief.summary}</p>
         <div className="market-overview-meta">
-          <span>{overview.state.regime}</span>
+          <span>{conciseRegime(overview.state.regime)}</span>
           <span>{feedLabel(overview.feed)} · {formatMarketTime(overview.dataAsOf)}{overview.stale ? ' · Stale' : ''}</span>
         </div>
       </section>
@@ -129,6 +140,59 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
           <div>{overview.evidence.map((evidence) => <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer"><span>{evidence.source}</span><span title={evidence.publishedAt}>{formatEvidenceTime(evidence.publishedAt)}</span><ArrowSquareOut size={14} aria-hidden="true" /></a>)}</div>
         </details> : null}
       </section>
+
+      <section className={`market-brief-analysis${hasConditions ? '' : ' market-brief-analysis--single'}`} aria-labelledby="market-brief-analysis-title">
+        <div className="market-brief-analysis-read">
+          <div className="market-section-heading">
+            <div>
+              <p className="markets-eyebrow">Market analysis</p>
+              <h2 id="market-brief-analysis-title">The current case</h2>
+            </div>
+            <span>Generated {formatMarketTime(overview.memo.generatedAt)}</span>
+          </div>
+          <div className="market-brief-implications">
+            {currentCase.map((item, index) => (
+              <p key={`${item}-${index}`}>
+                <span className={index === 0 ? 'market-negative' : 'market-positive'}>{index === 0 ? 'Read' : 'Context'}</span>
+                {item}
+              </p>
+            ))}
+          </div>
+        </div>
+        {hasConditions ? <aside className="market-brief-conditions" aria-label="Catalysts and risks">
+          {catalysts.length > 0 ? <div>
+            <p className="markets-eyebrow">Catalysts</p>
+            {catalysts.map((item) => <p key={item}>{item}</p>)}
+          </div> : null}
+          {risks.length > 0 ? <div>
+            <p className="markets-eyebrow">Risks to watch</p>
+            {risks.map((item) => <p key={item}>{item}</p>)}
+          </div> : null}
+        </aside> : null}
+      </section>
+
+      {news.length > 0 ? (
+        <section className="market-brief-news" aria-labelledby="market-brief-news-title">
+          <header className="market-section-heading">
+            <div>
+              <p className="markets-eyebrow">Live context</p>
+              <h2 id="market-brief-news-title">News moving through the market</h2>
+              <p>Source-linked context for the session. Open the original reporting before assigning causality.</p>
+            </div>
+            <MarketsIntentLink href="/markets/events">All events <ArrowRight size={15} aria-hidden="true" /></MarketsIntentLink>
+          </header>
+          <div className="market-brief-news-list">
+            {news.map((item) => (
+              <a key={item.id} href={item.url} target="_blank" rel="noreferrer">
+                <span>{item.category ?? 'Markets'}</span>
+                <strong>{item.title}</strong>
+                <small>{item.source} · {formatEvidenceTime(item.publishedAt)}</small>
+                <ArrowSquareOut size={15} aria-hidden="true" />
+              </a>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {overview.leadership ? (
         <section className="market-structure-panel" aria-labelledby="market-structure-title">

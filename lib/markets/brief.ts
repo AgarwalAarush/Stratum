@@ -11,6 +11,13 @@ export interface MarketDailyBrief {
   lines: MarketBriefLine[]
 }
 
+const PARTICIPATION_LANGUAGE = /participation|\bbreadth\b|\badvanc\w* stocks?\b|above (the )?50-day|share above|average daily change/i
+
+/** Keeps the overview focused on a market call, rather than repeating breadth diagnostics. */
+export function withoutParticipationLanguage(items: string[]): string[] {
+  return items.filter((item) => !PARTICIPATION_LANGUAGE.test(item))
+}
+
 function signedPercent(value: number | null | undefined): string | null {
   return typeof value === 'number' && Number.isFinite(value)
     ? `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
