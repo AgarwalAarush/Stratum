@@ -741,6 +741,7 @@ export async function generateFullEquityResearch(
   ownerId: string,
   reason = 'manual',
   onProgress?: (progress: number, phase: string) => Promise<void>,
+  context?: { marketThesisVersionId?: string },
 ): Promise<EquityResearchNote> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required for research ownership')
   if (await isEtfInstrument(symbol)) {
@@ -824,7 +825,12 @@ export async function generateFullEquityResearch(
       generatedAt,
       error: null,
     }
-    await proposeStockThesis(ownerId, packet, note, reason).catch(() => undefined)
+    await proposeStockThesis(ownerId, packet, note, reason, context?.marketThesisVersionId).catch((proposalError) => {
+      // A normal research refresh stays useful if thesis storage is temporarily
+      // unavailable. An exposure-led investigation, however, must retain its
+      // lineage before its job can be considered complete.
+      if (context?.marketThesisVersionId) throw proposalError
+    })
     return note
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

@@ -88,6 +88,23 @@ test('stock thesis tickers offer canonical stock and equity-research destination
   assert.match(workspace, /<StockDestinationMenu symbol=\{thesis\.symbol\} \/>/)
 })
 
+test('market exposure investigations queue independently verified company research with durable lineage', async () => {
+  const workspace = await readFile(new URL('../components/markets/MarketThesisWorkspace.tsx', import.meta.url), 'utf8')
+  const route = await readFile(new URL('../app/api/markets/market-theses/[id]/exposures/[exposureId]/investigate/route.ts', import.meta.url), 'utf8')
+  const companyResearch = await readFile(new URL('../lib/server/company-research.ts', import.meta.url), 'utf8')
+  const theses = await readFile(new URL('../lib/server/theses.ts', import.meta.url), 'utf8')
+  assert.match(workspace, /Company research leads/)
+  assert.match(workspace, /Model context only · company evidence required/)
+  assert.match(workspace, /Investigate company/)
+  assert.match(route, /resolveMarketThesisExposureInvestigation/)
+  assert.match(route, /marketThesisVersionId/)
+  assert.match(route, /marketThesisExposureId/)
+  assert.match(route, /generate-company-research/)
+  assert.match(companyResearch, /context\?\.marketThesisVersionId/)
+  assert.match(theses, /linkMarketThesisToCompanyThesis/)
+  assert.match(theses, /market_thesis_company_links/)
+})
+
 test('legacy question-led thesis records render an affirmative belief and preserve the debate separately', () => {
   const thesis = normalizeThesisContent({
     headline: 'Can margins expand fast enough?',

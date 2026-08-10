@@ -24,6 +24,7 @@ export function MarketThesisWorkspace({ initialData }: { initialData: MarketThes
   const [data, setData] = useState(initialData)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
+  const [queuedExposureIds, setQueuedExposureIds] = useState<Set<string>>(() => new Set())
   const [selectedId, setSelectedId] = useState(initialData.theses.find((item) => item.state === 'active' || item.state === 'weakened')?.id ?? '')
 
   const takeAction = async (hypothesis: MarketHypothesis, action: Action) => {
@@ -44,6 +45,29 @@ export function MarketThesisWorkspace({ initialData }: { initialData: MarketThes
       setNotice(payload.queued ? 'Research is queued. The published thesis stays unchanged until its evidence clears review.' : 'Market thesis state updated.')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to update market thesis')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const investigateExposure = async (thesis: MarketThesisVersion, exposureId: string) => {
+    const key = `investigate:${thesis.id}:${exposureId}`
+    setBusy(key)
+    setNotice('')
+    try {
+      const response = await fetch(`/api/markets/market-theses/${thesis.hypothesisId}/exposures/${exposureId}/investigate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ marketThesisVersionId: thesis.id }),
+      })
+      const payload = await response.json() as { error?: string; symbol?: string; deduplicated?: boolean }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue company research')
+      setQueuedExposureIds((current) => new Set([...current, exposureId]))
+      setNotice(payload.deduplicated
+        ? `${payload.symbol ?? 'Company'} research is already queued. The resulting proposal will remain separate from this market model.`
+        : `${payload.symbol ?? 'Company'} research is queued. It must independently verify the value-chain role before creating a proposal.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to queue company research')
     } finally {
       setBusy(null)
     }
@@ -96,7 +120,7 @@ export function MarketThesisWorkspace({ initialData }: { initialData: MarketThes
             <small>v{thesis.version} · {Math.round(thesis.confidence)}% confidence</small>
           </button>)}
         </nav>
-        <MarketThesisDetail thesis={selected} hypothesis={selectedHypothesis} busy={busy} onAction={takeAction} />
+        <MarketThesisDetail thesis={selected} hypothesis={selectedHypothesis} busy={busy} queuedExposureIds={queuedExposureIds} onAction={takeAction} onInvestigate={investigateExposure} />
       </div> : <EmptyState title="No model has cleared the publication gate." detail="A compelling narrative is insufficient without a fresh factual core, an independent cross-check, a counter-case, and predictions." />}
     </section>
 
@@ -118,10 +142,11 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
   return <div className="thesis-empty-state"><strong>{title}</strong><span>{detail}</span></div>
 }
 
-function MarketThesisDetail({ thesis, hypothesis, busy, onAction }: { thesis: MarketThesisVersion; hypothesis: MarketHypothesis | null; busy: string | null; onAction: (hypothesis: MarketHypothesis, action: Action) => Promise<void> }) {
+function MarketThesisDetail({ thesis, hypothesis, busy, queuedExposureIds, onAction, onInvestigate }: { thesis: MarketThesisVersion; hypothesis: MarketHypothesis | null; busy: string | null; queuedExposureIds: Set<string>; onAction: (hypothesis: MarketHypothesis, action: Action) => Promise<void>; onInvestigate: (thesis: MarketThesisVersion, exposureId: string) => Promise<void> }) {
   const primary = hypothesis ? actionLabel(hypothesis) : null
   const sources = [...new Map(thesis.content.sourceLedger.map((source) => [`${source.label}:${source.url}`, source])).values()]
   const verifiedExposures = thesis.exposures.filter((item) => item.verificationStatus === 'verified')
+  const companyResearchLeads = thesis.exposures.filter((item) => item.symbol && item.verificationStatus !== 'unverified')
   return <article className="market-thesis-detail" data-state={thesis.state}>
     <header>
       <div><span className="thesis-status-pill" data-status={thesis.state}>{thesis.state} · v{thesis.version}</span><h3>{thesis.title}</h3></div>
@@ -137,6 +162,17 @@ function MarketThesisDetail({ thesis, hypothesis, busy, onAction }: { thesis: Ma
     {verifiedExposures.length > 0 ? <section className="market-thesis-exposure-ledger" aria-label="Verified value-chain exposures">
       <span>Value-chain exposures</span>
       <div>{verifiedExposures.map((item) => <p key={item.id}><strong>{item.symbol ?? item.entityName}</strong><span>{item.mechanism}</span></p>)}</div>
+    </section> : null}
+    {companyResearchLeads.length > 0 ? <section className="market-thesis-company-leads" aria-label="Company research leads">
+      <header><span>Company research leads</span><small>Model context only · company evidence required</small></header>
+      <div>{companyResearchLeads.map((item) => {
+        const queued = queuedExposureIds.has(item.id)
+        const investigating = busy === `investigate:${thesis.id}:${item.id}`
+        return <article key={item.id}>
+          <div><strong>{item.symbol}</strong><span>{item.role} · {item.verificationStatus.replaceAll('_', ' ')}</span><p>{item.mechanism}</p></div>
+          <button type="button" disabled={busy !== null || queued} onClick={() => void onInvestigate(thesis, item.id)}>{investigating ? 'Queueing…' : queued ? 'Research queued' : 'Investigate company'}</button>
+        </article>
+      })}</div>
     </section> : null}
     <footer>
       {sources.length > 0 ? <details className="market-thesis-source-ledger"><summary>{countLabel(sources.length, 'source')}</summary><div>{sources.map((source) => <a key={`${source.label}:${source.url}`} href={source.url} target="_blank" rel="noreferrer">{source.label}<ArrowRight size={12} aria-hidden="true" /></a>)}</div></details> : <span />}

@@ -703,6 +703,11 @@ async function executeJob(
       ownerId,
       String(job.payload.reason ?? 'manual'),
       reportProgress,
+      {
+        marketThesisVersionId: typeof job.payload.marketThesisVersionId === 'string'
+          ? job.payload.marketThesisVersionId
+          : undefined,
+      },
     )
     return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf }
   }

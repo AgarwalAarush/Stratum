@@ -93,6 +93,12 @@ interface ProposalInput {
   sources: ThesisSource[]
   dataAsOf: string
   researchNoteId?: string
+  /**
+   * A market model can nominate a company for research, but it never supplies
+   * the company-level evidence. Retain the originating model version only as
+   * traceable context once independent company research has proposed a view.
+   */
+  marketThesisVersionId?: string
 }
 
 async function saveProposal(input: ProposalInput): Promise<InvestmentThesis | null> {
@@ -139,8 +145,9 @@ export async function proposeStockThesis(
   packet: CompanyPacket,
   research: EquityResearchNote,
   trigger: string,
+  marketThesisVersionId?: string,
 ): Promise<InvestmentThesis | null> {
-  return saveProposal({
+  const thesis = await saveProposal({
     ownerId,
     entityType: 'stock',
     symbol: research.symbol,
@@ -152,6 +159,67 @@ export async function proposeStockThesis(
     dataAsOf: research.dataAsOf,
     researchNoteId: research.id,
   })
+  if (thesis && marketThesisVersionId) {
+    await linkMarketThesisToCompanyThesis(ownerId, marketThesisVersionId, thesis.id)
+  }
+  return thesis
+}
+
+/** Link a completed company-research proposal to the exact market-model
+ * version that prompted the investigation. Both records must belong to the
+ * same owner; this link is context and never validates the company thesis. */
+export async function linkMarketThesisToCompanyThesis(
+  ownerId: string,
+  marketThesisVersionId: string,
+  investmentThesisId: string,
+): Promise<void> {
+  if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required')
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const [{ data: marketVersion, error: marketError }, { data: companyThesis, error: thesisError }] = await Promise.all([
+    supabase.from('market_thesis_versions').select('id,hypothesis_id').eq('id', marketThesisVersionId).maybeSingle(),
+    supabase.from('investment_theses').select('id,owner_id').eq('id', investmentThesisId).maybeSingle(),
+  ])
+  if (marketError || !marketVersion) throw new Error(`Unable to resolve market thesis context: ${marketError?.message ?? 'not found'}`)
+  if (thesisError || !companyThesis || companyThesis.owner_id !== ownerId) {
+    throw new Error(`Unable to resolve company thesis context: ${thesisError?.message ?? 'not found'}`)
+  }
+  const { data: hypothesis, error: hypothesisError } = await supabase.from('market_hypotheses')
+    .select('id').eq('id', marketVersion.hypothesis_id).eq('owner_id', ownerId).maybeSingle()
+  if (hypothesisError || !hypothesis) throw new Error('Market thesis context does not belong to this user')
+  const { error } = await supabase.from('market_thesis_company_links').upsert({
+    market_thesis_version_id: marketThesisVersionId,
+    investment_thesis_id: investmentThesisId,
+  }, { onConflict: 'market_thesis_version_id,investment_thesis_id', ignoreDuplicates: true })
+  if (error) throw new Error(`Unable to link market and company theses: ${error.message}`)
+}
+
+export async function resolveMarketThesisExposureInvestigation(
+  ownerId: string,
+  hypothesisId: string,
+  marketThesisVersionId: string,
+  exposureId: string,
+): Promise<{ symbol: string; verificationStatus: 'verified' | 'needs_company_research' }> {
+  if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required')
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data: hypothesis, error: hypothesisError } = await supabase.from('market_hypotheses')
+    .select('id').eq('id', hypothesisId).eq('owner_id', ownerId).maybeSingle()
+  if (hypothesisError || !hypothesis) throw new Error('Market thesis not found')
+  const { data: version, error: versionError } = await supabase.from('market_thesis_versions')
+    .select('id,state').eq('id', marketThesisVersionId).eq('hypothesis_id', hypothesisId).maybeSingle()
+  if (versionError || !version) throw new Error('Market thesis version not found')
+  if (version.state !== 'active' && version.state !== 'weakened') throw new Error('Only published market models can start company research')
+  const { data: exposure, error: exposureError } = await supabase.from('market_thesis_exposures')
+    .select('symbol,verification_status').eq('id', exposureId).eq('market_thesis_version_id', marketThesisVersionId).maybeSingle()
+  if (exposureError || !exposure) throw new Error('Market thesis exposure not found')
+  const symbol = typeof exposure.symbol === 'string' ? exposure.symbol.toUpperCase() : ''
+  if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(symbol)) throw new Error('This exposure does not yet identify a tradable company')
+  if (exposure.verification_status === 'unverified') throw new Error('Verify this exposure before starting company research')
+  return {
+    symbol,
+    verificationStatus: exposure.verification_status as 'verified' | 'needs_company_research',
+  }
 }
 
 export async function proposeUserAuthoredThesis(
