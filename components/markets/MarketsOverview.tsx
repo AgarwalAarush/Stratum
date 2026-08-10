@@ -3,12 +3,14 @@
 import { ArrowRight, ArrowSquareOut } from '@phosphor-icons/react'
 import { MarketsIntentLink } from './MarketsIntentLink'
 import { buildMarketDailyBrief, withoutParticipationLanguage } from '@/lib/markets/brief'
+import type { MarketThesisBrief } from '@/lib/markets/thesis-brief'
 import type { MarketOverviewResponse } from '@/lib/markets/types'
 import type { NewsItem } from '@/lib/types'
 
 interface MarketsOverviewProps {
   overview: MarketOverviewResponse
   news: NewsItem[]
+  thesisBrief: MarketThesisBrief | null
 }
 
 const CANDIDATE_LANE_LABEL = {
@@ -78,7 +80,14 @@ function conciseRegime(regime: string): string {
   return regime.split(/[,;·]/)[0]?.trim() || regime
 }
 
-export function MarketsOverview({ overview, news }: MarketsOverviewProps) {
+function dateLabel(value: string | null): string {
+  if (!value) return 'Date not set'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Date not set'
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' }).format(date)
+}
+
+export function MarketsOverview({ overview, news, thesisBrief }: MarketsOverviewProps) {
   const sessionLabel = tradingSessionLabel(overview.leadership?.tradingDate)
   const brief = buildMarketDailyBrief(overview)
   const memoImplications = withoutParticipationLanguage(overview.memo.sectorImplications.map((item) => item.text))
@@ -170,6 +179,35 @@ export function MarketsOverview({ overview, news }: MarketsOverviewProps) {
           </div> : null}
         </aside> : null}
       </section>
+
+      {thesisBrief ? <section className="market-thesis-brief" aria-labelledby="market-thesis-brief-title">
+        <header className="market-section-heading">
+          <div>
+            <p className="markets-eyebrow">Thesis book</p>
+            <h2 id="market-thesis-brief-title">What the system is testing</h2>
+            <p>{thesisBrief.modelCount} active models · {thesisBrief.predictionCount} open predictions · {thesisBrief.observationCount} material observations{thesisBrief.crossDomainLinkCount > 0 ? ` · ${thesisBrief.crossDomainLinkCount} linked mechanisms` : ''}</p>
+          </div>
+          <MarketsIntentLink href="/markets/theses">Open thesis library <ArrowRight size={15} aria-hidden="true" /></MarketsIntentLink>
+        </header>
+        <div className="market-thesis-brief-grid">
+          <div className="market-thesis-brief-models">
+            {thesisBrief.models.map((model) => <article key={model.id}>
+              <div><span>Active model</span><small>{Math.round(model.confidence)}% confidence · {model.evidenceCount} source{model.evidenceCount === 1 ? '' : 's'}</small></div>
+              <h3>{model.title}</h3>
+              <p>{model.whyNow}</p>
+              <footer>{model.predictionCount} open test{model.predictionCount === 1 ? '' : 's'} · {model.exposureCount} mapped exposure{model.exposureCount === 1 ? '' : 's'}</footer>
+            </article>)}
+          </div>
+          <aside className="market-thesis-brief-tests" aria-label="Next thesis tests">
+            <p className="markets-eyebrow">Next tests</p>
+            {thesisBrief.predictions.length > 0 ? thesisBrief.predictions.map((prediction) => <article key={prediction.id}>
+              <span>{dateLabel(prediction.deadline)}</span>
+              <strong>{prediction.modelTitle}</strong>
+              <p>{prediction.prediction}</p>
+            </article>) : <p className="market-thesis-brief-empty">No pending model test has a dated evaluation window.</p>}
+          </aside>
+        </div>
+      </section> : null}
 
       {news.length > 0 ? (
         <section className="market-brief-news" aria-labelledby="market-brief-news-title">

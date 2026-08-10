@@ -1026,6 +1026,146 @@
   color: var(--market-accent);
 }
 
+/* Thesis context turns the tape into a durable research read, not an action call. */
+.market-thesis-brief {
+  border-bottom: 1px solid var(--market-border);
+  padding: 29px 0 24px;
+}
+
+.market-thesis-brief .market-section-heading {
+  align-items: end;
+  margin-bottom: 18px;
+}
+
+.market-thesis-brief h2 {
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: -.035em;
+  margin: 5px 0 0;
+}
+
+.market-thesis-brief .market-section-heading > div > p:last-child {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.45;
+  margin: 9px 0 0;
+}
+
+.market-thesis-brief .market-section-heading > a {
+  align-items: center;
+  color: var(--market-text-dim);
+  display: inline-flex;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.market-thesis-brief .market-section-heading > a:hover {
+  color: var(--market-accent);
+}
+
+.market-thesis-brief-grid {
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
+}
+
+.market-thesis-brief-models > article {
+  border-bottom: 1px solid var(--market-border);
+  padding: 16px 28px 16px 0;
+}
+
+.market-thesis-brief-models > article:last-child {
+  border-bottom: 0;
+}
+
+.market-thesis-brief-models > article > div {
+  display: flex;
+  gap: 11px;
+  justify-content: space-between;
+}
+
+.market-thesis-brief-models span,
+.market-thesis-brief-models small,
+.market-thesis-brief-models footer,
+.market-thesis-brief-tests > article > span,
+.market-thesis-brief-tests > article > small {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.market-thesis-brief-models span {
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.market-thesis-brief-models h3 {
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -.02em;
+  line-height: 1.25;
+  margin: 9px 0 6px;
+}
+
+.market-thesis-brief-models p {
+  color: var(--market-text-dim);
+  display: -webkit-box;
+  font-size: 13px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.45;
+  margin: 0;
+  overflow: hidden;
+}
+
+.market-thesis-brief-models footer {
+  margin-top: 10px;
+}
+
+.market-thesis-brief-tests {
+  border-left: 1px solid var(--market-border);
+  padding: 17px 0 0 28px;
+}
+
+.market-thesis-brief-tests > .markets-eyebrow {
+  margin: 0 0 11px;
+}
+
+.market-thesis-brief-tests > article {
+  border-top: 1px solid var(--market-border);
+  padding: 13px 0;
+}
+
+.market-thesis-brief-tests > article > span,
+.market-thesis-brief-tests > article > strong,
+.market-thesis-brief-tests > article > p,
+.market-thesis-brief-tests > article > small {
+  display: block;
+}
+
+.market-thesis-brief-tests strong {
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 6px;
+}
+
+.market-thesis-brief-tests p {
+  color: var(--market-text-dim);
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 5px 0 7px;
+}
+
+.market-thesis-brief-empty {
+  color: var(--market-text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
 .market-priority-grid {
   border-top: 0;
 }
@@ -1122,6 +1262,20 @@
 
   .market-brief-news-list > a > small {
     display: none;
+  }
+
+  .market-thesis-brief-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .market-thesis-brief-models > article {
+    padding-right: 0;
+  }
+
+  .market-thesis-brief-tests {
+    border-left: 0;
+    border-top: 1px solid var(--market-border);
+    padding-left: 0;
   }
 
   .market-analysis-grid {
@@ -1237,6 +1391,30 @@
     grid-column: 2;
     grid-row: 1 / span 2;
     margin-top: 4px;
+  }
+
+  .market-thesis-brief {
+    padding: 24px 0 18px;
+  }
+
+  .market-thesis-brief .market-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .market-thesis-brief h2 {
+    font-size: 22px;
+  }
+
+  .market-thesis-brief-models > article > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .market-thesis-brief-tests {
+    padding-top: 20px;
   }
 }
 
@@ -11211,6 +11389,79 @@ body:has(.equity-research-note) {
   text-transform: capitalize;
 }
 
+.market-thesis-company-leads {
+  border-top: 1px solid var(--market-border);
+  margin-top: 20px;
+  padding-top: 16px;
+}
+
+.market-thesis-company-leads > header {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.market-thesis-company-leads > header > span,
+.market-thesis-company-leads > header small,
+.market-thesis-company-leads article span {
+  color: var(--market-text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.market-thesis-company-leads > div {
+  border-bottom: 1px solid var(--market-border);
+  border-top: 1px solid var(--market-border);
+  margin-top: 9px;
+}
+
+.market-thesis-company-leads article {
+  align-items: center;
+  border-bottom: 1px solid var(--market-border);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 11px 0;
+}
+
+.market-thesis-company-leads article:last-child {
+  border-bottom: 0;
+}
+
+.market-thesis-company-leads article > div {
+  min-width: 0;
+}
+
+.market-thesis-company-leads article strong {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  margin-right: 8px;
+}
+
+.market-thesis-company-leads article p {
+  color: var(--market-text);
+  font-size: 11px;
+  line-height: 1.45;
+  margin: 4px 0 0;
+}
+
+.market-thesis-company-leads button {
+  background: var(--market-text);
+  border: 1px solid var(--market-text);
+  color: var(--market-bg);
+  flex: 0 0 auto;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 9px;
+  padding: 7px 9px;
+}
+
+.market-thesis-company-leads button:disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
 .market-thesis-detail footer {
   border-top: 1px solid var(--market-border);
   gap: 18px;
@@ -11974,6 +12225,16 @@ body:has(.equity-research-note) {
     grid-column: 2;
     grid-row: 1;
     text-align: right;
+  }
+
+  .market-thesis-company-leads > header,
+  .market-thesis-company-leads article {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .market-thesis-company-leads button {
+    width: 100%;
   }
 
   .market-thesis-transmission article,
