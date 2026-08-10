@@ -1,6 +1,7 @@
 'use client'
 
 import { type FormEvent, useState } from 'react'
+import { Check, Pause, Play, Plus, Pulse, X } from '@phosphor-icons/react'
 import type {
   InvestmentThesis,
   ThesisEntityType,
@@ -70,6 +71,10 @@ function coverageLabel(monitor: ThesisMonitor): string {
   return monitor.coverage.map((item) => labels[item] ?? item).join(' · ')
 }
 
+function countLabel(value: number, singular: string, plural = `${singular}s`) {
+  return `${value} ${value === 1 ? singular : plural}`
+}
+
 function StockDestinationMenu({ symbol }: { symbol: string }) {
   const normalizedSymbol = symbol.toUpperCase()
 
@@ -135,11 +140,7 @@ export function ThesisWorkspace({ initialData, initialMarketData }: { initialDat
           ...current.filter((item) => item.entityKey !== payload.thesis?.entityKey),
         ])
       }
-      setNotice(
-        payload.researchQueued
-          ? `${title(payload.thesis)} added; full research is queued to enrich it.`
-          : `${title(payload.thesis)} added to the review queue.`,
-      )
+      setNotice(payload.researchQueued ? `${title(payload.thesis)} is in review; research is queued to enrich it.` : `${title(payload.thesis)} is in the review queue.`)
       setDraft(emptyDraft)
       setShowIntake(false)
     } catch (error) {
@@ -173,7 +174,7 @@ export function ThesisWorkspace({ initialData, initialMarketData }: { initialDat
           ])
         }
       }
-      setNotice(decision === 'accept' ? `${title(thesis)} thesis accepted.` : `${title(thesis)} proposal rejected.`)
+      setNotice(decision === 'accept' ? `${title(thesis)} is now an active company thesis.` : `${title(thesis)} proposal rejected.`)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to review thesis')
     } finally {
@@ -192,8 +193,7 @@ export function ThesisWorkspace({ initialData, initialMarketData }: { initialDat
       })
       const payload = await response.json() as { error?: string; monitor?: ThesisMonitor }
       if (!response.ok || !payload.monitor) throw new Error(payload.error ?? 'Unable to update monitoring')
-      const updatedMonitor = payload.monitor
-      setMonitors((current) => current.map((item) => item.id === monitor.id ? updatedMonitor : item))
+      setMonitors((current) => current.map((item) => item.id === monitor.id ? payload.monitor as ThesisMonitor : item))
       setNotice(status === 'active' ? 'Thesis monitoring resumed.' : 'Thesis monitoring paused.')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to update monitoring')
@@ -205,185 +205,78 @@ export function ThesisWorkspace({ initialData, initialMarketData }: { initialDat
   const monitorByEntity = new Map(monitors.map((monitor) => [monitor.entityKey, monitor]))
   const activeMonitorCount = monitors.filter((monitor) => monitor.status === 'active').length
 
-  return (
-    <section className="thesis-workspace">
-      <header className="market-explore-heading">
-        <div>
-          <p className="markets-eyebrow">Evidence-backed and versioned</p>
-          <h1 className="markets-display">Theses</h1>
-        </div>
-        <div className="thesis-heading-actions">
-          <span>{proposals.length} awaiting review · {activeMonitorCount} monitored</span>
-          <button type="button" onClick={() => { setLibrary('company'); setShowIntake((current) => !current) }}>
-            {showIntake ? 'Close intake' : 'New thesis'}
-          </button>
-        </div>
-      </header>
-      <nav className="thesis-library-switch" aria-label="Thesis library">
-        <button type="button" data-active={library === 'market'} onClick={() => setLibrary('market')}>Market theses</button>
-        <button type="button" data-active={library === 'company'} onClick={() => setLibrary('company')}>Company theses</button>
-      </nav>
-      {library === 'market' ? <MarketThesisWorkspace initialData={initialMarketData ?? { baseline: null, hypotheses: [], theses: [], frontiers: [], crossDomainLinks: [] }} /> : null}
+  return <section className="thesis-workspace">
+    <header className="market-explore-heading thesis-workspace-heading">
+      <div><p className="markets-eyebrow">Evidence, conviction, and revision</p><h1 className="markets-display">Theses</h1></div>
+      <div className="thesis-workspace-actions"><span>{countLabel(proposals.length, 'review')} · {countLabel(activeMonitorCount, 'active monitor')}</span><button type="button" onClick={() => { setLibrary('company'); setShowIntake((current) => !current) }}><Plus size={14} weight="bold" /> {showIntake ? 'Close intake' : 'New thesis'}</button></div>
+    </header>
 
-      <div hidden={library !== 'company'}>
-      <p className="thesis-intro">A screen can surface a name; a thesis states the belief, what changed, and what would prove it wrong. New evidence creates a proposal—never a silent rewrite.</p>
+    <nav className="thesis-workspace-tabs" aria-label="Thesis library">
+      <button type="button" aria-current={library === 'market' ? 'page' : undefined} onClick={() => setLibrary('market')}>Market models</button>
+      <button type="button" aria-current={library === 'company' ? 'page' : undefined} onClick={() => setLibrary('company')}>Company theses</button>
+    </nav>
 
-      {showIntake ? (
-        <form className="thesis-intake" data-entity-type={draft.entityType} onSubmit={createThesis}>
-          <header>
-            <div>
-              <p className="markets-eyebrow">Direct intake</p>
-              <h2>Capture the view before the full research</h2>
-            </div>
-            <div className="thesis-intake-kind" aria-label="Thesis type">
-              <button type="button" data-active={draft.entityType === 'stock'} onClick={() => setEntityType('stock')}>Stock</button>
-              <button type="button" data-active={draft.entityType === 'sub_industry'} onClick={() => setEntityType('sub_industry')}>Industry</button>
-            </div>
-          </header>
-          <p className="thesis-intake-help">This records your view as a proposal immediately. Research can add evidence and revise it later; accepting it turns on monitoring.</p>
-          <div className="thesis-intake-grid">
-            {draft.entityType === 'stock' ? (
-              <label className="thesis-intake-symbol">
-                <span>Ticker</span>
-                <input
-                  required
-                  autoCapitalize="characters"
-                  maxLength={10}
-                  value={draft.symbol}
-                  onChange={(event) => updateDraft('symbol', event.target.value.toUpperCase())}
-                  placeholder="INTC"
-                />
-              </label>
-            ) : (
-              <>
-                <label>
-                  <span>Sector</span>
-                  <input required value={draft.sector} onChange={(event) => updateDraft('sector', event.target.value)} placeholder="Information Technology" />
-                </label>
-                <label>
-                  <span>Industry</span>
-                  <input required value={draft.subIndustry} onChange={(event) => updateDraft('subIndustry', event.target.value)} placeholder="Semiconductors" />
-                </label>
-              </>
-            )}
-            <label className="thesis-intake-statement">
-              <span>What you believe</span>
-              <textarea
-                required
-                minLength={12}
-                maxLength={1000}
-                value={draft.statement}
-                onChange={(event) => updateDraft('statement', event.target.value)}
-                placeholder="Intel’s selloff underprices the strategic value of its U.S. fabs and advanced packaging as AI compute demand broadens."
-              />
-            </label>
-            <label className="thesis-intake-mispricing">
-              <span>Why the market may be wrong</span>
-              <textarea
-                maxLength={1000}
-                value={draft.mispricing}
-                onChange={(event) => updateDraft('mispricing', event.target.value)}
-                placeholder="The market is focused on near-term foundry losses and execution risk, not the value of domestic capacity if demand and policy support compound."
-              />
-            </label>
-            <label>
-              <span>Key debate <small>optional</small></span>
-              <input
-                maxLength={500}
-                value={draft.keyDebate}
-                onChange={(event) => updateDraft('keyDebate', event.target.value)}
-                placeholder="Can foundry utilization improve before cash burn overwhelms the upside?"
-              />
-            </label>
-            <label>
-              <span>Fastest disconfirming evidence <small>optional</small></span>
-              <input
-                maxLength={500}
-                value={draft.fastestKillSignal}
-                onChange={(event) => updateDraft('fastestKillSignal', event.target.value)}
-                placeholder="Another major process delay with no external foundry wins."
-              />
-            </label>
-          </div>
-          <footer>
-            <span>Saved as proposed · confidence starts neutral</span>
-            <button type="submit" disabled={busy === 'create'}>{busy === 'create' ? 'Capturing…' : 'Add to review queue'}</button>
-          </footer>
-        </form>
-      ) : null}
+    {library === 'market' ? <MarketThesisWorkspace initialData={initialMarketData ?? { baseline: null, hypotheses: [], theses: [], frontiers: [], crossDomainLinks: [] }} /> : null}
 
-      <section className="thesis-review-queue" aria-labelledby="thesis-review-title">
-        <header>
-          <div><p className="markets-eyebrow">Review queue</p><h2 id="thesis-review-title">Proposed updates</h2></div>
-          <span>{proposals.length} open</span>
-        </header>
-        {proposals.length === 0 ? <p className="thesis-empty">No updates need review. A completed research run, a material event, or a new industry leadership signal will create the next proposal.</p> : (
-          <div className="thesis-proposal-list">
-            {proposals.map((thesis) => (
-              <article key={thesis.id} className="thesis-proposal">
-                <header className="thesis-proposal-identity">
-                  <div><span>{thesis.entityType === 'stock' ? 'Stock thesis' : 'Industry thesis'}</span><h3>{thesis.symbol ? <StockDestinationMenu symbol={thesis.symbol} /> : title(thesis)}</h3><small>{label(thesis)}<br />proposed v{thesis.version}</small></div>
-                  <time dateTime={thesis.generatedAt}>{proposalDate(thesis.generatedAt)}</time>
-                </header>
-                <div className="thesis-proposal-copy">
-                  <span>Thesis</span>
-                  <strong>{thesis.content.headline}</strong>
-                  {thesis.content.summary ? <><small>Why it may be mispriced</small><p>{thesis.content.summary}</p></> : null}
-                </div>
-                <dl>
-                  {thesis.content.keyDebate ? <div><dt>Key debate</dt><dd>{thesis.content.keyDebate}</dd></div> : null}
-                  <div><dt>Fastest disconfirming evidence</dt><dd>{thesis.content.fastestKillSignal || 'Not defined yet.'}</dd></div>
-                </dl>
-                <footer>
-                  <span><strong>Changed:</strong> {thesis.content.whatChanged} · {thesis.sources.length} linked source{thesis.sources.length === 1 ? '' : 's'} · {thesis.trigger.replaceAll('-', ' ')}</span>
-                  <div><button type="button" onClick={() => review(thesis, 'reject')} disabled={busy === thesis.id}>Reject</button><button type="button" onClick={() => review(thesis, 'accept')} disabled={busy === thesis.id}>{busy === thesis.id ? 'Saving…' : 'Accept thesis'}</button></div>
-                </footer>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+    {library === 'company' ? <div className="company-thesis-workspace">
+      <section className="thesis-context-strip" aria-label="Company thesis context"><Pulse size={16} weight="bold" aria-hidden="true" /><p>A company thesis is an explicit belief about a security, its mispricing, and the fastest evidence that could disprove it.</p><span>Review activates monitoring; no revision silently replaces the current view.</span></section>
 
-      <section className="thesis-library" aria-labelledby="thesis-library-title">
-        <header><div><p className="markets-eyebrow">Current view</p><h2 id="thesis-library-title">Accepted theses</h2></div><span>{accepted.length} active</span></header>
-        {accepted.length === 0 ? <p className="thesis-empty">Accept a proposal to establish the first durable view. The version history will preserve every later change.</p> : (
-          <div className="thesis-library-grid">
-            {accepted.map((thesis) => {
-              const monitor = monitorByEntity.get(thesis.entityKey)
-              return <article key={thesis.id} className="thesis-library-item">
-                <header><div><span>{thesis.entityType === 'stock' ? 'Stock' : 'Industry'}</span><h3>{thesis.symbol ? <StockDestinationMenu symbol={thesis.symbol} /> : title(thesis)}</h3></div><small>v{thesis.version}</small></header>
-                <strong className="thesis-library-statement">{thesis.content.headline}</strong>
-                <p>{thesis.content.summary}</p>
-                {monitor ? (
-                    <div className="thesis-monitor-strip" data-status={monitor.status}>
-                      <div>
-                        <strong>{monitor.status === 'active' ? 'Monitoring active' : 'Monitoring paused'}</strong>
-                        <span>{coverageLabel(monitor)}</span>
-                      </div>
-                      <div>
-                        <small>{checkedLabel(monitor.lastCheckedAt)}</small>
-                        <button
-                          type="button"
-                          disabled={busy === monitor.id}
-                          onClick={() => setMonitorStatus(monitor, monitor.status === 'active' ? 'paused' : 'active')}
-                        >
-                          {monitor.status === 'active' ? 'Pause' : 'Resume'}
-                        </button>
-                      </div>
-                    </div>
-                ) : <div className="thesis-monitor-strip" data-status="pending"><strong>Monitoring setup pending</strong></div>}
-                <div className="thesis-list-columns">
-                  <div><span>Catalysts</span>{list(thesis.content.catalysts).map((item) => <p key={item}>{item}</p>)}</div>
-                  <div><span>Invalidation</span>{list(thesis.content.invalidation).map((item) => <p key={item}>{item}</p>)}</div>
-                </div>
-                {thesis.symbol ? null : <small>{label(thesis)}</small>}
-              </article>
-            })}
-          </div>
-        )}
-      </section>
+      {showIntake ? <ThesisIntake draft={draft} busy={busy} setEntityType={setEntityType} updateDraft={updateDraft} onSubmit={createThesis} /> : null}
+      <ProposalQueue proposals={proposals} busy={busy} onReview={review} />
+      <AcceptedTheses accepted={accepted} monitors={monitorByEntity} busy={busy} onMonitorChange={setMonitorStatus} />
       {notice ? <p className="thesis-notice" role="status">{notice}</p> : null}
-      </div>
-    </section>
-  )
+    </div> : null}
+  </section>
+}
+
+function ThesisIntake({ draft, busy, setEntityType, updateDraft, onSubmit }: { draft: ThesisIntakeDraft; busy: string | null; setEntityType: (entityType: ThesisEntityType) => void; updateDraft: (field: keyof ThesisIntakeDraft, value: string) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return <form className="thesis-intake" data-entity-type={draft.entityType} onSubmit={onSubmit}>
+    <header><div><p className="markets-eyebrow">New company thesis</p><h2>Record the view before the research</h2><p>It enters review immediately; full research can add evidence but cannot overwrite it.</p></div><div className="thesis-intake-kind" aria-label="Thesis type"><button type="button" data-active={draft.entityType === 'stock'} onClick={() => setEntityType('stock')}>Stock</button><button type="button" data-active={draft.entityType === 'sub_industry'} onClick={() => setEntityType('sub_industry')}>Industry</button></div></header>
+    <div className="thesis-intake-grid">
+      {draft.entityType === 'stock' ? <label className="thesis-intake-symbol"><span>Ticker</span><input required autoCapitalize="characters" maxLength={10} value={draft.symbol} onChange={(event) => updateDraft('symbol', event.target.value.toUpperCase())} placeholder="INTC" /></label> : <><label><span>Sector</span><input required value={draft.sector} onChange={(event) => updateDraft('sector', event.target.value)} placeholder="Information Technology" /></label><label><span>Industry</span><input required value={draft.subIndustry} onChange={(event) => updateDraft('subIndustry', event.target.value)} placeholder="Semiconductors" /></label></>}
+      <label className="thesis-intake-statement"><span>What you believe</span><textarea required minLength={12} maxLength={1000} value={draft.statement} onChange={(event) => updateDraft('statement', event.target.value)} placeholder="Intel’s selloff underprices the strategic value of its U.S. fabs and advanced packaging as AI compute demand broadens." /></label>
+      <label className="thesis-intake-mispricing"><span>Why the market may be wrong</span><textarea maxLength={1000} value={draft.mispricing} onChange={(event) => updateDraft('mispricing', event.target.value)} placeholder="The market is focused on near-term foundry losses and execution risk, not the value of domestic capacity if demand and policy support compound." /></label>
+      <label><span>Key debate <small>Optional</small></span><input maxLength={500} value={draft.keyDebate} onChange={(event) => updateDraft('keyDebate', event.target.value)} placeholder="Can utilization improve before cash burn overwhelms the upside?" /></label>
+      <label><span>Fastest disconfirming evidence <small>Optional</small></span><input maxLength={500} value={draft.fastestKillSignal} onChange={(event) => updateDraft('fastestKillSignal', event.target.value)} placeholder="Another major process delay with no external foundry wins." /></label>
+    </div>
+    <footer><span>Saved as a proposal · confidence begins neutral</span><button type="submit" disabled={busy === 'create'}>{busy === 'create' ? 'Capturing…' : 'Add to review'}</button></footer>
+  </form>
+}
+
+function ProposalQueue({ proposals, busy, onReview }: { proposals: InvestmentThesis[]; busy: string | null; onReview: (thesis: InvestmentThesis, decision: 'accept' | 'reject') => Promise<void> }) {
+  return <section className="company-thesis-review" aria-labelledby="thesis-review-title">
+    <header className="thesis-section-heading"><div><p className="markets-eyebrow">Review queue</p><h2 id="thesis-review-title">Views waiting on a decision</h2></div><span>{countLabel(proposals.length, 'proposal')}</span></header>
+    {proposals.length === 0 ? <EmptyCompanyState title="Nothing needs review right now." detail="A completed research run or a directly captured view will show up here." /> : <div className="company-thesis-review-rows">{proposals.map((thesis) => <article key={thesis.id}>
+      <div className="company-thesis-identity"><span className="thesis-status-pill" data-status="proposed">proposed · v{thesis.version}</span><h3>{thesis.symbol ? <StockDestinationMenu symbol={thesis.symbol} /> : title(thesis)}</h3><small>{label(thesis)} · {proposalDate(thesis.generatedAt)}</small></div>
+      <div className="company-thesis-statement"><strong>{thesis.content.headline}</strong><details className="company-thesis-evidence"><summary>Review evidence</summary><div>{thesis.content.summary ? <p>{thesis.content.summary}</p> : null}<dl><div><dt>Key debate</dt><dd>{thesis.content.keyDebate || 'Not defined yet.'}</dd></div><div><dt>Fastest disconfirming evidence</dt><dd>{thesis.content.fastestKillSignal || 'Not defined yet.'}</dd></div></dl></div></details></div>
+      <footer><small>{thesis.sources.length} linked source{thesis.sources.length === 1 ? '' : 's'} · {thesis.trigger.replaceAll('-', ' ')}</small><div><button type="button" className="thesis-quiet-action" onClick={() => void onReview(thesis, 'reject')} disabled={busy === thesis.id}><X size={13} weight="bold" /> Reject</button><button type="button" className="thesis-primary-action" onClick={() => void onReview(thesis, 'accept')} disabled={busy === thesis.id}><Check size={13} weight="bold" /> {busy === thesis.id ? 'Saving…' : 'Accept thesis'}</button></div></footer>
+    </article>)}</div>}
+  </section>
+}
+
+function AcceptedTheses({ accepted, monitors, busy, onMonitorChange }: { accepted: InvestmentThesis[]; monitors: Map<string, ThesisMonitor>; busy: string | null; onMonitorChange: (monitor: ThesisMonitor, status: ThesisMonitorStatus) => Promise<void> }) {
+  return <section className="company-thesis-library" aria-labelledby="thesis-library-title">
+    <header className="thesis-section-heading"><div><p className="markets-eyebrow">Active company views</p><h2 id="thesis-library-title">The current book</h2></div><span>{countLabel(accepted.length, 'active thesis', 'active theses')}</span></header>
+    {accepted.length === 0 ? <EmptyCompanyState title="No company thesis is active yet." detail="Accept a reviewed proposal to establish a durable view and turn on monitoring." /> : <div className="company-thesis-active-list">{accepted.map((thesis) => {
+      const monitor = monitors.get(thesis.entityKey)
+      return <article key={thesis.id}>
+        <header><div><span className="thesis-status-pill" data-status="active">active · v{thesis.version}</span><h3>{thesis.symbol ? <StockDestinationMenu symbol={thesis.symbol} /> : title(thesis)}</h3><small>{label(thesis)}</small></div><MonitorControl monitor={monitor} busy={busy} onChange={onMonitorChange} /></header>
+        <div className="company-thesis-active-body"><div><strong>{thesis.content.headline}</strong>{thesis.content.summary ? <p>{thesis.content.summary}</p> : null}</div><div className="company-thesis-active-evidence"><EvidenceList label="Catalysts" items={list(thesis.content.catalysts)} empty="No catalyst retained." /><EvidenceList label="Invalidation" items={list(thesis.content.invalidation)} empty={thesis.content.fastestKillSignal || 'No invalidation retained.'} /></div></div>
+      </article>
+    })}</div>}
+  </section>
+}
+
+function MonitorControl({ monitor, busy, onChange }: { monitor: ThesisMonitor | undefined; busy: string | null; onChange: (monitor: ThesisMonitor, status: ThesisMonitorStatus) => Promise<void> }) {
+  if (!monitor) return <div className="company-thesis-monitor" data-status="pending"><span>Monitoring</span><strong>Setup pending</strong></div>
+  const active = monitor.status === 'active'
+  return <div className="company-thesis-monitor" data-status={monitor.status}><span>Monitoring</span><strong>{active ? 'Active' : 'Paused'}</strong><small>{coverageLabel(monitor)} · {checkedLabel(monitor.lastCheckedAt)}</small><button type="button" disabled={busy === monitor.id} onClick={() => void onChange(monitor, active ? 'paused' : 'active')}>{active ? <Pause size={12} weight="fill" /> : <Play size={12} weight="fill" />}{active ? 'Pause' : 'Resume'}</button></div>
+}
+
+function EvidenceList({ label, items, empty }: { label: string; items: string[]; empty: string }) {
+  return <div><span>{label}</span>{items.length ? <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul> : <p>{empty}</p>}</div>
+}
+
+function EmptyCompanyState({ title, detail }: { title: string; detail: string }) {
+  return <div className="thesis-empty-state"><strong>{title}</strong><span>{detail}</span></div>
 }
