@@ -100,7 +100,7 @@ export function MarketThesisWorkspace({ initialData }: { initialData: MarketThes
       </div> : <EmptyState title="No model has cleared the publication gate." detail="A compelling narrative is insufficient without a fresh factual core, an independent cross-check, a counter-case, and predictions." />}
     </section>
 
-    <ResearchQueue hypotheses={forming} frontiers={data.frontiers} busy={busy} onAction={takeAction} />
+    {forming.length > 0 ? <ResearchQueue hypotheses={forming} frontiers={data.frontiers} busy={busy} onAction={takeAction} /> : null}
     <CrossDomainMap links={data.crossDomainLinks} hypothesesById={hypothesesById} />
     {history.length > 0 ? <Archive history={history} frontiers={data.frontiers} busy={busy} onAction={takeAction} /> : null}
     {notice ? <p className="thesis-notice" role="status">{notice}</p> : null}
@@ -121,6 +121,7 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
 function MarketThesisDetail({ thesis, hypothesis, busy, onAction }: { thesis: MarketThesisVersion; hypothesis: MarketHypothesis | null; busy: string | null; onAction: (hypothesis: MarketHypothesis, action: Action) => Promise<void> }) {
   const primary = hypothesis ? actionLabel(hypothesis) : null
   const sources = [...new Map(thesis.content.sourceLedger.map((source) => [`${source.label}:${source.url}`, source])).values()]
+  const verifiedExposures = thesis.exposures.filter((item) => item.verificationStatus === 'verified')
   return <article className="market-thesis-detail" data-state={thesis.state}>
     <header>
       <div><span className="thesis-status-pill" data-status={thesis.state}>{thesis.state} · v{thesis.version}</span><h3>{thesis.title}</h3></div>
@@ -133,12 +134,12 @@ function MarketThesisDetail({ thesis, hypothesis, busy, onAction }: { thesis: Ma
       <DetailList label="Falsifiers" items={thesis.content.falsifiers} empty="No explicit falsifier has been retained." />
       <PredictionLedger predictions={thesis.predictions} />
     </div>
-    {thesis.exposures.length > 0 ? <section className="market-thesis-exposure-ledger" aria-label="Value-chain exposures">
+    {verifiedExposures.length > 0 ? <section className="market-thesis-exposure-ledger" aria-label="Verified value-chain exposures">
       <span>Value-chain exposures</span>
-      <div>{thesis.exposures.map((item) => <p key={item.id}><strong>{item.symbol ?? item.entityName}</strong><span>{item.role}</span><small>{item.mechanism}</small><em>{item.verificationStatus.replaceAll('_', ' ')}</em></p>)}</div>
+      <div>{verifiedExposures.map((item) => <p key={item.id}><strong>{item.symbol ?? item.entityName}</strong><span>{item.mechanism}</span></p>)}</div>
     </section> : null}
     <footer>
-      <div className="market-thesis-source-ledger"><span>Evidence ledger</span>{sources.slice(0, 4).map((source) => <a key={`${source.label}:${source.url}`} href={source.url} target="_blank" rel="noreferrer">{source.label}<ArrowRight size={12} aria-hidden="true" /></a>)}</div>
+      {sources.length > 0 ? <details className="market-thesis-source-ledger"><summary>{countLabel(sources.length, 'source')}</summary><div>{sources.map((source) => <a key={`${source.label}:${source.url}`} href={source.url} target="_blank" rel="noreferrer">{source.label}<ArrowRight size={12} aria-hidden="true" /></a>)}</div></details> : <span />}
       <div className="market-thesis-detail-actions">
         <small>Generated {dateLabel(thesis.generatedAt)}{thesis.revisionDiff.length ? ` · ${thesis.revisionDiff[0]}` : ''}</small>
         {hypothesis && primary ? <button type="button" disabled={busy !== null} onClick={() => void onAction(hypothesis, primary.action)}>{busy === `${hypothesis.id}:${primary.action}` ? 'Saving…' : primary.label}</button> : null}
@@ -187,7 +188,7 @@ function ResearchQueue({ hypotheses, frontiers, busy, onAction }: { hypotheses: 
 function CrossDomainMap({ links, hypothesesById }: { links: MarketHypothesisCrossDomainLink[]; hypothesesById: Map<string, MarketHypothesis> }) {
   if (links.length === 0) return null
   return <details className="market-thesis-transmission">
-    <summary><span><p className="markets-eyebrow">Transmission map</p><strong>Where the models connect</strong></span><small>{countLabel(links.length, 'retained link')}</small><CaretDown size={15} aria-hidden="true" /></summary>
+    <summary><strong>Related model links</strong><small>{countLabel(links.length, 'link')}</small><CaretDown size={15} aria-hidden="true" /></summary>
     <div>{links.map((link) => <article key={link.id}><span>{link.relationship}</span><strong>{hypothesesById.get(link.fromHypothesisId)?.title ?? 'Source model'}<ArrowRight size={14} aria-hidden="true" />{hypothesesById.get(link.toHypothesisId)?.title ?? 'Destination model'}</strong><p>{link.explanation}</p><small>{countLabel(link.sourceObservationIds.length, 'linked observation')} · {Math.round(link.confidence)}% confidence</small></article>)}</div>
   </details>
 }

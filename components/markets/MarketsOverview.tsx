@@ -1,9 +1,8 @@
 'use client'
 
 import { ArrowSquareOut } from '@phosphor-icons/react'
-import { useState } from 'react'
 import { MarketsIntentLink } from './MarketsIntentLink'
-import { buildMarketAttention, buildMarketCheckpoints } from '@/lib/markets/attention'
+import { buildMarketDailyBrief } from '@/lib/markets/brief'
 import type { MarketOverviewResponse } from '@/lib/markets/types'
 
 interface MarketsOverviewProps {
@@ -74,21 +73,20 @@ function dataStatusLabel(value: MarketOverviewResponse['instruments'][number]['d
 }
 
 export function MarketsOverview({ overview }: MarketsOverviewProps) {
-  const [selectedEvidenceId, setSelectedEvidenceId] = useState(overview.evidence[0]?.id ?? '')
   const sessionLabel = tradingSessionLabel(overview.leadership?.tradingDate)
-  const attention = buildMarketAttention(overview.leadership, sessionLabel)
-  const checkpoints = buildMarketCheckpoints(overview.leadership)
+  const brief = buildMarketDailyBrief(overview)
 
   return (
     <article className="market-overview">
       <section className="market-overview-hero" aria-labelledby="market-state-title">
-        <p className="markets-eyebrow">Market state</p>
+        <p className="markets-eyebrow">Markets</p>
         <h1 id="market-state-title" className="markets-display market-overview-title">
-          {overview.state.regime}
+          Daily market brief
         </h1>
+        <p className="market-overview-deck">{brief.summary}</p>
         <div className="market-overview-meta">
-          <span>{overview.state.confidence}% confidence</span>
-          <span>{feedLabel(overview.feed)}{overview.stale ? ' · Stale' : ''}</span>
+          <span>{overview.state.regime}</span>
+          <span>{feedLabel(overview.feed)} · {formatMarketTime(overview.dataAsOf)}{overview.stale ? ' · Stale' : ''}</span>
         </div>
       </section>
 
@@ -116,43 +114,20 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
         ))}
       </section>
 
-      <section className="market-overview-evidence-grid">
-        <div className="market-change-panel">
-          <h2>What changed</h2>
-          <ol className="market-change-list">
-            {overview.memo.changes.map((change) => (
-              <li key={change.id}>
-                <p>{change.body}</p>
-                <span>Source: {change.source} · {change.sourceTime}</span>
-              </li>
-            ))}
-          </ol>
+      <section className="market-daily-brief" aria-labelledby="market-daily-brief-title">
+        <header>
+          <div><p className="markets-eyebrow">The read</p><h2 id="market-daily-brief-title">What matters today</h2></div>
+          <span>{formatMarketTime(overview.dataAsOf)}</span>
+        </header>
+        <div className="market-daily-brief-lines">
+          {brief.lines.map((line) => line.href ? (
+            <MarketsIntentLink key={line.label} href={line.href}><span>{line.label}</span><p>{line.text}</p></MarketsIntentLink>
+          ) : <div key={line.label}><span>{line.label}</span><p>{line.text}</p></div>)}
         </div>
-
-        <div className="market-evidence-panel">
-          <h2>Evidence</h2>
-          <div className="market-evidence-list" aria-label="Evidence sources">
-            {overview.evidence.map((evidence) => {
-              const selected = evidence.id === selectedEvidenceId
-              return (
-                <a
-                  key={evidence.id}
-                  href={evidence.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-current={selected ? 'true' : undefined}
-                  className={`market-evidence-row ${selected ? 'market-evidence-row-selected' : ''}`}
-                  onClick={() => setSelectedEvidenceId(evidence.id)}
-                >
-                  <span>{evidence.source}</span>
-                  <span title={evidence.publishedAt}>{formatEvidenceTime(evidence.publishedAt)}</span>
-                  <ArrowSquareOut size={17} aria-hidden="true" />
-                </a>
-              )
-            })}
-          </div>
-          <p className="market-evidence-count">1 of {overview.evidence.length} selected</p>
-        </div>
+        {overview.evidence.length > 0 ? <details className="market-daily-brief-sources">
+          <summary>{overview.evidence.length} {overview.evidence.length === 1 ? 'source' : 'sources'} behind this brief</summary>
+          <div>{overview.evidence.map((evidence) => <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer"><span>{evidence.source}</span><span title={evidence.publishedAt}>{formatEvidenceTime(evidence.publishedAt)}</span><ArrowSquareOut size={14} aria-hidden="true" /></a>)}</div>
+        </details> : null}
       </section>
 
       {overview.leadership ? (
@@ -163,11 +138,6 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
               <h2 id="market-structure-title">{sessionLabel}&apos;s Market Structure</h2>
             </div>
             <MarketsIntentLink href="/markets/explore?view=sub-industries">Explore all groups →</MarketsIntentLink>
-          </div>
-          <div className="market-breadth-strip">
-            <div><strong>{overview.leadership.advancingPercent.toFixed(0)}%</strong><span>advancing</span></div>
-            <div><strong>{overview.leadership.above50DayPercent.toFixed(0)}%</strong><span>above 50-day</span></div>
-            <div><strong>{overview.leadership.usableCount}/{overview.leadership.universeCount}</strong><span>usable series</span></div>
           </div>
           <div className="market-structure-columns">
             <div>
@@ -191,32 +161,9 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
         </section>
       ) : null}
 
-      {attention.length > 0 || (overview.candidates && overview.candidates.length > 0) ? (
+      {overview.candidates && overview.candidates.length > 0 ? (
         <section className="market-priority-grid" aria-label="Market attention and candidates">
-          {attention.length > 0 ? (
-            <section className="market-attention-panel" aria-labelledby="market-attention-title">
-              <div className="market-section-heading">
-                <div>
-                  <p className="markets-eyebrow">Market attention</p>
-                  <h2 id="market-attention-title">{sessionLabel}&apos;s action items</h2>
-                </div>
-                <MarketsIntentLink href="/markets/events">View events →</MarketsIntentLink>
-              </div>
-              <div className="market-attention-grid">
-                {attention.map((item) => (
-                  <MarketsIntentLink key={item.id} href={item.href} className={`market-attention-card market-attention-${item.tone}`}>
-                    <div><span>{item.eyebrow}</span><strong>{item.metric}</strong></div>
-                    <h3>{item.title}</h3>
-                    <p>{item.detail}</p>
-                    <small>Market data · Open context →</small>
-                  </MarketsIntentLink>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {overview.candidates && overview.candidates.length > 0 ? (
-            <section className="market-candidate-panel" aria-labelledby="candidate-scout-title">
+          <section className="market-candidate-panel" aria-labelledby="candidate-scout-title">
               <div className="market-section-heading">
                 <div>
                   <p className="markets-eyebrow">Candidate Scout</p>
@@ -263,8 +210,7 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
                   </div>
                 </aside>
               ) : null}
-            </section>
-          ) : null}
+          </section>
         </section>
       ) : null}
 
@@ -290,14 +236,6 @@ export function MarketsOverview({ overview }: MarketsOverviewProps) {
                 <strong>{signal.groupLabel}</strong><span>{signal.summary}</span>
               </MarketsIntentLink>
             )) : <p className="market-analysis-empty">No material short-term versus long-term divergence is available in this snapshot.</p>}
-          </div>
-          <div className="market-checkpoints">
-            <div className="market-analysis-heading"><p className="markets-eyebrow">Market checkpoints</p><h2>What would change the read</h2></div>
-            {checkpoints.map((item) => (
-              <div key={item.id} className={`market-checkpoint market-checkpoint-${item.tone}`}>
-                <span>{item.label}</span><strong>{item.value}</strong><small>{item.detail}</small>
-              </div>
-            ))}
           </div>
         </section>
       ) : null}
