@@ -10,8 +10,6 @@ import {
   newYorkClockParts,
 } from '../markets/market-clock.ts'
 import { isMarketWorldModelEnabled } from './world-memory.ts'
-import { fetchActiveMarketDomainPacks } from './world-source-control.ts'
-import { listWorldSourceAdapters } from './world-sources.ts'
 
 export interface ScheduledAgentJob {
   jobType: AgentJobType
@@ -90,40 +88,26 @@ export function buildDueAgentJobs(
   }
   jobs.push(scheduledJob('monitor-investment-theses', now, { cadenceMinutes: monitorCadence }))
   const newYork = newYorkClockParts(now)
-  // Injected adapters are used by deterministic schedule tests; production
-  // reaches this branch only when the guarded world model is enabled.
+  // The optional adapters value keeps schedule tests independent of process
+  // environment. Production resolves durable active domains inside the cycle.
   if (isMarketWorldModelEnabled() || options.worldSourceAdapters !== undefined) {
-    if (newYork.hour === 16 && newYork.minute < 10) {
-      jobs.push(scheduledJob('verify-world-source-health', now))
-    }
-    if (newYork.hour === 17 && newYork.minute < 10) {
-      // The fallback keeps direct schedule tests deterministic. The worker
-      // supplies the durable active-domain selection in normal operation.
-      const adapters = options.worldSourceAdapters ?? [{ id: 'ai-power-v1', cadence: 'daily' }]
-      for (const adapter of adapters) {
-        if (adapter.cadence === 'daily' || (adapter.cadence === 'weekly' && newYork.weekday === 'Sun')) {
-          jobs.push(scheduledJob('ingest-world-source', now, { adapterId: adapter.id }))
-        }
-      }
-    }
-    if (newYork.hour === 17 && newYork.minute >= 20 && newYork.minute < 30) {
-      jobs.push(scheduledJob('collect-world-source-documents', now))
-    }
-    if (newYork.hour === 18 && newYork.minute < 10) {
-      jobs.push(scheduledJob('compile-world-baseline', now, { scopeType: 'global', scopeKey: 'global' }))
-    }
-    if (newYork.hour === 20 && newYork.minute < 10) {
-      jobs.push(scheduledJob('synthesize-market-hypotheses', now))
+    const cycle = newYork.hour === 6 ? 'pre-market' : newYork.hour === 18 ? 'post-close' : null
+    if (cycle && newYork.minute < 10) {
+      // A cycle owns sources -> baseline -> hypothesis correlation -> research
+      // routing. Independent wall-clock jobs race and can only inspect stale
+      // state, which is not a meaningful refresh.
+      jobs.push(scheduledJob('run-market-thesis-cycle', now, { cycle, cycleDate: newYork.date }))
     }
     if (newYork.hour % 6 === 0 && newYork.minute < 10) {
       // The orchestrator is the sole 6h research control plane. It auto-accepts
       // eligible proposals, then enqueues bounded child jobs (scout, collect,
       // critic, prediction eval) under explicit cost caps.
-      jobs.push(scheduledJob('orchestrate-market-research', now))
+      // The coordinated cycles run their own planner after their fresh
+      // source-to-hypothesis chain has completed.
+      if (newYork.hour !== 6 && newYork.hour !== 18) jobs.push(scheduledJob('orchestrate-market-research', now))
     }
-    if (newYork.weekday === 'Sun' && newYork.hour === 18 && newYork.minute < 10) {
-      jobs.push(scheduledJob('correlate-market-signals', now, { mode: 'weekly' }))
-    }
+    // The coordinated post-close cycle already performs the weekly correlation
+    // pass on Sundays, so do not run a competing standalone correlation job.
     if (newYork.weekday === 'Sun' && newYork.hour === 19 && newYork.minute < 10) {
       jobs.push(scheduledJob('review-world-source-coverage', now))
     }
@@ -153,23 +137,7 @@ export async function enqueueDueAgentJobs(
   options: AgentScheduleOptions = {},
 ): Promise<Array<ScheduledAgentJob & { id: string; deduplicated: boolean }>> {
   const enqueued = []
-  const newYork = newYorkClockParts(now)
-  let worldSourceAdapters = options.worldSourceAdapters
-  if (worldSourceAdapters === undefined && isMarketWorldModelEnabled() && newYork.hour === 17 && newYork.minute < 10) {
-    try {
-      const activeDomains = new Set((await fetchActiveMarketDomainPacks()).map((pack) => pack.id))
-      worldSourceAdapters = listWorldSourceAdapters()
-        .filter((adapter) => activeDomains.has(adapter.domain))
-        .map((adapter) => ({ id: adapter.id, cadence: adapter.cadence }))
-    } catch (error) {
-      // Fail closed for source ingestion while allowing other market jobs to
-      // proceed. A static adapter list is never an approval decision.
-      console.warn(`Unable to resolve active world-source adapters: ${error instanceof Error ? error.message : String(error)}`)
-      worldSourceAdapters = []
-    }
-  }
-
-  for (const job of buildDueAgentJobs(now, { ...options, ...(worldSourceAdapters === undefined ? {} : { worldSourceAdapters }) })) {
+  for (const job of buildDueAgentJobs(now, options)) {
     if (lastScheduledKeys.get(job.jobType) === job.dedupeKey) continue
     const result = await enqueueAgentJob(job.jobType, job.payload, job.dedupeKey)
     lastScheduledKeys.set(job.jobType, job.dedupeKey)

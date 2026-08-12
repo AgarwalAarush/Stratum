@@ -27,8 +27,8 @@ import {
   runMarketWorldCycle,
 } from './world-memory.ts'
 import { backupMarketCorpus, verifyMarketCorpusBackup } from './world-backup.ts'
-import { getWorldSourceAdapter } from './world-sources.ts'
-import { findCandidateSourcePreflights, findWorldSourceCoverageScoutPlans, isMarketDomainActive, runWorldSourceScout } from './world-source-control.ts'
+import { getWorldSourceAdapter, listWorldSourceAdapters } from './world-sources.ts'
+import { fetchActiveMarketDomainPacks, findCandidateSourcePreflights, findWorldSourceCoverageScoutPlans, isMarketDomainActive, runWorldSourceScout } from './world-source-control.ts'
 import { runMarketResearchScout } from './market-research-scout.ts'
 import { auditWorldSourceHealth, preflightWorldSourceCandidate } from './world-source-health.ts'
 import { collectGovernedWorldSourceDocuments } from './world-source-collector.ts'
@@ -66,6 +66,7 @@ export const AGENT_JOB_TYPES = [
   'generate-weekly-overview',
   'generate-monthly-overview',
   'ingest-world-source',
+  'run-market-thesis-cycle',
   'verify-world-source-health',
   'preflight-world-source-candidate',
   'collect-world-source-documents',
@@ -137,6 +138,9 @@ export function parseAgentJobType(value: unknown): AgentJobType {
 }
 
 export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), payload: Record<string, unknown> = {}): string {
+  if (jobType === 'run-market-thesis-cycle' && typeof payload.cycleDate === 'string' && (payload.cycle === 'pre-market' || payload.cycle === 'post-close')) {
+    return `${jobType}:${payload.cycleDate}:${payload.cycle}`
+  }
   if (jobType === 'sync-robinhood-portfolio' && typeof payload.tradingDate === 'string' && typeof payload.slot === 'string') {
     return `${jobType}:${payload.tradingDate}:${payload.slot}`
   }
@@ -286,7 +290,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-robinhood-portfolio') return 'robinhood'
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'fetch-stock-price-history' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
-  if (jobType === 'ingest-world-source' || jobType === 'verify-world-source-health' || jobType === 'preflight-world-source-candidate' || jobType === 'collect-world-source-documents') return 'market-data'
+  if (jobType === 'ingest-world-source' || jobType === 'run-market-thesis-cycle' || jobType === 'verify-world-source-health' || jobType === 'preflight-world-source-candidate' || jobType === 'collect-world-source-documents') return 'market-data'
   if (jobType === 'triage-world-observation-proposals' || jobType === 'scout-market-research') return 'codex'
   if (
     jobType === 'refresh-cross-asset'
@@ -557,10 +561,113 @@ export async function enqueueAgentJob(
   return { id: inserted.id, deduplicated: false }
 }
 
+type MarketThesisCycle = 'pre-market' | 'post-close'
+
+function validMarketThesisCycle(value: unknown): value is MarketThesisCycle {
+  return value === 'pre-market' || value === 'post-close'
+}
+
+/**
+ * One source adapter is intentionally reusable by both the manual adapter job
+ * and the coordinated market-thesis cycle. The cycle keeps downstream work
+ * in process so a baseline cannot race ahead of a still-running source fetch.
+ */
+async function ingestWorldSourceAdapter(adapterId: string): Promise<{
+  adapterId: string
+  sourceCount: number
+  observationIds: string[]
+  failedSources: Array<{ sourceId: string; message: string }>
+}> {
+  const adapter = getWorldSourceAdapter(adapterId)
+  if (!adapter) throw new Error(`Unknown world-source adapter: ${adapterId}`)
+  if (!(await isMarketDomainActive(adapter.domain))) {
+    return { adapterId, sourceCount: 0, observationIds: [], failedSources: [{ sourceId: adapterId, message: `domain ${adapter.domain} is not active` }] }
+  }
+  const sourceResult = await adapter.ingest()
+  const stored = []
+  for (const observation of sourceResult.observations) stored.push(await ingestWorldObservation(observation))
+  return {
+    adapterId,
+    sourceCount: sourceResult.observations.length,
+    observationIds: stored.map((item) => item.id),
+    failedSources: sourceResult.failures,
+  }
+}
+
+/**
+ * A cycle is deliberately sequential: sources -> governed collection ->
+ * immutable baseline -> hypotheses -> eligible analyst/critic work. This
+ * avoids a successful-looking scheduler tick that only observes stale state.
+ */
+async function runMarketThesisCycle(
+  cycle: MarketThesisCycle,
+  reportProgress: (progress: number, phase: string) => Promise<void>,
+): Promise<Record<string, unknown>> {
+  if (!isMarketWorldModelEnabled()) return { skipped: 'MARKET_WORLD_MODEL_ENABLED is false' }
+
+  await reportProgress(5, 'checking governed source health')
+  const health = await auditWorldSourceHealth().catch((error) => ({
+    healthy: 0,
+    degraded: 0,
+    failed: 0,
+    error: error instanceof Error ? error.message : String(error),
+  }))
+  const activeDomains = new Set((await fetchActiveMarketDomainPacks()).map((pack) => pack.id))
+  const isSunday = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'America/New_York' }).format(new Date()) === 'Sun'
+  const adapters = listWorldSourceAdapters().filter((adapter) =>
+    activeDomains.has(adapter.domain) && (adapter.cadence === 'daily' || (cycle === 'post-close' && isSunday)),
+  )
+
+  const ingestions: Array<Record<string, unknown>> = []
+  for (const [index, adapter] of adapters.entries()) {
+    await reportProgress(10 + Math.round((index / Math.max(adapters.length, 1)) * 35), `ingesting ${adapter.label}`)
+    try {
+      ingestions.push(await ingestWorldSourceAdapter(adapter.id))
+    } catch (error) {
+      ingestions.push({ adapterId: adapter.id, error: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  await reportProgress(48, 'collecting governed source documents')
+  const collection = await collectGovernedWorldSourceDocuments()
+  await reportProgress(62, 'compiling the market baseline')
+  const baseline = await compileWorldBaseline('global', 'global')
+  await reportProgress(74, 'correlating source-backed hypotheses')
+  const worldCycle = await runMarketWorldCycle({ baseline })
+
+  await reportProgress(84, 'queuing eligible analyst and critic revisions')
+  const { findDueMarketHypothesisResearch } = await import('./market-thesis-research.ts')
+  const due = await findDueMarketHypothesisResearch(undefined, scheduledMarketResearchRunLimit())
+  const research = await Promise.all(due.map((item) => enqueueAgentJob('deepen-market-hypothesis', item)))
+
+  // Keep the broader planner in the same completed source cycle. Its actions
+  // remain governed and durable, but cannot get ahead of this cycle's inputs.
+  const { runMarketResearchOrchestration } = await import('./market-research-orchestrator.ts')
+  const orchestration = await runMarketResearchOrchestration({ trigger: 'scheduled' })
+  await reportProgress(100, `${adapters.length} source packets, ${due.length} eligible thesis revisions, ${orchestration.planned} governed follow-ups`)
+  return {
+    cycle,
+    sourceAdapters: adapters.map((adapter) => adapter.id),
+    ingestions,
+    health,
+    collection,
+    baselineId: baseline.id,
+    worldCycle,
+    researchQueued: research.filter((item) => !item.deduplicated).length,
+    researchHypothesisIds: due.map((item) => item.hypothesisId),
+    orchestration,
+  }
+}
+
 async function executeJob(
   job: AgentJobRecord,
   reportProgress: (progress: number, phase: string) => Promise<void> = async () => {},
 ): Promise<unknown> {
+  if (job.job_type === 'run-market-thesis-cycle') {
+    if (!validMarketThesisCycle(job.payload.cycle)) throw new Error('Market thesis cycle requires a valid cycle')
+    return runMarketThesisCycle(job.payload.cycle, reportProgress)
+  }
+
   if (job.job_type === 'sync-robinhood-portfolio') {
     const slot = job.payload.slot
     if (slot !== 'open' && slot !== 'midday' && slot !== 'close' && slot !== 'final') {
@@ -738,31 +845,21 @@ async function executeJob(
     if (adapterId) {
       const adapter = getWorldSourceAdapter(adapterId)
       if (!adapter) throw new Error(`Unknown world-source adapter: ${adapterId}`)
-      if (!(await isMarketDomainActive(adapter.domain))) {
-        return { adapterId, skipped: `domain ${adapter.domain} is not active` }
-      }
+      if (!(await isMarketDomainActive(adapter.domain))) return { adapterId, skipped: `domain ${adapter.domain} is not active` }
       await reportProgress(10, `fetching ${adapter.label}`)
-      const sourceResult = await adapter.ingest()
-      const observations = sourceResult.observations
+      const sourceResult = await ingestWorldSourceAdapter(adapterId)
       await reportProgress(55, 'archiving source documents and observations')
-      const stored = []
-      for (const observation of observations) stored.push(await ingestWorldObservation(observation))
       await reportProgress(100, 'ingested')
-      if (isMarketWorldModelEnabled() && stored.some((item) => item.materiality >= 55)) {
+      if (isMarketWorldModelEnabled() && sourceResult.observationIds.length > 0) {
         // A source can partially succeed and then later supply the decisive
         // document. Tie downstream work to the observation set, not merely the
         // calendar day, so that recovery is visible in the next baseline.
-        const evidenceFingerprint = stored.map((item) => item.id).sort().join('-')
+        const evidenceFingerprint = [...sourceResult.observationIds].sort().join('-')
         await enqueueAgentJob('compile-world-baseline', { scopeType: 'domain', scopeKey: adapter.domain, evidenceFingerprint })
         await enqueueAgentJob('compile-world-baseline', { scopeType: 'global', scopeKey: 'global', evidenceFingerprint })
         await enqueueAgentJob('synthesize-market-hypotheses', { reason: `source:${adapterId}`, evidenceFingerprint })
       }
-      return {
-        adapterId,
-        sourceCount: observations.length,
-        observationIds: stored.map((item) => item.id),
-        failedSources: sourceResult.failures,
-      }
+      return sourceResult
     }
     const payload = job.payload.observation
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('World-source ingestion requires an observation payload')
@@ -889,9 +986,15 @@ async function executeJob(
   if (job.job_type === 'refresh-market-hypothesis-research') {
     const { findDueMarketHypothesisResearch } = await import('./market-thesis-research.ts')
     const scheduledResearchLimit = scheduledMarketResearchRunLimit()
-    const due = await findDueMarketHypothesisResearch(undefined, scheduledResearchLimit)
+    const requestedIds = Array.isArray(job.payload.hypothesisIds)
+      ? new Set(job.payload.hypothesisIds.filter((item): item is string => typeof item === 'string'))
+      : null
+    const candidates = await findDueMarketHypothesisResearch(undefined, requestedIds ? 40 : scheduledResearchLimit)
+    const due = requestedIds
+      ? candidates.filter((item) => requestedIds.has(item.hypothesisId)).slice(0, scheduledResearchLimit)
+      : candidates
     const queued = await Promise.all(due.map((item) => enqueueAgentJob('deepen-market-hypothesis', item)))
-    return { queued: queued.length, hypothesisIds: due.map((item) => item.hypothesisId), scheduledResearchLimit }
+    return { queued: queued.length, hypothesisIds: due.map((item) => item.hypothesisId), requestedHypothesisIds: requestedIds ? [...requestedIds] : null, scheduledResearchLimit }
   }
 
   if (job.job_type === 'route-market-research-frontiers') {

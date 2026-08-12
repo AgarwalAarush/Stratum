@@ -50,7 +50,7 @@ test('source health preserves a failed contract shape for review instead of chan
   assert.match(health.error ?? '', /MIME type/)
 })
 
-test('health audit is worker-only, durable, scheduled, and never auto-blocks a source', async () => {
+test('health audit is worker-only, durable, part of the coordinated cycle, and never auto-blocks a source', async () => {
   const [migration, jobs, schedule, controlRoute, panel] = await Promise.all([
     readFile(new URL('../supabase/migrations/202608040006_world_source_health_checks.sql', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8'),
@@ -63,7 +63,7 @@ test('health audit is worker-only, durable, scheduled, and never auto-blocks a s
   assert.match(jobs, /'verify-world-source-health'/)
   assert.match(jobs, /auditWorldSourceHealth/)
   assert.match(jobs, /preflightWorldSourceCandidate/)
-  assert.match(schedule, /verify-world-source-health/)
+  assert.match(schedule, /run-market-thesis-cycle/)
   assert.match(controlRoute, /'audit-health'/)
   assert.match(controlRoute, /'preflight-candidate'/)
   assert.match(panel, /Run source health audit/)

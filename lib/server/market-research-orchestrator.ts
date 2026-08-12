@@ -4,6 +4,7 @@ import { enqueueAgentJob, type AgentJobType } from './agent-jobs.ts'
 import { scheduledMarketResearchRunLimit, selectMarketModel } from './market-model-policy.ts'
 import { autoAcceptEligibleWorldObservationProposals } from './world-observation-review.ts'
 import { runCodexJson, type CodexExecResult } from './codex-exec.ts'
+import { findDueMarketHypothesisResearch } from './market-thesis-research.ts'
 
 type RecordValue = Record<string, unknown>
 
@@ -16,6 +17,10 @@ export interface OrchestrationDomainInput {
   contradictingLeads: number
   strongestDisconfirmingClaim: string | null
   freshGovernedEvidence: number
+  /** A generic domain pulse is not enough to spend an analyst/critic pass.
+   * These are the exact hypotheses whose linked evidence is newer than their
+   * most recent research artifact. */
+  eligibleResearchHypothesisIds?: string[]
   approvedSourceCount: number
   duePredictionIds: string[]
   recentActionTypes: MarketOrchestrationActionType[]
@@ -81,6 +86,7 @@ export function planMarketResearchActions(
       reliableRecurringPublishers: input.reliableRecurringPublishers,
       contradictingLeads: input.contradictingLeads,
       freshGovernedEvidence: input.freshGovernedEvidence,
+      eligibleResearchHypotheses: input.eligibleResearchHypothesisIds?.length ?? 0,
       approvedSourceCount: input.approvedSourceCount,
       duePredictions: input.duePredictionIds.length,
       marketRegime,
@@ -137,13 +143,14 @@ export function planMarketResearchActions(
         deterministicSignals: signals, payload: { trigger: 'orchestration' }, jobType: 'scout-world-sources', costTier: 'cheap',
       })
     }
-    if ((input.evidenceReceived > 0 || input.freshGovernedEvidence >= 3) && eligible(input, 'critic_revision')) {
+    const eligibleResearch = input.eligibleResearchHypothesisIds ?? []
+    if (eligibleResearch.length > 0 && eligible(input, 'critic_revision')) {
       actions.push({
         domainId: input.domainId, actionType: 'critic_revision', priority: nudge('critic_revision', 55),
-        rationale: input.evidenceReceived > 0
-          ? `${input.evidenceReceived} frontier item${input.evidenceReceived === 1 ? ' has' : 's have'} accepted governed evidence and need bounded analyst-plus-critic reassessment.`
-          : `${input.freshGovernedEvidence} fresh governed observations warrant a bounded research/critic refresh, not a thesis promotion.`,
-        deterministicSignals: signals, payload: { trigger: 'orchestration' }, jobType: 'refresh-market-hypothesis-research', costTier: 'strong',
+        rationale: `${eligibleResearch.length} thesis ${eligibleResearch.length === 1 ? 'has' : 'have'} newly linked governed evidence and is eligible for bounded analyst-plus-critic reassessment.`,
+        deterministicSignals: signals,
+        payload: { trigger: 'orchestration', hypothesisIds: eligibleResearch },
+        jobType: 'refresh-market-hypothesis-research', costTier: 'strong',
       })
     }
     if (input.approvedSourceCount > 0 && input.freshGovernedEvidence === 0 && eligible(input, 'collect_known_source')) {
@@ -439,6 +446,18 @@ export async function runMarketResearchOrchestration(input: {
   // Prefer no-model work first: clear eligible quote-bound proposals before planning.
   const autoAccept = await autoAcceptEligibleWorldObservationProposals({ limit: 40 })
   const context = await loadInputs(now)
+  const dueResearch = await findDueMarketHypothesisResearch(undefined, 40)
+  const dueIds = dueResearch.map((item) => item.hypothesisId)
+  if (dueIds.length > 0) {
+    const { data: hypotheses, error } = await supabase.from('market_hypotheses').select('id,scope').in('id', dueIds)
+    if (error) throw new Error(`Unable to map eligible thesis research: ${error.message}`)
+    const dueByDomain = new Map<string, string[]>()
+    for (const row of hypotheses ?? []) {
+      const domainId = String(row.scope)
+      dueByDomain.set(domainId, [...(dueByDomain.get(domainId) ?? []), String(row.id)])
+    }
+    for (const domain of context.inputs) domain.eligibleResearchHypothesisIds = dueByDomain.get(domain.domainId) ?? []
+  }
   const researchRunLimit = scheduledMarketResearchRunLimit()
   const plannedAll = planMarketResearchActions(context.inputs, { marketRegime: context.marketRegime })
   const expensive = plannedAll.filter((action) => EXPENSIVE_ACTIONS.has(action.actionType))

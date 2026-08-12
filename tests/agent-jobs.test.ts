@@ -25,6 +25,7 @@ test('agent job parser rejects unknown work', () => {
   assert.equal(parseAgentJobType('scout-market-research'), 'scout-market-research')
   assert.equal(parseAgentJobType('review-world-source-coverage'), 'review-world-source-coverage')
   assert.equal(parseAgentJobType('verify-world-source-health'), 'verify-world-source-health')
+  assert.equal(parseAgentJobType('run-market-thesis-cycle'), 'run-market-thesis-cycle')
   assert.equal(parseAgentJobType('preflight-world-source-candidate'), 'preflight-world-source-candidate')
   assert.equal(parseAgentJobType('evaluate-market-prediction'), 'evaluate-market-prediction')
   assert.throws(() => parseAgentJobType('place-order'), /Unsupported agent job type/)
@@ -94,6 +95,12 @@ test('five-minute market refreshes receive stable dedupe buckets', () => {
     'compile-world-baseline:domain:ai-power:2026-08-03T21:00:00.000Z',
   )
   assert.equal(
+    buildAgentJobDedupeKey('run-market-thesis-cycle', new Date('2026-08-03T21:03:00Z'), {
+      cycleDate: '2026-08-03', cycle: 'post-close',
+    }),
+    'run-market-thesis-cycle:2026-08-03:post-close',
+  )
+  assert.equal(
     buildAgentJobDedupeKey('compile-world-baseline', new Date('2026-08-03T21:03:00Z'), {
       scopeType: 'domain', scopeKey: 'ai-power', evidenceFingerprint: 'observation-a-observation-b',
     }),
@@ -160,6 +167,7 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('scout-world-sources'), 'codex')
   assert.equal(agentJobProvider('scout-market-research'), 'codex')
   assert.equal(agentJobProvider('verify-world-source-health'), 'market-data')
+  assert.equal(agentJobProvider('run-market-thesis-cycle'), 'market-data')
   assert.equal(agentJobProvider('preflight-world-source-candidate'), 'market-data')
   assert.equal(agentJobProvider('triage-world-observation-proposals'), 'codex')
 })
@@ -194,7 +202,8 @@ test('bounded market-research jobs persist their actual routed model policy', as
   assert.match(source, /marketModelRouting: modelRouting/)
   assert.match(source, /input_refs: \[job\.payload/)
   assert.match(source, /scheduledMarketResearchRunLimit/)
-  assert.match(source, /findDueMarketHypothesisResearch\(undefined, scheduledResearchLimit\)/)
+  assert.match(source, /findDueMarketHypothesisResearch\(undefined, requestedIds \? 40 : scheduledResearchLimit\)/)
+  assert.match(source, /requestedHypothesisIds/)
 })
 
 test('market-wide orchestration uses a six-hour durable dedupe bucket', () => {

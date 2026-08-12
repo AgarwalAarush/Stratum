@@ -773,8 +773,11 @@ export async function seedAiPowerDemoObservations(ownerId: string): Promise<{ ob
   return { observations: sources.length, hypothesis, thesis }
 }
 
-export async function runMarketWorldCycle(): Promise<{ baselineId: string; hypotheses: number; crossDomainLinks: number; promoted: number }> {
-  const baseline = await compileWorldBaseline('global', 'global')
+export async function runMarketWorldCycle(options: { baseline?: WorldBaseline } = {}): Promise<{ baselineId: string; hypotheses: number; crossDomainLinks: number; promoted: number }> {
+  // A coordinated cycle compiles its baseline immediately after source
+  // ingestion, then passes that immutable result here. Other callers retain
+  // the standalone behavior without being able to observe a half-cycle.
+  const baseline = options.baseline ?? await compileWorldBaseline('global', 'global')
   const supabase = getSupabaseClient()!
   const { data: owners, error } = await supabase.from('market_users').select('id').limit(20)
   if (error) throw new Error(`Unable to load market thesis owners: ${error.message}`)

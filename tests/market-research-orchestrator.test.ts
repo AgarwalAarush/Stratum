@@ -10,7 +10,7 @@ import {
 const emptyDomain = {
   pendingReviews: 0, queuedFrontierIds: [] as string[], evidenceReceived: 0,
   reliableRecurringPublishers: 0, contradictingLeads: 0, strongestDisconfirmingClaim: null as string | null,
-  freshGovernedEvidence: 0, approvedSourceCount: 0, duePredictionIds: [] as string[], recentActionTypes: [] as never[],
+  freshGovernedEvidence: 0, eligibleResearchHypothesisIds: [] as string[], approvedSourceCount: 0, duePredictionIds: [] as string[], recentActionTypes: [] as never[],
 }
 
 test('market orchestrator selects bounded work without collapsing evidence into a thesis', () => {
@@ -23,7 +23,7 @@ test('market orchestrator selects bounded work without collapsing evidence into 
     },
     {
       ...emptyDomain,
-      domainId: 'critical-materials', evidenceReceived: 2, freshGovernedEvidence: 3, approvedSourceCount: 2,
+      domainId: 'critical-materials', evidenceReceived: 2, freshGovernedEvidence: 3, eligibleResearchHypothesisIds: ['hyp-1'], approvedSourceCount: 2,
       duePredictionIds: ['pred-1'],
     },
   ], { marketRegime: 'Risk-Off policy shock' })
@@ -49,8 +49,8 @@ test('market orchestrator observes cooldowns and emits a no-action audit record'
 
 test('budget defers expensive work and marks contention for the model arbitrator', () => {
   const actions = planMarketResearchActions([
-    { ...emptyDomain, domainId: 'ai-power', queuedFrontierIds: ['f1'], freshGovernedEvidence: 4, approvedSourceCount: 2 },
-    { ...emptyDomain, domainId: 'critical-materials', queuedFrontierIds: ['f2'], evidenceReceived: 1, approvedSourceCount: 2 },
+    { ...emptyDomain, domainId: 'ai-power', queuedFrontierIds: ['f1'], freshGovernedEvidence: 4, eligibleResearchHypothesisIds: ['hyp-1'], approvedSourceCount: 2 },
+    { ...emptyDomain, domainId: 'critical-materials', queuedFrontierIds: ['f2'], evidenceReceived: 1, eligibleResearchHypothesisIds: ['hyp-2'], approvedSourceCount: 2 },
     { ...emptyDomain, domainId: 'semicap-data-center-equipment', contradictingLeads: 2, strongestDisconfirmingClaim: 'Lead times eased', approvedSourceCount: 1 },
   ])
   const budget = applyOrchestrationBudget(actions, { researchRunLimit: 2 })
@@ -58,6 +58,20 @@ test('budget defers expensive work and marks contention for the model arbitrator
   assert.ok(budget.selected.filter((action) => ['investigate_broad', 'investigate_counter_evidence', 'critic_revision'].includes(action.actionType)).length <= 2)
   assert.ok(budget.deferred.length >= 1)
   assert.ok((budget.costEstimate.deferred ?? 0) >= 1)
+})
+
+test('generic domain evidence does not queue a critic without a thesis evidence link', () => {
+  const actions = planMarketResearchActions([
+    {
+      ...emptyDomain,
+      domainId: 'ai-power',
+      evidenceReceived: 5,
+      freshGovernedEvidence: 8,
+      approvedSourceCount: 3,
+    },
+  ])
+
+  assert.equal(actions.some((action) => action.actionType === 'critic_revision'), false)
 })
 
 test('orchestration plan validator only accepts eligible keys', () => {

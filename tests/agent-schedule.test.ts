@@ -90,37 +90,23 @@ test('market synthesis has only open, midday, and close slots', () => {
   assert.equal(marketMemoSlot(new Date('2026-07-28T16:00:00Z')), null)
 })
 
-test('world-source health checks are scheduled before the daily source packet', async () => {
-  const source = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../lib/server/agent-schedule.ts', import.meta.url), 'utf8'))
-  assert.match(source, /newYork\.hour === 16/)
-  assert.match(source, /'verify-world-source-health'/)
-  assert.match(source, /newYork\.hour === 17/)
-})
-
-test('active-domain source adapters schedule by declared cadence', () => {
-  const adapters = [
-    { id: 'daily-domain', cadence: 'daily' as const },
-    { id: 'weekly-domain', cadence: 'weekly' as const },
-  ]
-  const weekday = buildDueAgentJobs(new Date('2026-07-28T21:05:00Z'), { worldSourceAdapters: adapters })
-    .filter((job) => job.jobType === 'ingest-world-source')
-  assert.deepEqual(weekday.map((job) => job.payload.adapterId), ['daily-domain'])
-
-  const sunday = buildDueAgentJobs(new Date('2026-08-02T21:05:00Z'), { worldSourceAdapters: adapters })
-    .filter((job) => job.jobType === 'ingest-world-source')
-  assert.deepEqual(sunday.map((job) => job.payload.adapterId), ['daily-domain', 'weekly-domain'])
-
-  const none = buildDueAgentJobs(new Date('2026-07-28T21:05:00Z'), { worldSourceAdapters: [] })
-    .filter((job) => job.jobType === 'ingest-world-source')
-  assert.deepEqual(none, [])
-})
-
-test('generic governed-document collection runs after source adapters', () => {
+test('a market-thesis cycle runs twice daily and owns the source-to-research chain', async () => {
   const options = { worldSourceAdapters: [] }
-  const before = buildDueAgentJobs(new Date('2026-07-28T21:05:00Z'), options).map((job) => job.jobType)
-  const collection = buildDueAgentJobs(new Date('2026-07-28T21:25:00Z'), options).map((job) => job.jobType)
-  assert.equal(before.includes('collect-world-source-documents'), false)
-  assert.equal(collection.includes('collect-world-source-documents'), true)
+  const preMarket = buildDueAgentJobs(new Date('2026-07-28T10:05:00Z'), options)
+    .find((job) => job.jobType === 'run-market-thesis-cycle')
+  const postClose = buildDueAgentJobs(new Date('2026-07-28T22:05:00Z'), options)
+    .find((job) => job.jobType === 'run-market-thesis-cycle')
+  const between = buildDueAgentJobs(new Date('2026-07-28T16:05:00Z'), options)
+    .some((job) => job.jobType === 'run-market-thesis-cycle')
+  assert.deepEqual(preMarket?.payload, { cycle: 'pre-market', cycleDate: '2026-07-28' })
+  assert.deepEqual(postClose?.payload, { cycle: 'post-close', cycleDate: '2026-07-28' })
+  assert.equal(between, false)
+  assert.equal(preMarket && preMarket.dedupeKey, 'run-market-thesis-cycle:2026-07-28:pre-market')
+  assert.equal(postClose && postClose.dedupeKey, 'run-market-thesis-cycle:2026-07-28:post-close')
+
+  const source = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8'))
+  assert.match(source, /sources -> governed collection ->[\s\S]*hypotheses -> eligible analyst\/critic work/)
+  assert.match(source, /runMarketResearchOrchestration\(\{ trigger: 'scheduled' \}\)/)
 })
 
 test('six-hour research bucket schedules only the market orchestrator', () => {
