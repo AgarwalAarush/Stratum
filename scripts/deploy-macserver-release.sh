@@ -24,7 +24,7 @@ npm ci
 # Existing repository warnings are reported, but only lint errors should block
 # an immutable worker release. Feature checks still run below before activation.
 npm run lint -- --quiet
-node --test --experimental-strip-types tests/world-memory.test.ts tests/world-sources.test.ts tests/candidate-scout.test.ts
+node --test --experimental-strip-types tests/world-memory.test.ts tests/world-sources.test.ts tests/candidate-scout.test.ts tests/agent-jobs.test.ts tests/agent-schedule.test.ts tests/market-thesis-research.test.ts tests/market-research-orchestrator.test.ts tests/world-source-health.test.ts
 npm run build
 
 # The worker environment is intentionally gitignored. Carry its existing

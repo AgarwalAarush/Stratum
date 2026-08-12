@@ -45,7 +45,7 @@ Sources are governed independently from the documents they emit. `world_source_r
 
 When a critic requests missing evidence, the worker routes at most three frontier questions per domain to a distinct scout job and marks them `deferred` for contract review. Discovery does not resolve a frontier. Only a reviewed source contract, governed capture, quote-bound proposal, and accepted observation can cause a new bounded research revision.
 
-The worker also runs `verify-world-source-health` at 16:00 ET. It records reachability, final redirect destination, HTTP status, MIME type, and latency in `world_source_health_checks`, validating the result against each source's active contract. A health failure is review telemetry only: it does not auto-approve, block, retire, ingest, activate a domain, form a thesis, or trigger a capital action.
+Each coordinated market-thesis cycle begins with `verify-world-source-health`. It records reachability, final redirect destination, HTTP status, MIME type, and latency in `world_source_health_checks`, validating the result against each source's active contract. A health failure is review telemetry only: it does not auto-approve, block, retire, ingest, activate a domain, form a thesis, or trigger a capital action.
 
 For boot persistence, replace the login-dependent LaunchAgent with the LaunchDaemon installer. Pass the stable production symlink rather than a release path:
 
@@ -110,8 +110,8 @@ The worker scheduler is enabled by default and checks once per minute. It create
 | After market-leadership materialization | `run-candidate-scout` | Enqueued by the materializer with a trading-date dedupe key |
 | Every five minutes while relevant | `monitor-investment-theses` | `/api/cron/agent-jobs` with the monitored-thesis payload |
 | Explicit coverage request only | `scout-world-sources` | `/api/cron/agent-jobs` with a bounded domain and source-gap reason |
-| Daily at 16:00 ET when the market-world model is enabled | `verify-world-source-health` | `/api/cron/agent-jobs` with `{"jobType":"verify-world-source-health"}` |
-| Every six hours when the market-world model is enabled | `refresh-market-hypothesis-research`, `route-market-research-frontiers`, `evaluate-market-predictions` | `/api/cron/agent-jobs` with the corresponding job type |
+| 06:00 and 18:00 ET when the market-world model is enabled | `run-market-thesis-cycle` — health audit, governed-source ingestion, document collection, baseline, correlation, then eligible research and orchestration | `/api/cron/agent-jobs` with `{"jobType":"run-market-thesis-cycle","cycle":"pre-market"}` or `{"cycle":"post-close"}` |
+| Every six hours outside those coordinated slots | `orchestrate-market-research` | `/api/cron/agent-jobs` with `{"jobType":"orchestrate-market-research"}` |
 | Daily after 12:00 UTC | `generate-morning-brief` | `/api/cron/morning-brief` |
 | Mondays after 13:00 UTC | `generate-weekly-overview` | `/api/cron/weekly-overview` |
 | 1st and 15th after 14:00 UTC | `generate-monthly-overview` | `/api/cron/monthly-overview` |
