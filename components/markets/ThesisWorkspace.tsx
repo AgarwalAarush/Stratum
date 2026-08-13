@@ -3,11 +3,13 @@
 import { type FormEvent, useState } from 'react'
 import { Check, Pause, Play, Plus, Pulse, X } from '@phosphor-icons/react'
 import type {
+  CompanyThesisReviewPacket,
   InvestmentThesis,
   ThesisEntityType,
   ThesisIntakeDraft,
   ThesisMonitor,
   ThesisMonitorStatus,
+  ThesisReviewDecision,
   ThesisWorkspaceData,
   MarketThesisWorkspaceData,
 } from '@/lib/markets/types'
@@ -99,6 +101,7 @@ export function ThesisWorkspace({ initialData, initialMarketData }: { initialDat
   const [proposals, setProposals] = useState(initialData.proposals)
   const [accepted, setAccepted] = useState(initialData.accepted)
   const [monitors, setMonitors] = useState(initialData.monitors)
+  const [reviewPackets, setReviewPackets] = useState(initialData.reviewPackets ?? {})
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
   const [showIntake, setShowIntake] = useState(false)
@@ -150,31 +153,39 @@ export function ThesisWorkspace({ initialData, initialMarketData }: { initialDat
     }
   }
 
-  const review = async (thesis: InvestmentThesis, decision: 'accept' | 'reject') => {
+  const review = async (thesis: InvestmentThesis, decision: ThesisReviewDecision, rationale: string) => {
     setBusy(thesis.id)
     setNotice('')
     try {
       const response = await fetch('/api/markets/theses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ thesisId: thesis.id, decision }),
+        body: JSON.stringify({ thesisId: thesis.id, decision, rationale }),
       })
-      const payload = await response.json() as { error?: string; workspace?: ThesisWorkspaceData }
+      const payload = await response.json() as { error?: string; researchQueued?: boolean; workspace?: ThesisWorkspaceData }
       if (!response.ok) throw new Error(payload.error ?? 'Unable to review thesis')
       if (payload.workspace) {
         setProposals(payload.workspace.proposals)
         setAccepted(payload.workspace.accepted)
         setMonitors(payload.workspace.monitors)
+        setReviewPackets(payload.workspace.reviewPackets)
       } else {
         setProposals((current) => current.filter((item) => item.id !== thesis.id))
-        if (decision === 'accept') {
+        if (decision === 'accept' || decision === 'no_trade') {
           setAccepted((current) => [
             { ...thesis, status: 'accepted', reviewedAt: new Date().toISOString() },
             ...current.filter((item) => item.entityKey !== thesis.entityKey),
           ])
         }
       }
-      setNotice(decision === 'accept' ? `${title(thesis)} is now an active company thesis.` : `${title(thesis)} proposal rejected.`)
+      const detail = decision === 'accept'
+        ? `${title(thesis)} is now an active company thesis and monitoring is on.`
+        : decision === 'no_trade'
+          ? `${title(thesis)} is now monitored with no capital action recorded.`
+          : decision === 'revise'
+            ? `${title(thesis)} was preserved for revision.${payload.researchQueued ? ' Fresh company research is queued.' : ''}`
+            : `${title(thesis)} proposal rejected.`
+      setNotice(detail)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to review thesis')
     } finally {
@@ -222,8 +233,8 @@ export function ThesisWorkspace({ initialData, initialMarketData }: { initialDat
       <section className="thesis-context-strip" aria-label="Company thesis context"><Pulse size={16} weight="bold" aria-hidden="true" /><p>A company thesis is an explicit belief about a security, its mispricing, and the fastest evidence that could disprove it.</p><span>Review activates monitoring; no revision silently replaces the current view.</span></section>
 
       {showIntake ? <ThesisIntake draft={draft} busy={busy} setEntityType={setEntityType} updateDraft={updateDraft} onSubmit={createThesis} /> : null}
-      <ProposalQueue proposals={proposals} busy={busy} onReview={review} />
-      <AcceptedTheses accepted={accepted} monitors={monitorByEntity} busy={busy} onMonitorChange={setMonitorStatus} />
+      <ProposalQueue proposals={proposals} packets={reviewPackets} busy={busy} onReview={review} />
+      <AcceptedTheses accepted={accepted} packets={reviewPackets} monitors={monitorByEntity} busy={busy} onMonitorChange={setMonitorStatus} />
       {notice ? <p className="thesis-notice" role="status">{notice}</p> : null}
     </div> : null}
   </section>
@@ -243,28 +254,69 @@ function ThesisIntake({ draft, busy, setEntityType, updateDraft, onSubmit }: { d
   </form>
 }
 
-function ProposalQueue({ proposals, busy, onReview }: { proposals: InvestmentThesis[]; busy: string | null; onReview: (thesis: InvestmentThesis, decision: 'accept' | 'reject') => Promise<void> }) {
+function ProposalQueue({ proposals, packets, busy, onReview }: { proposals: InvestmentThesis[]; packets: Record<string, CompanyThesisReviewPacket>; busy: string | null; onReview: (thesis: InvestmentThesis, decision: ThesisReviewDecision, rationale: string) => Promise<void> }) {
+  const [reviewingId, setReviewingId] = useState<string | null>(null)
+  const [decision, setDecision] = useState<ThesisReviewDecision>('accept')
+  const [rationale, setRationale] = useState('')
+  const beginReview = (thesisId: string, nextDecision: ThesisReviewDecision) => {
+    setReviewingId(thesisId)
+    setDecision(nextDecision)
+    setRationale('')
+  }
   return <section className="company-thesis-review" aria-labelledby="thesis-review-title">
     <header className="thesis-section-heading"><div><p className="markets-eyebrow">Review queue</p><h2 id="thesis-review-title">Views waiting on a decision</h2></div><span>{countLabel(proposals.length, 'proposal')}</span></header>
     {proposals.length === 0 ? <EmptyCompanyState title="Nothing needs review right now." detail="A completed research run or a directly captured view will show up here." /> : <div className="company-thesis-review-rows">{proposals.map((thesis) => <article key={thesis.id}>
       <div className="company-thesis-identity"><span className="thesis-status-pill" data-status="proposed">proposed · v{thesis.version}</span><h3>{thesis.symbol ? <StockDestinationMenu symbol={thesis.symbol} /> : title(thesis)}</h3><small>{label(thesis)} · {proposalDate(thesis.generatedAt)}</small></div>
-      <div className="company-thesis-statement"><strong>{thesis.content.headline}</strong><details className="company-thesis-evidence"><summary>Review evidence</summary><div>{thesis.content.summary ? <p>{thesis.content.summary}</p> : null}<dl><div><dt>Key debate</dt><dd>{thesis.content.keyDebate || 'Not defined yet.'}</dd></div><div><dt>Fastest disconfirming evidence</dt><dd>{thesis.content.fastestKillSignal || 'Not defined yet.'}</dd></div></dl></div></details></div>
-      <footer><small>{thesis.sources.length} linked source{thesis.sources.length === 1 ? '' : 's'} · {thesis.trigger.replaceAll('-', ' ')}</small><div><button type="button" className="thesis-quiet-action" onClick={() => void onReview(thesis, 'reject')} disabled={busy === thesis.id}><X size={13} weight="bold" /> Reject</button><button type="button" className="thesis-primary-action" onClick={() => void onReview(thesis, 'accept')} disabled={busy === thesis.id}><Check size={13} weight="bold" /> {busy === thesis.id ? 'Saving…' : 'Accept thesis'}</button></div></footer>
+      <div className="company-thesis-statement"><strong>{thesis.content.headline}</strong><ReviewPacket thesis={thesis} packet={packets[thesis.id]} /></div>
+      {reviewingId === thesis.id ? <form className="company-thesis-review-form" onSubmit={(event) => { event.preventDefault(); void onReview(thesis, decision, rationale).then(() => setReviewingId(null)) }}>
+        <fieldset><legend>Review outcome</legend><div>{(['accept', 'no_trade', 'revise', 'reject'] as ThesisReviewDecision[]).map((option) => <button key={option} type="button" data-selected={decision === option} onClick={() => setDecision(option)}>{reviewDecisionLabel(option)}</button>)}</div></fieldset>
+        <label>Rationale<textarea required minLength={3} maxLength={2000} value={rationale} onChange={(event) => setRationale(event.target.value)} placeholder={reviewDecisionPrompt(decision)} /></label>
+        <footer><button type="submit" className="thesis-primary-action" disabled={busy === thesis.id || rationale.trim().length < 3}>{busy === thesis.id ? 'Recording…' : `Record ${reviewDecisionLabel(decision)}`}</button><button type="button" className="thesis-quiet-action" disabled={busy === thesis.id} onClick={() => setReviewingId(null)}>Cancel</button></footer>
+      </form> : <footer><small>{thesis.sources.length} linked source{thesis.sources.length === 1 ? '' : 's'} · {thesis.trigger.replaceAll('-', ' ')}</small><div><button type="button" className="thesis-quiet-action" onClick={() => beginReview(thesis.id, 'reject')} disabled={busy === thesis.id}><X size={13} weight="bold" /> Reject</button><button type="button" className="thesis-quiet-action" onClick={() => beginReview(thesis.id, 'revise')} disabled={busy === thesis.id}>Revise</button><button type="button" className="thesis-quiet-action" onClick={() => beginReview(thesis.id, 'no_trade')} disabled={busy === thesis.id}>No trade</button><button type="button" className="thesis-primary-action" onClick={() => beginReview(thesis.id, 'accept')} disabled={busy === thesis.id}><Check size={13} weight="bold" /> Accept thesis</button></div></footer>}
     </article>)}</div>}
   </section>
 }
 
-function AcceptedTheses({ accepted, monitors, busy, onMonitorChange }: { accepted: InvestmentThesis[]; monitors: Map<string, ThesisMonitor>; busy: string | null; onMonitorChange: (monitor: ThesisMonitor, status: ThesisMonitorStatus) => Promise<void> }) {
+function AcceptedTheses({ accepted, packets, monitors, busy, onMonitorChange }: { accepted: InvestmentThesis[]; packets: Record<string, CompanyThesisReviewPacket>; monitors: Map<string, ThesisMonitor>; busy: string | null; onMonitorChange: (monitor: ThesisMonitor, status: ThesisMonitorStatus) => Promise<void> }) {
   return <section className="company-thesis-library" aria-labelledby="thesis-library-title">
     <header className="thesis-section-heading"><div><p className="markets-eyebrow">Active company views</p><h2 id="thesis-library-title">The current book</h2></div><span>{countLabel(accepted.length, 'active thesis', 'active theses')}</span></header>
     {accepted.length === 0 ? <EmptyCompanyState title="No company thesis is active yet." detail="Accept a reviewed proposal to establish a durable view and turn on monitoring." /> : <div className="company-thesis-active-list">{accepted.map((thesis) => {
       const monitor = monitors.get(thesis.entityKey)
       return <article key={thesis.id}>
         <header><div><span className="thesis-status-pill" data-status="active">active · v{thesis.version}</span><h3>{thesis.symbol ? <StockDestinationMenu symbol={thesis.symbol} /> : title(thesis)}</h3><small>{label(thesis)}</small></div><MonitorControl monitor={monitor} busy={busy} onChange={onMonitorChange} /></header>
-        <div className="company-thesis-active-body"><div><strong>{thesis.content.headline}</strong>{thesis.content.summary ? <p>{thesis.content.summary}</p> : null}</div><div className="company-thesis-active-evidence"><EvidenceList label="Catalysts" items={list(thesis.content.catalysts)} empty="No catalyst retained." /><EvidenceList label="Invalidation" items={list(thesis.content.invalidation)} empty={thesis.content.fastestKillSignal || 'No invalidation retained.'} /></div></div>
+        <div className="company-thesis-active-body"><div><strong>{thesis.content.headline}</strong>{thesis.content.summary ? <p>{thesis.content.summary}</p> : null}<ReviewOutcomeSummary outcomes={packets[thesis.id]?.reviewHistory ?? []} /></div><div className="company-thesis-active-evidence"><EvidenceList label="Catalysts" items={list(thesis.content.catalysts)} empty="No catalyst retained." /><EvidenceList label="Invalidation" items={list(thesis.content.invalidation)} empty={thesis.content.fastestKillSignal || 'No invalidation retained.'} /></div></div>
       </article>
     })}</div>}
   </section>
+}
+
+function reviewDecisionLabel(decision: ThesisReviewDecision) {
+  return decision === 'accept' ? 'Accept thesis' : decision === 'no_trade' ? 'No trade' : decision === 'revise' ? 'Request revision' : 'Reject'
+}
+
+function reviewDecisionPrompt(decision: ThesisReviewDecision) {
+  return decision === 'accept' ? 'Why does the company evidence now support an active, monitored belief?'
+    : decision === 'no_trade' ? 'Why is the thesis credible but not a capital action today?'
+      : decision === 'revise' ? 'What specific evidence or analysis must the next research version resolve?'
+        : 'Why does the evidence fail to support this company thesis?'
+}
+
+function ReviewPacket({ thesis, packet }: { thesis: InvestmentThesis; packet: CompanyThesisReviewPacket | undefined }) {
+  const research = packet?.research ?? null
+  return <details className="company-thesis-evidence"><summary>Open review packet</summary><div>
+    {thesis.content.summary ? <p>{thesis.content.summary}</p> : null}
+    <dl><div><dt>Key debate</dt><dd>{thesis.content.keyDebate || 'Not defined yet.'}</dd></div><div><dt>Fastest disconfirming evidence</dt><dd>{thesis.content.fastestKillSignal || 'Not defined yet.'}</dd></div></dl>
+    <div className="company-thesis-review-packet-grid">
+      <div><span>Company research</span>{research ? <><p>v{research.version} · {research.status} · {research.formalRating} · {research.entryAction.replaceAll('_', ' ')}</p><small>{research.revision.opinionChange.replaceAll('_', ' ')} · {research.revision.summary}</small>{research.fairValue !== null ? <small>Fair value {research.fairValue}{research.entryZoneLow !== null && research.entryZoneHigh !== null ? ` · entry zone ${research.entryZoneLow}–${research.entryZoneHigh}` : ''}</small> : null}</> : <p>No linked company research yet.</p>}</div>
+      <div><span>Market-model context</span>{packet?.marketContexts.length ? packet.marketContexts.map((context) => <p key={context.marketThesisVersionId}>v{context.version} · {Math.round(context.confidence)}% · {context.title}</p>) : <p>No originating market model is linked.</p>}</div>
+      <div><span>Source ledger</span>{packet?.sourceLedger.length ? packet.sourceLedger.map((source) => <a key={`${source.label}:${source.url}`} href={source.url} target="_blank" rel="noreferrer">{source.label}</a>) : <p>No linked source ledger.</p>}</div>
+    </div>
+  </div></details>
+}
+
+function ReviewOutcomeSummary({ outcomes }: { outcomes: CompanyThesisReviewPacket['reviewHistory'] }) {
+  const latest = outcomes[0]
+  return latest ? <small className="company-thesis-review-outcome">{reviewDecisionLabel(latest.decision)} · {latest.rationale}</small> : null
 }
 
 function MonitorControl({ monitor, busy, onChange }: { monitor: ThesisMonitor | undefined; busy: string | null; onChange: (monitor: ThesisMonitor, status: ThesisMonitorStatus) => Promise<void> }) {

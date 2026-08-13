@@ -360,6 +360,52 @@ export interface InvestmentThesis {
   researchNoteId: string | null
 }
 
+/** An explicit human conclusion about a proposed company thesis. `no_trade`
+ * accepts the belief for monitoring while deliberately recording that no
+ * capital action follows from it today. */
+export type ThesisReviewDecision = 'accept' | 'reject' | 'revise' | 'no_trade'
+
+export interface ThesisReviewOutcome {
+  id: string
+  thesisId: string
+  decision: ThesisReviewDecision
+  rationale: string
+  reviewedAt: string
+}
+
+export interface CompanyThesisResearchSummary {
+  id: string
+  version: number
+  status: EquityResearchNote['status']
+  formalRating: EquityResearchNote['formalRating']
+  entryAction: EquityResearchNote['entryAction']
+  fairValue: number | null
+  entryZoneLow: number | null
+  entryZoneHigh: number | null
+  confidence: number
+  dataAsOf: string
+  revision: EquityResearchRevision
+}
+
+export interface CompanyThesisMarketContext {
+  marketThesisVersionId: string
+  title: string
+  version: number
+  state: MarketThesisVersion['state']
+  confidence: number
+  generatedAt: string
+}
+
+/** Compact, server-assembled review context. It is deliberately a read model:
+ * it links evidence and lineage but never validates or changes the thesis. */
+export interface CompanyThesisReviewPacket {
+  thesisId: string
+  research: CompanyThesisResearchSummary | null
+  marketContexts: CompanyThesisMarketContext[]
+  sourceLedger: ThesisSource[]
+  reviewHistory: ThesisReviewOutcome[]
+}
+
 export type ThesisMonitorStatus = 'active' | 'paused'
 export type ThesisMonitorOutcome = 'pending' | 'no_change' | 'attention' | 'refresh_queued' | 'failed'
 export type ThesisMonitorCoverage = 'price' | 'material_events' | 'research' | 'leadership' | 'candidate_scout'
@@ -382,6 +428,7 @@ export interface ThesisWorkspaceData {
   proposals: InvestmentThesis[]
   accepted: InvestmentThesis[]
   monitors: ThesisMonitor[]
+  reviewPackets: Record<string, CompanyThesisReviewPacket>
 }
 
 export interface StockPricePoint {

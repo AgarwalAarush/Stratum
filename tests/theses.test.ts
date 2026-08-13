@@ -175,6 +175,29 @@ test('accepted theses atomically become monitored durable objects', async () => 
   assert.match(migration, /alter column symbol drop not null/)
 })
 
+test('company thesis reviews preserve an explicit decision ledger and distinguish no-trade from rejection', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/202608130001_company_thesis_review_outcomes.sql', import.meta.url), 'utf8')
+  const theses = await readFile(new URL('../lib/server/theses.ts', import.meta.url), 'utf8')
+  const route = await readFile(new URL('../app/api/markets/theses/route.ts', import.meta.url), 'utf8')
+  const workspace = await readFile(new URL('../components/markets/ThesisWorkspace.tsx', import.meta.url), 'utf8')
+  assert.match(migration, /create table if not exists public\.investment_thesis_review_outcomes/)
+  assert.match(migration, /decision in \('accept', 'reject', 'revise', 'no_trade'\)/)
+  assert.match(migration, /p_decision in \('accept', 'no_trade'\)/)
+  assert.match(migration, /else 'superseded'/)
+  assert.match(migration, /insert into public\.investment_thesis_review_outcomes/)
+  assert.match(theses, /reviewPackets: \{\}/)
+  assert.match(theses, /investment_thesis_review_outcomes/)
+  assert.match(theses, /market_thesis_company_links/)
+  assert.match(theses, /p_rationale: rationale\.trim\(\)/)
+  assert.match(route, /explicit review decision, and rationale are required/)
+  assert.match(route, /decision === 'revise'/)
+  assert.match(route, /reason: 'thesis-review-revise'/)
+  assert.match(workspace, /Open review packet/)
+  assert.match(workspace, /No trade/)
+  assert.match(workspace, /Request revision/)
+  assert.match(workspace, /ReviewOutcomeSummary/)
+})
+
 test('industry monitors ignore noise and flag material leadership deterioration', () => {
   const previous = {
     snapshotId: 'snapshot-1',

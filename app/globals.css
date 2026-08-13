@@ -11958,6 +11958,134 @@ body:has(.equity-research-note) {
   gap: 7px;
 }
 
+.company-thesis-review-form {
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  gap: 13px;
+  grid-column: 2 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(168px, .46fr);
+  padding-top: 14px;
+}
+
+.company-thesis-review-form fieldset {
+  border: 0;
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0;
+}
+
+.company-thesis-review-form legend,
+.company-thesis-review-form label,
+.company-thesis-review-packet-grid > div > span {
+  color: var(--market-text-muted);
+  display: block;
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.company-thesis-review-form fieldset > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.company-thesis-review-form fieldset button {
+  background: transparent;
+  border: 1px solid var(--market-border);
+  color: var(--market-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  min-height: 29px;
+  padding: 0 8px;
+}
+
+.company-thesis-review-form fieldset button[data-selected="true"] {
+  background: var(--market-text);
+  border-color: var(--market-text);
+  color: var(--market-bg);
+}
+
+.company-thesis-review-form textarea {
+  background: var(--market-bg);
+  border: 1px solid var(--market-border);
+  color: var(--market-text);
+  display: block;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 7px;
+  min-height: 78px;
+  padding: 8px 9px;
+  resize: vertical;
+  text-transform: none;
+  width: 100%;
+}
+
+.company-thesis-review-form textarea:focus {
+  border-color: var(--market-accent);
+  outline: 1px solid var(--market-accent);
+  outline-offset: -1px;
+}
+
+.company-thesis-review-form footer {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: row;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
+.company-thesis-review-packet-grid {
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 15px;
+  padding-top: 13px;
+}
+
+.company-thesis-review-packet-grid > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.company-thesis-review-packet-grid p,
+.company-thesis-review-packet-grid small,
+.company-thesis-review-packet-grid a {
+  color: var(--market-text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-transform: none;
+}
+
+.company-thesis-review-packet-grid a {
+  text-decoration: underline;
+  text-decoration-color: var(--market-border);
+  text-underline-offset: 3px;
+}
+
+.company-thesis-review-packet-grid a:hover {
+  color: var(--market-accent);
+  text-decoration-color: currentColor;
+}
+
+.company-thesis-review-outcome {
+  border-left: 1px solid var(--market-accent);
+  color: var(--market-text-muted);
+  display: block;
+  font-size: 10px;
+  line-height: 1.45;
+  margin-top: 14px;
+  padding-left: 8px;
+}
+
 .thesis-quiet-action {
   background: transparent;
   border: 1px solid transparent;
@@ -12127,6 +12255,10 @@ body:has(.equity-research-note) {
   .market-thesis-research-rows button {
     align-self: auto;
   }
+
+  .company-thesis-review-form {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 767px) {
@@ -12277,6 +12409,16 @@ body:has(.equity-research-note) {
   .company-thesis-review-rows footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .company-thesis-review-form,
+  .company-thesis-review-packet-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .company-thesis-review-form footer {
+    align-items: flex-start;
+    flex-direction: row;
   }
 
   .company-thesis-monitor {

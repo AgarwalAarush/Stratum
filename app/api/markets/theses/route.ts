@@ -9,7 +9,7 @@ import {
 import { enqueueAgentJob } from '@/lib/server/agent-jobs'
 import { addSymbolToPrimaryWatchlist } from '@/lib/server/portfolio'
 import { thesisEntityKey, userAuthoredThesisContent } from '@/lib/markets/theses'
-import type { InvestmentThesis, ThesisEntityType, ThesisIntakeDraft } from '@/lib/markets/types'
+import type { InvestmentThesis, ThesisEntityType, ThesisIntakeDraft, ThesisReviewDecision } from '@/lib/markets/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,13 +93,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ monitor: await updateThesisMonitorStatus(user.id, monitorId, status) })
     }
     const thesisId = typeof body.thesisId === 'string' ? body.thesisId.trim() : ''
-    const decision = body.decision === 'accept' || body.decision === 'reject' ? body.decision : null
-    if (!thesisId || !decision) throw new Error('A thesis proposal and review decision are required')
+    const decision = body.decision === 'accept' || body.decision === 'reject' || body.decision === 'revise' || body.decision === 'no_trade'
+      ? body.decision as ThesisReviewDecision
+      : null
+    const rationale = typeof body.rationale === 'string' ? body.rationale.trim() : ''
+    if (!thesisId || !decision || rationale.length < 3) throw new Error('A thesis proposal, explicit review decision, and rationale are required')
     if (user.id === 'local-development-user') {
-      return NextResponse.json({ thesis: { id: thesisId, status: decision === 'accept' ? 'accepted' : 'rejected' } })
+      return NextResponse.json({ thesis: { id: thesisId, status: decision === 'accept' || decision === 'no_trade' ? 'accepted' : decision === 'reject' ? 'rejected' : 'superseded' } })
     }
-    const thesis = await reviewThesis(user.id, thesisId, decision)
-    return NextResponse.json({ thesis, workspace: await fetchThesisWorkspace(user.id) })
+    const thesis = await reviewThesis(user.id, thesisId, decision, rationale)
+    let researchQueued = false
+    if (decision === 'revise' && thesis.symbol) {
+      const queued = await enqueueAgentJob('generate-company-research', {
+        ownerId: user.id, symbol: thesis.symbol, reason: 'thesis-review-revise',
+      }, `generate-company-research:${user.id}:${thesis.symbol}:${new Date().toISOString().slice(0, 10)}:thesis-review-revise`)
+      researchQueued = !queued.deduplicated
+    }
+    return NextResponse.json({ thesis, researchQueued, workspace: await fetchThesisWorkspace(user.id) })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to review thesis' }, { status: 400 })
   }

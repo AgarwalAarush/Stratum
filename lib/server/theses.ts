@@ -3,6 +3,11 @@ import type {
   EquityResearchNote,
   InvestmentThesis,
   ThesisContent,
+  CompanyThesisMarketContext,
+  CompanyThesisResearchSummary,
+  CompanyThesisReviewPacket,
+  ThesisReviewDecision,
+  ThesisReviewOutcome,
   ThesisEntityType,
   ThesisMonitor,
   ThesisMonitorCoverage,
@@ -31,6 +36,10 @@ function thesisStorageUnavailable(message: string | undefined): boolean {
   return Boolean(message && /investment_theses|schema cache/i.test(message))
 }
 
+function reviewStorageUnavailable(message: string | undefined): boolean {
+  return Boolean(message && /investment_thesis_review_outcomes|schema cache/i.test(message))
+}
+
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
@@ -42,6 +51,46 @@ function sources(value: unknown): ThesisSource[] {
       ? [{ label: source.label, url: source.url, asOf: source.asOf }]
       : []
   }) : []
+}
+
+function relatedRecord(value: unknown): Record<string, unknown> {
+  return Array.isArray(value) ? record(value[0]) : record(value)
+}
+
+function reviewOutcome(row: Record<string, unknown>): ThesisReviewOutcome | null {
+  const decision = row.decision
+  if (decision !== 'accept' && decision !== 'reject' && decision !== 'revise' && decision !== 'no_trade') return null
+  return {
+    id: String(row.id), thesisId: String(row.investment_thesis_id), decision,
+    rationale: String(row.rationale ?? ''), reviewedAt: String(row.reviewed_at),
+  }
+}
+
+function researchSummary(row: Record<string, unknown>): CompanyThesisResearchSummary {
+  const content = record(row.content)
+  const revision = record(content.revision)
+  const changes = Array.isArray(revision.changes) ? revision.changes.map(record) : []
+  const opinionChange = String(revision.opinionChange)
+  return {
+    id: String(row.id), version: Number(row.version), status: row.status as CompanyThesisResearchSummary['status'],
+    formalRating: row.formal_rating as CompanyThesisResearchSummary['formalRating'], entryAction: row.entry_action as CompanyThesisResearchSummary['entryAction'],
+    fairValue: content.fairValue === null || content.fairValue === undefined || !Number.isFinite(Number(content.fairValue)) ? null : Number(content.fairValue),
+    entryZoneLow: content.entryZoneLow === null || content.entryZoneLow === undefined || !Number.isFinite(Number(content.entryZoneLow)) ? null : Number(content.entryZoneLow),
+    entryZoneHigh: content.entryZoneHigh === null || content.entryZoneHigh === undefined || !Number.isFinite(Number(content.entryZoneHigh)) ? null : Number(content.entryZoneHigh),
+    confidence: Number(content.confidence ?? 0), dataAsOf: String(row.data_as_of),
+    revision: {
+      priorVersion: revision.priorVersion === null ? null : Number.isFinite(Number(revision.priorVersion)) ? Number(revision.priorVersion) : Number(row.version) > 1 ? Number(row.version) - 1 : null,
+      opinionChange: opinionChange === 'more_constructive' || opinionChange === 'less_constructive' || opinionChange === 'unchanged' || opinionChange === 'initial'
+        ? opinionChange : Number(row.version) > 1 ? 'unchanged' : 'initial',
+      summary: String(revision.summary ?? (Number(row.version) > 1 ? 'Legacy refresh did not include a structured opinion comparison.' : 'Initial research baseline.')),
+      changes: changes.flatMap((change) => {
+        const field = String(change.field)
+        return ['formal_rating', 'entry_action', 'fair_value', 'investment_thesis', 'key_debate', 'kill_criteria', 'evidence'].includes(field)
+          ? [{ field: field as CompanyThesisResearchSummary['revision']['changes'][number]['field'], previous: String(change.previous ?? ''), current: String(change.current ?? ''), explanation: String(change.explanation ?? '') }]
+          : []
+      }),
+    },
+  }
 }
 
 function normalize(row: Record<string, unknown>): InvestmentThesis {
@@ -270,7 +319,7 @@ export async function proposeUserAuthoredThesis(
 
 export async function fetchThesisWorkspace(ownerId: string): Promise<ThesisWorkspaceData> {
   const supabase = getSupabaseClient()
-  if (!supabase || !validOwnerId(ownerId)) return { proposals: [], accepted: [], monitors: [] }
+  if (!supabase || !validOwnerId(ownerId)) return { proposals: [], accepted: [], monitors: [], reviewPackets: {} }
   const [{ data, error }, monitorResult] = await Promise.all([
     supabase.from('investment_theses').select('*').eq('owner_id', ownerId)
       .order('generated_at', { ascending: false }).limit(160),
@@ -278,7 +327,7 @@ export async function fetchThesisWorkspace(ownerId: string): Promise<ThesisWorks
       .order('updated_at', { ascending: false }),
   ])
   if (error) {
-    if (thesisStorageUnavailable(error.message)) return { proposals: [], accepted: [], monitors: [] }
+    if (thesisStorageUnavailable(error.message)) return { proposals: [], accepted: [], monitors: [], reviewPackets: {} }
     throw new Error(`Unable to load thesis workspace: ${error.message}`)
   }
   if (monitorResult.error && !/thesis_monitors|schema cache/i.test(monitorResult.error.message)) {
@@ -293,10 +342,50 @@ export async function fetchThesisWorkspace(ownerId: string): Promise<ThesisWorks
     seen.add(thesis.entityKey)
     accepted.push(thesis)
   }
+  const thesisIds = rows.map((item) => item.id)
+  const researchNoteIds = rows.flatMap((item) => item.researchNoteId ? [item.researchNoteId] : [])
+  const [outcomeResult, researchResult, contextResult] = await Promise.all([
+    thesisIds.length > 0
+      ? supabase.from('investment_thesis_review_outcomes').select('*').eq('owner_id', ownerId).in('investment_thesis_id', thesisIds).order('reviewed_at', { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+    researchNoteIds.length > 0
+      ? supabase.from('equity_research_notes').select('id,version,status,formal_rating,entry_action,content,data_as_of').eq('owner_id', ownerId).in('id', researchNoteIds)
+      : Promise.resolve({ data: [], error: null }),
+    thesisIds.length > 0
+      ? supabase.from('market_thesis_company_links').select('investment_thesis_id,market_thesis_versions(id,title,version,state,confidence,generated_at)').in('investment_thesis_id', thesisIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+  if (outcomeResult.error && !reviewStorageUnavailable(outcomeResult.error.message)) throw new Error(`Unable to load thesis review outcomes: ${outcomeResult.error.message}`)
+  if (researchResult.error) throw new Error(`Unable to load linked company research: ${researchResult.error.message}`)
+  if (contextResult.error && !/market_thesis_company_links|schema cache/i.test(contextResult.error.message)) throw new Error(`Unable to load market-thesis context: ${contextResult.error.message}`)
+  const outcomesByThesisId = new Map<string, ThesisReviewOutcome[]>()
+  for (const row of outcomeResult.data ?? []) {
+    const outcome = reviewOutcome(row as Record<string, unknown>)
+    if (!outcome) continue
+    outcomesByThesisId.set(outcome.thesisId, [...(outcomesByThesisId.get(outcome.thesisId) ?? []), outcome])
+  }
+  const researchById = new Map((researchResult.data ?? []).map((row) => [String(row.id), researchSummary(row as Record<string, unknown>)]))
+  const contextsByThesisId = new Map<string, CompanyThesisMarketContext[]>()
+  for (const row of contextResult.data ?? []) {
+    const version = relatedRecord((row as Record<string, unknown>).market_thesis_versions)
+    if (!version.id) continue
+    const context: CompanyThesisMarketContext = {
+      marketThesisVersionId: String(version.id), title: String(version.title), version: Number(version.version),
+      state: version.state as CompanyThesisMarketContext['state'], confidence: Number(version.confidence), generatedAt: String(version.generated_at),
+    }
+    const thesisId = String((row as Record<string, unknown>).investment_thesis_id)
+    contextsByThesisId.set(thesisId, [...(contextsByThesisId.get(thesisId) ?? []), context])
+  }
+  const reviewPackets = Object.fromEntries(rows.map((thesis): [string, CompanyThesisReviewPacket] => [thesis.id, {
+    thesisId: thesis.id, research: thesis.researchNoteId ? researchById.get(thesis.researchNoteId) ?? null : null,
+    marketContexts: contextsByThesisId.get(thesis.id) ?? [], sourceLedger: thesis.sources,
+    reviewHistory: outcomesByThesisId.get(thesis.id) ?? [],
+  }]))
   return {
     proposals,
     accepted,
     monitors: (monitorResult.data ?? []).map((row) => monitor(row)),
+    reviewPackets,
   }
 }
 
@@ -310,7 +399,7 @@ export async function fetchLatestStockThesis(ownerId: string, symbol: string): P
   return data ? normalize(data) : null
 }
 
-export async function reviewThesis(ownerId: string, thesisId: string, decision: 'accept' | 'reject'): Promise<InvestmentThesis> {
+export async function reviewThesis(ownerId: string, thesisId: string, decision: ThesisReviewDecision, rationale: string): Promise<InvestmentThesis> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required')
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
@@ -318,6 +407,7 @@ export async function reviewThesis(ownerId: string, thesisId: string, decision: 
     p_owner_id: ownerId,
     p_thesis_id: thesisId,
     p_decision: decision,
+    p_rationale: rationale.trim(),
   })
   if (error || !data) throw new Error(`Unable to review thesis: ${error?.message ?? 'unknown error'}`)
   const row = Array.isArray(data) ? data[0] : data
