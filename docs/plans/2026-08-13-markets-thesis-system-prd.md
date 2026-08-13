@@ -33,15 +33,15 @@ The operating principle is **capital allocation first, trading second**. Trading
 
 ### What is only partially complete
 
-- The market-model → company-research handoff exists, but is not yet a fully autonomous conversion loop with a dedicated review packet and queue policy.
+- The market-model → company-research handoff has a review packet and explicit outcome contract; portfolio-led research now prioritizes owned companies, then watchlists, then bounded peer leads. It is not yet a complete company-thesis conversion loop.
 - Company thesis, monitoring, and portfolio entry decision are persisted separately, but are not yet presented or operated as one continuous review workflow.
-- Prediction evaluation is implemented, but there is not yet enough evaluated history or a calibration surface to make learning operationally useful.
-- Domain coverage is six curated starter systems, not a complete economic or GICS coverage map.
-- Intelligence/Markets source referrals are implemented on a separate pushed branch, not `main`; they cannot be released until the Supabase migration ledger is reconciled.
+- Prediction evaluation is implemented and new market research must include a 1-week-to-12-month evaluable prediction, but legacy predictions remain long-dated and there is not yet enough evaluated history or a calibration surface to make learning operationally useful.
+- Domain coverage is six curated starter systems. Portfolio-led company coverage expands decision relevance without pretending to be complete economic or GICS coverage.
+- Intelligence/Markets source referrals are released and remain a discovery-only lane pending governed source admission.
 
-### Current release blocker
+### Current release posture
 
-Supabase migration history must be reconciled before any new schema-backed feature ships. The remote history has an unexplained `20260805021215` entry while local history contains an unrecorded `202608040025` migration. Do not force a migration repair merely to unblock a deploy; first recover and verify the source of that remote migration.
+Migration history has been reconciled and recent schema-backed releases are live. Continue to verify migration parity and worker heartbeat before each release; do not bypass either gate to ship a feature.
 
 ## 3. Product principles and non-negotiables
 
@@ -245,21 +245,19 @@ Status legend: **Done** means implemented on `main` and intended for production 
 
 ### Stage 3 — Closed market-model → company-thesis loop (**Partial; highest product priority**)
 
-- Existing: exposure investigation button, CompanyPacket, company research, proposed investment thesis, linkage table, and accept/reject flow.
+- Existing: exposure investigation button, CompanyPacket, company research, proposed investment thesis, linkage table, dedicated review packet, and accept/revise/reject/no-trade outcomes. A daily portfolio-led queue prioritizes owned companies, then watchlists, then bounded FMP ticker peers that exist in the market universe.
 
 **Build next:**
 
-1. Create a dedicated company-thesis review packet combining market-model context, CompanyPacket, research comparison, valuation/expectations, catalysts, falsifiers, sources, and proposed thesis.
-2. Make `accept`, `revise`, `reject`, and explicit `no trade` first-class review outcomes with auditable rationale.
-3. Add a controlled queue policy: only high-materiality, verified exposures with unresolved company evidence can automatically propose research; cap work and preserve owner priority.
-4. Show originating market model, exposure mechanism, and all linked company thesis versions on both sides of the relationship.
-5. Ensure every accepted company thesis exposes its full evidence ledger and change history in the UI.
+1. Add a controlled queue policy for high-materiality, verified market exposures alongside the portfolio-led queue; cap work and preserve owner priority.
+2. Show originating market model, exposure mechanism, and all linked company thesis versions on both sides of the relationship.
+3. Ensure every accepted company thesis exposes its full evidence ledger and change history in the UI.
 
 **Exit criteria:** a market exposure can reliably become a reviewed company belief, or an explicit no-trade/rejection, without losing lineage.
 
 ### Stage 4 — Living thesis and calibration loop (**Partial**)
 
-- Existing: monitors, monitor findings, research refresh queues, market prediction evaluator, decision reviews schema.
+- Existing: monitors, monitor findings, research refresh queues, market prediction evaluator, decision reviews schema, and a research-contract guard requiring a near-term (1 week to 12 months) evaluable market prediction.
 
 **Build next:**
 
@@ -268,6 +266,7 @@ Status legend: **Done** means implemented on `main` and intended for production 
 3. Publish a calibration dashboard for market and company predictions.
 4. Add a thesis-change timeline that distinguishes evidence, research revision, review outcome, and capital decision.
 5. Add a review cadence/SLA for stale accepted theses and unresolved monitor alerts.
+6. Retire or annotate legacy long-dated predictions without rewriting their historical record; subsequent research versions must replace them with a near-term test.
 
 **Exit criteria:** the owner can see, for each active thesis, what changed, why it matters, whether an action is required, and whether similar past beliefs were well calibrated.
 
@@ -289,10 +288,11 @@ Status legend: **Done** means implemented on `main` and intended for production 
 
 **Build next:**
 
-1. Establish a domain-admission rubric before adding packs: economic mechanism, source requirements, cross-domain links, expected decision relevance, and maintenance owner.
-2. Expand domain packs progressively, prioritizing areas connected to active portfolio exposure and unresolved high-materiality frontiers.
-3. Add explicit economic-capture analysis: who earns the rent, what is commoditized, how durable is the capture, and what breaks it.
-4. Avoid a superficial “whole GICS map”; coverage is complete only when it has credible mechanisms, governed evidence, and a maintained decision use.
+1. Use portfolio-led company coverage first: owned companies, watchlists, and bounded adjacent-company leads make existing models useful to the actual book without calling peer relationships recommendations.
+2. Establish a domain-admission rubric before adding packs: economic mechanism, source requirements, cross-domain links, expected decision relevance, and maintenance owner.
+3. Expand domain packs progressively, prioritizing areas connected to active portfolio exposure and unresolved high-materiality frontiers.
+4. Add explicit economic-capture analysis: who earns the rent, what is commoditized, how durable is the capture, and what breaks it.
+5. Avoid a superficial “whole GICS map”; coverage is complete only when it has credible mechanisms, governed evidence, and a maintained decision use.
 
 **Exit criteria:** breadth improves decision coverage without lowering source governance or turning the system into generalized market commentary.
 
