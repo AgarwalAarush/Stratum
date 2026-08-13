@@ -44,6 +44,7 @@ import {
 import { fetchLatestSnapshotMeta } from './markets-repository.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { materializeIntelligenceSourceReferrals } from './intelligence-source-referrals.ts'
+import { fetchPortfolioResearchCoverage, fetchPortfolioResearchSeedOwners } from './portfolio-research-seeding.ts'
 
 export const AGENT_JOB_TYPES = [
   'sync-market-assets',
@@ -59,6 +60,7 @@ export const AGENT_JOB_TYPES = [
   'generate-etf-research',
   'event-refresh-company-research',
   'scan-research-refreshes',
+  'seed-portfolio-company-research',
   'monitor-investment-theses',
   'refresh-fmp-intelligence',
   'fetch-stock-price-history',
@@ -185,6 +187,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     bucket.setTime(Math.floor(bucket.getTime() / bucketMs) * bucketMs)
     return `${jobType}:${bucket.toISOString()}`
   }
+  if (jobType === 'seed-portfolio-company-research') return `${jobType}:${now.toISOString().slice(0, 10)}`
   if (jobType === 'monitor-investment-theses') {
     const cadence = typeof payload.cadenceMinutes === 'number'
       ? Math.max(5, Math.min(240, Math.round(payload.cadenceMinutes)))
@@ -299,6 +302,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
     jobType === 'refresh-cross-asset'
     || jobType === 'materialize-market-leadership'
     || jobType === 'scan-research-refreshes'
+    || jobType === 'seed-portfolio-company-research'
     || jobType === 'monitor-investment-theses'
     || jobType === 'summarize-candidate-scout'
     || jobType === 'compile-world-baseline'
@@ -838,6 +842,37 @@ async function executeJob(
 
   if (job.job_type === 'scan-research-refreshes') {
     return scanResearchRefreshes()
+  }
+
+  if (job.job_type === 'seed-portfolio-company-research') {
+    // This deliberately queues research, never an investment thesis, sizing,
+    // or action. Existing exposure earns first pass; FMP peers are merely a
+    // bounded adjacent-company discovery lane.
+    const requestedOwnerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : null
+    const ownerIds = requestedOwnerId ? [requestedOwnerId] : await fetchPortfolioResearchSeedOwners()
+    const results = []
+    for (const ownerId of ownerIds) {
+      const coverage = await fetchPortfolioResearchCoverage(ownerId, { maxTargets: 4 })
+      const queued = await Promise.all(coverage.targets.map(async (target) => {
+        const context = target.relatedTo.length > 0 ? ` related to ${target.relatedTo.join(', ')}` : ''
+        return enqueueAgentJob('generate-company-research', {
+          ownerId,
+          symbol: target.symbol,
+          reason: `${target.reason}${context}`,
+          researchPriority: target.priority,
+          relatedSymbols: target.relatedTo,
+        })
+      }))
+      results.push({
+        ownerId,
+        ownedCount: coverage.ownedSymbols.length,
+        watchlistedCount: coverage.watchlistedSymbols.length,
+        adjacentCount: coverage.adjacentSymbols.length,
+        targetSymbols: coverage.targets.map((target) => target.symbol),
+        queued: queued.filter((item) => !item.deduplicated).length,
+      })
+    }
+    return { owners: results, note: 'Portfolio-led research only; no thesis, trade, or portfolio action was created.' }
   }
 
   if (job.job_type === 'monitor-investment-theses') {

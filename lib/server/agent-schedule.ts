@@ -88,6 +88,11 @@ export function buildDueAgentJobs(
   }
   jobs.push(scheduledJob('monitor-investment-theses', now, { cadenceMinutes: monitorCadence }))
   const newYork = newYorkClockParts(now)
+  // Research existing exposure before adjacent discovery. This run only creates
+  // durable company-research jobs; it cannot create an investment decision.
+  if (newYork.hour === 6 && newYork.minute >= 10 && newYork.minute < 20) {
+    jobs.push(scheduledJob('seed-portfolio-company-research', now))
+  }
   // The optional adapters value keeps schedule tests independent of process
   // environment. Production resolves durable active domains inside the cycle.
   if (isMarketWorldModelEnabled() || options.worldSourceAdapters !== undefined) {

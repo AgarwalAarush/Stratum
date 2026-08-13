@@ -6,6 +6,7 @@ import {
   buildPersistedResearchFrontier,
   buildResearchFrontierScoutPlan,
   critiquePrompt,
+  hasNearTermEvaluablePrediction,
   researchPrompt,
   shouldQueueMarketHypothesisResearch,
   validateMarketThesisCritique,
@@ -56,6 +57,11 @@ test('market thesis research requires a source-backed, internally complete ledge
   const unsupportedClaim = researchFixture()
   unsupportedClaim.causalChain[0].sourceIds = []
   assert.throws(() => validateMarketThesisResearch(unsupportedClaim, new Set(sourceIds)), /needs a source ID/)
+})
+
+test('market research requires at least one near-term evaluable prediction', () => {
+  assert.equal(hasNearTermEvaluablePrediction([{ horizon: '3 months' }]), true)
+  assert.equal(hasNearTermEvaluablePrediction([{ horizon: '5 years' }, { horizon: 'eventually' }]), false)
 })
 
 test('critic output is constrained to the same source ledger', () => {

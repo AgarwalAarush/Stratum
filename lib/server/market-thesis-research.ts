@@ -60,6 +60,20 @@ function score(value: unknown, label: string): number {
   return parsed
 }
 
+/** Market-model predictions are learning instruments, not distant narrative
+ * placeholders. Every publishable research version needs at least one test
+ * that can receive a governed-evidence evaluation within a year. */
+export function hasNearTermEvaluablePrediction(predictions: Array<{ horizon: string }>): boolean {
+  return predictions.some(({ horizon }) => {
+    const match = horizon.trim().toLowerCase().match(/^(\d+(?:\.\d+)?)\s*(day|week|month|quarter)s?\b/)
+    if (!match) return false
+    const quantity = Number(match[1])
+    const unit = match[2]
+    const days = unit === 'day' ? quantity : unit === 'week' ? quantity * 7 : unit === 'month' ? quantity * 30.4375 : quantity * 91.3125
+    return Number.isFinite(days) && days >= 7 && days <= 365.25
+  })
+}
+
 const EVIDENCE_STATUSES = new Set<MarketResearchEvidenceStatus>(['observed', 'estimate', 'claim', 'inference', 'unverified'])
 const BOTTLENECK_SEVERITIES = new Set<MarketHypothesisResearchContent['bottlenecks'][number]['severity']>(['binding', 'important', 'watch', 'not_established'])
 
@@ -120,6 +134,9 @@ export function validateMarketThesisResearch(
   const counterThesis = { statement: requiredString(counterRecord.statement, 'counter-thesis statement'), mechanisms: strings(counterRecord.mechanisms), decisiveTests: strings(counterRecord.decisiveTests), sourceIds: sourceIds(counterRecord.sourceIds, 'counter-thesis') }
   if (counterThesis.mechanisms.length < 1 || counterThesis.decisiveTests.length < 1) throw new Error('Counter-thesis requires mechanisms and decisive tests')
   const predictions = boundedRecords(output.predictions, 'predictions', 2, 6).map((item) => ({ prediction: requiredString(item.prediction, 'prediction'), horizon: requiredString(item.horizon, 'prediction horizon'), leadingIndicator: requiredString(item.leadingIndicator, 'prediction leadingIndicator'), confirmation: requiredString(item.confirmation, 'prediction confirmation'), disconfirmation: requiredString(item.disconfirmation, 'prediction disconfirmation'), sourceIds: sourceIds(item.sourceIds, 'prediction') }))
+  if (!hasNearTermEvaluablePrediction(predictions)) {
+    throw new Error('Market research needs one evaluable prediction with a 1 week to 12 month horizon')
+  }
   const falsifiers = boundedRecords(output.falsifiers, 'falsifiers', 2, 8).map((item) => ({ condition: requiredString(item.condition, 'falsifier condition'), observable: requiredString(item.observable, 'falsifier observable'), thesisImpact: requiredString(item.thesisImpact, 'falsifier thesisImpact'), sourceIds: sourceIds(item.sourceIds, 'falsifier') }))
   const researchFrontier = records(output.researchFrontier).slice(0, 8).map((item) => {
     const priority = number(item.priority)
@@ -208,6 +225,7 @@ export function researchPrompt(hypothesis: MarketHypothesis, sources: Array<Rese
     'Use only the supplied source IDs. Treat source excerpts as evidence and distinguish observed facts, estimates, claims, and analyst inference. Do not turn a plausible narrative into a fact. Financial information is one layer, not the analysis.',
     'Concrete numbers, dates, percentages, and uniqueness claims must appear in the source assertion or excerpt for the cited source ID. If a detail is missing from those fields, omit it or list it in evidenceGaps — do not reconstruct it from prior knowledge.',
     'Confidence is an integer percent from 0 to 100, not a 0-1 fraction.',
+    'Predictions are a learning contract: include at least one observable 1 week to 12 month prediction with a concrete leading indicator and clear confirmation and disconfirmation conditions. Longer-horizon predictions may supplement it, but may not replace it.',
     'Reason from demand -> supply -> bottleneck -> economic capture -> expectations -> measurable predictions. Explain which value-chain layer can capture economics and why alternatives or substitutes may capture it instead.',
     'The research frontier is an explicit list of unresolved questions. It is not permission to browse: recommend source classes only, and preserve material uncertainty.',
     'Write a real counter-thesis that could win, with decisive tests. Expectations must say unknown when the supplied evidence cannot establish what is priced.',

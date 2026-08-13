@@ -193,7 +193,7 @@ function DetailList({ label, items, empty }: { label: string; items: string[]; e
 }
 
 function PredictionLedger({ predictions }: { predictions: ThesisPrediction[] }) {
-  return <div className="market-thesis-detail-block"><span>Predictions</span>{predictions.length ? <div className="market-thesis-predictions">{predictions.map((prediction) => <div key={prediction.id}><p>{prediction.prediction}</p><small>{prediction.result}{prediction.deadline ? ` · due ${dateLabel(prediction.deadline)}` : ''}</small>{prediction.latestEvaluation ? <small>{prediction.latestEvaluation.status === 'complete' ? `${prediction.latestEvaluation.verdict} · evaluator v${prediction.latestEvaluation.version}` : prediction.latestEvaluation.error || 'Evaluation is processing.'}</small> : null}</div>)}</div> : <p>No prediction has been recorded yet.</p>}</div>
+  return <div className="market-thesis-detail-block"><span>Predictions</span>{predictions.length ? <div className="market-thesis-predictions">{predictions.map((prediction) => <div key={prediction.id}><p>{prediction.prediction}</p><small>{prediction.result}{prediction.deadline ? ` · due ${dateLabel(prediction.deadline)}` : ''}</small>{prediction.latestEvaluation ? <small>{prediction.latestEvaluation.status === 'complete' ? `${prediction.latestEvaluation.verdict} · evaluator v${prediction.latestEvaluation.version}` : prediction.latestEvaluation.error || 'Evaluation is processing.'}</small> : <small>Awaiting a due date or new linked evidence before evaluation.</small>}</div>)}</div> : <p>No prediction has been recorded yet.</p>}</div>
 }
 
 function frontierStatus(item: MarketResearchFrontierItem) {

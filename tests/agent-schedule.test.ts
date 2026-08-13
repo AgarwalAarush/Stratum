@@ -109,6 +109,12 @@ test('a market-thesis cycle runs twice daily and owns the source-to-research cha
   assert.match(source, /runMarketResearchOrchestration\(\{ trigger: 'scheduled' \}\)/)
 })
 
+test('portfolio-led research seeding runs after the morning thesis cycle', () => {
+  const scheduled = buildDueAgentJobs(new Date('2026-07-28T10:12:00Z')).map((job) => job.jobType)
+  assert.equal(scheduled.includes('seed-portfolio-company-research'), true)
+  assert.equal(buildDueAgentJobs(new Date('2026-07-28T10:05:00Z')).some((job) => job.jobType === 'seed-portfolio-company-research'), false)
+})
+
 test('six-hour research bucket schedules only the market orchestrator', () => {
   const scheduled = buildDueAgentJobs(new Date('2026-08-04T04:05:00Z'), { worldSourceAdapters: [] }).map((job) => job.jobType)
   assert.equal(scheduled.includes('orchestrate-market-research'), true)

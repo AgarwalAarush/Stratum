@@ -28,6 +28,7 @@ test('agent job parser rejects unknown work', () => {
   assert.equal(parseAgentJobType('run-market-thesis-cycle'), 'run-market-thesis-cycle')
   assert.equal(parseAgentJobType('preflight-world-source-candidate'), 'preflight-world-source-candidate')
   assert.equal(parseAgentJobType('evaluate-market-prediction'), 'evaluate-market-prediction')
+  assert.equal(parseAgentJobType('seed-portfolio-company-research'), 'seed-portfolio-company-research')
   assert.throws(() => parseAgentJobType('place-order'), /Unsupported agent job type/)
 })
 
@@ -163,6 +164,7 @@ test('agent jobs retain their actual data provider', () => {
   assert.equal(agentJobProvider('generate-etf-research'), 'codex')
   assert.equal(agentJobProvider('event-refresh-company-research'), 'codex')
   assert.equal(agentJobProvider('scan-research-refreshes'), 'market-data')
+  assert.equal(agentJobProvider('seed-portfolio-company-research'), 'market-data')
   assert.equal(agentJobProvider('monitor-investment-theses'), 'market-data')
   assert.equal(agentJobProvider('scout-world-sources'), 'codex')
   assert.equal(agentJobProvider('scout-market-research'), 'codex')
