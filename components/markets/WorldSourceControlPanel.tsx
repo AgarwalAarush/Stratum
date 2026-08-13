@@ -85,6 +85,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const [canonicalRationale, setCanonicalRationale] = useState('')
   const selectedDomain = useMemo(() => workspace?.domains.find((domain) => domain.id === selectedDomainId) ?? null, [workspace, selectedDomainId])
   const selectedDomainCoverage = useMemo(() => selectedDomain ? sourceCoverage(workspace!, selectedDomain) : [], [workspace, selectedDomain])
+  const selectedDomainResearchCoverage = useMemo(() => workspace?.coverage.find((coverage) => coverage.domainId === selectedDomainId) ?? null, [workspace, selectedDomainId])
   const selectedDomainComplete = selectedDomainCoverage.every((item) => item.current >= item.minimumSources)
 
   if (!workspace) {
@@ -115,6 +116,8 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const orchestrationActions = workspace.orchestrationActions.slice(0, 18)
   const pendingProposalCount = workspace.observationProposals.filter((proposal) => !proposal.review).length
   const autoAcceptedCount = workspace.observationProposals.filter((proposal) => proposal.review?.reviewerKind === 'policy_auto').length
+  const pendingReferrals = workspace.referrals.filter((referral) => referral.status === 'pending')
+  const selectedDomainReferrals = selectedDomain ? pendingReferrals.filter((referral) => referral.domainId === selectedDomain.id) : pendingReferrals
   const contradictingLeads = researchLeads.filter(({ lead }) => lead.supports === 'contradicts').slice(0, 6)
   const costEstimate = recentOrchestration && typeof recentOrchestration.inputSummary.costEstimate === 'object' && recentOrchestration.inputSummary.costEstimate
     ? recentOrchestration.inputSummary.costEstimate as Record<string, number>
@@ -220,6 +223,27 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
       router.refresh()
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to queue source health audit')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const requestReferralScan = async () => {
+    if (pending) return
+    setPending(true)
+    setNotice(null)
+    try {
+      const response = await fetch('/api/markets/world-sources', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'scan-intelligence-source-referrals' }),
+      })
+      const payload = await response.json() as { error?: string; deduplicated?: boolean }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to scan source referrals')
+      setNotice(payload.deduplicated
+        ? 'Today’s Intelligence and Markets source-referral scan is already queued or complete.'
+        : 'Referral scan queued. It can create only reviewable referrals from existing feed items; it cannot admit a source or add market evidence.')
+      router.refresh()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to scan source referrals')
     } finally {
       setPending(false)
     }
@@ -386,10 +410,30 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           <div><dt>Latest healthy</dt><dd>{health.filter((check) => check.status === 'healthy').length}/{health.length || '—'}</dd></div>
           <div><dt>Pending review</dt><dd>{candidates.length}</dd></div>
           <div><dt>Evidence proposals</dt><dd>{workspace.observationProposals.length}</dd></div>
+          <div><dt>Feed referrals</dt><dd>{pendingReferrals.length}</dd></div>
           <div><dt>Triage attention</dt><dd>{triageAttention.length}</dd></div>
           <div><dt>Failed scouts</dt><dd>{failedRuns.length}</dd></div>
         </dl>
       </div>
+
+      <section className="market-source-coverage-board" aria-labelledby="coverage-board-heading">
+        <div>
+          <p className="markets-eyebrow">Coverage control</p>
+          <h3 id="coverage-board-heading">Research surface by domain</h3>
+          <p>Source counts are governed coverage; observations are accepted evidence. Feed referrals are only inspectable prompts from Intelligence and Markets, never evidence.</p>
+        </div>
+        <div className="market-source-coverage-grid">
+          {workspace.domains.map((domain) => {
+            const coverage = workspace.coverage.find((item) => item.domainId === domain.id)
+            return <button key={domain.id} type="button" onClick={() => setSelectedDomainId(domain.id)} data-selected={selectedDomainId === domain.id}>
+              <strong>{domain.label}</strong>
+              <span>{coverage?.admittedSourceCount ?? 0} governed · {coverage?.candidateSourceCount ?? 0} candidate</span>
+              <span>{coverage?.observationCount ?? 0} evidence · {coverage?.pendingReferralCount ?? 0} referrals</span>
+              <small>{coverage?.latestObservationAt ? `Latest evidence ${formatDate(coverage.latestObservationAt)}` : 'No accepted evidence yet'}</small>
+            </button>
+          })}
+        </div>
+      </section>
 
       <section className="market-source-control-detail" aria-labelledby="orchestration-board-heading">
         <div>
@@ -460,6 +504,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
             <p className="markets-eyebrow">{selectedDomain.status} domain</p>
             <h3>{selectedDomain.label}</h3>
             <p>{selectedDomain.description}</p>
+            <p className="market-source-domain-telemetry">{selectedDomainResearchCoverage?.observationCount ?? 0} accepted observations · {selectedDomainResearchCoverage?.pendingReferralCount ?? 0} pending feed referrals{selectedDomainResearchCoverage?.latestObservationAt ? ` · latest evidence ${formatDate(selectedDomainResearchCoverage.latestObservationAt)}` : ''}</p>
             <dl className="market-source-requirements">
               {selectedDomainCoverage.map((requirement) => (
                 <div key={requirement.evidenceClass} data-complete={requirement.current >= requirement.minimumSources}>
@@ -476,6 +521,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
             <button type="button" onClick={requestBroadResearch} disabled={pending || !reason.trim()}>{pending ? 'Queuing scout…' : 'Queue broad research scout'}</button>
             <button type="button" className="market-source-secondary-button" onClick={requestScout} disabled={pending || !reason.trim()}>Queue recurring-source scout</button>
             <button type="button" className="market-source-secondary-button" onClick={requestHealthAudit} disabled={pending}>{pending ? 'Queuing audit…' : 'Run source health audit'}</button>
+            <button type="button" className="market-source-secondary-button" onClick={requestReferralScan} disabled={pending}>{pending ? 'Scanning referrals…' : 'Scan Intelligence + Markets referrals'}</button>
             <p>Broad research uses the standard research tier to return a compact, cited, and deliberately mixed lead dossier. The separate low-cost source scout only proposes recurring collection candidates. They cannot approve a source, ingest evidence, activate a domain, create a thesis, or move capital.</p>
             <p>A health audit checks reachability, redirect destination, and MIME type against the active contract. A failed check is review telemetry, not an automatic source block.</p>
             {selectedDomain.status === 'candidate' ? activatingDomainId === selectedDomain.id ? <form className="market-source-contract-review market-domain-activation-review" onSubmit={(event) => { event.preventDefault(); void activateDomain(selectedDomain) }}>
@@ -524,6 +570,22 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
             )
           }) : <p>No candidate sources are awaiting review for this domain.</p>}
           {hasMoreCandidates ? <button type="button" className="market-source-review-button" onClick={() => setCandidateLimit((limit) => Math.min(limit + 12, scopedCandidates.length))} disabled={pending}>Show 12 more candidates</button> : null}
+        </div>
+        <div className="market-source-referrals">
+          <p className="markets-eyebrow">Discovery handoff</p>
+          <h3>{selectedDomain ? `${selectedDomain.label} feed referrals` : 'Feed referrals'}</h3>
+          <p>These are direct items already ingested by Stratum’s Intelligence or Markets feeds. They are not a source contract, quote-bound observation, market thesis input, or company recommendation.</p>
+          {selectedDomainReferrals.length ? selectedDomainReferrals.slice(0, 12).map((referral) => (
+            <article key={referral.id}>
+              <div>
+                <strong><a href={referral.sourceUrl} target="_blank" rel="noreferrer">{referral.title}</a></strong>
+                <span>{referral.feedScope.replaceAll('-', ' ')} · {referral.feedSection}{referral.publisher ? ` · ${referral.publisher}` : ''}</span>
+                <p>{referral.reason}</p>
+                <a href={referral.originUrl} target="_blank" rel="noreferrer">Open publisher origin for separate source review</a>
+              </div>
+              <time>{formatDate(referral.publishedAt ?? referral.createdAt)}</time>
+            </article>
+          )) : <p>No pending referrals for this domain. The scheduled scan reads the recent existing feed ledger; it never searches or ingests the open web directly.</p>}
         </div>
         <div>
           <p className="markets-eyebrow">Scout trail</p>

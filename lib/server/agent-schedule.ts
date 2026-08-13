@@ -98,6 +98,18 @@ export function buildDueAgentJobs(
       // state, which is not a meaningful refresh.
       jobs.push(scheduledJob('run-market-thesis-cycle', now, { cycle, cycleDate: newYork.date }))
     }
+    // Keep health remediation and discovery-only cross-workspace referrals
+    // outside the coordinated research cycle. A referral can prompt governed
+    // source admission, but cannot become thesis evidence by itself.
+    if (newYork.hour === 16 && newYork.minute < 10) {
+      jobs.push(scheduledJob('verify-world-source-health', now))
+    }
+    if (newYork.hour === 17 && newYork.minute >= 35 && newYork.minute < 45) {
+      // Feed items may suggest a place to investigate, but the resulting
+      // referral remains outside governed evidence until a human starts a
+      // separate candidate/contract review.
+      jobs.push(scheduledJob('scan-intelligence-source-referrals', now))
+    }
     if (newYork.hour % 6 === 0 && newYork.minute < 10) {
       // The orchestrator is the sole 6h research control plane. It auto-accepts
       // eligible proposals, then enqueues bounded child jobs (scout, collect,

@@ -43,6 +43,7 @@ import {
 } from './markets-ingestion.ts'
 import { fetchLatestSnapshotMeta } from './markets-repository.ts'
 import { getSupabaseClient } from './supabase.ts'
+import { materializeIntelligenceSourceReferrals } from './intelligence-source-referrals.ts'
 
 export const AGENT_JOB_TYPES = [
   'sync-market-assets',
@@ -75,6 +76,7 @@ export const AGENT_JOB_TYPES = [
   'scout-market-research',
   'scout-world-sources',
   'review-world-source-coverage',
+  'scan-intelligence-source-referrals',
   'compile-world-baseline',
   'correlate-market-signals',
   'synthesize-market-hypotheses',
@@ -272,6 +274,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     return `${jobType}:${payload.domainId}:${frontierIds.join(',') || 'manual'}:${now.toISOString().slice(0, 10)}`
   }
   if (jobType === 'review-world-source-coverage') return `${jobType}:${now.toISOString().slice(0, 10)}`
+  if (jobType === 'scan-intelligence-source-referrals') return `${jobType}:${now.toISOString().slice(0, 10)}`
   if ((jobType === 'materialize-market-leadership' || jobType === 'run-candidate-scout') && typeof payload.tradingDate === 'string') {
     return `${jobType}:${payload.tradingDate}`
   }
@@ -306,6 +309,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
     || jobType === 'orchestrate-market-research'
     || jobType === 'auto-accept-observation-proposals'
     || jobType === 'review-world-source-coverage'
+    || jobType === 'scan-intelligence-source-referrals'
     || jobType === 'evaluate-market-predictions'
     || jobType === 'prune-market-data'
   ) return 'market-data'
@@ -363,7 +367,7 @@ export function shouldRefreshClosedMarket(
 export function agentJobPriority(jobType: AgentJobType): number {
   if (jobType === 'preflight-world-source-candidate') return 20
   if (jobType === 'verify-world-source-health') return 30
-  if (jobType === 'scout-world-sources' || jobType === 'scout-market-research' || jobType === 'review-world-source-coverage' || jobType === 'route-market-research-frontiers' || jobType === 'orchestrate-market-research' || jobType === 'auto-accept-observation-proposals') return 40
+  if (jobType === 'scout-world-sources' || jobType === 'scout-market-research' || jobType === 'review-world-source-coverage' || jobType === 'scan-intelligence-source-referrals' || jobType === 'route-market-research-frontiers' || jobType === 'orchestrate-market-research' || jobType === 'auto-accept-observation-proposals') return 40
   if (jobType === 'collect-world-source-documents' || jobType === 'triage-world-observation-proposals') return 50
   if (jobType === 'refresh-market-screener' || jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence') return 140
   return 100
@@ -943,6 +947,13 @@ async function executeJob(
       domainId: plan.domainId, reason: plan.reason, trigger: 'coverage_review',
     })))
     return { planned: plans.length, queued: queued.filter((item) => !item.deduplicated).length, domainIds: plans.map((plan) => plan.domainId) }
+  }
+
+  if (job.job_type === 'scan-intelligence-source-referrals') {
+    await reportProgress(5, 'scanning existing Intelligence and Markets feed records for bounded source referrals')
+    const result = await materializeIntelligenceSourceReferrals()
+    await reportProgress(100, `${result.created} pending referrals from ${result.scanned} recent feed records; none were admitted as evidence`)
+    return result
   }
 
   if (job.job_type === 'compile-world-baseline') {

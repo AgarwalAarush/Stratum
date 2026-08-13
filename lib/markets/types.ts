@@ -1372,6 +1372,36 @@ export interface MarketOrchestrationRun {
   error: string | null
 }
 
+/** A bounded discovery handoff from an existing Intelligence or Markets feed.
+ * It is intentionally outside the governed evidence ledger until a reviewer
+ * decides to pursue a separate source candidate and contract. */
+export interface WorldSourceReferral {
+  id: string
+  feedItemId: string
+  domainId: string
+  status: 'pending' | 'registered' | 'dismissed'
+  feedScope: string
+  feedSection: string
+  title: string
+  sourceUrl: string
+  originUrl: string
+  publisher: string | null
+  publishedAt: string | null
+  reason: string
+  registeredSourceId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MarketDomainResearchCoverage {
+  domainId: string
+  admittedSourceCount: number
+  candidateSourceCount: number
+  pendingReferralCount: number
+  observationCount: number
+  latestObservationAt: string | null
+}
+
 export interface WorldSourceControlWorkspaceData {
   domains: MarketDomainPack[]
   sources: WorldSourceRegistryEntry[]
@@ -1382,6 +1412,8 @@ export interface WorldSourceControlWorkspaceData {
   triageRuns: WorldObservationProposalTriageRun[]
   orchestrationRuns: MarketOrchestrationRun[]
   orchestrationActions: MarketOrchestrationAction[]
+  referrals: WorldSourceReferral[]
+  coverage: MarketDomainResearchCoverage[]
 }
 
 /** Quote-bound cheap-model output. It is deliberately not a WorldObservation

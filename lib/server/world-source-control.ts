@@ -24,6 +24,7 @@ import type {
 import { runCodexJson, type CodexExecResult } from './codex-exec.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { selectMarketModel } from './market-model-policy.ts'
+import { fetchWorldSourceReferrals } from './intelligence-source-referrals.ts'
 
 type RecordValue = Record<string, unknown>
 
@@ -608,7 +609,7 @@ export async function reviseWorldSourceCanonicalUrl(input: { slug: string; canon
 export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceControlWorkspaceData> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const [domains, sources, runs, researchScoutRuns, mappings, healthChecks, proposals, triageRuns, researchFrontiers, orchestrationRuns, orchestrationActions] = await Promise.all([
+  const [domains, sources, runs, researchScoutRuns, mappings, healthChecks, proposals, triageRuns, researchFrontiers, orchestrationRuns, orchestrationActions, referrals, observations] = await Promise.all([
     supabase.from('market_domain_packs').select('*').order('id'),
     supabase.from('world_source_registry').select('*').order('updated_at', { ascending: false }).limit(200),
     supabase.from('world_source_discovery_runs').select('*').order('created_at', { ascending: false }).limit(60),
@@ -620,8 +621,10 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
     supabase.from('market_hypothesis_research_frontier').select('*').order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(120),
     supabase.from('market_orchestration_runs').select('*').order('created_at', { ascending: false }).limit(20),
     supabase.from('market_orchestration_actions').select('*').order('created_at', { ascending: false }).limit(120),
+    fetchWorldSourceReferrals(),
+    supabase.from('world_observations').select('domain,ingested_at').order('ingested_at', { ascending: false }).limit(2_000),
   ])
-  const error = domains.error ?? sources.error ?? runs.error ?? researchScoutRuns.error ?? mappings.error ?? healthChecks.error ?? proposals.error ?? triageRuns.error ?? researchFrontiers.error ?? orchestrationRuns.error ?? orchestrationActions.error
+  const error = domains.error ?? sources.error ?? runs.error ?? researchScoutRuns.error ?? mappings.error ?? healthChecks.error ?? proposals.error ?? triageRuns.error ?? researchFrontiers.error ?? orchestrationRuns.error ?? orchestrationActions.error ?? observations.error
   if (error) throw new Error(`Unable to load source-control workspace: ${error.message}`)
   const domainIdsBySourceId = new Map<string, string[]>()
   for (const mapping of mappings.data ?? []) {
@@ -634,6 +637,24 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
     const health = normalizeHealthCheck(row as RecordValue)
     if (!latestHealthBySourceId.has(health.sourceId)) latestHealthBySourceId.set(health.sourceId, health)
   }
+  const normalizedSources = (sources.data ?? []).map((row) => normalizeRegistryEntry(
+    row as RecordValue,
+    domainIdsBySourceId.get(String(row.id)) ?? [],
+    latestHealthBySourceId.get(String(row.id)) ?? null,
+  ))
+  const coverage = (domains.data ?? []).map((row) => {
+    const domainId = String(row.id)
+    const domainSources = normalizedSources.filter((source) => source.domainIds.includes(domainId))
+    const domainObservations = (observations.data ?? []).filter((observation) => observation.domain === domainId)
+    return {
+      domainId,
+      admittedSourceCount: domainSources.filter((source) => source.status === 'approved' || source.status === 'probation').length,
+      candidateSourceCount: domainSources.filter((source) => source.status === 'candidate').length,
+      pendingReferralCount: referrals.filter((referral) => referral.domainId === domainId && referral.status === 'pending').length,
+      observationCount: domainObservations.length,
+      latestObservationAt: domainObservations[0]?.ingested_at ?? null,
+    }
+  })
   return {
     domains: (domains.data ?? []).map((row) => {
       const pack = getMarketDomainPack(String(row.id))
@@ -642,11 +663,7 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
       if (status !== 'candidate' && status !== 'active' && status !== 'archived') throw new Error(`Invalid persisted domain status: ${status}`)
       return { ...pack, status }
     }),
-    sources: (sources.data ?? []).map((row) => normalizeRegistryEntry(
-      row as RecordValue,
-      domainIdsBySourceId.get(String(row.id)) ?? [],
-      latestHealthBySourceId.get(String(row.id)) ?? null,
-    )),
+    sources: normalizedSources,
     discoveryRuns: (runs.data ?? []).map((row) => normalizeDiscoveryRun(row as RecordValue)),
     researchScoutRuns: (researchScoutRuns.data ?? []).map((row) => normalizeResearchScoutRun(row as RecordValue)),
     researchFrontiers: (researchFrontiers.data ?? []).map((row) => normalizeResearchFrontier(row as RecordValue)),
@@ -654,6 +671,8 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
     triageRuns: (triageRuns.data ?? []).map((row) => normalizeTriageRun(row as RecordValue)),
     orchestrationRuns: (orchestrationRuns.data ?? []).map((row) => normalizeOrchestrationRun(row as RecordValue)),
     orchestrationActions: (orchestrationActions.data ?? []).map((row) => normalizeOrchestrationAction(row as RecordValue)),
+    referrals,
+    coverage,
   }
 }
 
