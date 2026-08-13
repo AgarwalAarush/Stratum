@@ -6,6 +6,8 @@ The user’s product direction is **market-wide autonomous research orchestratio
 
 No trading authority is authorized. Never add order placement, brokerage write access, or a buy/sell execution path.
 
+The canonical end-state, staged delivery plan, product invariants, and definition of done are in [the Markets Thesis System PRD](docs/plans/2026-08-13-markets-thesis-system-prd.md). This handoff is operational context, not the roadmap source of truth.
+
 ## Current deployed milestone (orchestration brain v2)
 
 Shipped on branch work culminating in the finish-orchestration-brain pass:
