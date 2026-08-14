@@ -34,7 +34,7 @@ The operating principle is **capital allocation first, trading second**. Trading
 ### What is only partially complete
 
 - The market-model → company-research handoff has a review packet and explicit outcome contract; portfolio-led research now prioritizes owned companies, then watchlists, then bounded peer leads. It is not yet a complete company-thesis conversion loop.
-- Company thesis, monitoring, and portfolio entry decision are persisted separately, but are not yet presented or operated as one continuous review workflow.
+- Company thesis, monitoring, and portfolio entry decision are persisted separately. An entry decision now has enforced accepted-thesis and research-version lineage, but the single review surface and decision-change timeline are still incomplete.
 - Prediction evaluation is implemented and new market research must include a 1-week-to-12-month evaluable prediction, but legacy predictions remain long-dated and there is not yet enough evaluated history or a calibration surface to make learning operationally useful.
 - Domain coverage is six curated starter systems. Portfolio-led company coverage expands decision relevance without pretending to be complete economic or GICS coverage.
 - Intelligence/Markets source referrals are released and remain a discovery-only lane pending governed source admission.
@@ -176,7 +176,7 @@ Allowed human review outcomes:
 | Revise | New research is required; the proposed version is not silently edited. |
 | No trade | The thesis may be credible, but no capital decision is warranted now. This must be recorded separately from rejection. |
 
-The first two outcomes are implemented today. `Revise` is represented by generating a new proposal/version; an explicit `No trade` review outcome is still required.
+All four outcomes are implemented. `Revise` generates a new proposal/version rather than editing the reviewed record; `No trade` preserves an active, monitored belief without creating a capital decision.
 
 ### 6.5 Monitoring, predictions, and learning
 
@@ -272,15 +272,14 @@ Status legend: **Done** means implemented on `main` and intended for production 
 
 ### Stage 5 — Capital-allocation operating system (**Partial**)
 
-- Existing: separate thesis-decision schema, entry actions, fair-value/entry-zone fields, decision review records, portfolio and private broker reconciliation.
+- Existing: separate thesis-decision schema, entry actions, fair-value/entry-zone fields, decision review records, portfolio and private broker reconciliation. New capital decisions are server-enforced to link to the owner’s accepted company thesis and inherit its linked research version.
 
 **Build next:**
 
-1. Link an entry decision explicitly to the current accepted company thesis and research version.
-2. Build a single decision-review surface with own/watch/avoid, entry action, sizing policy, valuation support, catalyst, kill criteria, and “what changed since decision.”
-3. Add portfolio-level constraint checks: concentration, correlated exposure, liquidity, account separation, and cash impact.
-4. Add decision-review prompts for entry-zone arrival, thesis break, and outcome/postmortem—not automatic actions.
-5. Define a deterministic position-sizing policy only if the owner explicitly authorizes it; otherwise surface required inputs without a size recommendation.
+1. Build a single decision-review surface with own/watch/avoid, entry action, sizing policy, valuation support, catalyst, kill criteria, and “what changed since decision.”
+2. Add portfolio-level constraint checks: concentration, correlated exposure, liquidity, account separation, and cash impact.
+3. Add decision-review prompts for entry-zone arrival, thesis break, and outcome/postmortem—not automatic actions.
+4. Define a deterministic position-sizing policy only if the owner explicitly authorizes it; otherwise surface required inputs without a size recommendation.
 
 **Exit criteria:** a user can move from accepted thesis to a reviewable capital decision and later evaluate that decision without any execution authority entering the system.
 
