@@ -123,6 +123,7 @@ export async function POST(request: Request) {
     }
     if (body.action === 'save-decision') {
       const symbol = text(body.symbol, 12).toUpperCase()
+      const investmentThesisId = text(body.investmentThesisId, 80)
       const disposition = body.disposition as 'own' | 'watch' | 'avoid'
       const formalRating = body.formalRating as 'BUY' | 'HOLD' | 'SELL' | 'NOT_RATED'
       const entryAction = body.entryAction as 'buy_now' | 'nibble' | 'wait' | 'add_on_weakness' | 'avoid'
@@ -149,9 +150,11 @@ export async function POST(request: Request) {
         || !['own', 'watch', 'avoid'].includes(disposition)
         || !['BUY', 'HOLD', 'SELL', 'NOT_RATED'].includes(formalRating)
         || !['buy_now', 'nibble', 'wait', 'add_on_weakness', 'avoid'].includes(entryAction)
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(investmentThesisId)
         || (conviction !== null && (!Number.isInteger(conviction) || conviction < 1 || conviction > 5))
         || (entryZoneLow !== null && entryZoneHigh !== null && entryZoneLow > entryZoneHigh)
-      ) throw new Error('The decision fields are invalid')
+        || text(body.rationale, 4_000).length < 3
+      ) throw new Error('A reviewed thesis and complete decision rationale are required')
       if (localDevelopment) {
         return NextResponse.json({ decision: {
           id: `local-decision-${Date.now()}`,
@@ -169,6 +172,8 @@ export async function POST(request: Request) {
           rationale: text(body.rationale, 4_000),
           priceAtDecision: null,
           createdAt: new Date().toISOString(),
+          investmentThesisId,
+          researchNoteId: null,
         } })
       }
       return NextResponse.json({ decision: await saveThesisDecision(user.id, {
@@ -183,6 +188,7 @@ export async function POST(request: Request) {
         nextCatalyst: text(body.nextCatalyst) || null,
         killCriteria,
         rationale: text(body.rationale, 4_000),
+        investmentThesisId,
       }) })
     }
     if (body.action === 'save-review') {

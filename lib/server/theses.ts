@@ -14,6 +14,7 @@ import type {
   ThesisMonitorOutcome,
   ThesisMonitorStatus,
   ThesisSource,
+  ThesisDecision,
   ThesisStatus,
   ThesisIntakeDraft,
   ThesisWorkspaceData,
@@ -26,6 +27,7 @@ import {
   userAuthoredThesisContent,
 } from '../markets/theses.ts'
 import { fetchLatestMarketLeadership } from './markets-repository.ts'
+import { normalizeDecisionForThesisWorkspace } from './portfolio.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 function validOwnerId(ownerId: string): boolean {
@@ -344,7 +346,7 @@ export async function fetchThesisWorkspace(ownerId: string): Promise<ThesisWorks
   }
   const thesisIds = rows.map((item) => item.id)
   const researchNoteIds = rows.flatMap((item) => item.researchNoteId ? [item.researchNoteId] : [])
-  const [outcomeResult, researchResult, contextResult] = await Promise.all([
+  const [outcomeResult, researchResult, contextResult, decisionResult] = await Promise.all([
     thesisIds.length > 0
       ? supabase.from('investment_thesis_review_outcomes').select('*').eq('owner_id', ownerId).in('investment_thesis_id', thesisIds).order('reviewed_at', { ascending: false })
       : Promise.resolve({ data: [], error: null }),
@@ -354,10 +356,14 @@ export async function fetchThesisWorkspace(ownerId: string): Promise<ThesisWorks
     thesisIds.length > 0
       ? supabase.from('market_thesis_company_links').select('investment_thesis_id,market_thesis_versions(id,title,version,state,confidence,generated_at)').in('investment_thesis_id', thesisIds)
       : Promise.resolve({ data: [], error: null }),
+    thesisIds.length > 0
+      ? supabase.from('thesis_decisions').select('*').eq('owner_id', ownerId).in('investment_thesis_id', thesisIds).order('created_at', { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
   ])
   if (outcomeResult.error && !reviewStorageUnavailable(outcomeResult.error.message)) throw new Error(`Unable to load thesis review outcomes: ${outcomeResult.error.message}`)
   if (researchResult.error) throw new Error(`Unable to load linked company research: ${researchResult.error.message}`)
   if (contextResult.error && !/market_thesis_company_links|schema cache/i.test(contextResult.error.message)) throw new Error(`Unable to load market-thesis context: ${contextResult.error.message}`)
+  if (decisionResult.error && !/investment_thesis_id|thesis_decisions|schema cache/i.test(decisionResult.error.message)) throw new Error(`Unable to load linked capital decisions: ${decisionResult.error.message}`)
   const outcomesByThesisId = new Map<string, ThesisReviewOutcome[]>()
   for (const row of outcomeResult.data ?? []) {
     const outcome = reviewOutcome(row as Record<string, unknown>)
@@ -376,10 +382,18 @@ export async function fetchThesisWorkspace(ownerId: string): Promise<ThesisWorks
     const thesisId = String((row as Record<string, unknown>).investment_thesis_id)
     contextsByThesisId.set(thesisId, [...(contextsByThesisId.get(thesisId) ?? []), context])
   }
+  const decisionsByThesisId = new Map<string, ThesisDecision>()
+  for (const row of decisionResult.data ?? []) {
+    const thesisId = String((row as Record<string, unknown>).investment_thesis_id ?? '')
+    if (!thesisId || decisionsByThesisId.has(thesisId)) continue
+    const decision = normalizeDecisionForThesisWorkspace(row as Record<string, unknown>)
+    decisionsByThesisId.set(thesisId, decision)
+  }
   const reviewPackets = Object.fromEntries(rows.map((thesis): [string, CompanyThesisReviewPacket] => [thesis.id, {
     thesisId: thesis.id, research: thesis.researchNoteId ? researchById.get(thesis.researchNoteId) ?? null : null,
     marketContexts: contextsByThesisId.get(thesis.id) ?? [], sourceLedger: thesis.sources,
     reviewHistory: outcomesByThesisId.get(thesis.id) ?? [],
+    capitalDecision: decisionsByThesisId.get(thesis.id) ?? null,
   }]))
   return {
     proposals,

@@ -112,7 +112,15 @@ function normalizeDecision(row: Record<string, unknown>): ThesisDecision {
     rationale: String(row.rationale ?? ''),
     priceAtDecision: numberOrNull(row.price_at_decision),
     createdAt: String(row.created_at),
+    investmentThesisId: row.investment_thesis_id === null || row.investment_thesis_id === undefined ? null : String(row.investment_thesis_id),
+    researchNoteId: row.research_note_id === null || row.research_note_id === undefined ? null : String(row.research_note_id),
   }
+}
+
+/** Shared read-model adapter for the thesis workspace. Persistence remains in
+ * this module so both stock and thesis views render the same decision version. */
+export function normalizeDecisionForThesisWorkspace(row: Record<string, unknown>): ThesisDecision {
+  return normalizeDecision(row)
 }
 
 function normalizeReview(row: Record<string, unknown>): DecisionReview {
@@ -599,16 +607,24 @@ export async function upsertManualPosition(
 
 export async function saveThesisDecision(
   ownerId: string,
-  input: Omit<ThesisDecision, 'id' | 'version' | 'priceAtDecision' | 'createdAt'>,
+  input: Omit<ThesisDecision, 'id' | 'version' | 'priceAtDecision' | 'createdAt' | 'researchNoteId'>,
 ): Promise<ThesisDecision> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required')
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const [{ data: prior }, { data: snapshot }] = await Promise.all([
+  if (!input.investmentThesisId) throw new Error('Accept a company thesis before recording a capital decision')
+  if (!input.rationale.trim()) throw new Error('Record the rationale for this capital decision')
+  const [{ data: thesis, error: thesisError }, { data: prior }, { data: snapshot }] = await Promise.all([
+    supabase.from('investment_theses').select('id,symbol,research_note_id').eq('id', input.investmentThesisId)
+      .eq('owner_id', ownerId).eq('status', 'accepted').maybeSingle(),
     supabase.from('thesis_decisions').select('version').eq('owner_id', ownerId).eq('symbol', input.symbol.toUpperCase())
       .order('version', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('market_snapshots').select('id').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
   ])
+  if (thesisError) throw new Error(`Unable to verify the company thesis: ${thesisError.message}`)
+  if (!thesis || String(thesis.symbol ?? '').toUpperCase() !== input.symbol.toUpperCase()) {
+    throw new Error('Capital decisions must be linked to the accepted thesis for this company')
+  }
   const { data: current } = snapshot
     ? await supabase.from('screener_rows').select('price').eq('snapshot_id', snapshot.id)
       .eq('symbol', input.symbol.toUpperCase()).maybeSingle()
@@ -627,6 +643,8 @@ export async function saveThesisDecision(
     next_catalyst: input.nextCatalyst,
     kill_criteria: input.killCriteria,
     rationale: input.rationale,
+    investment_thesis_id: thesis.id,
+    research_note_id: thesis.research_note_id,
     price_at_decision: current ? Number(current.price) : null,
   }).select('*').single()
   if (error || !data) throw new Error(`Unable to save thesis decision: ${error?.message ?? 'unknown error'}`)

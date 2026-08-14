@@ -28,6 +28,8 @@ const decision: ThesisDecision = {
   rationale: 'Wait for a better risk/reward.',
   priceAtDecision: 200,
   createdAt: '2026-07-28T20:00:00.000Z',
+  investmentThesisId: 'thesis-1',
+  researchNoteId: 'research-1',
 }
 
 test('event refresh keys are stable per owner and source event', () => {

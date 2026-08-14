@@ -162,6 +162,8 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
         rationale: String(row.rationale ?? ''),
         priceAtDecision: row.price_at_decision === null ? null : Number(row.price_at_decision),
         createdAt: row.created_at as string,
+        investmentThesisId: row.investment_thesis_id === null ? null : String(row.investment_thesis_id),
+        researchNoteId: row.research_note_id === null ? null : String(row.research_note_id),
       }
       for (const alert of evaluateDecisionAlerts(decision, Number(screener.price), now.toISOString())) {
         const dedupeKey = `portfolio:${trackedName.portfolioId}:${alert.dedupeKey}`

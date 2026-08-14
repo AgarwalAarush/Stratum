@@ -4,6 +4,7 @@ import { FormEvent, useState } from 'react'
 import { formatEntryAction } from '@/lib/markets/research-presentation'
 import type { CandidateBrief, EquityResearchNote, ThesisDecision } from '@/lib/markets/types'
 import { MarketSelect } from './MarketSelect'
+import { MarketsIntentLink } from './MarketsIntentLink'
 import { ResearchActionButton } from './ResearchActionButton'
 
 type DecisionResearch = Pick<EquityResearchNote, 'formalRating' | 'entryAction' | 'fastestKillSignal' | 'version'>
@@ -14,12 +15,14 @@ export function CapitalDecisionRail({
   initial,
   research,
   candidate,
+  thesis,
   instrumentType = 'equity',
 }: {
   symbol: string
   initial: ThesisDecision | null
   research: DecisionResearch | null
   candidate: CandidateBrief | null
+  thesis: { id: string; researchNoteId: string | null } | null
   instrumentType?: 'equity' | 'etf'
 }) {
   const [editing, setEditing] = useState(false)
@@ -34,6 +37,7 @@ export function CapitalDecisionRail({
       body: JSON.stringify({
         action: 'save-decision',
         symbol,
+        investmentThesisId: thesis?.id,
         disposition: form.get('disposition'),
         formalRating: form.get('formalRating'),
         entryAction: form.get('entryAction'),
@@ -112,7 +116,13 @@ export function CapitalDecisionRail({
         <div><dt>Next catalyst</dt><dd>{decision?.nextCatalyst ?? candidate?.catalyst ?? '—'}</dd></div>
         <div><dt>Kill criteria</dt><dd>{decision?.killCriteria[0]?.description ?? research?.fastestKillSignal ?? candidate?.redFlags[0] ?? 'Define after research'}</dd></div>
       </dl>
-      <button type="button" onClick={() => setEditing(true)}>Edit decision</button>
+      {thesis ? <>
+        <small>Linked to accepted thesis{thesis.researchNoteId ? ` and research evidence` : ''}.</small>
+        <button type="button" onClick={() => setEditing(true)}>Edit decision</button>
+      </> : <>
+        <p className="capital-decision-prerequisite">Accept a company thesis before recording a capital decision. Research and a thesis stay separate from the action taken with capital.</p>
+        <MarketsIntentLink href="/markets/theses">Review company theses →</MarketsIntentLink>
+      </>}
       <button type="button" className="capital-watchlist-button" onClick={addToWatchlist}>Add to watchlist</button>
       <ResearchActionButton symbol={symbol} hasResearch={Boolean(research)} currentVersion={research?.version} instrumentType={instrumentType} />
       {notice ? <small>{notice}</small> : null}

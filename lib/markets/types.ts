@@ -404,6 +404,7 @@ export interface CompanyThesisReviewPacket {
   marketContexts: CompanyThesisMarketContext[]
   sourceLedger: ThesisSource[]
   reviewHistory: ThesisReviewOutcome[]
+  capitalDecision: ThesisDecision | null
 }
 
 export type ThesisMonitorStatus = 'active' | 'paused'
@@ -929,6 +930,8 @@ export interface ThesisDecision {
   rationale: string
   priceAtDecision: number | null
   createdAt: string
+  investmentThesisId: string | null
+  researchNoteId: string | null
 }
 
 export interface DecisionReview {
