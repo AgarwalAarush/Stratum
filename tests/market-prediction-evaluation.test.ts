@@ -11,6 +11,8 @@ test('prediction horizons become bounded deterministic deadlines', () => {
   const start = new Date('2026-08-04T00:00:00.000Z')
   assert.equal(predictionDeadlineFromHorizon('12 months', start), '2027-08-04T06:00:00.000Z')
   assert.equal(predictionDeadlineFromHorizon('2 quarters', start), '2027-02-02T15:00:00.000Z')
+  assert.equal(predictionDeadlineFromHorizon('within three months', start), '2026-11-03T07:30:00.000Z')
+  assert.equal(predictionDeadlineFromHorizon('6-12 months', start), '2027-08-04T06:00:00.000Z')
   assert.equal(predictionDeadlineFromHorizon('eventually', start), null)
   assert.equal(predictionDeadlineFromHorizon('50 years', start), null)
 })

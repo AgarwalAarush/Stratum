@@ -3,6 +3,7 @@ import { runCodexJson, type CodexExecResult } from './codex-exec.ts'
 import { selectMarketModel } from './market-model-policy.ts'
 import { readWorldCorpusExtract } from './world-corpus.ts'
 import { getSupabaseClient } from './supabase.ts'
+import { predictionHorizonDays } from '../markets/prediction-horizon.ts'
 
 type RecordValue = Record<string, unknown>
 
@@ -20,14 +21,8 @@ function requiredString(value: unknown, label: string): string {
 }
 
 export function predictionDeadlineFromHorizon(horizon: string, startAt: Date): string | null {
-  const normalized = horizon.toLowerCase().trim()
-  const match = normalized.match(/(\d+(?:\.\d+)?)\s*(day|week|month|quarter|year)s?\b/)
-  if (!match) return null
-  const quantity = Number(match[1])
-  if (!Number.isFinite(quantity) || quantity <= 0) return null
-  const unit = match[2]
-  const days = unit === 'day' ? quantity : unit === 'week' ? quantity * 7 : unit === 'month' ? quantity * 30.4375 : unit === 'quarter' ? quantity * 91.3125 : quantity * 365.25
-  if (days < 1 || days > 3652) return null
+  const days = predictionHorizonDays(horizon)
+  if (days === null || days < 1 || days > 3652) return null
   return new Date(startAt.getTime() + Math.round(days * 24 * 60 * 60 * 1_000)).toISOString()
 }
 

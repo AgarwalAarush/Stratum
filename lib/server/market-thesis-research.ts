@@ -10,6 +10,7 @@ import { getSupabaseClient } from './supabase.ts'
 import { readWorldCorpusExtract } from './world-corpus.ts'
 import { selectMarketModel } from './market-model-policy.ts'
 import { getMarketDomainPack } from '../markets/domain-packs.ts'
+import { predictionHorizonDays } from '../markets/prediction-horizon.ts'
 
 type RecordValue = Record<string, unknown>
 
@@ -65,12 +66,8 @@ function score(value: unknown, label: string): number {
  * that can receive a governed-evidence evaluation within a year. */
 export function hasNearTermEvaluablePrediction(predictions: Array<{ horizon: string }>): boolean {
   return predictions.some(({ horizon }) => {
-    const match = horizon.trim().toLowerCase().match(/^(\d+(?:\.\d+)?)\s*(day|week|month|quarter)s?\b/)
-    if (!match) return false
-    const quantity = Number(match[1])
-    const unit = match[2]
-    const days = unit === 'day' ? quantity : unit === 'week' ? quantity * 7 : unit === 'month' ? quantity * 30.4375 : quantity * 91.3125
-    return Number.isFinite(days) && days >= 7 && days <= 365.25
+    const days = predictionHorizonDays(horizon)
+    return days !== null && days >= 7 && days <= 365.25
   })
 }
 
@@ -259,7 +256,7 @@ export function researchPrompt(hypothesis: MarketHypothesis, sources: Array<Rese
     'Use only the supplied source IDs. Treat source excerpts as evidence and distinguish observed facts, estimates, claims, and analyst inference. Do not turn a plausible narrative into a fact. Financial information is one layer, not the analysis.',
     'Concrete numbers, dates, percentages, and uniqueness claims must appear in the source assertion or excerpt for the cited source ID. If a detail is missing from those fields, omit it or list it in evidenceGaps — do not reconstruct it from prior knowledge.',
     'Confidence is an integer percent from 0 to 100, not a 0-1 fraction.',
-    'Predictions are a learning contract: include at least one observable 1 week to 12 month prediction with a concrete leading indicator and clear confirmation and disconfirmation conditions. Longer-horizon predictions may supplement it, but may not replace it.',
+    'Predictions are a learning contract: include at least one observable 1 week to 12 month prediction with a concrete leading indicator and clear confirmation and disconfirmation conditions. Write every horizon as a compact duration such as "3 months", "2 quarters", or "1 year"; do not use a date or an event phrase. Longer-horizon predictions may supplement the near-term prediction, but may not replace it.',
     'Reason from demand -> supply -> bottleneck -> economic capture -> expectations -> measurable predictions. Explain which value-chain layer can capture economics and why alternatives or substitutes may capture it instead.',
     'Inside economics.companyCandidates, name 0-8 public-company research candidates only when a supplied source explicitly names the company or ticker, or the company is unambiguously the issuer of a supplied disclosure. Include symbol, role, mechanism, materiality, confidence, and exact sourceIds. This is a research queue, not a recommendation. Do not infer tickers from sectors, general value-chain layers, or prior knowledge; use an empty array when the ledger does not identify a company.',
     'The research frontier is an explicit list of unresolved questions. It is not permission to browse: recommend source classes only, and preserve material uncertainty.',

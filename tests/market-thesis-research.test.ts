@@ -72,6 +72,10 @@ test('public-company candidates require a valid ticker and exact source-ledger p
 
 test('market research requires at least one near-term evaluable prediction', () => {
   assert.equal(hasNearTermEvaluablePrediction([{ horizon: '3 months' }]), true)
+  assert.equal(hasNearTermEvaluablePrediction([{ horizon: 'within three months' }]), true)
+  assert.equal(hasNearTermEvaluablePrediction([{ horizon: '6-12 months' }]), true)
+  assert.equal(hasNearTermEvaluablePrediction([{ horizon: 'one year' }]), true)
+  assert.equal(hasNearTermEvaluablePrediction([{ horizon: '12-18 months' }]), false)
   assert.equal(hasNearTermEvaluablePrediction([{ horizon: '5 years' }, { horizon: 'eventually' }]), false)
 })
 
