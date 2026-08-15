@@ -331,7 +331,7 @@ function normalizeResearchFrontier(row: RecordValue): MarketResearchFrontierItem
     adapterId: row.adapter_id === null ? null : String(row.adapter_id ?? ''),
     status: (status === 'evidence_received' || status === 'complete' || status === 'blocked' || status === 'deferred' ? status : 'queued') as MarketResearchFrontierItem['status'],
     evidenceNeeded: String(row.evidence_needed ?? ''), attemptCount: number(row.attempt_count), lastError: row.last_error === null ? null : String(row.last_error ?? ''),
-    nextRunAt: row.next_run_at === null ? null : String(row.next_run_at ?? ''),
+    nextRunAt: row.next_run_at === null ? null : String(row.next_run_at ?? ''), createdAt: String(row.created_at),
   }
 }
 
@@ -602,14 +602,34 @@ export async function promoteEligibleMarketHypothesis(ownerId: string, hypothesi
   }))
   const { data: predictionRows, error: predictionError } = await supabase.from('market_thesis_predictions').insert(predictions.map((item) => ({ ...item, market_thesis_version_id: data.id }))).select('*')
   if (predictionError) throw new Error(`Unable to persist market thesis predictions: ${predictionError.message}`)
-  const exposureRows = researchContent.economics.beneficiaries
+  const genericExposureRows = researchContent.economics.beneficiaries
     .map((entityName) => entityName.trim())
     .filter((entityName) => entityName.length > 0 && !/^(none|no beneficiary)\b/i.test(entityName))
     .map((entityName) => ({
       market_thesis_version_id: data.id, value_chain_layer: researchContent.economics.valueChain, entity_name: entityName,
       symbol: null, role: 'beneficiary', mechanism: researchContent.economics.scarcityRentCapture,
-      materiality: publishedConfidence, confidence: publishedConfidence, verification_status: 'needs_company_research',
+      materiality: publishedConfidence, confidence: publishedConfidence, verification_status: 'unverified',
+      resolution_method: null, resolution_reason: 'Value-chain layer only; no public security was resolved.', source_ids: researchContent.economics.sourceIds,
     }))
+  const requestedSymbols = researchContent.economics.companyCandidates.map((candidate) => candidate.symbol)
+  const assetResult = requestedSymbols.length > 0
+    ? await supabase.from('market_assets').select('symbol,name').in('symbol', requestedSymbols).eq('active', true).eq('tradable', true)
+    : { data: [], error: null }
+  if (assetResult.error) throw new Error(`Unable to verify market-exposure symbols: ${assetResult.error.message}`)
+  const activeAssets = new Map((assetResult.data ?? []).map((asset) => [String(asset.symbol), String(asset.name)]))
+  const companyExposureRows = researchContent.economics.companyCandidates.flatMap((candidate) => {
+    const assetName = activeAssets.get(candidate.symbol)
+    if (!assetName) return []
+    return [{
+      market_thesis_version_id: data.id, value_chain_layer: researchContent.economics.valueChain,
+      entity_name: assetName || candidate.companyName, symbol: candidate.symbol, role: candidate.role, mechanism: candidate.mechanism,
+      materiality: candidate.materiality, confidence: candidate.confidence, verification_status: 'needs_company_research',
+      resolution_method: 'analyst_source_candidate',
+      resolution_reason: `The bounded market-research artifact named ${candidate.companyName} (${candidate.symbol}); the symbol was verified against the active tradable asset registry. Company-level economics remain unverified until independent research.`,
+      source_ids: candidate.sourceIds,
+    }]
+  })
+  const exposureRows = [...genericExposureRows, ...companyExposureRows]
   const { data: persistedExposures, error: exposureError } = exposureRows.length > 0
     ? await supabase.from('market_thesis_exposures').insert(exposureRows).select('*')
     : { data: [], error: null }
@@ -631,6 +651,7 @@ function normalizeThesis(
   predictionRows: RecordValue[],
   exposureRows: RecordValue[],
   latestEvaluations = new Map<string, import('../markets/types.ts').MarketThesisPredictionEvaluation>(),
+  linkedCompanyTheses: import('../markets/types.ts').MarketLinkedCompanyThesis[] = [],
 ): MarketThesisVersion {
   const content = record(row.content)
   return {
@@ -647,7 +668,16 @@ function normalizeThesis(
         result: item.result as ThesisPrediction['result'], evaluatedAt: iso(item.evaluated_at), latestEvaluation: latestEvaluations.get(id) ?? null,
       }
     }),
-    exposures: exposureRows.map((item) => ({ id: String(item.id), valueChainLayer: String(item.value_chain_layer), entityName: String(item.entity_name), symbol: item.symbol === null ? null : String(item.symbol ?? ''), role: item.role as 'beneficiary' | 'loser' | 'substitute', mechanism: String(item.mechanism), materiality: number(item.materiality), confidence: number(item.confidence), verificationStatus: item.verification_status as 'verified' | 'needs_company_research' | 'unverified' })),
+    exposures: exposureRows.map((item) => ({
+      id: String(item.id), valueChainLayer: String(item.value_chain_layer), entityName: String(item.entity_name), symbol: item.symbol === null ? null : String(item.symbol ?? ''),
+      role: item.role as 'beneficiary' | 'loser' | 'substitute', mechanism: String(item.mechanism), materiality: number(item.materiality), confidence: number(item.confidence),
+      verificationStatus: item.verification_status as 'verified' | 'needs_company_research' | 'unverified',
+      resolutionMethod: item.resolution_method === null || item.resolution_method === undefined ? null : item.resolution_method as import('../markets/types.ts').MarketThesisExposure['resolutionMethod'],
+      resolutionReason: item.resolution_reason === null || item.resolution_reason === undefined ? null : String(item.resolution_reason),
+      sourceIds: strings(item.source_ids), researchJobId: item.research_job_id === null || item.research_job_id === undefined ? null : String(item.research_job_id),
+      researchQueuedAt: item.research_queued_at === null || item.research_queued_at === undefined ? null : String(item.research_queued_at),
+    })),
+    linkedCompanyTheses,
   }
 }
 
@@ -665,11 +695,12 @@ export async function fetchMarketThesisWorkspace(ownerId: string): Promise<Marke
     : { data: [], error: null }
   if (thesisResult.error) throw new Error(`Unable to load market thesis workspace: ${thesisResult.error.message}`)
   const thesisIds = (thesisResult.data ?? []).map((item) => item.id)
-  const [predictionResult, exposureResult] = thesisIds.length > 0 ? await Promise.all([
+  const [predictionResult, exposureResult, companyLinkResult] = thesisIds.length > 0 ? await Promise.all([
     supabase.from('market_thesis_predictions').select('*').in('market_thesis_version_id', thesisIds),
     supabase.from('market_thesis_exposures').select('*').in('market_thesis_version_id', thesisIds),
-  ]) : [{ data: [], error: null }, { data: [], error: null }]
-  if (predictionResult.error || exposureResult.error) throw new Error(`Unable to load market thesis details: ${predictionResult.error?.message ?? exposureResult.error?.message}`)
+    supabase.from('market_thesis_company_links').select('market_thesis_version_id,investment_theses(id,symbol,version,status,trigger,content,generated_at,reviewed_at,research_note_id)').in('market_thesis_version_id', thesisIds),
+  ]) : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }]
+  if (predictionResult.error || exposureResult.error || (companyLinkResult.error && !/market_thesis_company_links|schema cache/i.test(companyLinkResult.error.message))) throw new Error(`Unable to load market thesis details: ${predictionResult.error?.message ?? exposureResult.error?.message ?? companyLinkResult.error?.message}`)
   const predictionIds = (predictionResult.data ?? []).map((item) => String(item.id))
   const predictionEvaluationResult = predictionIds.length > 0
     ? await supabase.from('market_thesis_prediction_evaluations').select('*').in('prediction_id', predictionIds).order('version', { ascending: false })
@@ -699,6 +730,21 @@ export async function fetchMarketThesisWorkspace(ownerId: string): Promise<Marke
   for (const item of predictionResult.data ?? []) predictionsByThesis.set(item.market_thesis_version_id, [...(predictionsByThesis.get(item.market_thesis_version_id) ?? []), item as RecordValue])
   const exposuresByThesis = new Map<string, RecordValue[]>()
   for (const item of exposureResult.data ?? []) exposuresByThesis.set(item.market_thesis_version_id, [...(exposuresByThesis.get(item.market_thesis_version_id) ?? []), item as RecordValue])
+  const companyThesesByMarketVersion = new Map<string, import('../markets/types.ts').MarketLinkedCompanyThesis[]>()
+  for (const item of companyLinkResult.data ?? []) {
+    const related = (item as RecordValue).investment_theses
+    const thesis = Array.isArray(related) ? record(related[0]) : record(related)
+    if (!thesis.id) continue
+    const content = record(thesis.content)
+    const marketVersionId = String((item as RecordValue).market_thesis_version_id)
+    const linked: import('../markets/types.ts').MarketLinkedCompanyThesis = {
+      id: String(thesis.id), symbol: thesis.symbol === null ? null : String(thesis.symbol ?? ''), version: number(thesis.version),
+      status: thesis.status as import('../markets/types.ts').ThesisStatus, headline: String(content.headline ?? ''), trigger: String(thesis.trigger ?? ''),
+      generatedAt: String(thesis.generated_at), reviewedAt: thesis.reviewed_at === null ? null : String(thesis.reviewed_at ?? ''),
+      researchNoteId: thesis.research_note_id === null ? null : String(thesis.research_note_id ?? ''),
+    }
+    companyThesesByMarketVersion.set(marketVersionId, [...(companyThesesByMarketVersion.get(marketVersionId) ?? []), linked])
+  }
   const latestPredictionEvaluationByPrediction = new Map<string, import('../markets/types.ts').MarketThesisPredictionEvaluation>()
   for (const item of predictionEvaluationResult.data ?? []) {
     const evaluation = {
@@ -723,7 +769,7 @@ export async function fetchMarketThesisWorkspace(ownerId: string): Promise<Marke
       const hypothesis = normalizeHypothesis(item as RecordValue)
       return { ...hypothesis, latestResearch: latestResearchByHypothesis.get(hypothesis.id) ?? null }
     }),
-    theses: (thesisResult.data ?? []).map((item) => normalizeThesis(item as RecordValue, predictionsByThesis.get(item.id) ?? [], exposuresByThesis.get(item.id) ?? [], latestPredictionEvaluationByPrediction)),
+    theses: (thesisResult.data ?? []).map((item) => normalizeThesis(item as RecordValue, predictionsByThesis.get(item.id) ?? [], exposuresByThesis.get(item.id) ?? [], latestPredictionEvaluationByPrediction, companyThesesByMarketVersion.get(item.id) ?? [])),
     frontiers: frontierResult.error ? [] : (frontierResult.data ?? []).map((item) => normalizeResearchFrontier(item as RecordValue)),
     crossDomainLinks: crossDomainResult.error ? [] : (crossDomainResult.data ?? [])
       .map((item) => normalizeCrossDomainLink(item as RecordValue))

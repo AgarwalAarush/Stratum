@@ -1,6 +1,7 @@
 import { getMarketDomainPack, isKnownMarketDomain, MARKET_DOMAIN_PACKS } from '../markets/domain-packs.ts'
 import type {
   MarketDomainPack,
+  MarketDomainResearchCoverage,
   MarketResearchScoutLead,
   MarketResearchScoutRun,
   MarketOrchestrationAction,
@@ -469,7 +470,7 @@ function normalizeResearchFrontier(row: RecordValue): MarketResearchFrontierItem
     id: String(row.id), hypothesisId: String(row.hypothesis_id), researchVersionId: row.research_version_id === null ? null : String(row.research_version_id ?? ''),
     question: String(row.question), causalNode: String(row.causal_node), priority: Number(row.priority), sourceTypes: strings(row.source_types), adapterId: row.adapter_id === null ? null : String(row.adapter_id ?? ''),
     status, evidenceNeeded: String(row.evidence_needed), attemptCount: Number(row.attempt_count), lastError: row.last_error === null ? null : String(row.last_error ?? ''),
-    nextRunAt: row.next_run_at === null ? null : String(row.next_run_at ?? ''),
+    nextRunAt: row.next_run_at === null ? null : String(row.next_run_at ?? ''), createdAt: String(row.created_at),
   }
 }
 
@@ -618,7 +619,7 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
     supabase.from('world_source_health_checks').select('*').order('checked_at', { ascending: false }).limit(500),
     supabase.from('world_observation_proposals').select('*,world_source_registry(label,canonical_url),world_documents(title,canonical_url),world_observation_proposal_reviews(decision,rationale,reviewed_at,observation_id,reviewer_kind)').order('generated_at', { ascending: false }).limit(60),
     supabase.from('world_observation_proposal_triage_runs').select('*,world_source_document_captures(source_id,world_source_registry(slug,label,canonical_url))').order('completed_at', { ascending: false }).limit(60),
-    supabase.from('market_hypothesis_research_frontier').select('*').order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(120),
+    supabase.from('market_hypothesis_research_frontier').select('*,market_hypotheses(scope)').order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(120),
     supabase.from('market_orchestration_runs').select('*').order('created_at', { ascending: false }).limit(20),
     supabase.from('market_orchestration_actions').select('*').order('created_at', { ascending: false }).limit(120),
     fetchWorldSourceReferrals(),
@@ -644,16 +645,22 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
   ))
   const coverage = (domains.data ?? []).map((row) => {
     const domainId = String(row.id)
+    const domain = getMarketDomainPack(domainId)
+    if (!domain) throw new Error(`Persisted unknown domain pack ${domainId}`)
     const domainSources = normalizedSources.filter((source) => source.domainIds.includes(domainId))
     const domainObservations = (observations.data ?? []).filter((observation) => observation.domain === domainId)
-    return {
-      domainId,
-      admittedSourceCount: domainSources.filter((source) => source.status === 'approved' || source.status === 'probation').length,
-      candidateSourceCount: domainSources.filter((source) => source.status === 'candidate').length,
-      pendingReferralCount: referrals.filter((referral) => referral.domainId === domainId && referral.status === 'pending').length,
-      observationCount: domainObservations.length,
-      latestObservationAt: domainObservations[0]?.ingested_at ?? null,
-    }
+    const domainFrontiers = (researchFrontiers.data ?? []).filter((frontier) => {
+      const hypothesis = relatedRecord((frontier as RecordValue).market_hypotheses)
+      return String(hypothesis.scope ?? '') === domainId
+    }).map((frontier) => normalizeResearchFrontier(frontier as RecordValue))
+    return buildMarketDomainResearchCoverage({
+      domain,
+      sources: domainSources,
+      referrals: referrals.filter((referral) => referral.domainId === domainId),
+      observations: domainObservations.map((observation) => ({ ingestedAt: String(observation.ingested_at) })),
+      frontiers: domainFrontiers,
+      proposals: (proposals.data ?? []).filter((proposal) => String(proposal.domain_id) === domainId).map((proposal) => normalizeObservationProposal(proposal as RecordValue)),
+    })
   })
   return {
     domains: (domains.data ?? []).map((row) => {
@@ -673,6 +680,64 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
     orchestrationActions: (orchestrationActions.data ?? []).map((row) => normalizeOrchestrationAction(row as RecordValue)),
     referrals,
     coverage,
+  }
+}
+
+const OBSERVATION_FRESHNESS_SLO_DAYS = 14
+const FRONTIER_AGE_SLO_DAYS = 21
+
+function ageInDays(value: string | null, now: Date): number | null {
+  if (!value) return null
+  const timestamp = new Date(value).getTime()
+  if (!Number.isFinite(timestamp)) return null
+  return Math.max(0, Math.floor((now.getTime() - timestamp) / 86_400_000))
+}
+
+/** Build the visible research-control contract for one domain. All thresholds
+ * are deterministic operational SLOs, not judgments about thesis validity. */
+export function buildMarketDomainResearchCoverage(input: {
+  domain: MarketDomainPack
+  sources: WorldSourceRegistryEntry[]
+  referrals: import('../markets/types.ts').WorldSourceReferral[]
+  observations: Array<{ ingestedAt: string }>
+  frontiers: MarketResearchFrontierItem[]
+  proposals: WorldObservationProposal[]
+  now?: Date
+}): MarketDomainResearchCoverage {
+  const now = input.now ?? new Date()
+  const admitted = input.sources.filter((source) => source.status === 'approved' || source.status === 'probation')
+  const sourceClassCoverage = input.domain.sourceRequirements.map((requirement) => ({
+    evidenceClass: requirement.evidenceClass,
+    current: new Set(admitted.filter((source) => source.evidenceClasses.includes(requirement.evidenceClass)).map((source) => source.id)).size,
+    required: requirement.minimumSources,
+    purpose: requirement.purpose,
+  }))
+  const openFrontiers = input.frontiers.filter((frontier) => frontier.status !== 'complete')
+  const oldestOpenFrontierAt = openFrontiers.flatMap((frontier) => frontier.createdAt ? [frontier.createdAt] : []).sort()[0] ?? null
+  const latestObservationAt = input.observations.map((observation) => observation.ingestedAt).sort().at(-1) ?? null
+  const observationFreshnessDays = ageInDays(latestObservationAt, now)
+  const frontierAgeDays = ageInDays(oldestOpenFrontierAt, now)
+  const candidateSourceCount = input.sources.filter((source) => source.status === 'candidate').length
+  const pendingReferralCount = input.referrals.filter((referral) => referral.status === 'pending').length
+  const pendingProposalCount = input.proposals.filter((proposal) => !proposal.review).length
+  const reviewBacklogCount = candidateSourceCount + pendingReferralCount + pendingProposalCount
+  const explanations: string[] = []
+  const missingClasses = sourceClassCoverage.filter((entry) => entry.current < entry.required)
+  if (missingClasses.length) explanations.push(`Source coverage is short in ${missingClasses.map((entry) => `${entry.evidenceClass.replaceAll('_', ' ')} (${entry.current}/${entry.required})`).join(', ')}.`)
+  if (latestObservationAt === null) explanations.push('No governed observation has been admitted for this domain yet.')
+  else if (observationFreshnessDays !== null && observationFreshnessDays > OBSERVATION_FRESHNESS_SLO_DAYS) explanations.push(`Latest governed evidence is ${observationFreshnessDays} days old; the operating target is ${OBSERVATION_FRESHNESS_SLO_DAYS} days.`)
+  if (frontierAgeDays !== null && frontierAgeDays > FRONTIER_AGE_SLO_DAYS) explanations.push(`The oldest unresolved research question is ${frontierAgeDays} days old; the operating target is ${FRONTIER_AGE_SLO_DAYS} days.`)
+  if (reviewBacklogCount > 0) explanations.push(`${reviewBacklogCount} item${reviewBacklogCount === 1 ? '' : 's'} await source, referral, or quote review before they can advance.`)
+  const admittedSourceCount = admitted.length
+  const blocked = input.domain.status === 'active' && admittedSourceCount === 0
+  const stale = (observationFreshnessDays !== null && observationFreshnessDays > OBSERVATION_FRESHNESS_SLO_DAYS)
+    || (frontierAgeDays !== null && frontierAgeDays > FRONTIER_AGE_SLO_DAYS)
+  const state: MarketDomainResearchCoverage['state'] = blocked ? 'blocked' : missingClasses.length ? 'thin' : stale ? 'stale' : 'healthy'
+  if (explanations.length === 0) explanations.push('Required source classes are covered, governed evidence is within the freshness target, and no review backlog is blocking the domain.')
+  return {
+    domainId: input.domain.id, state, admittedSourceCount, candidateSourceCount, pendingReferralCount,
+    observationCount: input.observations.length, latestObservationAt, observationFreshnessDays, sourceClassCoverage,
+    oldestOpenFrontierAt, frontierAgeDays, openFrontierCount: openFrontiers.length, reviewBacklogCount, explanations,
   }
 }
 

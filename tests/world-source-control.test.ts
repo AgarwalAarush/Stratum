@@ -3,6 +3,7 @@ import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 import {
   buildWorldSourceCoverageScoutPlan,
+  buildMarketDomainResearchCoverage,
   buildWorldSourceScoutPrompt,
   scoreWorldSourceCandidate,
   selectCandidateSourcePreflights,
@@ -86,6 +87,23 @@ test('weekly coverage discovery targets only declared gaps without candidate cov
     { id: 'operations', status: 'candidate', evidenceClasses: ['operational_data'] },
     { id: 'expectations', status: 'candidate', evidenceClasses: ['market_expectations'] },
   ]), null)
+})
+
+test('domain research coverage explains thin, stale, and review-blocked surfaces', () => {
+  const domain = getMarketDomainPack('ai-power')!
+  const coverage = buildMarketDomainResearchCoverage({
+    domain,
+    sources: [],
+    referrals: [{ id: 'referral', feedItemId: 'feed', domainId: domain.id, status: 'pending', feedScope: 'markets', feedSection: 'news', title: 'Grid item', sourceUrl: 'https://example.com/item', originUrl: 'https://example.com', publisher: 'Example', publishedAt: null, reason: 'Matched grid capacity.', registeredSourceId: null, reviewedBy: null, reviewRationale: null, registeredAt: null, dismissedAt: null, createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T00:00:00Z' }],
+    observations: [{ ingestedAt: '2026-07-01T00:00:00Z' }],
+    frontiers: [{ id: 'frontier', hypothesisId: 'hypothesis', researchVersionId: null, question: 'What binds?', causalNode: 'capacity', priority: 5, sourceTypes: [], adapterId: null, status: 'queued', evidenceNeeded: 'Operator data', attemptCount: 0, lastError: null, nextRunAt: null, createdAt: '2026-07-01T00:00:00Z' }],
+    proposals: [],
+    now: new Date('2026-08-15T00:00:00Z'),
+  })
+  assert.equal(coverage.state, 'blocked')
+  assert.equal(coverage.reviewBacklogCount, 1)
+  assert.ok(coverage.explanations.some((reason) => /Source coverage is short/i.test(reason)))
+  assert.ok(coverage.explanations.some((reason) => /45 days old/i.test(reason)))
 })
 
 test('source contracts constrain hosts, paths, MIME types, and allowed observation kinds', () => {

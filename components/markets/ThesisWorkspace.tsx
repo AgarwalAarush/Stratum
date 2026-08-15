@@ -286,6 +286,7 @@ function AcceptedTheses({ accepted, packets, monitors, busy, onMonitorChange }: 
       return <article key={thesis.id}>
         <header><div><span className="thesis-status-pill" data-status="active">active · v{thesis.version}</span><h3>{thesis.symbol ? <StockDestinationMenu symbol={thesis.symbol} /> : title(thesis)}</h3><small>{label(thesis)}</small></div><MonitorControl monitor={monitor} busy={busy} onChange={onMonitorChange} /></header>
         <div className="company-thesis-active-body"><div><strong>{thesis.content.headline}</strong>{thesis.content.summary ? <p>{thesis.content.summary}</p> : null}<ReviewOutcomeSummary outcomes={packets[thesis.id]?.reviewHistory ?? []} />{thesis.symbol ? <p className="company-thesis-capital-link">{capitalDecision ? <>Capital decision v{capitalDecision.version}: {capitalDecision.disposition} · {capitalDecision.entryAction.replaceAll('_', ' ')}</> : <>No capital decision recorded. <MarketsIntentLink href={`/markets/stocks/${thesis.symbol}`}>Record one separately →</MarketsIntentLink></>}</p> : null}</div><div className="company-thesis-active-evidence"><EvidenceList label="Catalysts" items={list(thesis.content.catalysts)} empty="No catalyst retained." /><EvidenceList label="Invalidation" items={list(thesis.content.invalidation)} empty={thesis.content.fastestKillSignal || 'No invalidation retained.'} /></div></div>
+        <ReviewPacket thesis={thesis} packet={packets[thesis.id]} />
       </article>
     })}</div>}
   </section>
@@ -312,6 +313,8 @@ function ReviewPacket({ thesis, packet }: { thesis: InvestmentThesis; packet: Co
       <div><span>Market-model context</span>{packet?.marketContexts.length ? packet.marketContexts.map((context) => <p key={context.marketThesisVersionId}>v{context.version} · {Math.round(context.confidence)}% · {context.title}</p>) : <p>No originating market model is linked.</p>}</div>
       <div><span>Source ledger</span>{packet?.sourceLedger.length ? packet.sourceLedger.map((source) => <a key={`${source.label}:${source.url}`} href={source.url} target="_blank" rel="noreferrer">{source.label}</a>) : <p>No linked source ledger.</p>}</div>
       <div><span>Capital decision</span>{packet?.capitalDecision ? <p>v{packet.capitalDecision.version} · {packet.capitalDecision.disposition} · {packet.capitalDecision.entryAction.replaceAll('_', ' ')}</p> : <p>None recorded. Thesis review and capital action remain separate.</p>}</div>
+      <div><span>Research change history</span>{packet?.researchHistory.length ? packet.researchHistory.map((version) => <p key={version.id}>Research v{version.version} · {version.formalRating} · {version.revision.opinionChange.replaceAll('_', ' ')} · {version.revision.summary}</p>) : <p>No research revision history.</p>}</div>
+      <div><span>Company-thesis history</span>{packet?.thesisHistory.length ? packet.thesisHistory.map((version) => <p key={version.id}>Thesis v{version.version} · {version.status} · {version.trigger.replaceAll('-', ' ')} · {proposalDate(version.generatedAt)}</p>) : <p>No prior company-thesis version.</p>}</div>
     </div>
   </div></details>
 }

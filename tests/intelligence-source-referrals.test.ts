@@ -39,9 +39,10 @@ test('classification is deterministic and ignores unsafe aggregation portals', (
   assert.deepEqual(candidates, [])
 })
 
-test('referral lane is durable, scheduled, and cannot silently become governed evidence', async () => {
-  const [migration, jobs, schedule, route, panel] = await Promise.all([
+test('referral lane is durable, reviewed, scheduled, and cannot silently become governed evidence', async () => {
+  const [migration, completionMigration, jobs, schedule, route, panel] = await Promise.all([
     readFile(new URL('../supabase/migrations/202608110001_intelligence_source_referrals.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/202608150001_complete_thesis_stages_2_3.sql', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8'),
     readFile(new URL('../lib/server/agent-schedule.ts', import.meta.url), 'utf8'),
     readFile(new URL('../app/api/markets/world-sources/route.ts', import.meta.url), 'utf8'),
@@ -53,6 +54,12 @@ test('referral lane is durable, scheduled, and cannot silently become governed e
   assert.match(jobs, /materializeIntelligenceSourceReferrals/)
   assert.match(schedule, /scan-intelligence-source-referrals/)
   assert.match(route, /scan-intelligence-source-referrals/)
+  assert.match(route, /review-source-referral/)
+  assert.match(completionMigration, /register_world_source_referral/)
+  assert.match(completionMigration, /dismiss_world_source_referral/)
+  assert.match(completionMigration, /reviewed_by/)
   assert.match(panel, /Scan Intelligence \+ Markets referrals/)
+  assert.match(panel, /Register source candidate/)
+  assert.match(panel, /Dismiss referral/)
   assert.match(panel, /not a source contract, quote-bound observation, market thesis input, or company recommendation/i)
 })

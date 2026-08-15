@@ -147,6 +147,7 @@ function MarketThesisDetail({ thesis, hypothesis, busy, queuedExposureIds, onAct
   const sources = [...new Map(thesis.content.sourceLedger.map((source) => [`${source.label}:${source.url}`, source])).values()]
   const verifiedExposures = thesis.exposures.filter((item) => item.verificationStatus === 'verified')
   const companyResearchLeads = thesis.exposures.filter((item) => item.symbol && item.verificationStatus !== 'unverified')
+  const unresolvedExposures = thesis.exposures.filter((item) => !item.symbol)
   return <article className="market-thesis-detail" data-state={thesis.state}>
     <header>
       <div><span className="thesis-status-pill" data-status={thesis.state}>{thesis.state} · v{thesis.version}</span><h3>{thesis.title}</h3></div>
@@ -164,15 +165,23 @@ function MarketThesisDetail({ thesis, hypothesis, busy, queuedExposureIds, onAct
       <div>{verifiedExposures.map((item) => <p key={item.id}><strong>{item.symbol ?? item.entityName}</strong><span>{item.mechanism}</span></p>)}</div>
     </section> : null}
     {companyResearchLeads.length > 0 ? <section className="market-thesis-company-leads" aria-label="Company research leads">
-      <header><span>Company research leads</span><small>Model context only · company evidence required</small></header>
+      <header><span>Public-company research candidates</span><small>Source-attributed nomination · not a recommendation</small></header>
       <div>{companyResearchLeads.map((item) => {
-        const queued = queuedExposureIds.has(item.id)
+        const queued = queuedExposureIds.has(item.id) || Boolean(item.researchQueuedAt)
         const investigating = busy === `investigate:${thesis.id}:${item.id}`
         return <article key={item.id}>
-          <div><strong>{item.symbol}</strong><span>{item.role} · {item.verificationStatus.replaceAll('_', ' ')}</span><p>{item.mechanism}</p></div>
+          <div><strong><a href={`/markets/stocks/${item.symbol}`}>{item.symbol}</a></strong><span>{item.role} · materiality {Math.round(item.materiality)} · confidence {Math.round(item.confidence)}</span><p>{item.mechanism}</p>{item.resolutionReason ? <small>{item.resolutionReason}</small> : null}</div>
           <button type="button" disabled={busy !== null || queued} onClick={() => void onInvestigate(thesis, item.id)}>{investigating ? 'Queueing…' : queued ? 'Research queued' : 'Investigate company'}</button>
         </article>
       })}</div>
+    </section> : null}
+    {unresolvedExposures.length > 0 ? <details className="market-thesis-unresolved-exposures"><summary>{countLabel(unresolvedExposures.length, 'unresolved value-chain exposure')}</summary><div>{unresolvedExposures.map((item) => <p key={item.id}><strong>{item.entityName}</strong><span>{item.mechanism}</span></p>)}</div><small>No ticker is shown until the bounded ledger identifies a company and the active-asset registry verifies its symbol.</small></details> : null}
+    {thesis.linkedCompanyTheses.length > 0 ? <section className="market-thesis-company-lineage" aria-label="Linked company thesis history">
+      <header><span>Independent company-thesis outcomes</span><small>All linked versions · market context does not validate them</small></header>
+      <div>{[...thesis.linkedCompanyTheses].sort((left, right) => right.version - left.version).map((companyThesis) => <article key={companyThesis.id}>
+        <div><strong>{companyThesis.symbol ?? 'Company thesis'} · v{companyThesis.version}</strong><span>{companyThesis.status} · {companyThesis.trigger.replaceAll('-', ' ')}</span><p>{companyThesis.headline || 'No headline retained.'}</p></div>
+        {companyThesis.symbol ? <a href={`/markets/stocks/${companyThesis.symbol}/research`}>Open research</a> : null}
+      </article>)}</div>
     </section> : null}
     <footer>
       {sources.length > 0 ? <details className="market-thesis-source-ledger"><summary>{countLabel(sources.length, 'source')}</summary><div>{sources.map((source) => <a key={`${source.label}:${source.url}`} href={source.url} target="_blank" rel="noreferrer">{source.label}<ArrowRight size={12} aria-hidden="true" /></a>)}</div></details> : <span />}
@@ -224,7 +233,7 @@ function ResearchQueue({ hypotheses, frontiers, busy, onAction }: { hypotheses: 
 function CrossDomainMap({ links, hypothesesById }: { links: MarketHypothesisCrossDomainLink[]; hypothesesById: Map<string, MarketHypothesis> }) {
   if (links.length === 0) return null
   return <details className="market-thesis-transmission">
-    <summary><strong>Related model links</strong><small>{countLabel(links.length, 'link')}</small><CaretDown size={15} aria-hidden="true" /></summary>
+    <summary><strong>Cross-domain mechanism map</strong><small>{countLabel(links.length, 'link')} · Forming links are research context only</small><CaretDown size={15} aria-hidden="true" /></summary>
     <div>{links.map((link) => <article key={link.id}><span>{link.relationship}</span><strong>{hypothesesById.get(link.fromHypothesisId)?.title ?? 'Source model'}<ArrowRight size={14} aria-hidden="true" />{hypothesesById.get(link.toHypothesisId)?.title ?? 'Destination model'}</strong><p>{link.explanation}</p><small>{countLabel(link.sourceObservationIds.length, 'linked observation')} · {Math.round(link.confidence)}% confidence</small></article>)}</div>
   </details>
 }

@@ -10,6 +10,7 @@ import {
   validateWorldSourceContract,
 } from '@/lib/server/world-source-control'
 import { reviewWorldObservationProposal } from '@/lib/server/world-observation-review'
+import { reviewWorldSourceReferral } from '@/lib/server/intelligence-source-referrals'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,18 @@ export async function POST(request: NextRequest) {
     if (body.action === 'scan-intelligence-source-referrals') {
       const queued = await enqueueAgentJob('scan-intelligence-source-referrals', { trigger: 'manual' })
       return NextResponse.json({ queued: true, ...queued })
+    }
+    if (body.action === 'review-source-referral') {
+      if (typeof body.referralId !== 'string' || (body.decision !== 'register' && body.decision !== 'dismiss') || typeof body.rationale !== 'string') {
+        return NextResponse.json({ error: 'A referral, explicit decision, and review rationale are required.' }, { status: 400 })
+      }
+      const review = await reviewWorldSourceReferral({
+        referralId: body.referralId, reviewerId: user.id, decision: body.decision, rationale: body.rationale,
+      })
+      const preflight = review.sourceSlug
+        ? await enqueueAgentJob('preflight-world-source-candidate', { slug: review.sourceSlug, trigger: 'feed-referral-review' })
+        : null
+      return NextResponse.json({ review, preflightQueued: preflight ? !preflight.deduplicated : false })
     }
     if (body.action === 'auto-accept-observation-proposals') {
       // Quote re-verification reads STRATUM_DATA_ROOT extracts on the worker.

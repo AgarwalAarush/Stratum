@@ -16,7 +16,7 @@ import {
 
 const sourceIds = ['source-a', 'source-b', 'source-c']
 
-function researchFixture() {
+function researchFixture(): any {
   return {
     thesisStatement: 'Firm-power constraints could preserve scarcity rents for proven regional supply.',
     whyNow: 'Large-load demand is arriving before every announced capacity project can serve it.',
@@ -28,7 +28,7 @@ function researchFixture() {
     demand: { currentState: 'Large loads are growing.', changeMechanism: 'New capacity is requested.', sourceIds: ['source-a'] },
     supply: { currentState: 'Firm supply takes time.', changeMechanism: 'Projects have lead times.', sourceIds: ['source-b'] },
     bottlenecks: [{ name: 'Interconnection', mechanism: 'Queue timing slows supply.', severity: 'important', whoCapturesEconomics: 'Deliverable capacity owners may capture value.', resolutionSignals: ['Queue completions'], sourceIds: ['source-b'] }],
-    economics: { valueChain: 'Generation to load serving.', scarcityRentCapture: 'Only proven delivery can capture rents.', beneficiaries: ['Deliverable capacity'], substitutes: ['Flexible load'], sourceIds: ['source-c'] },
+    economics: { valueChain: 'Generation to load serving.', scarcityRentCapture: 'Only proven delivery can capture rents.', beneficiaries: ['Deliverable capacity'], substitutes: ['Flexible load'], companyCandidates: [], sourceIds: ['source-c'] },
     expectations: { currentNarrative: 'Demand growth is well discussed.', whatAppearsPriced: 'Unknown from the supplied evidence.', variantView: 'Regional delivery matters more than aggregate capacity.', sourceIds: ['source-a'] },
     counterThesis: { statement: 'Supply catches up before scarcity persists.', mechanisms: ['Faster projects'], decisiveTests: ['Delivered capacity additions'], sourceIds: ['source-b'] },
     predictions: [
@@ -58,6 +58,16 @@ test('market thesis research requires a source-backed, internally complete ledge
   const unsupportedClaim = researchFixture()
   unsupportedClaim.causalChain[0].sourceIds = []
   assert.throws(() => validateMarketThesisResearch(unsupportedClaim, new Set(sourceIds)), /needs a source ID/)
+})
+
+test('public-company candidates require a valid ticker and exact source-ledger provenance', () => {
+  const named = researchFixture()
+  named.economics.companyCandidates = [{ companyName: 'Acme Power', symbol: 'ACME', role: 'beneficiary', mechanism: 'Owns named deliverable capacity.', materiality: 82, confidence: 68, sourceIds: ['source-c'] }]
+  const validated = validateMarketThesisResearch(named, new Set(sourceIds))
+  assert.equal(validated.economics.companyCandidates[0]?.symbol, 'ACME')
+  const unsupported = researchFixture()
+  unsupported.economics.companyCandidates = [{ ...named.economics.companyCandidates[0]!, sourceIds: [] }]
+  assert.throws(() => validateMarketThesisResearch(unsupported, new Set(sourceIds)), /requires source-ledger provenance/)
 })
 
 test('market research requires at least one near-term evaluable prediction', () => {
@@ -138,6 +148,8 @@ test('revision prompts feed the prior critique and allow unresolved capture on p
   assert.match(revision, /Find contractual capture evidence/)
   assert.match(revision, /Do not invent new facts/)
   assert.match(revision, /integer percent from 0 to 100/)
+  assert.match(revision, /companyCandidates/)
+  assert.match(revision, /not a recommendation/i)
   const critic = critiquePrompt(hypothesis, validateMarketThesisResearch(researchFixture(), new Set(sourceIds)), sources)
   assert.match(critic, /Economic capture may remain unresolved/)
   assert.match(critic, /assertion and excerpt together/)

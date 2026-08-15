@@ -93,8 +93,8 @@ test('market exposure investigations queue independently verified company resear
   const route = await readFile(new URL('../app/api/markets/market-theses/[id]/exposures/[exposureId]/investigate/route.ts', import.meta.url), 'utf8')
   const companyResearch = await readFile(new URL('../lib/server/company-research.ts', import.meta.url), 'utf8')
   const theses = await readFile(new URL('../lib/server/theses.ts', import.meta.url), 'utf8')
-  assert.match(workspace, /Company research leads/)
-  assert.match(workspace, /Model context only · company evidence required/)
+  assert.match(workspace, /Public-company research candidates/)
+  assert.match(workspace, /not a recommendation/)
   assert.match(workspace, /Investigate company/)
   assert.match(route, /resolveMarketThesisExposureInvestigation/)
   assert.match(route, /marketThesisVersionId/)
@@ -103,6 +103,7 @@ test('market exposure investigations queue independently verified company resear
   assert.match(companyResearch, /context\?\.marketThesisVersionId/)
   assert.match(theses, /linkMarketThesisToCompanyThesis/)
   assert.match(theses, /market_thesis_company_links/)
+  assert.match(workspace, /Independent company-thesis outcomes/)
 })
 
 test('legacy question-led thesis records render an affirmative belief and preserve the debate separately', () => {

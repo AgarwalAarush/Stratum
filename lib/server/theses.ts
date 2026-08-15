@@ -345,13 +345,13 @@ export async function fetchThesisWorkspace(ownerId: string): Promise<ThesisWorks
     accepted.push(thesis)
   }
   const thesisIds = rows.map((item) => item.id)
-  const researchNoteIds = rows.flatMap((item) => item.researchNoteId ? [item.researchNoteId] : [])
+  const symbols = [...new Set(rows.flatMap((item) => item.symbol ? [item.symbol] : []))]
   const [outcomeResult, researchResult, contextResult, decisionResult] = await Promise.all([
     thesisIds.length > 0
       ? supabase.from('investment_thesis_review_outcomes').select('*').eq('owner_id', ownerId).in('investment_thesis_id', thesisIds).order('reviewed_at', { ascending: false })
       : Promise.resolve({ data: [], error: null }),
-    researchNoteIds.length > 0
-      ? supabase.from('equity_research_notes').select('id,version,status,formal_rating,entry_action,content,data_as_of').eq('owner_id', ownerId).in('id', researchNoteIds)
+    symbols.length > 0
+      ? supabase.from('equity_research_notes').select('id,symbol,version,status,formal_rating,entry_action,content,data_as_of,equity_research_sources(label,url,source_as_of)').eq('owner_id', ownerId).in('symbol', symbols).order('version', { ascending: false })
       : Promise.resolve({ data: [], error: null }),
     thesisIds.length > 0
       ? supabase.from('market_thesis_company_links').select('investment_thesis_id,market_thesis_versions(id,title,version,state,confidence,generated_at)').in('investment_thesis_id', thesisIds)
@@ -371,6 +371,19 @@ export async function fetchThesisWorkspace(ownerId: string): Promise<ThesisWorks
     outcomesByThesisId.set(outcome.thesisId, [...(outcomesByThesisId.get(outcome.thesisId) ?? []), outcome])
   }
   const researchById = new Map((researchResult.data ?? []).map((row) => [String(row.id), researchSummary(row as Record<string, unknown>)]))
+  const researchHistoryBySymbol = new Map<string, CompanyThesisResearchSummary[]>()
+  const researchSourcesBySymbol = new Map<string, ThesisSource[]>()
+  for (const row of researchResult.data ?? []) {
+    const symbol = String(row.symbol)
+    researchHistoryBySymbol.set(symbol, [...(researchHistoryBySymbol.get(symbol) ?? []), researchSummary(row as Record<string, unknown>)])
+    const persistedSources = Array.isArray(row.equity_research_sources) ? row.equity_research_sources.flatMap((item) => {
+      const source = record(item)
+      return source.label && source.url && source.source_as_of
+        ? [{ label: String(source.label), url: String(source.url), asOf: String(source.source_as_of) }]
+        : []
+    }) : []
+    researchSourcesBySymbol.set(symbol, [...(researchSourcesBySymbol.get(symbol) ?? []), ...persistedSources])
+  }
   const contextsByThesisId = new Map<string, CompanyThesisMarketContext[]>()
   for (const row of contextResult.data ?? []) {
     const version = relatedRecord((row as Record<string, unknown>).market_thesis_versions)
@@ -391,7 +404,12 @@ export async function fetchThesisWorkspace(ownerId: string): Promise<ThesisWorks
   }
   const reviewPackets = Object.fromEntries(rows.map((thesis): [string, CompanyThesisReviewPacket] => [thesis.id, {
     thesisId: thesis.id, research: thesis.researchNoteId ? researchById.get(thesis.researchNoteId) ?? null : null,
-    marketContexts: contextsByThesisId.get(thesis.id) ?? [], sourceLedger: thesis.sources,
+    researchHistory: thesis.symbol ? researchHistoryBySymbol.get(thesis.symbol) ?? [] : [],
+    thesisHistory: rows.filter((version) => version.entityKey === thesis.entityKey).map((version) => ({
+      id: version.id, version: version.version, status: version.status, trigger: version.trigger, generatedAt: version.generatedAt, reviewedAt: version.reviewedAt,
+    })),
+    marketContexts: contextsByThesisId.get(thesis.id) ?? [],
+    sourceLedger: [...new Map([...(thesis.symbol ? researchSourcesBySymbol.get(thesis.symbol) ?? [] : []), ...thesis.sources].map((source) => [`${source.label}:${source.url}`, source])).values()],
     reviewHistory: outcomesByThesisId.get(thesis.id) ?? [],
     capitalDecision: decisionsByThesisId.get(thesis.id) ?? null,
   }]))

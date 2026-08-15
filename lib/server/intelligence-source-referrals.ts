@@ -144,6 +144,10 @@ function normalizeReferral(row: RecordValue): WorldSourceReferral {
     originUrl: String(row.origin_url), publisher: row.publisher === null ? null : String(row.publisher ?? ''),
     publishedAt: row.published_at === null ? null : String(row.published_at ?? ''), reason: String(row.reason),
     registeredSourceId: row.registered_source_id === null ? null : String(row.registered_source_id ?? ''),
+    reviewedBy: row.reviewed_by === null ? null : String(row.reviewed_by ?? ''),
+    reviewRationale: row.review_rationale === null ? null : String(row.review_rationale ?? ''),
+    registeredAt: row.registered_at === null ? null : String(row.registered_at ?? ''),
+    dismissedAt: row.dismissed_at === null ? null : String(row.dismissed_at ?? ''),
     createdAt: String(row.created_at), updatedAt: String(row.updated_at),
   }
 }
@@ -154,4 +158,32 @@ export async function fetchWorldSourceReferrals(limit = 120): Promise<WorldSourc
   const { data, error } = await supabase.from('world_source_referrals').select('*').order('created_at', { ascending: false }).limit(Math.max(1, Math.min(limit, 300)))
   if (error) throw new Error(`Unable to load source referrals: ${error.message}`)
   return (data ?? []).map((row) => normalizeReferral(row as RecordValue))
+}
+
+export async function reviewWorldSourceReferral(input: {
+  referralId: string
+  reviewerId: string
+  decision: 'register' | 'dismiss'
+  rationale: string
+}): Promise<{ decision: 'register' | 'dismiss'; sourceId: string | null; sourceSlug: string | null }> {
+  if (!UUID.test(input.referralId) || !UUID.test(input.reviewerId)) throw new Error('A persisted referral and authenticated reviewer are required')
+  const rationale = input.rationale.trim()
+  if (rationale.length < 3 || rationale.length > 1_000) throw new Error('A review rationale between 3 and 1,000 characters is required')
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  if (input.decision === 'register') {
+    const { data, error } = await supabase.rpc('register_world_source_referral', {
+      p_referral_id: input.referralId, p_reviewer_id: input.reviewerId, p_rationale: rationale,
+    })
+    if (error || !data) throw new Error(`Unable to register source referral: ${error?.message ?? 'unknown error'}`)
+    const sourceId = String(data)
+    const { data: source, error: sourceError } = await supabase.from('world_source_registry').select('slug').eq('id', sourceId).single()
+    if (sourceError || !source) throw new Error(`Source referral registered but its candidate could not be reloaded: ${sourceError?.message ?? 'unknown error'}`)
+    return { decision: 'register', sourceId, sourceSlug: String(source.slug) }
+  }
+  const { error } = await supabase.rpc('dismiss_world_source_referral', {
+    p_referral_id: input.referralId, p_reviewer_id: input.reviewerId, p_rationale: rationale,
+  })
+  if (error) throw new Error(`Unable to dismiss source referral: ${error.message}`)
+  return { decision: 'dismiss', sourceId: null, sourceSlug: null }
 }

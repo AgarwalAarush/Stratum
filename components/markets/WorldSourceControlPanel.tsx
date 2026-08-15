@@ -83,6 +83,9 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const [revisingCanonicalSlug, setRevisingCanonicalSlug] = useState<string | null>(null)
   const [canonicalUrl, setCanonicalUrl] = useState('')
   const [canonicalRationale, setCanonicalRationale] = useState('')
+  const [reviewingReferralId, setReviewingReferralId] = useState<string | null>(null)
+  const [referralDecision, setReferralDecision] = useState<'register' | 'dismiss'>('register')
+  const [referralRationale, setReferralRationale] = useState('')
   const selectedDomain = useMemo(() => workspace?.domains.find((domain) => domain.id === selectedDomainId) ?? null, [workspace, selectedDomainId])
   const selectedDomainCoverage = useMemo(() => selectedDomain ? sourceCoverage(workspace!, selectedDomain) : [], [workspace, selectedDomain])
   const selectedDomainResearchCoverage = useMemo(() => workspace?.coverage.find((coverage) => coverage.domainId === selectedDomainId) ?? null, [workspace, selectedDomainId])
@@ -244,6 +247,30 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
       router.refresh()
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to scan source referrals')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const reviewReferral = async (referralId: string) => {
+    if (pending || referralRationale.trim().length < 3) return
+    setPending(true)
+    setNotice(null)
+    try {
+      const response = await fetch('/api/markets/world-sources', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'review-source-referral', referralId, decision: referralDecision, rationale: referralRationale.trim() }),
+      })
+      const payload = await response.json() as { error?: string; preflightQueued?: boolean }
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to review source referral')
+      setNotice(referralDecision === 'register'
+        ? `Referral registered as a source candidate.${payload.preflightQueued ? ' A direct-target preflight is queued.' : ''} Contract review is still required before collection.`
+        : 'Referral dismissed with its provenance and rationale preserved.')
+      setReviewingReferralId(null)
+      setReferralRationale('')
+      router.refresh()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to review source referral')
     } finally {
       setPending(false)
     }
@@ -425,11 +452,11 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
         <div className="market-source-coverage-grid">
           {workspace.domains.map((domain) => {
             const coverage = workspace.coverage.find((item) => item.domainId === domain.id)
-            return <button key={domain.id} type="button" onClick={() => setSelectedDomainId(domain.id)} data-selected={selectedDomainId === domain.id}>
-              <strong>{domain.label}</strong>
+            return <button key={domain.id} type="button" onClick={() => setSelectedDomainId(domain.id)} data-selected={selectedDomainId === domain.id} data-coverage-state={coverage?.state ?? 'blocked'}>
+              <strong>{domain.label}<em>{coverage?.state ?? 'unavailable'}</em></strong>
               <span>{coverage?.admittedSourceCount ?? 0} governed · {coverage?.candidateSourceCount ?? 0} candidate</span>
-              <span>{coverage?.observationCount ?? 0} evidence · {coverage?.pendingReferralCount ?? 0} referrals</span>
-              <small>{coverage?.latestObservationAt ? `Latest evidence ${formatDate(coverage.latestObservationAt)}` : 'No accepted evidence yet'}</small>
+              <span>{coverage?.observationCount ?? 0} evidence · {coverage?.reviewBacklogCount ?? 0} review backlog</span>
+              <small>{coverage?.explanations[0] ?? 'Coverage explanation unavailable.'}</small>
             </button>
           })}
         </div>
@@ -505,6 +532,11 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
             <h3>{selectedDomain.label}</h3>
             <p>{selectedDomain.description}</p>
             <p className="market-source-domain-telemetry">{selectedDomainResearchCoverage?.observationCount ?? 0} accepted observations · {selectedDomainResearchCoverage?.pendingReferralCount ?? 0} pending feed referrals{selectedDomainResearchCoverage?.latestObservationAt ? ` · latest evidence ${formatDate(selectedDomainResearchCoverage.latestObservationAt)}` : ''}</p>
+            {selectedDomainResearchCoverage ? <div className="market-domain-coverage-explanation" data-state={selectedDomainResearchCoverage.state}>
+              <strong>{selectedDomainResearchCoverage.state} coverage</strong>
+              <ul>{selectedDomainResearchCoverage.explanations.map((explanation) => <li key={explanation}>{explanation}</li>)}</ul>
+              <small>{selectedDomainResearchCoverage.openFrontierCount} open research questions · {selectedDomainResearchCoverage.reviewBacklogCount} review items · evidence freshness {selectedDomainResearchCoverage.observationFreshnessDays === null ? 'not established' : `${selectedDomainResearchCoverage.observationFreshnessDays} days`}</small>
+            </div> : null}
             <dl className="market-source-requirements">
               {selectedDomainCoverage.map((requirement) => (
                 <div key={requirement.evidenceClass} data-complete={requirement.current >= requirement.minimumSources}>
@@ -584,6 +616,12 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
                 <a href={referral.originUrl} target="_blank" rel="noreferrer">Open publisher origin for separate source review</a>
               </div>
               <time>{formatDate(referral.publishedAt ?? referral.createdAt)}</time>
+              {reviewingReferralId === referral.id ? <form className="market-source-contract-review market-referral-review" onSubmit={(event) => { event.preventDefault(); void reviewReferral(referral.id) }}>
+                <fieldset><legend>Referral outcome</legend><div><button type="button" data-selected={referralDecision === 'register'} onClick={() => setReferralDecision('register')}>Register candidate</button><button type="button" data-selected={referralDecision === 'dismiss'} onClick={() => setReferralDecision('dismiss')}>Dismiss</button></div></fieldset>
+                <p>{referralDecision === 'register' ? 'Registration creates a discovery-tier candidate and queues a reachability check. A separate contract review is still required before collection.' : 'Dismissal preserves the feed item and review rationale but prevents this referral from entering the source-candidate queue.'}</p>
+                <label>Review rationale<textarea required minLength={3} maxLength={1000} value={referralRationale} onChange={(event) => setReferralRationale(event.target.value)} /></label>
+                <footer><button type="submit" disabled={pending || referralRationale.trim().length < 3}>{pending ? 'Recording…' : referralDecision === 'register' ? 'Register source candidate' : 'Dismiss referral'}</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setReviewingReferralId(null); setReferralRationale('') }}>Cancel</button></footer>
+              </form> : <button type="button" className="market-source-review-button" disabled={pending} onClick={() => { setReviewingReferralId(referral.id); setReferralDecision('register'); setReferralRationale(''); setNotice(null) }}>Review referral</button>}
             </article>
           )) : <p>No pending referrals for this domain. The scheduled scan reads the recent existing feed ledger; it never searches or ingests the open web directly.</p>}
         </div>

@@ -127,7 +127,23 @@ export function validateMarketThesisResearch(
   const economicsRecord = record(output.economics)
   const beneficiaries = strings(economicsRecord.beneficiaries)
   if (beneficiaries.length < 1) throw new Error('Economics requires at least one beneficiary')
-  const economics = { valueChain: requiredString(economicsRecord.valueChain, 'economics valueChain'), scarcityRentCapture: requiredString(economicsRecord.scarcityRentCapture, 'economics scarcityRentCapture'), beneficiaries, substitutes: strings(economicsRecord.substitutes), sourceIds: sourceIds(economicsRecord.sourceIds, 'economics') }
+  const candidateSymbols = new Set<string>()
+  const companyCandidates = records(economicsRecord.companyCandidates).slice(0, 8).map((item) => {
+    const symbol = requiredString(item.symbol, 'company-candidate symbol').toUpperCase()
+    if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(symbol)) throw new Error(`Invalid company-candidate symbol ${symbol}`)
+    if (candidateSymbols.has(symbol)) throw new Error(`Duplicate company-candidate symbol ${symbol}`)
+    candidateSymbols.add(symbol)
+    const role = item.role as 'beneficiary' | 'loser' | 'substitute'
+    if (role !== 'beneficiary' && role !== 'loser' && role !== 'substitute') throw new Error(`Invalid company-candidate role for ${symbol}`)
+    const ids = sourceIds(item.sourceIds, `company candidate ${symbol}`)
+    if (ids.length < 1) throw new Error(`Company candidate ${symbol} requires source-ledger provenance`)
+    return {
+      companyName: requiredString(item.companyName, 'company-candidate name'), symbol, role,
+      mechanism: requiredString(item.mechanism, 'company-candidate mechanism'),
+      materiality: score(item.materiality, 'company-candidate materiality'), confidence: score(item.confidence, 'company-candidate confidence'), sourceIds: ids,
+    }
+  })
+  const economics = { valueChain: requiredString(economicsRecord.valueChain, 'economics valueChain'), scarcityRentCapture: requiredString(economicsRecord.scarcityRentCapture, 'economics scarcityRentCapture'), beneficiaries, substitutes: strings(economicsRecord.substitutes), companyCandidates, sourceIds: sourceIds(economicsRecord.sourceIds, 'economics') }
   const expectationsRecord = record(output.expectations)
   const expectations = { currentNarrative: requiredString(expectationsRecord.currentNarrative, 'expectations currentNarrative'), whatAppearsPriced: requiredString(expectationsRecord.whatAppearsPriced, 'expectations whatAppearsPriced'), variantView: requiredString(expectationsRecord.variantView, 'expectations variantView'), sourceIds: sourceIds(expectationsRecord.sourceIds, 'expectations') }
   const counterRecord = record(output.counterThesis)
@@ -245,6 +261,7 @@ export function researchPrompt(hypothesis: MarketHypothesis, sources: Array<Rese
     'Confidence is an integer percent from 0 to 100, not a 0-1 fraction.',
     'Predictions are a learning contract: include at least one observable 1 week to 12 month prediction with a concrete leading indicator and clear confirmation and disconfirmation conditions. Longer-horizon predictions may supplement it, but may not replace it.',
     'Reason from demand -> supply -> bottleneck -> economic capture -> expectations -> measurable predictions. Explain which value-chain layer can capture economics and why alternatives or substitutes may capture it instead.',
+    'Inside economics.companyCandidates, name 0-8 public-company research candidates only when a supplied source explicitly names the company or ticker, or the company is unambiguously the issuer of a supplied disclosure. Include symbol, role, mechanism, materiality, confidence, and exact sourceIds. This is a research queue, not a recommendation. Do not infer tickers from sectors, general value-chain layers, or prior knowledge; use an empty array when the ledger does not identify a company.',
     'The research frontier is an explicit list of unresolved questions. It is not permission to browse: recommend source classes only, and preserve material uncertainty.',
     'Write a real counter-thesis that could win, with decisive tests. Expectations must say unknown when the supplied evidence cannot establish what is priced.',
     'When revising after a prior critique: address every unsupportedClaims and requiredResearch item by narrowing claims to the ledger, marking capture as not established when evidence is missing, lowering confidence, and listing remaining gaps in evidenceGaps. Do not invent new facts to satisfy the critic.',

@@ -401,6 +401,8 @@ export interface CompanyThesisMarketContext {
 export interface CompanyThesisReviewPacket {
   thesisId: string
   research: CompanyThesisResearchSummary | null
+  researchHistory: CompanyThesisResearchSummary[]
+  thesisHistory: Array<Pick<InvestmentThesis, 'id' | 'version' | 'status' | 'trigger' | 'generatedAt' | 'reviewedAt'>>
   marketContexts: CompanyThesisMarketContext[]
   sourceLedger: ThesisSource[]
   reviewHistory: ThesisReviewOutcome[]
@@ -902,7 +904,7 @@ export interface ResearchJobStatus {
   progress: number
   phase: string
   error: string | null
-  createdAt: string
+  createdAt?: string
   updatedAt: string
 }
 
@@ -1392,17 +1394,34 @@ export interface WorldSourceReferral {
   publishedAt: string | null
   reason: string
   registeredSourceId: string | null
+  reviewedBy: string | null
+  reviewRationale: string | null
+  registeredAt: string | null
+  dismissedAt: string | null
   createdAt: string
   updatedAt: string
 }
 
 export interface MarketDomainResearchCoverage {
   domainId: string
+  state: 'healthy' | 'thin' | 'stale' | 'blocked'
   admittedSourceCount: number
   candidateSourceCount: number
   pendingReferralCount: number
   observationCount: number
   latestObservationAt: string | null
+  observationFreshnessDays: number | null
+  sourceClassCoverage: Array<{
+    evidenceClass: WorldSourceEvidenceClass
+    current: number
+    required: number
+    purpose: string
+  }>
+  oldestOpenFrontierAt: string | null
+  frontierAgeDays: number | null
+  openFrontierCount: number
+  reviewBacklogCount: number
+  explanations: string[]
 }
 
 export interface WorldSourceControlWorkspaceData {
@@ -1552,7 +1571,22 @@ export interface MarketHypothesisResearchContent {
   demand: { currentState: string; changeMechanism: string; sourceIds: string[] }
   supply: { currentState: string; changeMechanism: string; sourceIds: string[] }
   bottlenecks: Array<{ name: string; mechanism: string; severity: 'binding' | 'important' | 'watch' | 'not_established'; whoCapturesEconomics: string; resolutionSignals: string[]; sourceIds: string[] }>
-  economics: { valueChain: string; scarcityRentCapture: string; beneficiaries: string[]; substitutes: string[]; sourceIds: string[] }
+  economics: {
+    valueChain: string
+    scarcityRentCapture: string
+    beneficiaries: string[]
+    substitutes: string[]
+    companyCandidates: Array<{
+      companyName: string
+      symbol: string
+      role: 'beneficiary' | 'loser' | 'substitute'
+      mechanism: string
+      materiality: number
+      confidence: number
+      sourceIds: string[]
+    }>
+    sourceIds: string[]
+  }
   expectations: { currentNarrative: string; whatAppearsPriced: string; variantView: string; sourceIds: string[] }
   counterThesis: { statement: string; mechanisms: string[]; decisiveTests: string[]; sourceIds: string[] }
   predictions: Array<{ prediction: string; horizon: string; leadingIndicator: string; confirmation: string; disconfirmation: string; sourceIds: string[] }>
@@ -1609,6 +1643,7 @@ export interface MarketResearchFrontierItem {
   attemptCount: number
   lastError: string | null
   nextRunAt: string | null
+  createdAt: string
 }
 
 export interface ThesisPrediction {
@@ -1648,6 +1683,23 @@ export interface MarketThesisExposure {
   materiality: number
   confidence: number
   verificationStatus: 'verified' | 'needs_company_research' | 'unverified'
+  resolutionMethod: 'analyst_source_candidate' | 'source_ledger_match' | 'manual' | null
+  resolutionReason: string | null
+  sourceIds: string[]
+  researchJobId: string | null
+  researchQueuedAt: string | null
+}
+
+export interface MarketLinkedCompanyThesis {
+  id: string
+  symbol: string | null
+  version: number
+  status: ThesisStatus
+  headline: string
+  trigger: string
+  generatedAt: string
+  reviewedAt: string | null
+  researchNoteId: string | null
 }
 
 export interface MarketThesisVersion {
@@ -1671,6 +1723,7 @@ export interface MarketThesisVersion {
   researchVersionId: string | null
   predictions: ThesisPrediction[]
   exposures: MarketThesisExposure[]
+  linkedCompanyTheses: MarketLinkedCompanyThesis[]
 }
 
 export interface MarketThesisWorkspaceData {

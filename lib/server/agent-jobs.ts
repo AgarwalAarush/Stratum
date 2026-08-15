@@ -45,6 +45,7 @@ import { fetchLatestSnapshotMeta } from './markets-repository.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { materializeIntelligenceSourceReferrals } from './intelligence-source-referrals.ts'
 import { fetchPortfolioResearchCoverage, fetchPortfolioResearchSeedOwners } from './portfolio-research-seeding.ts'
+import { selectControlledExposureResearch } from '../markets/market-exposure-research.ts'
 
 export const AGENT_JOB_TYPES = [
   'sync-market-assets',
@@ -1026,7 +1027,20 @@ async function executeJob(
       ? (autoPromotionEnabled ? 'validated research published' : 'validated research awaits promotion authorization')
       : 'research requires revision')
     const marketThesis = autoPromotionEnabled ? await promoteEligibleMarketHypothesis(ownerId, hypothesisId) : null
-    return { hypothesisId, researchVersionId: research.id, version: research.version, status: research.status, marketThesisId: marketThesis?.id ?? null }
+    const exposureResearch = marketThesis ? selectControlledExposureResearch(marketThesis.exposures) : []
+    const queuedExposureResearch = []
+    for (const candidate of exposureResearch) {
+      const queued = await enqueueAgentJob('generate-company-research', {
+        ownerId, symbol: candidate.symbol,
+        reason: `controlled-market-exposure:${marketThesis!.id}:${candidate.exposureId}`,
+        marketThesisVersionId: marketThesis!.id, marketThesisExposureId: candidate.exposureId,
+        researchPriority: candidate.materiality,
+      }, `generate-company-research:controlled-market-exposure:${ownerId}:${marketThesis!.id}:${candidate.exposureId}`)
+      const supabase = getSupabaseClient()
+      if (supabase) await supabase.from('market_thesis_exposures').update({ research_job_id: queued.id, research_queued_at: new Date().toISOString() }).eq('id', candidate.exposureId).is('research_queued_at', null)
+      queuedExposureResearch.push({ ...candidate, jobId: queued.id, deduplicated: queued.deduplicated })
+    }
+    return { hypothesisId, researchVersionId: research.id, version: research.version, status: research.status, marketThesisId: marketThesis?.id ?? null, queuedExposureResearch }
   }
 
   if (job.job_type === 'refresh-market-hypothesis-research') {
