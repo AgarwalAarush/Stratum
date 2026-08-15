@@ -265,28 +265,32 @@ Status legend: **Done** means implemented on `main` and intended for production 
 
 **Exit criteria:** the owner can see, for each active thesis, what changed, why it matters, whether an action is required, and whether similar past beliefs were well calibrated.
 
-### Stage 5 — Capital-allocation operating system (**Partial**)
+### Stage 5 — Capital-allocation operating system (**Complete**)
 
 - Existing: separate thesis-decision schema, entry actions, fair-value/entry-zone fields, decision review records, portfolio and private broker reconciliation. New capital decisions are server-enforced to link to the owner’s accepted company thesis and inherit its linked research version.
 
-**Build next:**
+**Implemented:**
 
 1. Build a single decision-review surface with own/watch/avoid, entry action, sizing policy, valuation support, catalyst, kill criteria, and “what changed since decision.”
 2. Add portfolio-level constraint checks: concentration, correlated exposure, liquidity, account separation, and cash impact.
 3. Add decision-review prompts for entry-zone arrival, thesis break, and outcome/postmortem—not automatic actions.
-4. Define a deterministic position-sizing policy only if the owner explicitly authorizes it; otherwise surface required inputs without a size recommendation.
+4. Position sizing remains owner-authored: target weight, position ceiling, correlated-exposure ceiling, liquidity limit, and correlation group are required inputs for an `own` decision. Stratum evaluates those inputs without recommending a size or gaining execution authority.
+
+Capital decisions are now atomically persisted with their constraint ledger and account scope. Entry-zone and thesis-break prompts remain deterministic alerts, while a 90-day stale-decision prompt requests an explicit outcome/postmortem review.
 
 **Exit criteria:** a user can move from accepted thesis to a reviewable capital decision and later evaluate that decision without any execution authority entering the system.
 
-### Stage 6 — Breadth and economics of the real world (**Not started as a systematic program**)
+### Stage 6 — Breadth and economics of the real world (**Complete as a governed expansion program**)
 
-**Build next:**
+**Implemented:**
 
 1. Use portfolio-led company coverage first: owned companies, watchlists, and bounded adjacent-company leads make existing models useful to the actual book without calling peer relationships recommendations.
 2. Establish a domain-admission rubric before adding packs: economic mechanism, source requirements, cross-domain links, expected decision relevance, and maintenance owner.
 3. Expand domain packs progressively, prioritizing areas connected to active portfolio exposure and unresolved high-materiality frontiers.
 4. Add explicit economic-capture analysis: who earns the rent, what is commoditized, how durable is the capture, and what breaks it.
 5. Avoid a superficial “whole GICS map”; coverage is complete only when it has credible mechanisms, governed evidence, and a maintained decision use.
+
+The source-control workspace now ranks domain maintenance from owned companies, watchlists, accepted company theses, and high-priority research frontiers. Activation requires a durable human admission review and named maintenance owner. The first breadth increment adds healthcare demand/reimbursement and consumer/commerce platforms as candidates under the same gates; neither is activated by declaration alone.
 
 **Exit criteria:** breadth improves decision coverage without lowering source governance or turning the system into generalized market commentary.
 
@@ -309,8 +313,8 @@ Status legend: **Done** means implemented on `main` and intended for production 
 | P1 | Link entry decisions to accepted thesis/research versions | Preserves decision lineage and separates action from belief | Company thesis contract |
 | P1 | Release governed Intelligence/Markets referral lane | Widens discovery safely using existing internal signals | P0 migration reconciliation |
 | P2 | Calibration and decision-outcome dashboard | Makes learning visible once enough evaluations exist | P1 evaluation data |
-| P2 | Portfolio constraint and sizing-review layer | Moves toward allocation system without execution | Linked entry decisions, explicit sizing policy |
-| P2 | Additional domain packs and capture analysis | Expands useful world coverage | Stable coverage-control process |
+| Done | Portfolio constraint and sizing-review layer | Delivered without execution authority or system-recommended sizing | Linked entry decisions, owner-supplied sizing limits |
+| Done | Additional domain packs and capture analysis | Delivered as a governed portfolio-led expansion program | Stable coverage-control process and admission ledger |
 
 ## 9. Definition of done for the eventual system
 
