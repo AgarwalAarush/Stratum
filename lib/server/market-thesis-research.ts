@@ -358,6 +358,43 @@ export interface DeepenMarketHypothesisOptions {
   criticRunner?: (prompt: string) => Promise<CodexExecResult<MarketHypothesisCritique>>
 }
 
+export function nextMarketResearchVersion(versions: Array<{ version?: unknown }>): number {
+  return versions.reduce((latest, item) => Math.max(latest, number(item.version)), 0) + 1
+}
+
+async function createRunningResearchArtifact(input: {
+  hypothesisId: string
+  sourceIds: string[]
+  observationIds: string[]
+  priorResearchVersionId: string | null
+  dataAsOf: string
+}): Promise<RecordValue> {
+  const supabase = getSupabaseClient()!
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const { data: versions, error: versionError } = await supabase
+      .from('market_hypothesis_research_versions')
+      .select('version')
+      .eq('hypothesis_id', input.hypothesisId)
+      .order('version', { ascending: false })
+      .limit(1)
+    if (versionError) throw new Error(`Unable to allocate market research version: ${versionError.message}`)
+    const version = nextMarketResearchVersion(versions ?? [])
+    const { data: row, error: createError } = await supabase.from('market_hypothesis_research_versions').insert({
+      hypothesis_id: input.hypothesisId,
+      version,
+      status: 'running',
+      source_ids: input.sourceIds,
+      observation_ids: input.observationIds,
+      prior_research_version_id: input.priorResearchVersionId,
+      data_as_of: input.dataAsOf,
+    }).select('*').single()
+    if (row && !createError) return row
+    if (createError?.code === '23505' && /hypothesis_id_version/i.test(createError.message)) continue
+    throw new Error(`Unable to create market research artifact: ${createError?.message ?? 'unknown error'}`)
+  }
+  throw new Error('Unable to allocate a unique market research version after concurrent retries')
+}
+
 /**
  * A critique that requests revision is a durable research frontier, not a
  * license to spend another strong-model pass on the same evidence. Scheduled
@@ -494,12 +531,16 @@ export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOpti
     ...source,
     excerpt: source.extractedKey ? await readWorldCorpusExtract(source.extractedKey, 7_000).catch(() => `${source.title}\n${source.assertion}`) : `${source.title}\n${source.assertion}`,
   })))
-  const version = (prior?.version ?? 0) + 1
   const now = new Date().toISOString()
-  const { data: row, error: createError } = await supabase.from('market_hypothesis_research_versions').insert({
-    hypothesis_id: hypothesis.id, version, status: 'running', source_ids: [...allowedSourceIds], observation_ids: sources.map((source) => source.observationId), prior_research_version_id: prior?.id ?? null, data_as_of: now,
-  }).select('*').single()
-  if (createError || !row) throw new Error(`Unable to create market research artifact: ${createError?.message ?? 'unknown error'}`)
+  const row = await createRunningResearchArtifact({
+    hypothesisId: hypothesis.id,
+    sourceIds: [...allowedSourceIds],
+    observationIds: sources.map((source) => source.observationId),
+    priorResearchVersionId: prior?.id ?? null,
+    dataAsOf: now,
+  })
+  const version = number(row.version)
+  const rowId = String(row.id)
   try {
     const researchRunner = options.researchRunner ?? ((prompt) => runCodexJson({ prompt, schemaPath: 'schemas/market-thesis-research.schema.json', validate: (value) => validateMarketThesisResearch(value, allowedSourceIds), model: selectMarketModel('hypothesis_analysis').model, timeoutMs: 20 * 60 * 1_000 }))
     const criticRunner = options.criticRunner ?? ((prompt) => runCodexJson({ prompt, schemaPath: 'schemas/market-thesis-critique.schema.json', validate: (value) => validateMarketThesisCritique(value, allowedSourceIds), model: selectMarketModel('hypothesis_critic').model, timeoutMs: 12 * 60 * 1_000 }))
@@ -512,10 +553,10 @@ export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOpti
     const { error: updateError } = await supabase.from('market_hypothesis_research_versions').update({
       status, content: research, critique, source_ids: research.sourceIds, revision_diff: revisionDiff(prior, research), provider: researchResult.metadata.provider, model: researchResult.metadata.model,
       critic_provider: critiqueResult.metadata.provider, critic_model: critiqueResult.metadata.model, critic_generated_at: generatedAt, generated_at: generatedAt, error: null,
-    }).eq('id', row.id).eq('status', 'running')
+    }).eq('id', rowId).eq('status', 'running')
     if (updateError) throw new Error(`Unable to publish market research artifact: ${updateError.message}`)
-    await persistFrontier(hypothesis.id, row.id, buildPersistedResearchFrontier(research.researchFrontier, critique))
-    await completeEvidenceReceivedResearchFrontiers(hypothesis.id, String(row.id))
+    await persistFrontier(hypothesis.id, rowId, buildPersistedResearchFrontier(research.researchFrontier, critique))
+    await completeEvidenceReceivedResearchFrontiers(hypothesis.id, rowId)
     // Keep unresolved capture visible on the live hypothesis without rewriting
     // correlation confidence used by the deterministic promotion evidence gate.
     if (research.evidenceGaps.some((gap) => /economic capture|rent capture|scarcity rent/i.test(gap))) {
@@ -525,10 +566,10 @@ export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOpti
         updated_at: generatedAt,
       }).eq('id', hypothesis.id).eq('owner_id', options.ownerId)
     }
-    return { id: row.id, hypothesisId: hypothesis.id, version, status, content: research, critique, sourceIds: research.sourceIds, observationIds: sources.map((source) => source.observationId), priorResearchVersionId: prior?.id ?? null, revisionDiff: revisionDiff(prior, research), provider: researchResult.metadata.provider, model: researchResult.metadata.model, criticProvider: critiqueResult.metadata.provider, criticModel: critiqueResult.metadata.model, criticGeneratedAt: generatedAt, dataAsOf: now, generatedAt, error: null }
+    return { id: rowId, hypothesisId: hypothesis.id, version, status, content: research, critique, sourceIds: research.sourceIds, observationIds: sources.map((source) => source.observationId), priorResearchVersionId: prior?.id ?? null, revisionDiff: revisionDiff(prior, research), provider: researchResult.metadata.provider, model: researchResult.metadata.model, criticProvider: critiqueResult.metadata.provider, criticModel: critiqueResult.metadata.model, criticGeneratedAt: generatedAt, dataAsOf: now, generatedAt, error: null }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    await supabase.from('market_hypothesis_research_versions').update({ status: 'failed', error: message }).eq('id', row.id)
+    await supabase.from('market_hypothesis_research_versions').update({ status: 'failed', error: message }).eq('id', rowId)
     throw error
   }
 }

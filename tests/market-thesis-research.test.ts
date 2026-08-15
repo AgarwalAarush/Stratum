@@ -7,6 +7,7 @@ import {
   buildResearchFrontierScoutPlan,
   critiquePrompt,
   hasNearTermEvaluablePrediction,
+  nextMarketResearchVersion,
   normalizeResearchVersion,
   researchPrompt,
   shouldQueueMarketHypothesisResearch,
@@ -77,6 +78,11 @@ test('market research requires at least one near-term evaluable prediction', () 
   assert.equal(hasNearTermEvaluablePrediction([{ horizon: 'one year' }]), true)
   assert.equal(hasNearTermEvaluablePrediction([{ horizon: '12-18 months' }]), false)
   assert.equal(hasNearTermEvaluablePrediction([{ horizon: '5 years' }, { horizon: 'eventually' }]), false)
+})
+
+test('failed immutable artifacts still advance the next research version', () => {
+  assert.equal(nextMarketResearchVersion([{ version: 4 }, { version: 5 }]), 6)
+  assert.equal(nextMarketResearchVersion([]), 1)
 })
 
 test('legacy research that predates a stricter publication check cannot crash the thesis workspace', () => {
