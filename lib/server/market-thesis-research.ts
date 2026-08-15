@@ -126,16 +126,18 @@ export function validateMarketThesisResearch(
   if (beneficiaries.length < 1) throw new Error('Economics requires at least one beneficiary')
   const candidateSymbols = new Set<string>()
   const companyCandidates = records(economicsRecord.companyCandidates).slice(0, 8).map((item) => {
-    const symbol = requiredString(item.symbol, 'company-candidate symbol').toUpperCase()
-    if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(symbol)) throw new Error(`Invalid company-candidate symbol ${symbol}`)
-    if (candidateSymbols.has(symbol)) throw new Error(`Duplicate company-candidate symbol ${symbol}`)
-    candidateSymbols.add(symbol)
+    const companyName = requiredString(item.companyName, 'company-candidate name')
+    const symbol = typeof item.symbol === 'string' && item.symbol.trim() ? item.symbol.trim().toUpperCase() : null
+    if (symbol && !/^[A-Z][A-Z0-9.-]{0,9}$/.test(symbol)) throw new Error(`Invalid company-candidate symbol ${symbol}`)
+    const candidateKey = symbol ?? companyName.toLocaleLowerCase()
+    if (candidateSymbols.has(candidateKey)) throw new Error(`Duplicate company candidate ${symbol ?? companyName}`)
+    candidateSymbols.add(candidateKey)
     const role = item.role as 'beneficiary' | 'loser' | 'substitute'
     if (role !== 'beneficiary' && role !== 'loser' && role !== 'substitute') throw new Error(`Invalid company-candidate role for ${symbol}`)
     const ids = sourceIds(item.sourceIds, `company candidate ${symbol}`)
     if (ids.length < 1) throw new Error(`Company candidate ${symbol} requires source-ledger provenance`)
     return {
-      companyName: requiredString(item.companyName, 'company-candidate name'), symbol, role,
+      companyName, symbol, role,
       mechanism: requiredString(item.mechanism, 'company-candidate mechanism'),
       materiality: score(item.materiality, 'company-candidate materiality'), confidence: score(item.confidence, 'company-candidate confidence'), sourceIds: ids,
     }
@@ -258,7 +260,7 @@ export function researchPrompt(hypothesis: MarketHypothesis, sources: Array<Rese
     'Confidence is an integer percent from 0 to 100, not a 0-1 fraction.',
     'Predictions are a learning contract: include at least one observable 1 week to 12 month prediction with a concrete leading indicator and clear confirmation and disconfirmation conditions. Write every horizon as a compact duration such as "3 months", "2 quarters", or "1 year"; do not use a date or an event phrase. Longer-horizon predictions may supplement the near-term prediction, but may not replace it.',
     'Reason from demand -> supply -> bottleneck -> economic capture -> expectations -> measurable predictions. Explain which value-chain layer can capture economics and why alternatives or substitutes may capture it instead.',
-    'Inside economics.companyCandidates, name 0-8 public-company research candidates only when a supplied source explicitly names the company or ticker, or the company is unambiguously the issuer of a supplied disclosure. Include symbol, role, mechanism, materiality, confidence, and exact sourceIds. This is a research queue, not a recommendation. Do not infer tickers from sectors, general value-chain layers, or prior knowledge; use an empty array when the ledger does not identify a company.',
+    'Inside economics.companyCandidates, review every supplied source for named public issuers. Include 0-8 companies when a supplied source explicitly names the company or ticker, or the company is unambiguously the issuer of a supplied disclosure, and the ledger directly ties it to a causal node or value-chain layer. Include role, mechanism, materiality, confidence, and exact sourceIds. Set symbol to null when the exact ticker is absent from the supplied ledger; the server, not the model, resolves issuer names against the active tradable asset registry. Uncertain economic capture should lower confidence or materiality, not erase an explicitly named research lead. This is a research queue, not a recommendation. Never infer tickers from sectors, general value-chain layers, or prior knowledge; use an empty array only when the ledger names no directly relevant public issuer.',
     'The research frontier is an explicit list of unresolved questions. It is not permission to browse: recommend source classes only, and preserve material uncertainty.',
     'Write a real counter-thesis that could win, with decisive tests. Expectations must say unknown when the supplied evidence cannot establish what is priced.',
     'When revising after a prior critique: address every unsupportedClaims and requiredResearch item by narrowing claims to the ledger, marking capture as not established when evidence is missing, lowering confidence, and listing remaining gaps in evidenceGaps. Do not invent new facts to satisfy the critic.',

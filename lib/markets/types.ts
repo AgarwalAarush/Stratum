@@ -1578,7 +1578,7 @@ export interface MarketHypothesisResearchContent {
     substitutes: string[]
     companyCandidates: Array<{
       companyName: string
-      symbol: string
+      symbol: string | null
       role: 'beneficiary' | 'loser' | 'substitute'
       mechanism: string
       materiality: number

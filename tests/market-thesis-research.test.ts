@@ -66,6 +66,9 @@ test('public-company candidates require a valid ticker and exact source-ledger p
   named.economics.companyCandidates = [{ companyName: 'Acme Power', symbol: 'ACME', role: 'beneficiary', mechanism: 'Owns named deliverable capacity.', materiality: 82, confidence: 68, sourceIds: ['source-c'] }]
   const validated = validateMarketThesisResearch(named, new Set(sourceIds))
   assert.equal(validated.economics.companyCandidates[0]?.symbol, 'ACME')
+  const issuerOnly = researchFixture()
+  issuerOnly.economics.companyCandidates = [{ ...named.economics.companyCandidates[0]!, companyName: 'Acme Power Corp.', symbol: null }]
+  assert.equal(validateMarketThesisResearch(issuerOnly, new Set(sourceIds)).economics.companyCandidates[0]?.symbol, null)
   const unsupported = researchFixture()
   unsupported.economics.companyCandidates = [{ ...named.economics.companyCandidates[0]!, sourceIds: [] }]
   assert.throws(() => validateMarketThesisResearch(unsupported, new Set(sourceIds)), /requires source-ledger provenance/)

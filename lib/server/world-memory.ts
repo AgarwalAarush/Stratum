@@ -611,21 +611,28 @@ export async function promoteEligibleMarketHypothesis(ownerId: string, hypothesi
       materiality: publishedConfidence, confidence: publishedConfidence, verification_status: 'unverified',
       resolution_method: null, resolution_reason: 'Value-chain layer only; no public security was resolved.', source_ids: researchContent.economics.sourceIds,
     }))
-  const requestedSymbols = researchContent.economics.companyCandidates.map((candidate) => candidate.symbol)
+  const requestedSymbols = researchContent.economics.companyCandidates.flatMap((candidate) => candidate.symbol ? [candidate.symbol] : [])
+  const requestedNames = researchContent.economics.companyCandidates.flatMap((candidate) => candidate.symbol ? [] : [candidate.companyName])
   const assetResult = requestedSymbols.length > 0
     ? await supabase.from('market_assets').select('symbol,name').in('symbol', requestedSymbols).eq('active', true).eq('tradable', true)
     : { data: [], error: null }
-  if (assetResult.error) throw new Error(`Unable to verify market-exposure symbols: ${assetResult.error.message}`)
+  const namedAssetResult = requestedNames.length > 0
+    ? await supabase.from('market_assets').select('symbol,name').in('name', requestedNames).eq('active', true).eq('tradable', true)
+    : { data: [], error: null }
+  if (assetResult.error || namedAssetResult.error) throw new Error(`Unable to verify market-exposure symbols: ${assetResult.error?.message ?? namedAssetResult.error?.message}`)
   const activeAssets = new Map((assetResult.data ?? []).map((asset) => [String(asset.symbol), String(asset.name)]))
+  const activeAssetsByName = new Map((namedAssetResult.data ?? []).map((asset) => [String(asset.name).toLocaleLowerCase(), { symbol: String(asset.symbol), name: String(asset.name) }]))
   const companyExposureRows = researchContent.economics.companyCandidates.flatMap((candidate) => {
-    const assetName = activeAssets.get(candidate.symbol)
-    if (!assetName) return []
+    const namedAsset = candidate.symbol ? null : activeAssetsByName.get(candidate.companyName.toLocaleLowerCase())
+    const resolvedSymbol = candidate.symbol ?? namedAsset?.symbol ?? null
+    const assetName = candidate.symbol ? activeAssets.get(candidate.symbol) : namedAsset?.name
+    if (!resolvedSymbol || !assetName) return []
     return [{
       market_thesis_version_id: data.id, value_chain_layer: researchContent.economics.valueChain,
-      entity_name: assetName || candidate.companyName, symbol: candidate.symbol, role: candidate.role, mechanism: candidate.mechanism,
+      entity_name: assetName || candidate.companyName, symbol: resolvedSymbol, role: candidate.role, mechanism: candidate.mechanism,
       materiality: candidate.materiality, confidence: candidate.confidence, verification_status: 'needs_company_research',
       resolution_method: 'analyst_source_candidate',
-      resolution_reason: `The bounded market-research artifact named ${candidate.companyName} (${candidate.symbol}); the symbol was verified against the active tradable asset registry. Company-level economics remain unverified until independent research.`,
+      resolution_reason: `The bounded market-research artifact named ${candidate.companyName}; ${resolvedSymbol} was verified against the active tradable asset registry${candidate.symbol ? ' from the supplied symbol' : ' by exact issuer name'}. Company-level economics remain unverified until independent research.`,
       source_ids: candidate.sourceIds,
     }]
   })

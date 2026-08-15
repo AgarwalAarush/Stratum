@@ -98,6 +98,13 @@ test('promoted thesis confidence comes from validated research, not correlation 
   assert.match(source, /!\/\^\(none\|no beneficiary\)\\b\/i/)
 })
 
+test('source-named issuers can be resolved by the active asset registry without a model-guessed ticker', async () => {
+  const source = await readFile(new URL('../lib/server/world-memory.ts', import.meta.url), 'utf8')
+  assert.match(source, /requestedNames/)
+  assert.match(source, /activeAssetsByName/)
+  assert.match(source, /by exact issuer name/)
+})
+
 test('all market domain packs use the same bounded correlation threshold', () => {
   assert.equal(minimumMechanismsForDomainHypothesis('ai-power'), 3)
   assert.equal(minimumMechanismsForDomainHypothesis('semicap-data-center-equipment'), 3)
