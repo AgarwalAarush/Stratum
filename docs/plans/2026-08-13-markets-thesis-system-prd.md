@@ -33,11 +33,11 @@ The operating principle is **capital allocation first, trading second**. Trading
 
 ### What is only partially complete
 
-- The market-model → company-research handoff has a review packet and explicit outcome contract; portfolio-led research now prioritizes owned companies, then watchlists, then bounded peer leads. It is not yet a complete company-thesis conversion loop.
+- The market-model → company-research → company-thesis review loop is complete. It nominates research candidates, not recommendations; portfolio entry and sizing remain a separate Stage 5 decision.
 - Company thesis, monitoring, and portfolio entry decision are persisted separately. An entry decision now has enforced accepted-thesis and research-version lineage, but the single review surface and decision-change timeline are still incomplete.
 - Prediction evaluation is implemented and new market research must include a 1-week-to-12-month evaluable prediction, but legacy predictions remain long-dated and there is not yet enough evaluated history or a calibration surface to make learning operationally useful.
 - Domain coverage is six curated starter systems. Portfolio-led company coverage expands decision relevance without pretending to be complete economic or GICS coverage.
-- Intelligence/Markets source referrals are released and remain a discovery-only lane pending governed source admission.
+- Intelligence/Markets source referrals are released with explicit register/dismiss review and remain a discovery-only lane pending separate contract and governed source admission.
 
 ### Current release posture
 
@@ -229,29 +229,24 @@ Status legend: **Done** means implemented on `main` and intended for production 
 
 **Still to harden:** repair source-specific collector failures, reconcile migration history, confirm worker health after releases, and show evidence ledger inspection as a first-class product surface rather than only counts.
 
-### Stage 2 — Research coverage control (**Partial**)
+### Stage 2 — Research coverage control (**Done**)
 
-- Existing: source-control board, source coverage requirements, research frontiers, broad research leads, and bounded source scout.
-- In progress: Intelligence/Markets feed-referral lane on branch `codex/intelligence-source-referrals`.
+- Source-control board, source coverage requirements, research frontiers, broad research leads, and bounded source scout.
+- Intelligence/Markets feed referrals have explicit register/dismiss review outcomes with reviewer rationale and immutable provenance. Registration creates only a discovery-tier candidate and queues a target preflight; it never admits or collects the source.
+- Every declared domain reports source-class attainment, governed-observation freshness, oldest open-frontier age, combined review backlog, and a deterministic `healthy` / `thin` / `stale` / `blocked` state with plain-language explanations.
 
-**Build next:**
-
-1. Reconcile Supabase migration history and release the referral migration.
-2. Add a review action to register/dismiss a referral as a candidate source with provenance; do not auto-admit it.
-3. Add domain coverage SLOs: minimum source classes, observation freshness, frontier age, and review-backlog limits.
-4. Surface clear “why this domain is thin/stale” explanations on the System board.
+**Operational follow-through:** use the board to clear candidate, referral, and quote-review backlogs; tune the explicit freshness thresholds only from observed operating history.
 
 **Exit criteria:** every active domain has a visible, explainable coverage state and a safe route from trusted internal signals to source review.
 
-### Stage 3 — Closed market-model → company-thesis loop (**Partial; highest product priority**)
+### Stage 3 — Closed market-model → company-thesis loop (**Done**)
 
-- Existing: exposure investigation button, CompanyPacket, company research, proposed investment thesis, linkage table, dedicated review packet, and accept/revise/reject/no-trade outcomes. A daily portfolio-led queue prioritizes owned companies, then watchlists, then bounded FMP ticker peers that exist in the market universe.
+- Exposure investigation, CompanyPacket, company research, proposed investment thesis, linkage table, dedicated review packet, and accept/revise/reject/no-trade outcomes are durable and owner-scoped. The portfolio-led queue still prioritizes owned companies, then watchlists, then bounded FMP ticker peers in the market universe.
+- Market research may nominate named public-company candidates only when the bounded source ledger explicitly identifies the company or ticker. The symbol is re-verified against active tradable market assets; generic value-chain beneficiaries remain visibly unresolved.
+- A capped automatic lane queues independent company research only for source-attributed candidates meeting the high-materiality and confidence policy. It cannot accept a company thesis, create a capital decision, or place a trade.
+- Market models show the exposure mechanism and all linked company-thesis versions. Company review packets show all originating market-model versions, research revisions, company-thesis history, review outcomes, capital-decision linkage, and the deduplicated source ledger.
 
-**Build next:**
-
-1. Add a controlled queue policy for high-materiality, verified market exposures alongside the portfolio-led queue; cap work and preserve owner priority.
-2. Show originating market model, exposure mechanism, and all linked company thesis versions on both sides of the relationship.
-3. Ensure every accepted company thesis exposes its full evidence ledger and change history in the UI.
+**Operational follow-through:** refresh legacy market-model research under the structured company-candidate contract so older generic exposure rows can either resolve with provenance or remain explicitly unresolved.
 
 **Exit criteria:** a market exposure can reliably become a reviewed company belief, or an explicit no-trade/rejection, without losing lineage.
 
