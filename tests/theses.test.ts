@@ -201,6 +201,7 @@ test('company thesis reviews preserve an explicit decision ledger and distinguis
 
 test('capital decisions require accepted thesis lineage and retain it in the thesis review packet', async () => {
   const migration = await readFile(new URL('../supabase/migrations/202608130002_link_thesis_decisions.sql', import.meta.url), 'utf8')
+  const allocationMigration = await readFile(new URL('../supabase/migrations/202608150002_complete_thesis_stages_5_6.sql', import.meta.url), 'utf8')
   const portfolio = await readFile(new URL('../lib/server/portfolio.ts', import.meta.url), 'utf8')
   const route = await readFile(new URL('../app/api/markets/portfolio/route.ts', import.meta.url), 'utf8')
   const theses = await readFile(new URL('../lib/server/theses.ts', import.meta.url), 'utf8')
@@ -210,8 +211,10 @@ test('capital decisions require accepted thesis lineage and retain it in the the
   assert.match(migration, /references public\.investment_theses\(id\) on delete set null/)
   assert.match(portfolio, /Accept a company thesis before recording a capital decision/)
   assert.match(portfolio, /eq\('status', 'accepted'\)/)
-  assert.match(portfolio, /investment_thesis_id: thesis\.id/)
-  assert.match(portfolio, /research_note_id: thesis\.research_note_id/)
+  assert.match(portfolio, /rpc\('record_capital_decision'/)
+  assert.match(portfolio, /p_investment_thesis_id: thesis\.id/)
+  assert.match(allocationMigration, /v_thesis\.research_note_id/)
+  assert.match(allocationMigration, /capital_decision_constraint_checks/)
   assert.match(route, /investmentThesisId/)
   assert.match(theses, /capitalDecision: decisionsByThesisId\.get\(thesis\.id\) \?\? null/)
   assert.match(workspace, /No capital decision recorded\./)

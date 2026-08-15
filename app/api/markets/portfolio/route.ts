@@ -130,6 +130,16 @@ export async function POST(request: Request) {
       const conviction = nullableNumber(body.conviction)
       const entryZoneLow = nullableNumber(body.entryZoneLow)
       const entryZoneHigh = nullableNumber(body.entryZoneHigh)
+      const portfolioId = text(body.portfolioId, 80)
+      const valuationSupport = text(body.valuationSupport, 4_000)
+      const whatChanged = text(body.whatChanged, 4_000)
+      const sizingInputs = disposition === 'own' ? {
+        targetWeightPct: Number(body.targetWeightPct),
+        maxPositionWeightPct: Number(body.maxPositionWeightPct),
+        maxCorrelatedWeightPct: Number(body.maxCorrelatedWeightPct),
+        maxLiquidityDays: Number(body.maxLiquidityDays),
+        correlationGroup: text(body.correlationGroup, 160),
+      } : null
       const killCriteria = Array.isArray(body.killCriteria) ? body.killCriteria.flatMap((item) => {
         if (!item || typeof item !== 'object' || Array.isArray(item)) return []
         const criterion = item as Record<string, unknown>
@@ -151,9 +161,19 @@ export async function POST(request: Request) {
         || !['BUY', 'HOLD', 'SELL', 'NOT_RATED'].includes(formalRating)
         || !['buy_now', 'nibble', 'wait', 'add_on_weakness', 'avoid'].includes(entryAction)
         || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(investmentThesisId)
+        || (!localDevelopment && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(portfolioId))
         || (conviction !== null && (!Number.isInteger(conviction) || conviction < 1 || conviction > 5))
         || (entryZoneLow !== null && entryZoneHigh !== null && entryZoneLow > entryZoneHigh)
         || text(body.rationale, 4_000).length < 3
+        || valuationSupport.length < 3
+        || whatChanged.length < 3
+        || (sizingInputs !== null && (
+          !Number.isFinite(sizingInputs.targetWeightPct) || sizingInputs.targetWeightPct <= 0 || sizingInputs.targetWeightPct > 100
+          || !Number.isFinite(sizingInputs.maxPositionWeightPct) || sizingInputs.maxPositionWeightPct <= 0 || sizingInputs.maxPositionWeightPct > 100
+          || !Number.isFinite(sizingInputs.maxCorrelatedWeightPct) || sizingInputs.maxCorrelatedWeightPct <= 0 || sizingInputs.maxCorrelatedWeightPct > 100
+          || !Number.isFinite(sizingInputs.maxLiquidityDays) || sizingInputs.maxLiquidityDays <= 0
+          || sizingInputs.correlationGroup.length < 2
+        ))
       ) throw new Error('A reviewed thesis and complete decision rationale are required')
       if (localDevelopment) {
         return NextResponse.json({ decision: {
@@ -174,6 +194,12 @@ export async function POST(request: Request) {
           createdAt: new Date().toISOString(),
           investmentThesisId,
           researchNoteId: null,
+          portfolioId: portfolioId || 'local-portfolio',
+          valuationSupport,
+          whatChanged,
+          changeSummary: ['Local decision version recorded.'],
+          sizingInputs,
+          constraintStatus: disposition === 'own' ? 'needs_inputs' : 'pass',
         } })
       }
       return NextResponse.json({ decision: await saveThesisDecision(user.id, {
@@ -189,6 +215,10 @@ export async function POST(request: Request) {
         killCriteria,
         rationale: text(body.rationale, 4_000),
         investmentThesisId,
+        portfolioId,
+        valuationSupport,
+        whatChanged,
+        sizingInputs,
       }) })
     }
     if (body.action === 'save-review') {

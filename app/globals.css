@@ -36,6 +36,75 @@
   --width-sidebar: 280px;
 }
 
+/* Stage 5 and 6 decision governance */
+.capital-sizing-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  border: 1px solid var(--market-border);
+  padding: 14px;
+}
+
+.capital-sizing-inputs legend,
+.capital-change-summary > span,
+.capital-constraint-ledger > span,
+.market-thesis-capture-ledger > span {
+  font: 500 11px/1.2 var(--font-ibm-plex-mono), ui-monospace, monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.capital-sizing-inputs p { grid-column: 1 / -1; margin: 0; color: var(--market-text-muted); }
+.capital-change-summary,
+.capital-constraint-ledger { border-top: 1px solid var(--market-border); padding-top: 14px; }
+.capital-change-summary ul { margin: 8px 0 0; padding-left: 18px; }
+.capital-constraint-ledger p { margin: 8px 0 0; color: var(--market-text-muted); }
+.capital-constraint-ledger p strong { color: var(--market-text); }
+.capital-constraint-ledger[data-status="blocked"] { border-top-color: var(--market-red); }
+.capital-constraint-ledger[data-status="warning"] { border-top-color: #b7791f; }
+
+.portfolio-decision-review-board { display: grid; gap: 18px; }
+.portfolio-decision-review-board > header { display: flex; justify-content: space-between; align-items: end; }
+.portfolio-decision-review-board > article { border: 1px solid var(--market-border); background: var(--market-surface); padding: 20px; display: grid; gap: 16px; }
+.portfolio-decision-review-board > article > header { display: flex; justify-content: space-between; gap: 16px; }
+.portfolio-decision-review-board > article > header div { display: flex; align-items: baseline; gap: 12px; }
+.portfolio-decision-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--market-border); }
+.portfolio-decision-fields > div { padding: 14px; border-right: 1px solid var(--market-border); border-bottom: 1px solid var(--market-border); }
+.portfolio-decision-fields span,
+.portfolio-constraint-checks > strong { display: block; font: 500 11px/1.2 var(--font-ibm-plex-mono), ui-monospace, monospace; letter-spacing: .07em; text-transform: uppercase; color: var(--market-text-muted); }
+.portfolio-decision-fields p { margin: 8px 0 0; }
+.portfolio-constraint-checks { padding: 15px; background: var(--market-surface); display: grid; gap: 9px; }
+.portfolio-constraint-checks p { margin: 0; display: grid; grid-template-columns: minmax(120px, .35fr) 1fr; gap: 12px; }
+.portfolio-constraint-checks p span { font-weight: 600; }
+.portfolio-constraint-checks p[data-status="blocked"] span { color: var(--market-red); }
+.portfolio-constraint-checks p[data-status="warning"] span { color: #b7791f; }
+.portfolio-legacy-decision { color: var(--market-text-muted); }
+
+.market-domain-decision-relevance,
+.market-domain-capture-contract { margin-top: 16px; border: 1px solid var(--market-border); padding: 15px; }
+.market-domain-decision-relevance ul { margin: 10px 0; padding-left: 18px; }
+.market-domain-capture-contract > p { color: var(--market-text-muted); }
+.market-domain-capture-contract dl { display: grid; gap: 10px; }
+.market-domain-capture-contract dl div { display: grid; grid-template-columns: 150px 1fr; gap: 14px; }
+.market-domain-capture-contract dt { font: 500 10px/1.4 var(--font-ibm-plex-mono), ui-monospace, monospace; text-transform: uppercase; color: var(--market-text-muted); }
+.market-domain-capture-contract dd { margin: 0; }
+
+.market-thesis-capture-ledger { padding: 16px; border-left: 2px solid var(--market-border); }
+.market-thesis-capture-ledger[data-status="established"] { border-left-color: var(--market-green); }
+.market-thesis-capture-ledger[data-status="plausible"] { border-left-color: var(--market-blue); }
+.market-thesis-capture-ledger p { display: grid; gap: 4px; margin: 10px 0 0; }
+.market-thesis-capture-ledger p strong { font-size: 11px; text-transform: uppercase; color: var(--market-text-muted); }
+
+@media (max-width: 720px) {
+  .capital-sizing-inputs,
+  .portfolio-decision-fields { grid-template-columns: 1fr; }
+  .portfolio-decision-review-board > article { padding: 14px; }
+  .portfolio-decision-review-board > article > header,
+  .portfolio-decision-review-board > article > header div { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .portfolio-constraint-checks p,
+  .market-domain-capture-contract dl div { grid-template-columns: 1fr; gap: 3px; }
+}
+
 /* Decision-grade equity research report */
 .equity-research-note {
   margin: 0 auto;

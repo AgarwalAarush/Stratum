@@ -122,6 +122,22 @@ export function validateMarketThesisResearch(
     return { name: requiredString(item.name, 'bottleneck name'), mechanism: requiredString(item.mechanism, 'bottleneck mechanism'), severity, whoCapturesEconomics: requiredString(item.whoCapturesEconomics, 'bottleneck economics'), resolutionSignals, sourceIds: sourceIds(item.sourceIds, 'bottleneck') }
   })
   const economicsRecord = record(output.economics)
+  const captureRecord = record(economicsRecord.capture)
+  const captureStatus = captureRecord.status
+  if (captureStatus !== 'established' && captureStatus !== 'plausible' && captureStatus !== 'not_established') {
+    throw new Error('Economics capture requires an established, plausible, or not_established status')
+  }
+  const capture: MarketHypothesisResearchContent['economics']['capture'] = {
+    status: captureStatus,
+    rentRecipients: strings(captureRecord.rentRecipients),
+    commoditizedLayers: strings(captureRecord.commoditizedLayers),
+    durabilityDrivers: strings(captureRecord.durabilityDrivers),
+    breakConditions: strings(captureRecord.breakConditions),
+    sourceIds: sourceIds(captureRecord.sourceIds, 'economic capture'),
+  }
+  if (!capture.rentRecipients.length || !capture.commoditizedLayers.length || !capture.durabilityDrivers.length || !capture.breakConditions.length) {
+    throw new Error('Economic capture must name rent recipients, commoditized layers, durability drivers, and break conditions')
+  }
   const beneficiaries = strings(economicsRecord.beneficiaries)
   if (beneficiaries.length < 1) throw new Error('Economics requires at least one beneficiary')
   const candidateSymbols = new Set<string>()
@@ -142,7 +158,7 @@ export function validateMarketThesisResearch(
       materiality: score(item.materiality, 'company-candidate materiality'), confidence: score(item.confidence, 'company-candidate confidence'), sourceIds: ids,
     }
   })
-  const economics = { valueChain: requiredString(economicsRecord.valueChain, 'economics valueChain'), scarcityRentCapture: requiredString(economicsRecord.scarcityRentCapture, 'economics scarcityRentCapture'), beneficiaries, substitutes: strings(economicsRecord.substitutes), companyCandidates, sourceIds: sourceIds(economicsRecord.sourceIds, 'economics') }
+  const economics = { valueChain: requiredString(economicsRecord.valueChain, 'economics valueChain'), scarcityRentCapture: requiredString(economicsRecord.scarcityRentCapture, 'economics scarcityRentCapture'), capture, beneficiaries, substitutes: strings(economicsRecord.substitutes), companyCandidates, sourceIds: sourceIds(economicsRecord.sourceIds, 'economics') }
   const expectationsRecord = record(output.expectations)
   const expectations = { currentNarrative: requiredString(expectationsRecord.currentNarrative, 'expectations currentNarrative'), whatAppearsPriced: requiredString(expectationsRecord.whatAppearsPriced, 'expectations whatAppearsPriced'), variantView: requiredString(expectationsRecord.variantView, 'expectations variantView'), sourceIds: sourceIds(expectationsRecord.sourceIds, 'expectations') }
   const counterRecord = record(output.counterThesis)
@@ -259,7 +275,7 @@ export function researchPrompt(hypothesis: MarketHypothesis, sources: Array<Rese
     'Concrete numbers, dates, percentages, and uniqueness claims must appear in the source assertion or excerpt for the cited source ID. If a detail is missing from those fields, omit it or list it in evidenceGaps — do not reconstruct it from prior knowledge.',
     'Confidence is an integer percent from 0 to 100, not a 0-1 fraction.',
     'Predictions are a learning contract: include at least one observable 1 week to 12 month prediction with a concrete leading indicator and clear confirmation and disconfirmation conditions. Write every horizon as a compact duration such as "3 months", "2 quarters", or "1 year"; do not use a date or an event phrase. Longer-horizon predictions may supplement the near-term prediction, but may not replace it.',
-    'Reason from demand -> supply -> bottleneck -> economic capture -> expectations -> measurable predictions. Explain which value-chain layer can capture economics and why alternatives or substitutes may capture it instead.',
+    'Reason from demand -> supply -> bottleneck -> economic capture -> expectations -> measurable predictions. In economics.capture, explicitly identify rent recipients, commoditized layers, durability drivers, break conditions, source IDs, and whether capture is established, plausible, or not established. Explain which value-chain layer can capture economics and why alternatives or substitutes may capture it instead.',
     'Inside economics.companyCandidates, review every supplied source for named public issuers. Include 0-8 companies when a supplied source explicitly names the company or ticker, or the company is unambiguously the issuer of a supplied disclosure, and the ledger directly ties it to a causal node or value-chain layer. Include role, mechanism, materiality, confidence, and exact sourceIds. Set symbol to null when the exact ticker is absent from the supplied ledger; the server, not the model, resolves issuer names against the active tradable asset registry. Uncertain economic capture should lower confidence or materiality, not erase an explicitly named research lead. This is a research queue, not a recommendation. Never infer tickers from sectors, general value-chain layers, or prior knowledge; use an empty array only when the ledger names no directly relevant public issuer.',
     'The research frontier is an explicit list of unresolved questions. It is not permission to browse: recommend source classes only, and preserve material uncertainty.',
     'Write a real counter-thesis that could win, with decisive tests. Expectations must say unknown when the supplied evidence cannot establish what is priced.',

@@ -10,7 +10,7 @@ import { MarketSparkline } from './MarketSparkline'
 import { MarketSelect } from './MarketSelect'
 import type { PortfolioHolding, PortfolioTransaction, PortfolioWorkspaceData, ScreenerResponse, ScreenerRow } from '@/lib/markets/types'
 
-type PortfolioView = 'owned' | 'alerts' | 'history'
+type PortfolioView = 'owned' | 'decisions' | 'alerts' | 'history'
 
 function formatMoney(value: number | null): string {
   return value === null ? '—' : value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
@@ -190,6 +190,7 @@ export function PortfolioWorkspace({
   const priceBySymbol = new Map(universe.rows.map((row) => [row.symbol, row.price]))
   const rowBySymbol = new Map(universe.rows.map((row) => [row.symbol, row]))
   const reviewByDecision = new Map(reviews.map((review) => [review.decisionId, review]))
+  const constraintByDecision = new Map(initialData.constraintAssessments.map((assessment) => [assessment.decisionId, assessment]))
   const performance = activePortfolio ? [
     ['Today', weightedReturn(activePortfolio.holdings, rowBySymbol, 'dailyChange')],
     ['30D', weightedReturn(activePortfolio.holdings, rowBySymbol, 'return30d')],
@@ -199,6 +200,9 @@ export function PortfolioWorkspace({
   ] as const : []
   const activeAlerts = activePortfolio
     ? inbox.filter((item) => item.portfolioId === activePortfolio.account.id)
+    : []
+  const activeDecisions = activePortfolio
+    ? initialData.decisions.filter((decision) => decision.portfolioId === activePortfolio.account.id || decision.portfolioId === null)
     : []
 
   const openRecording = () => {
@@ -300,6 +304,7 @@ export function PortfolioWorkspace({
       <nav className="market-portfolio-tabs" aria-label="Portfolio workflow">
         {([
           ['owned', 'Owned'],
+          ['decisions', 'Decisions'],
           ['alerts', 'Alerts'],
           ['history', 'History'],
         ] as const).map(([id, label]) => (
@@ -333,6 +338,37 @@ export function PortfolioWorkspace({
               </div>
             </section>
           </> : <p className="portfolio-empty-state">Portfolio records will appear after the database migration is applied.</p>}
+        </div>
+      ) : null}
+      {view === 'decisions' ? (
+        <div className="portfolio-decision-review-board">
+          <header><div><p className="markets-eyebrow">Own · watch · avoid</p><h2>{activePortfolio?.account.name ?? 'Portfolio'} decisions</h2></div><span>{activeDecisions.length} current</span></header>
+          {activeDecisions.length === 0 ? <p>No account-specific decisions yet. Open a researched company with an accepted thesis to record one.</p> : activeDecisions.map((decision) => {
+            const assessment = constraintByDecision.get(decision.id)
+            const review = reviewByDecision.get(decision.id)
+            return <article key={decision.id} data-status={decision.constraintStatus}>
+              <header><div><MarketsIntentLink href={`/markets/stocks/${decision.symbol}`}><strong>{decision.symbol}</strong></MarketsIntentLink><span>{decision.disposition} · {formatEntryAction(decision.entryAction)} · v{decision.version}</span></div><time>{new Date(decision.createdAt).toLocaleDateString()}</time></header>
+              <div className="portfolio-decision-fields">
+                <div><span>Valuation support</span><p>{decision.valuationSupport || 'Legacy decision — valuation support was not structured.'}</p></div>
+                <div><span>Catalyst and kill</span><p>{decision.nextCatalyst || 'No catalyst recorded.'}</p><small>{decision.killCriteria.map((item) => item.description).join(' · ') || 'No kill criteria recorded.'}</small></div>
+                <div><span>What changed</span><p>{decision.whatChanged || decision.changeSummary.join(' ') || 'Legacy decision — change record unavailable.'}</p></div>
+                <div><span>Owner sizing policy</span><p>{decision.sizingInputs ? `${decision.sizingInputs.targetWeightPct}% target · ${decision.sizingInputs.maxPositionWeightPct}% position ceiling · ${decision.sizingInputs.maxCorrelatedWeightPct}% ${decision.sizingInputs.correlationGroup} ceiling · ${decision.sizingInputs.maxLiquidityDays} liquidity days` : 'No capital requested for this disposition.'}</p></div>
+              </div>
+              {assessment ? <div className="portfolio-constraint-checks" data-status={assessment.status}>
+                <strong>Constraint review · {assessment.status.replaceAll('_', ' ')}</strong>
+                {assessment.checks.map((check) => <p key={check.id} data-status={check.status}><span>{check.label}</span>{check.summary}</p>)}
+                <small>Observed {new Date(assessment.dataAsOf).toLocaleString()} · deterministic checks on owner-supplied limits, not a sizing recommendation.</small>
+              </div> : <p className="portfolio-legacy-decision">No structured constraint assessment exists for this legacy version.</p>}
+              {review ? <div className="portfolio-review-summary"><span>{review.outcome.replaceAll('_', ' ')}</span><p>{review.expectationAssessment}</p><small>{review.lessons}</small></div> : null}
+              {reviewingDecisionId === decision.id ? <form className="decision-review-form" onSubmit={(event) => saveReview(event, decision.id, decision.symbol)}>
+                <div className="market-form-field"><span>Outcome</span><MarketSelect name="outcome" ariaLabel="Decision outcome" options={[{ value: 'working', label: 'Working' }, { value: 'not_working', label: 'Not working' }, { value: 'invalidated', label: 'Invalidated' }, { value: 'closed', label: 'Closed' }]} /></div>
+                <label>Expectation vs outcome<textarea name="expectationAssessment" required placeholder="Did the entry setup and expected mechanism behave as anticipated?" /></label>
+                <label>Lessons<textarea name="lessons" required placeholder="What should change in the next decision?" /></label>
+                <label>Postmortem<textarea name="postmortem" placeholder="Required when the thesis broke or the position closed" /></label>
+                <div><button type="submit">Save review</button><button type="button" onClick={() => setReviewingDecisionId(null)}>Cancel</button></div>
+              </form> : <button type="button" onClick={() => setReviewingDecisionId(decision.id)}>{review ? 'Update outcome review' : 'Review entry, break, and outcome'}</button>}
+            </article>
+          })}
         </div>
       ) : null}
       {view === 'alerts' ? (

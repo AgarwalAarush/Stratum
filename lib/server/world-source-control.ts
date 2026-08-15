@@ -26,6 +26,7 @@ import { runCodexJson, type CodexExecResult } from './codex-exec.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { selectMarketModel } from './market-model-policy.ts'
 import { fetchWorldSourceReferrals } from './intelligence-source-referrals.ts'
+import { buildDomainDecisionCoverage, evaluateDomainAdmission, type PortfolioDomainSignal } from '../markets/domain-admission.ts'
 
 type RecordValue = Record<string, unknown>
 
@@ -607,7 +608,7 @@ export async function reviseWorldSourceCanonicalUrl(input: { slug: string; canon
   return normalizeRegistryEntry(data as RecordValue)
 }
 
-export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceControlWorkspaceData> {
+export async function fetchWorldSourceControlWorkspace(ownerId?: string): Promise<WorldSourceControlWorkspaceData> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const [domains, sources, runs, researchScoutRuns, mappings, healthChecks, proposals, triageRuns, researchFrontiers, orchestrationRuns, orchestrationActions, referrals, observations] = await Promise.all([
@@ -662,24 +663,59 @@ export async function fetchWorldSourceControlWorkspace(): Promise<WorldSourceCon
       proposals: (proposals.data ?? []).filter((proposal) => String(proposal.domain_id) === domainId).map((proposal) => normalizeObservationProposal(proposal as RecordValue)),
     })
   })
+  const normalizedDomains: MarketDomainPack[] = (domains.data ?? []).map((row) => {
+    const pack = getMarketDomainPack(String(row.id))
+    if (!pack) throw new Error(`Persisted unknown domain pack ${String(row.id)}`)
+    const status = String(row.status)
+    if (status !== 'candidate' && status !== 'active' && status !== 'archived') throw new Error(`Invalid persisted domain status: ${status}`)
+    return { ...pack, status: status as MarketDomainPack['status'] }
+  })
+  let portfolioSignals: PortfolioDomainSignal[] = []
+  if (ownerId && validMarketUserId(ownerId)) {
+    const [{ data: transactionRows }, { data: watchlistRows }, { data: thesisRows }, { data: leadershipSnapshot }] = await Promise.all([
+      supabase.from('portfolio_transactions').select('symbol,action,quantity').eq('owner_id', ownerId).is('voided_at', null),
+      supabase.from('market_watchlists').select('market_watchlist_items(symbol)').eq('owner_id', ownerId),
+      supabase.from('investment_theses').select('symbol').eq('owner_id', ownerId).eq('entity_type', 'stock').eq('status', 'accepted').not('symbol', 'is', null),
+      supabase.from('market_leadership_snapshots').select('id').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
+    ])
+    const ownedQuantities = new Map<string, number>()
+    for (const row of transactionRows ?? []) {
+      if (!row.symbol) continue
+      const direction = row.action === 'sell' ? -1 : row.action === 'buy' || row.action === 'position_import' ? 1 : 0
+      ownedQuantities.set(String(row.symbol), (ownedQuantities.get(String(row.symbol)) ?? 0) + direction * Number(row.quantity ?? 0))
+    }
+    const watchlisted = new Set((watchlistRows ?? []).flatMap((row) => (row.market_watchlist_items ?? []).map((item: { symbol: string }) => item.symbol)))
+    const accepted = new Set((thesisRows ?? []).map((row) => String(row.symbol)))
+    const symbols = [...new Set([...ownedQuantities.keys(), ...watchlisted, ...accepted])]
+    const { data: metricRows } = leadershipSnapshot && symbols.length
+      ? await supabase.from('market_stock_metrics').select('symbol,sector,sub_industry').eq('snapshot_id', leadershipSnapshot.id).in('symbol', symbols)
+      : { data: [] }
+    const classifications = new Map((metricRows ?? []).map((row) => [String(row.symbol), { sector: String(row.sector ?? ''), subIndustry: String(row.sub_industry ?? '') }]))
+    portfolioSignals = symbols.map((symbol) => ({
+      symbol,
+      sector: classifications.get(symbol)?.sector ?? '',
+      subIndustry: classifications.get(symbol)?.subIndustry ?? '',
+      owned: (ownedQuantities.get(symbol) ?? 0) > 0.00000001,
+      watchlisted: watchlisted.has(symbol),
+      acceptedThesis: accepted.has(symbol),
+    }))
+  }
+  const normalizedFrontiers = (researchFrontiers.data ?? []).map((row) => normalizeResearchFrontier(row as RecordValue))
+  const frontierDomainIds = new Map((researchFrontiers.data ?? []).map((row) => [String(row.id), String(relatedRecord((row as RecordValue).market_hypotheses).scope ?? '')]))
+  const decisionCoverage = buildDomainDecisionCoverage({ domains: normalizedDomains, portfolioSignals, frontiers: normalizedFrontiers, frontierDomainIds })
   return {
-    domains: (domains.data ?? []).map((row) => {
-      const pack = getMarketDomainPack(String(row.id))
-      if (!pack) throw new Error(`Persisted unknown domain pack ${String(row.id)}`)
-      const status = String(row.status)
-      if (status !== 'candidate' && status !== 'active' && status !== 'archived') throw new Error(`Invalid persisted domain status: ${status}`)
-      return { ...pack, status }
-    }),
+    domains: normalizedDomains,
     sources: normalizedSources,
     discoveryRuns: (runs.data ?? []).map((row) => normalizeDiscoveryRun(row as RecordValue)),
     researchScoutRuns: (researchScoutRuns.data ?? []).map((row) => normalizeResearchScoutRun(row as RecordValue)),
-    researchFrontiers: (researchFrontiers.data ?? []).map((row) => normalizeResearchFrontier(row as RecordValue)),
+    researchFrontiers: normalizedFrontiers,
     observationProposals: (proposals.data ?? []).map((row) => normalizeObservationProposal(row as RecordValue)),
     triageRuns: (triageRuns.data ?? []).map((row) => normalizeTriageRun(row as RecordValue)),
     orchestrationRuns: (orchestrationRuns.data ?? []).map((row) => normalizeOrchestrationRun(row as RecordValue)),
     orchestrationActions: (orchestrationActions.data ?? []).map((row) => normalizeOrchestrationAction(row as RecordValue)),
     referrals,
     coverage,
+    decisionCoverage,
   }
 }
 
@@ -852,6 +888,8 @@ export async function ensureDeclaredMarketDomainPacks(): Promise<{ inserted: str
       entityKinds: pack.entityKinds,
       hypothesisTemplate: pack.hypothesisTemplate,
       crossDomainLinks: pack.crossDomainLinks,
+      admission: pack.admission,
+      economicCapture: pack.economicCapture,
     }
     const currentVersion = persisted.get(pack.id)
     if (currentVersion === undefined) {
@@ -884,12 +922,14 @@ export async function isMarketDomainActive(domainId: string): Promise<boolean> {
   return data.status === 'active'
 }
 
-export async function activateMarketDomainPack(domainId: string, reason: string): Promise<MarketDomainPackEvent> {
+export async function activateMarketDomainPack(domainId: string, reason: string, reviewerId: string, maintenanceOwner: string): Promise<MarketDomainPackEvent> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const pack = getMarketDomainPack(domainId)
   if (!pack) throw new Error(`Unknown market domain: ${domainId}`)
+  if (!validMarketUserId(reviewerId)) throw new Error('A persisted authenticated reviewer is required')
   const activationReason = requiredString(reason, 'domain activation reason')
+  const namedOwner = requiredString(maintenanceOwner, 'domain maintenance owner')
   const { data: domainRow, error: domainError } = await supabase.from('market_domain_packs').select('status').eq('id', domainId).maybeSingle()
   if (domainError || !domainRow) throw new Error(`Unable to load domain ${domainId}: ${domainError?.message ?? 'unknown error'}`)
   if (domainRow.status === 'archived') throw new Error(`Archived domain ${domainId} cannot be activated`)
@@ -902,11 +942,25 @@ export async function activateMarketDomainPack(domainId: string, reason: string)
     const source = sourceRecord(mapping.world_source_registry)
     return source && (source.status === 'approved' || source.status === 'probation') ? [source] : []
   })
-  for (const requirement of pack.sourceRequirements) {
-    const matching = new Set(approved.filter((source) => source.evidenceClasses.includes(requirement.evidenceClass)).map((source) => source.id))
-    if (matching.size < requirement.minimumSources) {
-      throw new Error(`${domainId} needs ${requirement.minimumSources} approved ${requirement.evidenceClass} source${requirement.minimumSources === 1 ? '' : 's'} before activation`)
-    }
+  const sourceCoverage = pack.sourceRequirements.map((requirement) => ({
+    evidenceClass: requirement.evidenceClass,
+    current: new Set(approved.filter((source) => source.evidenceClasses.includes(requirement.evidenceClass)).map((source) => source.id)).size,
+    required: requirement.minimumSources,
+  }))
+  const admission = evaluateDomainAdmission({ domain: pack, sourceCoverage, maintenanceOwner: namedOwner })
+  const { error: admissionError } = await supabase.from('market_domain_admission_reviews').insert({
+    domain_id: domainId,
+    pack_version: pack.version,
+    reviewer_id: reviewerId,
+    maintenance_owner: namedOwner,
+    decision: admission.passed ? 'admitted' : 'rejected',
+    rationale: activationReason,
+    rubric: admission.criteria,
+  })
+  if (admissionError) throw new Error(`Unable to persist domain admission review: ${admissionError.message}`)
+  if (!admission.passed) {
+    const failed = admission.criteria.filter((criterion) => !criterion.passed).map((criterion) => criterion.label).join(', ')
+    throw new Error(`${domainId} failed its admission rubric: ${failed}`)
   }
   const sourceIds = [...new Set(approved.map((source) => source.id))]
   const { error: updateError } = await supabase.from('market_domain_packs').update({ status: 'active', updated_at: new Date().toISOString() }).eq('id', domainId)

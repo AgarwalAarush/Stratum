@@ -66,7 +66,12 @@ function listValue(value: string): string[] {
 
 export function WorldSourceControlPanel({ workspace, unavailableReason }: { workspace: WorldSourceControlWorkspaceData | null; unavailableReason: string | null }) {
   const router = useRouter()
-  const [selectedDomainId, setSelectedDomainId] = useState(workspace?.domains[0]?.id ?? '')
+  const rankedDomains = useMemo(() => [...(workspace?.domains ?? [])].sort((left, right) => {
+    const leftScore = workspace?.decisionCoverage.find((item) => item.domainId === left.id)?.priorityScore ?? 0
+    const rightScore = workspace?.decisionCoverage.find((item) => item.domainId === right.id)?.priorityScore ?? 0
+    return rightScore - leftScore || left.label.localeCompare(right.label)
+  }), [workspace])
+  const [selectedDomainId, setSelectedDomainId] = useState(rankedDomains[0]?.id ?? '')
   const [candidateLimit, setCandidateLimit] = useState(12)
   const [proposalLimit, setProposalLimit] = useState(12)
   const [reason, setReason] = useState('Review source coverage gaps before expanding this domain.')
@@ -78,6 +83,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const [blockRationale, setBlockRationale] = useState('')
   const [activatingDomainId, setActivatingDomainId] = useState<string | null>(null)
   const [activationReason, setActivationReason] = useState('')
+  const [maintenanceOwner, setMaintenanceOwner] = useState('')
   const [reviewingProposal, setReviewingProposal] = useState<string | null>(null)
   const [proposalRationale, setProposalRationale] = useState('')
   const [revisingCanonicalSlug, setRevisingCanonicalSlug] = useState<string | null>(null)
@@ -89,6 +95,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   const selectedDomain = useMemo(() => workspace?.domains.find((domain) => domain.id === selectedDomainId) ?? null, [workspace, selectedDomainId])
   const selectedDomainCoverage = useMemo(() => selectedDomain ? sourceCoverage(workspace!, selectedDomain) : [], [workspace, selectedDomain])
   const selectedDomainResearchCoverage = useMemo(() => workspace?.coverage.find((coverage) => coverage.domainId === selectedDomainId) ?? null, [workspace, selectedDomainId])
+  const selectedDecisionCoverage = useMemo(() => workspace?.decisionCoverage.find((coverage) => coverage.domainId === selectedDomainId) ?? null, [workspace, selectedDomainId])
   const selectedDomainComplete = selectedDomainCoverage.every((item) => item.current >= item.minimumSources)
 
   if (!workspace) {
@@ -277,18 +284,19 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
   }
 
   const activateDomain = async (domain: MarketDomainPack) => {
-    if (!activationReason.trim() || pending) return
+    if (!activationReason.trim() || !maintenanceOwner.trim() || pending) return
     setPending(true)
     setNotice(null)
     try {
       const response = await fetch('/api/markets/world-sources', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'activate-domain', domainId: domain.id, reason: activationReason.trim() }),
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'activate-domain', domainId: domain.id, reason: activationReason.trim(), maintenanceOwner: maintenanceOwner.trim() }),
       })
       const payload = await response.json() as { error?: string }
       if (!response.ok) throw new Error(payload.error ?? 'Unable to activate market domain')
       setNotice(`${domain.label} is active. Only its approved, contract-bounded sources may enter the scheduled collection path; candidates remain outside evidence.`)
       setActivatingDomainId(null)
       setActivationReason('')
+      setMaintenanceOwner('')
       router.refresh()
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to activate market domain')
@@ -450,12 +458,14 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           <p>Source counts are governed coverage; observations are accepted evidence. Feed referrals are only inspectable prompts from Intelligence and Markets, never evidence.</p>
         </div>
         <div className="market-source-coverage-grid">
-          {workspace.domains.map((domain) => {
+          {rankedDomains.map((domain) => {
             const coverage = workspace.coverage.find((item) => item.domainId === domain.id)
+            const decision = workspace.decisionCoverage.find((item) => item.domainId === domain.id)
             return <button key={domain.id} type="button" onClick={() => setSelectedDomainId(domain.id)} data-selected={selectedDomainId === domain.id} data-coverage-state={coverage?.state ?? 'blocked'}>
               <strong>{domain.label}<em>{coverage?.state ?? 'unavailable'}</em></strong>
               <span>{coverage?.admittedSourceCount ?? 0} governed · {coverage?.candidateSourceCount ?? 0} candidate</span>
               <span>{coverage?.observationCount ?? 0} evidence · {coverage?.reviewBacklogCount ?? 0} review backlog</span>
+              <span>Decision relevance {decision?.priorityScore ?? 0}/100</span>
               <small>{coverage?.explanations[0] ?? 'Coverage explanation unavailable.'}</small>
             </button>
           })}
@@ -510,7 +520,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
       </div>
 
       <div className="market-domain-control-grid" role="list" aria-label="Market research domains">
-        {workspace.domains.map((domain) => {
+        {rankedDomains.map((domain) => {
           const coverage = sourceCoverage(workspace, domain)
           const complete = coverage.every((item) => item.current >= item.minimumSources)
           const selected = selectedDomainId === domain.id
@@ -531,6 +541,22 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
             <p className="markets-eyebrow">{selectedDomain.status} domain</p>
             <h3>{selectedDomain.label}</h3>
             <p>{selectedDomain.description}</p>
+            <div className="market-domain-decision-relevance">
+              <strong>Portfolio-led research priority · {selectedDecisionCoverage?.priorityScore ?? 0}/100</strong>
+              <ul>{selectedDecisionCoverage?.reasons.map((item) => <li key={item}>{item}</li>)}</ul>
+              <small>This controls research order only. It does not admit evidence, accept a thesis, or recommend a security.</small>
+            </div>
+            <div className="market-domain-capture-contract">
+              <strong>Admission and economic capture</strong>
+              <p>{selectedDomain.admission.economicMechanism}</p>
+              <dl>
+                <div><dt>Decision relevance</dt><dd>{selectedDomain.admission.expectedDecisionRelevance}</dd></div>
+                <div><dt>Potential rent recipients</dt><dd>{selectedDomain.economicCapture.rentRecipients.join(' · ')}</dd></div>
+                <div><dt>Commoditized layers</dt><dd>{selectedDomain.economicCapture.commoditizedLayers.join(' · ')}</dd></div>
+                <div><dt>Durability tests</dt><dd>{selectedDomain.economicCapture.durabilityTests.join(' · ')}</dd></div>
+                <div><dt>Breaks capture</dt><dd>{selectedDomain.economicCapture.breakConditions.join(' · ')}</dd></div>
+              </dl>
+            </div>
             <p className="market-source-domain-telemetry">{selectedDomainResearchCoverage?.observationCount ?? 0} accepted observations · {selectedDomainResearchCoverage?.pendingReferralCount ?? 0} pending feed referrals{selectedDomainResearchCoverage?.latestObservationAt ? ` · latest evidence ${formatDate(selectedDomainResearchCoverage.latestObservationAt)}` : ''}</p>
             {selectedDomainResearchCoverage ? <div className="market-domain-coverage-explanation" data-state={selectedDomainResearchCoverage.state}>
               <strong>{selectedDomainResearchCoverage.state} coverage</strong>
@@ -558,8 +584,9 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
             <p>A health audit checks reachability, redirect destination, and MIME type against the active contract. A failed check is review telemetry, not an automatic source block.</p>
             {selectedDomain.status === 'candidate' ? activatingDomainId === selectedDomain.id ? <form className="market-source-contract-review market-domain-activation-review" onSubmit={(event) => { event.preventDefault(); void activateDomain(selectedDomain) }}>
               <p>Activation is a human decision after every required source class has approved, contract-bounded coverage. It enables scheduled collection for approved sources only; it does not admit candidates, create observations, publish a thesis, or move capital.</p>
+              <label>Maintenance owner<input value={maintenanceOwner} onChange={(event) => setMaintenanceOwner(event.target.value)} required maxLength={160} placeholder="Named person or operating role" /></label>
               <label>Activation rationale<textarea value={activationReason} onChange={(event) => setActivationReason(event.target.value)} required maxLength={1000} /></label>
-              <footer><button type="submit" disabled={pending || !selectedDomainComplete || !activationReason.trim()}>{pending ? 'Activating domain…' : 'Activate verified domain'}</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setActivatingDomainId(null); setActivationReason('') }}>Cancel</button></footer>
+              <footer><button type="submit" disabled={pending || !selectedDomainComplete || !activationReason.trim() || !maintenanceOwner.trim()}>{pending ? 'Activating domain…' : 'Activate verified domain'}</button><button type="button" className="market-source-secondary-button" disabled={pending} onClick={() => { setActivatingDomainId(null); setActivationReason(''); setMaintenanceOwner('') }}>Cancel</button></footer>
             </form> : <div className="market-domain-activation-summary"><button type="button" className="market-source-secondary-button" disabled={pending || !selectedDomainComplete} onClick={() => { setActivatingDomainId(selectedDomain.id); setActivationReason(''); setNotice(null) }}>Review domain activation</button><small>{selectedDomainComplete ? 'All required source classes have approved coverage. Activation remains a separately recorded human decision.' : 'Activation remains unavailable until every required source class has approved coverage.'}</small></div> : null}
             {notice ? <output aria-live="polite">{notice}</output> : null}
           </div>

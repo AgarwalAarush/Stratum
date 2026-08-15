@@ -286,6 +286,8 @@ export function StockViewer({ data }: { data: StockViewerData }) {
           research={isEtf ? data.etfResearchNote : data.researchNote}
           candidate={data.candidate}
           thesis={data.thesis}
+          portfolios={data.decisionPortfolios}
+          constraint={data.decisionConstraint}
           instrumentType={data.instrumentType}
         />
       </div>

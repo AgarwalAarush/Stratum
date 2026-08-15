@@ -156,6 +156,13 @@ function MarketThesisDetail({ thesis, hypothesis, busy, queuedExposureIds, onAct
     <p className="market-thesis-detail-summary">{thesis.content.whyNow}</p>
     <div className="market-thesis-detail-grid">
       <DetailBlock label="Economic capture" content={thesis.content.economics} />
+      <div className="market-thesis-capture-ledger" data-status={thesis.content.economicCapture.status}>
+        <span>Capture test · {thesis.content.economicCapture.status.replaceAll('_', ' ')}</span>
+        <p><strong>Rent recipients</strong>{thesis.content.economicCapture.rentRecipients.join(' · ') || 'Not established'}</p>
+        <p><strong>Commoditized</strong>{thesis.content.economicCapture.commoditizedLayers.join(' · ') || 'Not established'}</p>
+        <p><strong>Durability</strong>{thesis.content.economicCapture.durabilityDrivers.join(' · ') || 'Not established'}</p>
+        <p><strong>Breaks capture</strong>{thesis.content.economicCapture.breakConditions.join(' · ') || 'Not established'}</p>
+      </div>
       <DetailBlock label="What may be priced" content={thesis.content.expectations} />
       <DetailList label="Falsifiers" items={thesis.content.falsifiers} empty="No explicit falsifier has been retained." />
       <PredictionLedger predictions={thesis.predictions} />

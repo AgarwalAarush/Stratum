@@ -582,6 +582,7 @@ export async function promoteEligibleMarketHypothesis(ownerId: string, hypothesi
   const content = {
     whyNow: researchContent.whyNow,
     economics: `${researchContent.economics.valueChain} ${researchContent.economics.scarcityRentCapture}`,
+    economicCapture: researchContent.economics.capture,
     expectations: `${researchContent.expectations.currentNarrative} ${researchContent.expectations.whatAppearsPriced} Variant view: ${researchContent.expectations.variantView}`,
     falsifiers: researchContent.falsifiers.map((item) => `${item.condition}: ${item.thesisImpact}`),
     counterThesis: researchContent.counterThesis.statement,
@@ -661,10 +662,20 @@ function normalizeThesis(
   linkedCompanyTheses: import('../markets/types.ts').MarketLinkedCompanyThesis[] = [],
 ): MarketThesisVersion {
   const content = record(row.content)
+  const economicCapture = record(content.economicCapture)
   return {
     id: String(row.id), hypothesisId: String(row.hypothesis_id), version: number(row.version), state: row.state as MarketThesisVersion['state'], title: String(row.title),
     content: {
-      whyNow: String(content.whyNow ?? ''), economics: String(content.economics ?? ''), expectations: String(content.expectations ?? ''), falsifiers: strings(content.falsifiers), counterThesis: String(content.counterThesis ?? ''),
+      whyNow: String(content.whyNow ?? ''), economics: String(content.economics ?? ''),
+      economicCapture: {
+        status: economicCapture.status === 'established' || economicCapture.status === 'plausible' ? economicCapture.status : 'not_established',
+        rentRecipients: strings(economicCapture.rentRecipients),
+        commoditizedLayers: strings(economicCapture.commoditizedLayers),
+        durabilityDrivers: strings(economicCapture.durabilityDrivers),
+        breakConditions: strings(economicCapture.breakConditions),
+        sourceIds: strings(economicCapture.sourceIds),
+      },
+      expectations: String(content.expectations ?? ''), falsifiers: strings(content.falsifiers), counterThesis: String(content.counterThesis ?? ''),
       sourceLedger: Array.isArray(content.sourceLedger) ? content.sourceLedger.map(record).map((item) => ({ documentId: String(item.documentId ?? ''), label: String(item.label ?? ''), url: String(item.url ?? ''), tier: item.tier as WorldSourceTier })) : [],
     },
     confidence: number(row.confidence), dataAsOf: String(row.data_as_of), generatedAt: String(row.generated_at), revisionDiff: strings(row.revision_diff), researchVersionId: row.research_version_id === null ? null : String(row.research_version_id ?? ''),

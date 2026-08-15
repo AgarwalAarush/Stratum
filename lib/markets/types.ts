@@ -464,6 +464,8 @@ export interface StockViewerData {
   researchNote: EquityResearchNote | null
   etfResearchNote: EtfResearchNote | null
   decision: ThesisDecision | null
+  decisionPortfolios: PortfolioDecisionOption[]
+  decisionConstraint: CapitalConstraintAssessment | null
   position: ManualPosition | null
   thesis: InvestmentThesis | null
   history: StockPricePoint[]
@@ -934,6 +936,49 @@ export interface ThesisDecision {
   createdAt: string
   investmentThesisId: string | null
   researchNoteId: string | null
+  portfolioId: string | null
+  valuationSupport: string
+  whatChanged: string
+  changeSummary: string[]
+  sizingInputs: CapitalDecisionSizingInputs | null
+  constraintStatus: CapitalConstraintStatus
+}
+
+export interface CapitalDecisionSizingInputs {
+  targetWeightPct: number
+  maxPositionWeightPct: number
+  maxCorrelatedWeightPct: number
+  maxLiquidityDays: number
+  correlationGroup: string
+}
+
+export type CapitalConstraintStatus = 'pass' | 'warning' | 'blocked' | 'needs_inputs'
+
+export interface CapitalConstraintCheck {
+  id: 'concentration' | 'correlated_exposure' | 'liquidity' | 'account_separation' | 'cash_impact'
+  status: 'pass' | 'warning' | 'blocked' | 'unknown'
+  label: string
+  summary: string
+  observedValue: number | null
+  limitValue: number | null
+  unit: 'percent' | 'days' | 'usd' | 'count'
+}
+
+export interface CapitalConstraintAssessment {
+  id: string
+  decisionId: string
+  portfolioId: string
+  status: CapitalConstraintStatus
+  checks: CapitalConstraintCheck[]
+  inputs: CapitalDecisionSizingInputs | null
+  dataAsOf: string
+  evaluatedAt: string
+}
+
+export interface PortfolioDecisionOption {
+  id: string
+  name: string
+  kind: 'brokerage' | 'manual'
 }
 
 export interface DecisionReview {
@@ -1010,7 +1055,7 @@ export interface PortfolioAccountSummary {
 export interface DecisionInboxItem {
   id: string
   portfolioId: string | null
-  type: 'new_candidate' | 'thesis_refresh' | 'entry_zone_arrival' | 'catalyst' | 'kill_criterion_breach'
+  type: 'new_candidate' | 'thesis_refresh' | 'entry_zone_arrival' | 'catalyst' | 'kill_criterion_breach' | 'decision_review_due'
   symbol: string | null
   title: string
   summary: string
@@ -1035,6 +1080,7 @@ export interface PortfolioWorkspaceData {
   inbox: DecisionInboxItem[]
   portfolios: PortfolioAccountSummary[]
   portfolioTransactions: PortfolioTransaction[]
+  constraintAssessments: CapitalConstraintAssessment[]
 }
 
 export type ScreenerPreset = 'momentum' | 'unusual-volume' | 'near-highs' | 'gap-movers'
@@ -1262,6 +1308,23 @@ export interface MarketDomainPack {
     toMechanisms: string[]
     explanation: string
   }>
+  admission: {
+    economicMechanism: string
+    expectedDecisionRelevance: string
+    maintenanceOwnerRole: string
+    reviewCadence: 'monthly' | 'quarterly'
+    portfolioSignals: {
+      sectors: string[]
+      subIndustries: string[]
+    }
+    admissionRisks: string[]
+  }
+  economicCapture: {
+    rentRecipients: string[]
+    commoditizedLayers: string[]
+    durabilityTests: string[]
+    breakConditions: string[]
+  }
 }
 
 export interface MarketHypothesisCrossDomainLink {
@@ -1424,6 +1487,16 @@ export interface MarketDomainResearchCoverage {
   explanations: string[]
 }
 
+export interface MarketDomainDecisionCoverage {
+  domainId: string
+  priorityScore: number
+  ownedSymbols: string[]
+  watchlistedSymbols: string[]
+  acceptedThesisSymbols: string[]
+  highPriorityFrontierCount: number
+  reasons: string[]
+}
+
 export interface WorldSourceControlWorkspaceData {
   domains: MarketDomainPack[]
   sources: WorldSourceRegistryEntry[]
@@ -1436,6 +1509,7 @@ export interface WorldSourceControlWorkspaceData {
   orchestrationActions: MarketOrchestrationAction[]
   referrals: WorldSourceReferral[]
   coverage: MarketDomainResearchCoverage[]
+  decisionCoverage: MarketDomainDecisionCoverage[]
 }
 
 /** Quote-bound cheap-model output. It is deliberately not a WorldObservation
@@ -1574,6 +1648,14 @@ export interface MarketHypothesisResearchContent {
   economics: {
     valueChain: string
     scarcityRentCapture: string
+    capture: {
+      status: 'established' | 'plausible' | 'not_established'
+      rentRecipients: string[]
+      commoditizedLayers: string[]
+      durabilityDrivers: string[]
+      breakConditions: string[]
+      sourceIds: string[]
+    }
     beneficiaries: string[]
     substitutes: string[]
     companyCandidates: Array<{
@@ -1711,6 +1793,7 @@ export interface MarketThesisVersion {
   content: {
     whyNow: string
     economics: string
+    economicCapture: MarketHypothesisResearchContent['economics']['capture']
     expectations: string
     falsifiers: string[]
     counterThesis: string

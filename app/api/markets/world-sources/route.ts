@@ -18,7 +18,7 @@ export async function GET() {
   const user = await getAllowedMarketUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   try {
-    return NextResponse.json(await fetchWorldSourceControlWorkspace())
+    return NextResponse.json(await fetchWorldSourceControlWorkspace(user.id))
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to load source control' }, { status: 500 })
   }
@@ -97,7 +97,8 @@ export async function POST(request: NextRequest) {
     }
     if (body.action === 'activate-domain') {
       if (typeof body.domainId !== 'string' || typeof body.reason !== 'string') return NextResponse.json({ error: 'A domain and activation reason are required.' }, { status: 400 })
-      const event = await activateMarketDomainPack(body.domainId, body.reason)
+      if (typeof body.maintenanceOwner !== 'string') return NextResponse.json({ error: 'A named maintenance owner is required.' }, { status: 400 })
+      const event = await activateMarketDomainPack(body.domainId, body.reason, user.id, body.maintenanceOwner)
       return NextResponse.json({ event })
     }
     if (body.action === 'review-observation-proposal') {

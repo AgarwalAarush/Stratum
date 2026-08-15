@@ -852,6 +852,8 @@ async function loadSharedStockViewerData(symbol: string): Promise<StockViewerDat
     researchNote: null,
     etfResearchNote: null,
     decision: null,
+    decisionPortfolios: [],
+    decisionConstraint: null,
     position: null,
     thesis: null,
     history,
@@ -876,8 +878,10 @@ export async function fetchStockViewerData(symbolInput: string, ownerId?: string
         import('./portfolio.ts').then((module) => module.fetchManualPosition(ownerId, symbol)),
         import('./theses.ts').then((module) => module.fetchLatestStockThesis(ownerId, symbol)),
         import('./etf-research.ts').then((module) => module.fetchLatestEtfResearch(ownerId, symbol)),
+        import('./portfolio.ts').then((module) => module.fetchDecisionPortfolioOptions(ownerId)),
+        import('./portfolio.ts').then((module) => module.fetchLatestDecisionConstraintAssessment(ownerId, symbol)),
       ])
-    : Promise.resolve([null, null, null, null, null, null] as const)
+    : Promise.resolve([null, null, null, null, null, null, [] as StockViewerData['decisionPortfolios'], null] as const)
   const candidatePromise = supabase
     .from('candidate_briefs')
     .select('content,status')
@@ -885,7 +889,7 @@ export async function fetchStockViewerData(symbolInput: string, ownerId?: string
     .order('trading_date', { ascending: false })
     .limit(1)
     .maybeSingle()
-  const [shared, [companyPacket, researchNote, decision, position, thesis, etfResearchNote], candidateResult] = await Promise.all([
+  const [shared, [companyPacket, researchNote, decision, position, thesis, etfResearchNote, decisionPortfolios, decisionConstraint], candidateResult] = await Promise.all([
     sharedPromise,
     ownerDataPromise,
     candidatePromise,
@@ -901,6 +905,8 @@ export async function fetchStockViewerData(symbolInput: string, ownerId?: string
     researchNote,
     etfResearchNote,
     decision,
+    decisionPortfolios,
+    decisionConstraint,
     position,
     thesis,
   }

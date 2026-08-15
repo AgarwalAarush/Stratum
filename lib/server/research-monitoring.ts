@@ -6,6 +6,7 @@ import {
   type MaterialEvent,
 } from '../markets/monitoring.ts'
 import type { ThesisDecision } from '../markets/types.ts'
+import { decisionReviewDue } from '../markets/capital-allocation.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 interface TrackedName {
@@ -41,6 +42,7 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
     { data: latestSnapshot },
     { data: acceptedTheses },
     { data: activeMonitors },
+    { data: decisionReviews },
   ] = await Promise.all([
     supabase.from('portfolio_transactions').select('owner_id,portfolio_id,symbol,action,quantity'),
     supabase.from('thesis_decisions').select('*').order('created_at', { ascending: false }),
@@ -48,6 +50,7 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
     supabase.from('investment_theses').select('id,owner_id,symbol,entity_key')
       .eq('entity_type', 'stock').eq('status', 'accepted').not('symbol', 'is', null),
     supabase.from('thesis_monitors').select('id,thesis_id,entity_key').eq('status', 'active'),
+    supabase.from('decision_reviews').select('decision_id,reviewed_at').order('reviewed_at', { ascending: false }),
   ])
   const monitorByThesis = new Map((activeMonitors ?? []).map((monitor) => [monitor.thesis_id, monitor]))
   const thesisByOwnerSymbol = new Map<string, Omit<TrackedName, 'portfolioId' | 'symbol'>>()
@@ -134,18 +137,20 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
   }
 
   let decisionAlerts = 0
-  if (latestSnapshot && decisions) {
+  if (decisions) {
     const latestByOwnerSymbol = new Map<string, Record<string, unknown>>()
     for (const row of decisions) {
-      const key = `${row.owner_id}:${row.symbol}`
+      const key = `${row.owner_id}:${row.portfolio_id ?? '*'}:${row.symbol}`
       if (!latestByOwnerSymbol.has(key)) latestByOwnerSymbol.set(key, row)
     }
+    const latestReviewByDecision = new Map<string, string>()
+    for (const review of decisionReviews ?? []) {
+      if (!latestReviewByDecision.has(String(review.decision_id))) latestReviewByDecision.set(String(review.decision_id), String(review.reviewed_at))
+    }
     for (const trackedName of tracked.values()) {
-      const row = latestByOwnerSymbol.get(`${trackedName.ownerId}:${trackedName.symbol}`)
+      const row = latestByOwnerSymbol.get(`${trackedName.ownerId}:${trackedName.portfolioId}:${trackedName.symbol}`)
+        ?? latestByOwnerSymbol.get(`${trackedName.ownerId}:*:${trackedName.symbol}`)
       if (!row) continue
-      const { data: screener } = await supabase.from('screener_rows').select('price').eq('snapshot_id', latestSnapshot.id)
-        .eq('symbol', trackedName.symbol).maybeSingle()
-      if (!screener) continue
       const decision: ThesisDecision = {
         id: row.id as string,
         symbol: trackedName.symbol,
@@ -164,7 +169,35 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
         createdAt: row.created_at as string,
         investmentThesisId: row.investment_thesis_id === null ? null : String(row.investment_thesis_id),
         researchNoteId: row.research_note_id === null ? null : String(row.research_note_id),
+        portfolioId: row.portfolio_id === null ? null : String(row.portfolio_id),
+        valuationSupport: String(row.valuation_support ?? ''),
+        whatChanged: String(row.what_changed ?? ''),
+        changeSummary: Array.isArray(row.change_summary) ? row.change_summary.map(String) : [],
+        sizingInputs: row.sizing_inputs && typeof row.sizing_inputs === 'object' && !Array.isArray(row.sizing_inputs) ? row.sizing_inputs as ThesisDecision['sizingInputs'] : null,
+        constraintStatus: (row.constraint_status ?? 'needs_inputs') as ThesisDecision['constraintStatus'],
       }
+      if (decisionReviewDue(decision, latestReviewByDecision.get(decision.id) ?? null, now)) {
+        const { data: insertedReviewAlert, error } = await supabase.from('decision_inbox_items').upsert({
+          owner_id: trackedName.ownerId,
+          portfolio_id: trackedName.portfolioId,
+          item_type: 'decision_review_due',
+          symbol: trackedName.symbol,
+          title: `${trackedName.symbol} capital decision review is due`,
+          summary: 'Review the entry setup, thesis-break conditions, realized outcome, and what changed since this decision version.',
+          evidence: [],
+          investment_thesis_id: trackedName.thesisId ?? null,
+          thesis_monitor_id: trackedName.monitorId ?? null,
+          entity_key: trackedName.entityKey ?? null,
+          severity: 'attention',
+          dedupe_key: `decision-review:${decision.id}:90d`,
+          occurred_at: now.toISOString(),
+        }, { onConflict: 'owner_id,dedupe_key', ignoreDuplicates: true }).select('id').maybeSingle()
+        if (!error && insertedReviewAlert) decisionAlerts += 1
+      }
+      if (!latestSnapshot) continue
+      const { data: screener } = await supabase.from('screener_rows').select('price').eq('snapshot_id', latestSnapshot.id)
+        .eq('symbol', trackedName.symbol).maybeSingle()
+      if (!screener) continue
       for (const alert of evaluateDecisionAlerts(decision, Number(screener.price), now.toISOString())) {
         const dedupeKey = `portfolio:${trackedName.portfolioId}:${alert.dedupeKey}`
         const { data: insertedAlert, error } = await supabase.from('decision_inbox_items').upsert({

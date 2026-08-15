@@ -29,7 +29,11 @@ function researchFixture(): any {
     demand: { currentState: 'Large loads are growing.', changeMechanism: 'New capacity is requested.', sourceIds: ['source-a'] },
     supply: { currentState: 'Firm supply takes time.', changeMechanism: 'Projects have lead times.', sourceIds: ['source-b'] },
     bottlenecks: [{ name: 'Interconnection', mechanism: 'Queue timing slows supply.', severity: 'important', whoCapturesEconomics: 'Deliverable capacity owners may capture value.', resolutionSignals: ['Queue completions'], sourceIds: ['source-b'] }],
-    economics: { valueChain: 'Generation to load serving.', scarcityRentCapture: 'Only proven delivery can capture rents.', beneficiaries: ['Deliverable capacity'], substitutes: ['Flexible load'], companyCandidates: [], sourceIds: ['source-c'] },
+    economics: {
+      valueChain: 'Generation to load serving.', scarcityRentCapture: 'Only proven delivery can capture rents.',
+      capture: { status: 'plausible', rentRecipients: ['Deliverable capacity'], commoditizedLayers: ['Announced capacity'], durabilityDrivers: ['Contract pricing'], breakConditions: ['Rapid supply response'], sourceIds: ['source-c'] },
+      beneficiaries: ['Deliverable capacity'], substitutes: ['Flexible load'], companyCandidates: [], sourceIds: ['source-c'],
+    },
     expectations: { currentNarrative: 'Demand growth is well discussed.', whatAppearsPriced: 'Unknown from the supplied evidence.', variantView: 'Regional delivery matters more than aggregate capacity.', sourceIds: ['source-a'] },
     counterThesis: { statement: 'Supply catches up before scarcity persists.', mechanisms: ['Faster projects'], decisiveTests: ['Delivered capacity additions'], sourceIds: ['source-b'] },
     predictions: [

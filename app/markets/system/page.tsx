@@ -20,10 +20,10 @@ function formatTime(value: string | null): string {
 }
 
 export default async function MarketsSystemPage() {
-  await requireAllowedMarketUser()
+  const user = await requireAllowedMarketUser()
   const [statusResult, sourceControlResult] = await Promise.allSettled([
     fetchMarketSystemStatus(),
-    fetchWorldSourceControlWorkspace(),
+    fetchWorldSourceControlWorkspace(user.id),
   ])
   const status = statusResult.status === 'fulfilled' ? statusResult.value : null
   const sourceControl = sourceControlResult.status === 'fulfilled' ? sourceControlResult.value : null

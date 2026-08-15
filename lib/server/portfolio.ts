@@ -4,6 +4,8 @@ import {
   type MarketWatchlistState,
 } from '../markets/watchlists.ts'
 import type {
+  CapitalConstraintAssessment,
+  CapitalDecisionSizingInputs,
   DecisionReview,
   DecisionInboxItem,
   ManualPosition,
@@ -12,10 +14,12 @@ import type {
   PortfolioHolding,
   PortfolioTransaction,
   PortfolioTransactionAction,
+  PortfolioDecisionOption,
   PortfolioWorkspaceData,
   ThesisDecision,
   ThesisKillCriterion,
 } from '../markets/types.ts'
+import { buildCapitalDecisionChangeSummary, evaluateCapitalConstraints } from '../markets/capital-allocation.ts'
 import { validatePortfolioUpdate, type ParsedPortfolioUpdate } from '../markets/portfolio-updates.ts'
 import { getAlpacaClient } from './alpaca.ts'
 import { getSupabaseClient } from './supabase.ts'
@@ -114,6 +118,25 @@ function normalizeDecision(row: Record<string, unknown>): ThesisDecision {
     createdAt: String(row.created_at),
     investmentThesisId: row.investment_thesis_id === null || row.investment_thesis_id === undefined ? null : String(row.investment_thesis_id),
     researchNoteId: row.research_note_id === null || row.research_note_id === undefined ? null : String(row.research_note_id),
+    portfolioId: row.portfolio_id === null || row.portfolio_id === undefined ? null : String(row.portfolio_id),
+    valuationSupport: String(row.valuation_support ?? ''),
+    whatChanged: String(row.what_changed ?? ''),
+    changeSummary: Array.isArray(row.change_summary) ? row.change_summary.map(String) : [],
+    sizingInputs: record(row.sizing_inputs) as CapitalDecisionSizingInputs | null,
+    constraintStatus: (row.constraint_status ?? 'needs_inputs') as ThesisDecision['constraintStatus'],
+  }
+}
+
+function normalizeConstraintAssessment(row: Record<string, unknown>): CapitalConstraintAssessment {
+  return {
+    id: String(row.id),
+    decisionId: String(row.decision_id),
+    portfolioId: String(row.portfolio_id),
+    status: row.status as CapitalConstraintAssessment['status'],
+    checks: Array.isArray(row.checks) ? row.checks as CapitalConstraintAssessment['checks'] : [],
+    inputs: record(row.inputs) as CapitalDecisionSizingInputs | null,
+    dataAsOf: String(row.data_as_of),
+    evaluatedAt: String(row.evaluated_at),
   }
 }
 
@@ -357,6 +380,7 @@ export async function fetchPortfolioWorkspace(
       inbox: [],
       portfolios: [],
       portfolioTransactions: [],
+      constraintAssessments: [],
     }
   }
   const [
@@ -368,6 +392,7 @@ export async function fetchPortfolioWorkspace(
     { data: portfolioRows },
     { data: portfolioTransactionRows },
     { data: brokerageRows },
+    { data: constraintRows },
   ] = await Promise.all([
     supabase.from('market_watchlists').select('id,client_id,name,market_watchlist_items(symbol)').eq('owner_id', ownerId).order('created_at'),
     supabase.from('manual_positions').select('*').eq('owner_id', ownerId).order('updated_at', { ascending: false }),
@@ -381,6 +406,7 @@ export async function fetchPortfolioWorkspace(
       .eq('owner_id', ownerId)
       .eq('status', 'succeeded')
       .order('captured_at', { ascending: false }),
+    supabase.from('capital_decision_constraint_checks').select('*').eq('owner_id', ownerId).order('evaluated_at', { ascending: false }),
   ])
   const lists = (listRows ?? []).map((row) => ({
     id: row.client_id ?? row.id,
@@ -393,7 +419,8 @@ export async function fetchPortfolioWorkspace(
   const decisionHistory = (decisionRows ?? []).map((row) => normalizeDecision(row))
   const latestDecisionBySymbol = new Map<string, ThesisDecision>()
   for (const decision of decisionHistory) {
-    if (!latestDecisionBySymbol.has(decision.symbol)) latestDecisionBySymbol.set(decision.symbol, decision)
+    const key = `${decision.portfolioId ?? 'legacy'}:${decision.symbol}`
+    if (!latestDecisionBySymbol.has(key)) latestDecisionBySymbol.set(key, decision)
   }
   const portfolioTransactions = (portfolioTransactionRows ?? []).map((row) => normalizePortfolioTransaction(row))
   const quotes = new Map(availableQuotes.map((quote) => [quote.symbol, quote.price]))
@@ -423,6 +450,7 @@ export async function fetchPortfolioWorkspace(
     inbox: (inboxRows ?? []).map((row) => normalizeInbox(row)),
     portfolios,
     portfolioTransactions,
+    constraintAssessments: (constraintRows ?? []).map((row) => normalizeConstraintAssessment(row)),
   }
 }
 
@@ -605,50 +633,110 @@ export async function upsertManualPosition(
   return normalizePosition(data)
 }
 
-export async function saveThesisDecision(
-  ownerId: string,
-  input: Omit<ThesisDecision, 'id' | 'version' | 'priceAtDecision' | 'createdAt' | 'researchNoteId'>,
-): Promise<ThesisDecision> {
+export interface SaveThesisDecisionInput {
+  symbol: string
+  portfolioId: string
+  investmentThesisId: string
+  disposition: ThesisDecision['disposition']
+  formalRating: ThesisDecision['formalRating']
+  entryAction: ThesisDecision['entryAction']
+  fairValue: number | null
+  entryZoneLow: number | null
+  entryZoneHigh: number | null
+  conviction: number | null
+  nextCatalyst: string | null
+  killCriteria: ThesisKillCriterion[]
+  rationale: string
+  valuationSupport: string
+  whatChanged: string
+  sizingInputs: CapitalDecisionSizingInputs | null
+}
+
+export async function fetchDecisionPortfolioOptions(ownerId: string): Promise<PortfolioDecisionOption[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase || !validOwnerId(ownerId)) return []
+  const { data } = await supabase.from('portfolios').select('id,name,kind').eq('owner_id', ownerId).order('created_at')
+  return (data ?? []).map((row) => ({ id: String(row.id), name: String(row.name), kind: row.kind === 'brokerage' ? 'brokerage' : 'manual' }))
+}
+
+export async function fetchLatestDecisionConstraintAssessment(ownerId: string, symbol: string): Promise<CapitalConstraintAssessment | null> {
+  const supabase = getSupabaseClient()
+  if (!supabase || !validOwnerId(ownerId)) return null
+  const { data: decision } = await supabase.from('thesis_decisions').select('id').eq('owner_id', ownerId).eq('symbol', symbol.toUpperCase()).order('created_at', { ascending: false }).limit(1).maybeSingle()
+  if (!decision) return null
+  const { data } = await supabase.from('capital_decision_constraint_checks').select('*').eq('owner_id', ownerId).eq('decision_id', decision.id).maybeSingle()
+  return data ? normalizeConstraintAssessment(data) : null
+}
+
+export async function saveThesisDecision(ownerId: string, input: SaveThesisDecisionInput): Promise<ThesisDecision> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required')
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   if (!input.investmentThesisId) throw new Error('Accept a company thesis before recording a capital decision')
   if (!input.rationale.trim()) throw new Error('Record the rationale for this capital decision')
-  const [{ data: thesis, error: thesisError }, { data: prior }, { data: snapshot }] = await Promise.all([
+  const symbol = input.symbol.toUpperCase()
+  const [{ data: thesis, error: thesisError }, { data: prior }, { data: snapshot }, { data: leadershipSnapshot }] = await Promise.all([
     supabase.from('investment_theses').select('id,symbol,research_note_id').eq('id', input.investmentThesisId)
       .eq('owner_id', ownerId).eq('status', 'accepted').maybeSingle(),
-    supabase.from('thesis_decisions').select('version').eq('owner_id', ownerId).eq('symbol', input.symbol.toUpperCase())
+    supabase.from('thesis_decisions').select('*').eq('owner_id', ownerId).eq('symbol', symbol)
       .order('version', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('market_snapshots').select('id').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
+    supabase.from('market_leadership_snapshots').select('id').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
   ])
   if (thesisError) throw new Error(`Unable to verify the company thesis: ${thesisError.message}`)
-  if (!thesis || String(thesis.symbol ?? '').toUpperCase() !== input.symbol.toUpperCase()) {
+  if (!thesis || String(thesis.symbol ?? '').toUpperCase() !== symbol) {
     throw new Error('Capital decisions must be linked to the accepted thesis for this company')
   }
-  const { data: current } = snapshot
-    ? await supabase.from('screener_rows').select('price').eq('snapshot_id', snapshot.id)
-      .eq('symbol', input.symbol.toUpperCase()).maybeSingle()
-    : { data: null }
-  const { data, error } = await supabase.from('thesis_decisions').insert({
-    owner_id: ownerId,
-    symbol: input.symbol.toUpperCase(),
-    version: Number(prior?.version ?? 0) + 1,
+  const { data: quoteRows } = snapshot
+    ? await supabase.from('screener_rows').select('symbol,price,volume,data_as_of').eq('snapshot_id', snapshot.id)
+    : { data: [] }
+  const quoteList = (quoteRows ?? []).map((row) => ({ symbol: String(row.symbol), price: Number(row.price) }))
+  const workspace = await fetchPortfolioWorkspace(ownerId, quoteList)
+  const portfolio = workspace.portfolios.find((item) => item.account.id === input.portfolioId)
+  if (!portfolio) throw new Error('Choose one of your portfolios')
+  const { data: classificationRows } = leadershipSnapshot
+    ? await supabase.from('market_stock_metrics').select('symbol,sector,sub_industry').eq('snapshot_id', leadershipSnapshot.id)
+    : { data: [] }
+  const classifications = new Map((classificationRows ?? []).map((row) => [String(row.symbol), String(row.sub_industry || row.sector || '')]))
+  const current = (quoteRows ?? []).find((row) => String(row.symbol) === symbol)
+  const assessmentBase = evaluateCapitalConstraints({
+    symbol,
     disposition: input.disposition,
-    formal_rating: input.formalRating,
-    entry_action: input.entryAction,
-    fair_value: input.fairValue,
-    entry_zone_low: input.entryZoneLow,
-    entry_zone_high: input.entryZoneHigh,
-    conviction: input.conviction,
-    next_catalyst: input.nextCatalyst,
-    kill_criteria: input.killCriteria,
-    rationale: input.rationale,
-    investment_thesis_id: thesis.id,
-    research_note_id: thesis.research_note_id,
-    price_at_decision: current ? Number(current.price) : null,
-  }).select('*').single()
+    portfolio,
+    allPortfolios: workspace.portfolios,
+    sizingInputs: input.sizingInputs,
+    classificationBySymbol: classifications,
+    currentPrice: current ? numberOrNull(current.price) : null,
+    currentVolume: current ? numberOrNull(current.volume) : null,
+    dataAsOf: current ? String(current.data_as_of) : new Date().toISOString(),
+  })
+  const changeSummary = buildCapitalDecisionChangeSummary(prior ? normalizeDecision(prior) : null, input)
+  const { data, error } = await supabase.rpc('record_capital_decision', {
+    p_owner_id: ownerId,
+    p_portfolio_id: input.portfolioId,
+    p_symbol: symbol,
+    p_investment_thesis_id: thesis.id,
+    p_disposition: input.disposition,
+    p_formal_rating: input.formalRating,
+    p_entry_action: input.entryAction,
+    p_fair_value: input.fairValue,
+    p_entry_zone_low: input.entryZoneLow,
+    p_entry_zone_high: input.entryZoneHigh,
+    p_conviction: input.conviction,
+    p_next_catalyst: input.nextCatalyst,
+    p_kill_criteria: input.killCriteria,
+    p_rationale: input.rationale,
+    p_valuation_support: input.valuationSupport,
+    p_what_changed: input.whatChanged,
+    p_change_summary: changeSummary,
+    p_sizing_inputs: input.sizingInputs,
+    p_constraint_status: assessmentBase.status,
+    p_constraint_checks: assessmentBase.checks,
+    p_constraint_data_as_of: assessmentBase.dataAsOf,
+    p_price_at_decision: current ? numberOrNull(current.price) : null,
+  }).single()
   if (error || !data) throw new Error(`Unable to save thesis decision: ${error?.message ?? 'unknown error'}`)
-  return normalizeDecision(data)
+  return normalizeDecision(data as Record<string, unknown>)
 }
 
 export async function saveDecisionReview(

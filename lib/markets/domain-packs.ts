@@ -11,9 +11,44 @@ import type { MarketDomainPack } from './types.ts'
  * research gates; a pack earns bespoke code only for a genuinely
  * domain-specific deterministic calculation.
  */
-export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
+const DOMAIN_GOVERNANCE: Record<string, Pick<MarketDomainPack, 'admission' | 'economicCapture'>> = {
+  'ai-power': {
+    admission: { economicMechanism: 'Firm-power demand can outrun permitted generation, interconnection, and equipment supply, shifting economics toward deliverable capacity.', expectedDecisionRelevance: 'Tests whether owned or watched compute, electrical-equipment, utility, and infrastructure companies face a real constraint or only a thematic narrative.', maintenanceOwnerRole: 'power-market evidence, source health, and quarterly mechanism review', reviewCadence: 'monthly', portfolioSignals: { sectors: ['Utilities'], subIndustries: ['Semiconductors', 'Electrical Components', 'Data Processing'] }, admissionRisks: ['Regional power markets differ materially.', 'Announced capacity is not operating capacity.'] },
+    economicCapture: { rentRecipients: ['Deliverable firm generation', 'Qualified grid equipment', 'Contracted load-serving capacity'], commoditizedLayers: ['Undifferentiated generation announcements', 'Unqualified equipment supply'], durabilityTests: ['Realized contract pricing', 'Operating utilization', 'Queue-to-service conversion'], breakConditions: ['Faster interconnection', 'Demand flexibility', 'Capacity overbuild', 'Lower data-center load growth'] },
+  },
+  'semicap-data-center-equipment': {
+    admission: { economicMechanism: 'Specialized fabrication, packaging, memory, networking, and cooling capacity can constrain delivered compute and redirect value-chain margins.', expectedDecisionRelevance: 'Separates broad AI demand from company-specific capture for owned and watched semiconductor and infrastructure suppliers.', maintenanceOwnerRole: 'semiconductor supply-chain evidence and quarterly architecture review', reviewCadence: 'monthly', portfolioSignals: { sectors: ['Information Technology'], subIndustries: ['Semiconductors', 'Semiconductor Materials', 'Technology Hardware'] }, admissionRisks: ['Architecture substitution can move bottlenecks quickly.', 'Backlog can overstate realized demand.'] },
+    economicCapture: { rentRecipients: ['Qualified bottleneck suppliers', 'Capacity-constrained equipment vendors'], commoditizedLayers: ['Interchangeable components', 'Capacity without customer qualification'], durabilityTests: ['Backlog conversion', 'Gross-margin persistence', 'Customer concentration', 'Substitution timelines'], breakConditions: ['Rapid capacity additions', 'Demand normalization', 'Architecture substitution', 'Customer insourcing'] },
+  },
+  'critical-materials': {
+    admission: { economicMechanism: 'Concentrated processing, slow project response, trade constraints, and substitution determine whether physical scarcity becomes durable economics.', expectedDecisionRelevance: 'Tests materials exposure in industrial, semiconductor, energy, and defense holdings without treating commodity adjacency as a recommendation.', maintenanceOwnerRole: 'materials balance, trade, project, and substitution evidence', reviewCadence: 'monthly', portfolioSignals: { sectors: ['Materials'], subIndustries: ['Metals', 'Mining', 'Specialty Chemicals'] }, admissionRisks: ['Commodity balances are product-specific.', 'Announced projects may never become qualified supply.'] },
+    economicCapture: { rentRecipients: ['Qualified processors', 'Low-cost operating producers', 'Contracted scarce-product suppliers'], commoditizedLayers: ['Undifferentiated mine output', 'Unqualified announced capacity'], durabilityTests: ['Product-level balances', 'Cost curves', 'Qualification status', 'Realized pricing and margins'], breakConditions: ['Substitution', 'Recycling', 'Inventory release', 'Low-cost supply response'] },
+  },
+  'macro-policy-geopolitics': {
+    admission: { economicMechanism: 'Policy, rates, trade rules, and physical disruption transmit through funding, demand, costs, and expectations rather than headlines alone.', expectedDecisionRelevance: 'Provides a bounded transmission layer for every portfolio while preventing macro narratives from becoming company evidence.', maintenanceOwnerRole: 'official policy, statistical-release, and transmission evidence', reviewCadence: 'monthly', portfolioSignals: { sectors: ['Financials', 'Real Estate'], subIndustries: ['Banks', 'Capital Markets', 'REIT'] }, admissionRisks: ['Announcements may not be implemented.', 'Market expectations may already discount the action.'] },
+    economicCapture: { rentRecipients: ['Entities with contractual pass-through', 'Assets advantaged by funding or policy'], commoditizedLayers: ['Headline exposure without operating transmission'], durabilityTests: ['Implemented policy', 'Realized funding costs', 'Physical trade flows', 'Demand response'], breakConditions: ['Policy reversal', 'Offsetting financial conditions', 'Supply-chain adaptation', 'Fully priced expectations'] },
+  },
+  'industrial-automation': {
+    admission: { economicMechanism: 'Labor and throughput constraints create value only when installed automation becomes productive, supportable, and difficult to substitute.', expectedDecisionRelevance: 'Connects industrial and technology holdings to deployment economics rather than generic robotics enthusiasm.', maintenanceOwnerRole: 'automation orders, deployment, utilization, and productivity evidence', reviewCadence: 'quarterly', portfolioSignals: { sectors: ['Industrials'], subIndustries: ['Industrial Machinery', 'Electrical Equipment', 'Application Software'] }, admissionRisks: ['Pilot activity may not scale.', 'Integration costs can absorb supplier value.'] },
+    economicCapture: { rentRecipients: ['Qualified integrators', 'Proprietary controls vendors', 'High-switching-cost platforms'], commoditizedLayers: ['Commodity hardware', 'Undifferentiated installation labor'], durabilityTests: ['Utilization', 'Customer payback', 'Service attachment', 'Renewal and expansion'], breakConditions: ['Labor normalization', 'Integration failure', 'Hardware commoditization', 'Weak customer returns'] },
+  },
+  'defense-industrial-capacity': {
+    admission: { economicMechanism: 'Budget execution and replenishment demand create economics only where qualified capacity, components, labor, and contract terms permit delivery.', expectedDecisionRelevance: 'Tests defense and space-industrial holdings against program-specific demand, delivery, and contract economics.', maintenanceOwnerRole: 'procurement, program, production, and contract evidence', reviewCadence: 'monthly', portfolioSignals: { sectors: ['Industrials'], subIndustries: ['Aerospace & Defense'] }, admissionRisks: ['Authorization is not an order.', 'Fixed-price contracts can absorb apparent demand upside.'] },
+    economicCapture: { rentRecipients: ['Qualified sole-source suppliers', 'Capacity owners with executable contracts'], commoditizedLayers: ['Unqualified capacity', 'Programs without funded orders'], durabilityTests: ['Funded backlog', 'Deliveries', 'Program margins', 'Capacity qualification'], breakConditions: ['Budget slippage', 'Program cancellation', 'Rapid capacity response', 'Adverse contract terms'] },
+  },
+  'healthcare-demand-reimbursement': {
+    admission: { economicMechanism: 'Clinical outcomes, diagnosis, reimbursement, manufacturing capacity, and channel access determine whether healthcare demand becomes durable company economics.', expectedDecisionRelevance: 'Adds governed coverage for owned and watched healthcare companies whose economics depend on product evidence, access, and reimbursement.', maintenanceOwnerRole: 'clinical, regulatory, reimbursement, capacity, and utilization evidence', reviewCadence: 'monthly', portfolioSignals: { sectors: ['Health Care'], subIndustries: ['Pharmaceuticals', 'Biotechnology', 'Health Care Services'] }, admissionRisks: ['Clinical evidence may not translate to access.', 'Utilization growth can be offset by pricing or capacity.'] },
+    economicCapture: { rentRecipients: ['Differentiated therapies with access', 'Scaled care platforms with retention'], commoditizedLayers: ['Undifferentiated compounds', 'Low-retention acquisition channels'], durabilityTests: ['Net pricing', 'Coverage and access', 'Persistence', 'Manufacturing yield', 'Clinical differentiation'], breakConditions: ['Competitive efficacy', 'Reimbursement pressure', 'Safety findings', 'Capacity shortfalls', 'Channel commoditization'] },
+  },
+  'consumer-commerce-platforms': {
+    admission: { economicMechanism: 'Household demand, traffic acquisition, merchant economics, fulfillment, pricing power, and inventory discipline determine durable consumer-platform capture.', expectedDecisionRelevance: 'Adds governed coverage for owned retail and commerce-platform exposure while separating customer activity from shareholder economics.', maintenanceOwnerRole: 'consumer demand, merchant, pricing, fulfillment, and inventory evidence', reviewCadence: 'monthly', portfolioSignals: { sectors: ['Consumer Staples', 'Consumer Discretionary'], subIndustries: ['Broadline Retail', 'Consumer Staples Merchandise', 'Internet Retail'] }, admissionRisks: ['Nominal sales can mask weak unit economics.', 'Traffic growth may be purchased rather than durable.'] },
+    economicCapture: { rentRecipients: ['Scaled low-cost retailers', 'High-retention merchant platforms', 'Differentiated brands'], commoditizedLayers: ['Undifferentiated fulfillment', 'Paid traffic arbitrage', 'Commodity marketplace listings'], durabilityTests: ['Incremental margins', 'Retention', 'Inventory turns', 'Merchant cohort economics', 'Price gaps'], breakConditions: ['Promotional intensity', 'Traffic-cost inflation', 'Inventory errors', 'Merchant multi-homing', 'Consumer trade-down'] },
+  },
+}
+
+const CORE_MARKET_DOMAIN_PACKS = [
   {
-    id: 'ai-power', version: 1, label: 'AI infrastructure and power', status: 'active', parentDomainId: null,
+    id: 'ai-power', version: 2, label: 'AI infrastructure and power', status: 'active', parentDomainId: null,
     description: 'Data-center load, firm generation, interconnection, electrical equipment, and regional scarcity.',
     mechanisms: [
       { id: 'data_center_load', label: 'Data-center and AI load growth', required: true },
@@ -48,7 +83,7 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
     }],
   },
   {
-    id: 'semicap-data-center-equipment', version: 1, label: 'Semicap and data-center equipment', status: 'candidate', parentDomainId: 'ai-power',
+    id: 'semicap-data-center-equipment', version: 2, label: 'Semicap and data-center equipment', status: 'candidate', parentDomainId: 'ai-power',
     description: 'Compute, networking, cooling, memory, fabrication capacity, and equipment bottlenecks.',
     mechanisms: [
       { id: 'compute_demand', label: 'Compute and networking demand', required: true },
@@ -81,7 +116,7 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
     }],
   },
   {
-    id: 'critical-materials', version: 1, label: 'Critical materials and supply chains', status: 'candidate', parentDomainId: null,
+    id: 'critical-materials', version: 2, label: 'Critical materials and supply chains', status: 'candidate', parentDomainId: null,
     description: 'Mine supply, processing concentration, inventories, export controls, substitution, and project lead times.',
     mechanisms: [
       { id: 'resource_supply', label: 'Mine and processing supply', required: true },
@@ -114,7 +149,7 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
     }],
   },
   {
-    id: 'macro-policy-geopolitics', version: 1, label: 'Macro, policy, and geopolitics', status: 'candidate', parentDomainId: null,
+    id: 'macro-policy-geopolitics', version: 2, label: 'Macro, policy, and geopolitics', status: 'candidate', parentDomainId: null,
     description: 'Rates, fiscal policy, trade rules, security constraints, and geopolitical transmission channels.',
     mechanisms: [
       { id: 'policy_change', label: 'Policy or trade-rule change', required: true },
@@ -146,7 +181,7 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
     ],
   },
   {
-    id: 'industrial-automation', version: 1, label: 'Industrial automation and robotics', status: 'candidate', parentDomainId: null,
+    id: 'industrial-automation', version: 2, label: 'Industrial automation and robotics', status: 'candidate', parentDomainId: null,
     description: 'Labor constraints, automation capex, deployment bottlenecks, realized productivity, and value-chain capture.',
     mechanisms: [
       { id: 'labor_constraint', label: 'Labor availability and cost pressure', required: true },
@@ -181,7 +216,7 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
     }],
   },
   {
-    id: 'defense-industrial-capacity', version: 1, label: 'Defense-industrial capacity', status: 'candidate', parentDomainId: null,
+    id: 'defense-industrial-capacity', version: 2, label: 'Defense-industrial capacity', status: 'candidate', parentDomainId: null,
     description: 'Procurement demand, production capacity, supply-chain constraints, budget execution, and durable value-chain capture.',
     mechanisms: [
       { id: 'procurement_demand', label: 'Procurement demand and replenishment', required: true },
@@ -222,7 +257,82 @@ export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = [
       },
     ],
   },
+  {
+    id: 'healthcare-demand-reimbursement', version: 1, label: 'Healthcare demand and reimbursement', status: 'candidate', parentDomainId: null,
+    description: 'Clinical outcomes, diagnosis, reimbursement, manufacturing capacity, access, and durable utilization.',
+    mechanisms: [
+      { id: 'clinical_outcomes', label: 'Clinical differentiation and outcomes', required: true },
+      { id: 'reimbursement_access', label: 'Reimbursement and patient access', required: true },
+      { id: 'manufacturing_capacity', label: 'Qualified manufacturing capacity', required: false },
+      { id: 'demand_persistence', label: 'Utilization and persistence', required: true },
+      { id: 'economic_capture', label: 'Net pricing and durable capture', required: true },
+    ],
+    sourceRequirements: [
+      { evidenceClass: 'regulatory_data', purpose: 'clinical, approval, reimbursement, and utilization evidence', minimumSources: 2 },
+      { evidenceClass: 'operational_data', purpose: 'access, capacity, and realized utilization evidence', minimumSources: 1 },
+      { evidenceClass: 'company_disclosure', purpose: 'net pricing, persistence, capacity, and economics', minimumSources: 2 },
+      { evidenceClass: 'industry_research', purpose: 'independent clinical and access cross-check', minimumSources: 1 },
+    ],
+    entityKinds: ['company', 'technology', 'facility', 'regulator', 'industry', 'dataset'],
+    hypothesisTemplate: {
+      title: 'Differentiated outcomes and access may create durable healthcare demand capture', horizon: '1–7 years',
+      coreMechanism: 'Clinical differentiation becomes investable economics only when approval, access, reimbursement, capacity, and patient persistence support realized demand.',
+      counterThesis: 'Competitive outcomes, safety findings, access restrictions, manufacturing constraints, or weak persistence prevent demand from becoming durable economics.',
+      causalGraph: [
+        { from: 'Clinical differentiation and outcomes', to: 'Eligible treated population', mechanism: 'clinical_outcomes', core: true },
+        { from: 'Reimbursement and patient access', to: 'Realized treatment demand', mechanism: 'reimbursement_access', core: true },
+        { from: 'Qualified manufacturing capacity', to: 'Deliverable treatment supply', mechanism: 'manufacturing_capacity', core: false },
+        { from: 'Utilization and persistence', to: 'Durable demand', mechanism: 'demand_persistence', core: true },
+        { from: 'Durable demand', to: 'Net pricing and value-chain capture', mechanism: 'economic_capture', core: true },
+      ],
+    },
+    crossDomainLinks: [{
+      id: 'policy-to-healthcare-access', toDomainId: 'macro-policy-geopolitics', relationship: 'transmits',
+      fromMechanisms: ['reimbursement_access'], toMechanisms: ['policy_change'],
+      explanation: 'Reimbursement policy can change access and net pricing, but the connection requires implemented policy and observed treatment economics.',
+    }],
+  },
+  {
+    id: 'consumer-commerce-platforms', version: 1, label: 'Consumer and commerce platforms', status: 'candidate', parentDomainId: null,
+    description: 'Household demand, traffic and retention, merchant economics, fulfillment, inventory, and pricing power.',
+    mechanisms: [
+      { id: 'household_demand', label: 'Household demand and trade-down', required: true },
+      { id: 'traffic_retention', label: 'Traffic acquisition and retention', required: true },
+      { id: 'fulfillment_inventory', label: 'Fulfillment and inventory discipline', required: true },
+      { id: 'pricing_power', label: 'Pricing power and merchant economics', required: true },
+      { id: 'economic_capture', label: 'Incremental margin and durable capture', required: true },
+    ],
+    sourceRequirements: [
+      { evidenceClass: 'regulatory_data', purpose: 'household demand, inflation, and retail activity evidence', minimumSources: 1 },
+      { evidenceClass: 'operational_data', purpose: 'traffic, price, fulfillment, and inventory evidence', minimumSources: 1 },
+      { evidenceClass: 'company_disclosure', purpose: 'cohort, merchant, margin, and retention economics', minimumSources: 2 },
+      { evidenceClass: 'industry_research', purpose: 'independent market-share and channel cross-check', minimumSources: 1 },
+    ],
+    entityKinds: ['company', 'technology', 'facility', 'industry', 'dataset'],
+    hypothesisTemplate: {
+      title: 'Scaled commerce platforms may convert demand and fulfillment advantages into durable economics', horizon: '1–5 years',
+      coreMechanism: 'Household demand and traffic become shareholder value only when retention, inventory, fulfillment, pricing, and merchant economics support incremental margins.',
+      counterThesis: 'Traffic is purchased, merchants multi-home, promotion rises, inventory errors recur, or consumer trade-down erodes incremental economics.',
+      causalGraph: [
+        { from: 'Household demand and trade-down', to: 'Category demand', mechanism: 'household_demand', core: true },
+        { from: 'Traffic acquisition and retention', to: 'Durable customer activity', mechanism: 'traffic_retention', core: true },
+        { from: 'Fulfillment and inventory discipline', to: 'Service quality and working capital', mechanism: 'fulfillment_inventory', core: true },
+        { from: 'Pricing power and merchant economics', to: 'Platform participation', mechanism: 'pricing_power', core: true },
+        { from: 'Platform participation', to: 'Incremental margin and durable capture', mechanism: 'economic_capture', core: true },
+      ],
+    },
+    crossDomainLinks: [{
+      id: 'macro-to-consumer-demand', toDomainId: 'macro-policy-geopolitics', relationship: 'transmits',
+      fromMechanisms: ['household_demand'], toMechanisms: ['financial_conditions'],
+      explanation: 'Financial conditions can transmit into household demand, but aggregate conditions do not establish company-specific retention or margins.',
+    }],
+  },
 ] as const
+
+export const MARKET_DOMAIN_PACKS: readonly MarketDomainPack[] = CORE_MARKET_DOMAIN_PACKS.map((pack) => ({
+  ...pack,
+  ...DOMAIN_GOVERNANCE[pack.id],
+}) as unknown as MarketDomainPack)
 
 export function getMarketDomainPack(id: string): MarketDomainPack | null {
   return MARKET_DOMAIN_PACKS.find((pack) => pack.id === id) ?? null
