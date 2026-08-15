@@ -214,9 +214,27 @@ function normalizeHypothesis(row: RecordValue): MarketHypothesis {
 }
 
 export function normalizeResearchVersion(row: RecordValue): MarketHypothesisResearchVersion {
-  const content = row.content && Object.keys(record(row.content)).length > 0 ? validateMarketThesisResearch(row.content) : null
-  const critique = row.critique && Object.keys(record(row.critique)).length > 0 ? validateMarketThesisCritique(row.critique) : null
-  return { id: String(row.id), hypothesisId: String(row.hypothesis_id), version: number(row.version), status: row.status as MarketHypothesisResearchVersion['status'], content, critique, sourceIds: strings(row.source_ids), observationIds: strings(row.observation_ids), priorResearchVersionId: row.prior_research_version_id === null ? null : String(row.prior_research_version_id ?? ''), revisionDiff: strings(row.revision_diff), provider: row.provider === null ? null : String(row.provider ?? ''), model: row.model === null ? null : String(row.model ?? ''), criticProvider: row.critic_provider === null ? null : String(row.critic_provider ?? ''), criticModel: row.critic_model === null ? null : String(row.critic_model ?? ''), criticGeneratedAt: row.critic_generated_at === null ? null : String(row.critic_generated_at ?? ''), dataAsOf: String(row.data_as_of), generatedAt: row.generated_at === null ? null : String(row.generated_at ?? ''), error: row.error === null ? null : String(row.error ?? '') }
+  let content: MarketHypothesisResearchContent | null = null
+  let critique: MarketHypothesisCritique | null = null
+  const validationErrors: string[] = []
+  try {
+    if (row.content && Object.keys(record(row.content)).length > 0) content = validateMarketThesisResearch(row.content)
+  } catch (error) {
+    validationErrors.push(`Stored research no longer meets the current publication checks: ${error instanceof Error ? error.message : 'invalid content'}`)
+  }
+  try {
+    if (row.critique && Object.keys(record(row.critique)).length > 0) critique = validateMarketThesisCritique(row.critique)
+  } catch (error) {
+    validationErrors.push(`Stored critic review no longer meets the current checks: ${error instanceof Error ? error.message : 'invalid critique'}`)
+  }
+  const storedError = row.error === null ? null : String(row.error ?? '')
+  const validationError = validationErrors.length > 0 ? validationErrors.join(' ') : null
+  const storedStatus = row.status as MarketHypothesisResearchVersion['status']
+  // Immutable historical artifacts can predate stricter publication gates.
+  // Keep the workspace readable, but never treat that version as current or
+  // publishable until a fresh, validated revision replaces it.
+  const status = validationError && storedStatus === 'complete' ? 'needs_revision' : storedStatus
+  return { id: String(row.id), hypothesisId: String(row.hypothesis_id), version: number(row.version), status, content, critique, sourceIds: strings(row.source_ids), observationIds: strings(row.observation_ids), priorResearchVersionId: row.prior_research_version_id === null ? null : String(row.prior_research_version_id ?? ''), revisionDiff: strings(row.revision_diff), provider: row.provider === null ? null : String(row.provider ?? ''), model: row.model === null ? null : String(row.model ?? ''), criticProvider: row.critic_provider === null ? null : String(row.critic_provider ?? ''), criticModel: row.critic_model === null ? null : String(row.critic_model ?? ''), criticGeneratedAt: row.critic_generated_at === null ? null : String(row.critic_generated_at ?? ''), dataAsOf: String(row.data_as_of), generatedAt: row.generated_at === null ? null : String(row.generated_at ?? ''), error: storedError ?? validationError }
 }
 
 export function researchPrompt(hypothesis: MarketHypothesis, sources: Array<ResearchSource & { excerpt: string }>, prior: MarketHypothesisResearchVersion | null, reason: string): string {

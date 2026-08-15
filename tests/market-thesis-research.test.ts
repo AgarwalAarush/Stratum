@@ -7,6 +7,7 @@ import {
   buildResearchFrontierScoutPlan,
   critiquePrompt,
   hasNearTermEvaluablePrediction,
+  normalizeResearchVersion,
   researchPrompt,
   shouldQueueMarketHypothesisResearch,
   validateMarketThesisCritique,
@@ -62,6 +63,21 @@ test('market thesis research requires a source-backed, internally complete ledge
 test('market research requires at least one near-term evaluable prediction', () => {
   assert.equal(hasNearTermEvaluablePrediction([{ horizon: '3 months' }]), true)
   assert.equal(hasNearTermEvaluablePrediction([{ horizon: '5 years' }, { horizon: 'eventually' }]), false)
+})
+
+test('legacy research that predates a stricter publication check cannot crash the thesis workspace', () => {
+  const legacy = researchFixture()
+  legacy.predictions[0].horizon = '18 months'
+  legacy.predictions[1].horizon = '2 years'
+  const normalized = normalizeResearchVersion({
+    id: 'legacy-research', hypothesis_id: 'hyp-1', version: 1, status: 'complete', content: legacy,
+    critique: null, source_ids: sourceIds, observation_ids: [], prior_research_version_id: null,
+    revision_diff: [], provider: 'codex', model: 'test', critic_provider: 'codex', critic_model: 'test',
+    critic_generated_at: '2026-01-01T00:00:00Z', data_as_of: '2026-01-01T00:00:00Z', generated_at: '2026-01-01T00:00:00Z', error: null,
+  })
+  assert.equal(normalized.status, 'needs_revision')
+  assert.equal(normalized.content, null)
+  assert.match(normalized.error ?? '', /evaluable prediction/)
 })
 
 test('critic output is constrained to the same source ledger', () => {
