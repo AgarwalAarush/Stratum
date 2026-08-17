@@ -24,7 +24,7 @@ npm ci
 # Existing repository warnings are reported, but only lint errors should block
 # an immutable worker release. Feature checks still run below before activation.
 npm run lint -- --quiet
-node --test --experimental-strip-types tests/world-memory.test.ts tests/world-sources.test.ts tests/candidate-scout.test.ts tests/agent-jobs.test.ts tests/agent-schedule.test.ts tests/market-thesis-research.test.ts tests/market-research-orchestrator.test.ts tests/world-source-health.test.ts
+node --test --experimental-strip-types tests/world-thinker.test.ts tests/world-memory.test.ts tests/world-sources.test.ts tests/candidate-scout.test.ts tests/agent-jobs.test.ts tests/agent-schedule.test.ts tests/market-thesis-research.test.ts tests/market-research-orchestrator.test.ts tests/world-source-health.test.ts
 npm run build
 
 # The worker environment is intentionally gitignored. Carry its existing
@@ -37,6 +37,14 @@ if [[ ! -f "$release_dir/.env.worker" ]]; then
   echo "Missing worker environment in $release_dir" >&2
   exit 1
 fi
+
+# The model repository is initialized before the worker symlink moves. This is
+# idempotent and writes synthesized state only; a missing or invalid remote is
+# surfaced before the daemon starts a World Thinker job.
+set -a
+source "$release_dir/.env.worker"
+set +a
+node --experimental-strip-types scripts/init-world-repository.ts
 
 next_link="${active_link}.next"
 rm -f "$next_link"

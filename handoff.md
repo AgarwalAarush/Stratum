@@ -1,41 +1,48 @@
-# Stratum market-orchestration handoff
+# Stratum World Thinker handoff
 
 ## Read this first
 
-The user’s product direction is **market-wide autonomous research orchestration**, not a static source dashboard and not a collection of narrow data integrations.
+The user’s product direction is one **persistent, autonomous World Thinker** that reads broadly, maintains a readable model of the world, invents falsifiable cross-domain hypotheses, and queues independent company research. It is not a static source dashboard, a collection of narrow integrations, or a fixed domain-template generator.
 
 No trading authority is authorized. Never add order placement, brokerage write access, or a buy/sell execution path.
 
 The canonical end-state, staged delivery plan, product invariants, and definition of done are in [the Markets Thesis System PRD](docs/plans/2026-08-13-markets-thesis-system-prd.md). This handoff is operational context, not the roadmap source of truth.
 
-## Current deployed milestone (orchestration brain v2)
+## Active migration
 
-Shipped on branch work culminating in the finish-orchestration-brain pass:
+The implementation lives on `codex/world-thinker`. The release order is contracts/storage, event awareness, Thinker/critic, opportunity bridge, UI, then the 48-hour shadow cutover.
 
-- Sole 6h control plane: `orchestrate-market-research` only (children enqueued by the planner)
-- Policy auto-accept for quote-bound proposals from approved/probation sources (verbatim quote + live contract)
-- Deterministic-v2 actions: investigate_broad, investigate_counter_evidence, verify_recurring_source, critic_revision, collect_known_source, evaluate_prediction, awaiting_review, no_action
-- Standard-tier model arbitrator only when expensive jobs exceed `STRATUM_MARKET_RESEARCH_RUN_LIMIT`
-- Worker concurrency via `STRATUM_WORKER_CONCURRENCY` (default 2, max 4)
-- System board shows cost shape, dissent, auto vs human review, budget skips
+- Raw evidence stays in `/Users/Shared/StratumData`; synthesized state lives in private Git at `/Users/Shared/StratumData/world-model`.
+- Supabase projects a validated commit for authenticated Vercel reads. Projection is rebuildable and idempotent by commit SHA.
+- `refresh-world-events` runs every 15 minutes. `run-world-thinker` runs at 06:00 and 18:00 ET plus coalesced urgent deltas.
+- Strong-call budget is one Thinker, one critic, and at most one revision. Live search is opt-in per approved run.
+- Research leads require explicit transmission/capture mechanisms, active/tradable assets, thresholds, caps, and 14-day duplicate protection.
+- Company research feeds back into the World Thinker. It cannot auto-accept the company thesis or create a capital decision.
 
-Migration: `202608040025_orchestration_brain_v2.sql`
+Migration: `202608170001_world_thinker.sql`
 
 `building_agents.md` is an untracked user file. Preserve it; do not stage it.
 
 ## Architecture reminder
 
 ```text
-discovery (autonomous search)
-  -> evidence gate (auto or human; verbatim quote + contract)
-  -> hypothesis / critic
-  -> orchestration (eligibility + optional model rank under budget)
-  -> thesis / entry (later, separately gated)
+all feeds and documents
+  -> event cluster and claim state
+  -> progressive retrieval
+  -> World Thinker proposal
+  -> critic and host validation
+  -> atomic Git commit and projection
+  -> company research lead
+  -> independent company thesis review
+  -> owner-only capital decision
 ```
 
-## Deferred
+## Cutover rule
+
+Do not enable `STRATUM_WORLD_CUTOVER_ENABLED=true` until 48 live shadow hours pass and repository, projection, Morning Brief, and `/markets/world` agree on one commit. Before cutover, old baselines/templates remain read-only-compatible. After cutover, `run-market-thesis-cycle` collects governed sources and enqueues the Thinker; it no longer creates fixed-template hypotheses. `orchestrate-market-research` only observes bounded company-research execution.
+
+## Still deferred
 
 - FERC 403 / source-specific collection repairs
-- More verticals beyond the six active systems
 - Public screener licensing
 - Exact provider $ token billing telemetry (hard job caps ship first)

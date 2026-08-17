@@ -1,15 +1,15 @@
 # Stratum Markets Thesis System — Product Requirements Document
 
-> **Version:** 1.0
-> **Date:** 2026-08-13
-> **Status:** Canonical product plan; implementation is in progress
+> **Version:** 2.0
+> **Date:** 2026-08-17
+> **Status:** Canonical product plan; World Thinker shadow migration is in progress
 > **Owner:** Stratum Markets
 
 ## 1. Product decision
 
 Stratum Markets is a private, evidence-governed capital-allocation system. It should continuously turn source-grounded views of economic systems into durable company theses, explicit entry decisions, and measured learning—without conflating any of those decisions and without trading authority.
 
-The end state is not an autonomous stock picker, a stream of market commentary, or a terminal that summarizes headlines. It is a decision system that lets its owner answer:
+The intelligence center is one persistent, file-backed World Thinker. It maintains a broad model of actors, situations, structural themes, markets, scenarios, and falsifiable hypotheses; detects material changes across existing feeds and governed evidence; performs bounded live research when important gaps remain; and creates explainable public-company investigations. The end state is not an autonomous stock picker, a stream of market commentary, or a terminal that summarizes headlines. It is a decision system that lets its owner answer:
 
 1. What deserves investigation?
 2. What do we believe about an economic system or company, and why?
@@ -18,9 +18,33 @@ The end state is not an autonomous stock picker, a stream of market commentary, 
 
 The operating principle is **capital allocation first, trading second**. Trading execution is out of scope.
 
+### 1.1 World Thinker architectural amendment
+
+- Synthesized world state is canonical in the private `AgarwalAarush/StratumWorld` Git repository; raw evidence remains in `/Users/Shared/StratumData` and Supabase remains canonical for jobs, market/company facts, owner records, and the Vercel projection.
+- Model output is a structured proposal. Host code validates source lineage, relationships, duplicate entities, replacement history, file budgets, active/tradable assets, and investment boundaries before an atomic commit.
+- Event awareness covers all persisted feed items and world documents. It does not require a fixed domain template or recurring-source admission to notice provisional material news.
+- Fixed domain packs remain useful governed-source collections. After the 48-hour shadow gate, they stop creating hypotheses; the World Thinker owns synthesis.
+- The Thinker may commit world updates and queue independent company research. Company-thesis acceptance, capital allocation, and trading remain owner-only.
+- The exact production rollout and recovery contract is [World Thinker production migration](2026-08-17-world-thinker-production.md).
+
 ## 2. Current product state
 
-### What is implemented on `main`
+### What is implemented in the World Thinker release branch
+
+- Stable world node, event, critique, opportunity, and run contracts with checked-in JSON Schemas and deterministic validators.
+- A file-first Git repository renderer, parser, single-writer lock, no-delete archive/supersession semantics, atomic branch commits, asynchronous push recovery, and generated JSON/JSONL indexes.
+- Broad event pre-grouping over feeds and world documents, cheap-model entity resolution, claim-state transitions, materiality/dependency triggers, 15-minute scheduling, and weekly one-year backfill.
+- Progressive context retrieval, sanitized portfolio dependencies, bounded native Codex web search, one Thinker call, one critic call, and at most one revision call.
+- Explicit opportunity dimensions and research gates, daily/run caps, active-asset verification, immutable origin lineage, and company-research feedback to the parent world hypothesis.
+- Authenticated World APIs and `/markets/world`, plus canonical journal integration in the Morning Brief.
+
+### What remains behind the production gate
+
+- The private StratumWorld remote, production migration, worker release, and Vercel surface must share one projected commit before shadow observation begins.
+- Canonical promotion is prohibited until 48 live hours pass and all acceptance gates in the migration document succeed.
+- Until promotion, the existing baseline/template read path remains available and the World projection is labeled `shadow`.
+
+### What is implemented on current production `main`
 
 - A governed market-model loop: source contracts, collection, quote-bound observation proposals, review/auto-accept gates, baselines, hypotheses, analyst/critic research, immutable market-thesis versions, exposures, and predictions.
 - Six declared starter economic systems: AI power, semicap/data-center equipment, critical materials, macro/policy/geopolitics, industrial automation, and defense-industrial capacity.
@@ -31,7 +55,7 @@ The operating principle is **capital allocation first, trading second**. Trading
 - Thesis monitors and decision-inbox items for material events, price/technical context, and research refreshes.
 - Market-prediction evaluation logic that uses post-prediction governed evidence and records confirmed, disconfirmed, or inconclusive results.
 
-### What is only partially complete
+### What predates the World Thinker and remains preserved
 
 - The market-model → company-research → company-thesis review loop is complete. It nominates research candidates, not recommendations; portfolio entry and sizing remain a separate Stage 5 decision.
 - Company thesis, monitoring, and portfolio entry decision are persisted separately. An entry decision now has enforced accepted-thesis and research-version lineage, but the single review surface and decision-change timeline are still incomplete.
@@ -59,22 +83,21 @@ Migration history has been reconciled and recent schema-backed releases are live
 ## 4. Target operating model
 
 ```text
-Governed source registry / approved recurring sources
-        + bounded broad research / Intelligence referrals
+Existing feeds + governed evidence + bounded web search
                          |
                          v
-           source contract + document capture
+        deterministic pre-grouping + cheap event sensor
                          |
                          v
-       quote-bound observation proposal + review gate
+             material event clusters + lineage
                          |
                          v
-      baseline -> hypothesis -> analyst / critic research
+     progressive retrieval -> World Thinker -> independent critic
                          |
                          v
-              versioned market model / thesis
+       validated atomic Git commit -> Supabase projection
                          |
-               value-chain exposures and falsifiable predictions
+              causal hypotheses + opportunity leads
                          |
                          v
              company-research task and CompanyPacket
@@ -89,7 +112,7 @@ Governed source registry / approved recurring sources
                          |                     |
                          +----------+----------+
                                     v
-                  evidence-backed refresh / prediction and decision review
+            research feedback -> World Thinker / measured learning
 ```
 
 Every arrow is a distinct contract. A downstream record can retain upstream context, but upstream confidence never substitutes for downstream evidence or review.
