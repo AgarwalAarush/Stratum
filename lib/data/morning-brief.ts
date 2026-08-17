@@ -15,6 +15,8 @@ import {
   fetchYesterdaysBrief,
   type FeedItemRow,
 } from './overview-persistence.ts'
+import { fetchWorldWorkspace } from '../server/world-projection.ts'
+import type { WorldNode } from '../markets/world-thinker-types.ts'
 
 interface SourceItem {
   title: string
@@ -223,6 +225,12 @@ function validateMorningBrief(value: unknown): GeneratedMorningBrief {
   return { headline: brief.headline, sections, watchList: brief.watchList as string[] }
 }
 
+function worldJournalSection(journal: WorldNode | undefined): { title: string; bullets: string[] } | null {
+  if (!journal) return null
+  const bullets = journal.body.split('\n').map((line) => line.trim()).filter((line) => line.startsWith('- ') && line !== '- None.').map((line) => line.slice(2)).slice(0, 5)
+  return bullets.length > 0 ? { title: 'World Model — Material Change', bullets } : { title: 'World Model — Material Change', bullets: [journal.summary] }
+}
+
 export async function generateMorningBrief(options: MorningBriefGenerationOptions = {}): Promise<MorningBriefData> {
   const apiKey = process.env.OPENAI_API_KEY
   if (options.provider !== 'codex' && !apiKey) {
@@ -230,10 +238,11 @@ export async function generateMorningBrief(options: MorningBriefGenerationOption
   }
 
   // Fetch live items, historical items, and yesterday's brief in parallel
-  const [liveResults, recentItems, yesterdaysBrief] = await Promise.all([
+  const [liveResults, recentItems, yesterdaysBrief, worldWorkspace] = await Promise.all([
     Promise.allSettled(SECTIONS.map((s) => s.fetch())),
     fetchRecentFeedItems(24),
     fetchYesterdaysBrief(),
+    fetchWorldWorkspace().catch(() => null),
   ])
 
   // Build live source items with labels
@@ -303,6 +312,14 @@ Yesterday's Brief Context:
 
 Note developing stories and whether yesterday's watch list items have materialized in today's headlines.`
   }
+  const latestWorldJournal = worldWorkspace?.latestChanges[0]
+  const worldBlock = latestWorldJournal ? `
+
+Canonical World Thinker journal (commit ${worldWorkspace?.commit ?? 'unavailable'}, as of ${latestWorldJournal.asOf}):
+${latestWorldJournal.summary}
+${latestWorldJournal.body.slice(0, 6_000)}
+
+Use this canonical journal to identify what materially changed, which beliefs moved, scenario changes, new company investigations, and indicators requiring attention. It is an assessment layer; retain its uncertainty and do not turn research leads into recommendations.` : ''
 
   const prompt = `You are a morning intelligence briefing writer for Stratum, a tech intelligence dashboard. Below are the latest headlines across AI research, policy, cybersecurity, venture capital, tech events, infrastructure, startups, papers, repos, discussions, earnings, deals, research reports, and macro indicators. Each headline has a numbered source reference. Some items include metadata details in parentheses (categories, star counts, engagement metrics, EPS figures) — use these for richer analysis.
 
@@ -310,7 +327,7 @@ Headlines:
 ${headlineBlocks.join('\n')}
 
 Sources:
-${sourcesBlock}${yesterdayBlock}
+${sourcesBlock}${yesterdayBlock}${worldBlock}
 
 Generate a structured morning brief as JSON matching this exact schema:
 {
@@ -378,10 +395,12 @@ Requirements:
         return url ? `[${num}](${url})` : full
       })
 
-    const sections = parsed.sections.map((s) => ({
+    const generatedSections = parsed.sections.map((s) => ({
       title: s.title,
       bullets: s.bullets.map(expandCitations),
     }))
+    const worldSection = worldJournalSection(latestWorldJournal)
+    const sections = worldSection ? [worldSection, ...generatedSections.filter((section) => !section.title.toLowerCase().includes('world model')).slice(0, 4)] : generatedSections
 
     const watchList = (parsed.watchList || []).map(expandCitations)
 
