@@ -1053,6 +1053,24 @@
   border-top: 1px solid var(--market-border);
 }
 
+.market-brief-news-loading {
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  gap: 1px;
+}
+
+.market-brief-news-loading span {
+  animation: market-brief-news-shimmer 1.5s ease-in-out infinite;
+  background: linear-gradient(90deg, var(--market-surface) 20%, var(--market-surface-soft) 45%, var(--market-surface) 70%);
+  background-size: 220% 100%;
+  display: block;
+  height: 66px;
+}
+
+@keyframes market-brief-news-shimmer {
+  to { background-position: -120% 0; }
+}
+
 .market-brief-news-list > a {
   align-items: center;
   border-bottom: 1px solid var(--market-border);
@@ -1139,6 +1157,21 @@
   border-top: 1px solid var(--market-border);
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
+}
+
+.market-thesis-brief-loading {
+  border-top: 1px solid var(--market-border);
+  display: grid;
+  gap: 1px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
+}
+
+.market-thesis-brief-loading span {
+  animation: market-brief-news-shimmer 1.5s ease-in-out infinite;
+  background: linear-gradient(90deg, var(--market-surface) 20%, var(--market-surface-soft) 45%, var(--market-surface) 70%);
+  background-size: 220% 100%;
+  display: block;
+  height: 174px;
 }
 
 .market-thesis-brief-models > article {
@@ -1334,6 +1367,10 @@
   }
 
   .market-thesis-brief-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .market-thesis-brief-loading {
     grid-template-columns: 1fr;
   }
 

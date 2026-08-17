@@ -38,6 +38,33 @@ test('Markets Overview rehydrates post-close action data and republishes it afte
   assert.match(jobs, /if \(job\.job_type === 'materialize-market-leadership'\) \{[\s\S]*?await materializeMarketHomeSnapshot\(\)/)
 })
 
+test('Markets Overview does not block its durable snapshot on live-feed collection', () => {
+  const page = source('app/markets/page.tsx')
+  const overview = source('components/markets/MarketsOverview.tsx')
+  const liveContext = source('components/markets/MarketBriefNews.tsx')
+  const route = source('app/api/markets/brief-news/route.ts')
+  const service = source('lib/server/market-brief-news.ts')
+
+  assert.doesNotMatch(page, /fetchMarketBriefNews/)
+  assert.match(overview, /<MarketBriefNews relevantSymbols=/)
+  assert.match(liveContext, /window\.setTimeout\(\(\) =>/)
+  assert.match(route, /CACHE_TTL_SECONDS = 300/)
+  assert.match(service, /cachedFetchWithFallback/)
+  assert.match(service, /stratum:markets:brief-news:v1:/)
+})
+
+test('Markets Overview defers owner-specific thesis reads until after the snapshot paints', () => {
+  const page = source('app/markets/page.tsx')
+  const overview = source('components/markets/MarketsOverview.tsx')
+  const thesisBrief = source('components/markets/MarketThesisBrief.tsx')
+  const route = source('app/api/markets/thesis-brief/route.ts')
+
+  assert.doesNotMatch(page, /fetchMarketThesisWorkspace/)
+  assert.match(overview, /<MarketThesisBrief \/>/)
+  assert.match(thesisBrief, /window\.setTimeout\(\(\) =>/)
+  assert.match(route, /fetchMarketThesisWorkspace\(user\.id\)/)
+})
+
 test('Intelligence pages server-seed one scope payload and lazy-load optional UI', () => {
   const scopePage = source('app/(intelligence)/[scope]/page.tsx')
   const scopeFeed = source('components/sections/ScopeFeed.tsx')

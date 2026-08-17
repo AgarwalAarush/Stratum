@@ -1,16 +1,14 @@
 'use client'
 
-import { ArrowRight, ArrowSquareOut } from '@phosphor-icons/react'
+import { ArrowSquareOut } from '@phosphor-icons/react'
 import { MarketsIntentLink } from './MarketsIntentLink'
+import { MarketBriefNews } from './MarketBriefNews'
+import { MarketThesisBrief } from './MarketThesisBrief'
 import { buildMarketDailyBrief, withoutParticipationLanguage } from '@/lib/markets/brief'
-import type { MarketThesisBrief } from '@/lib/markets/thesis-brief'
 import type { MarketOverviewResponse } from '@/lib/markets/types'
-import type { NewsItem } from '@/lib/types'
 
 interface MarketsOverviewProps {
   overview: MarketOverviewResponse
-  news: NewsItem[]
-  thesisBrief: MarketThesisBrief | null
 }
 
 const CANDIDATE_LANE_LABEL = {
@@ -80,14 +78,7 @@ function conciseRegime(regime: string): string {
   return regime.split(/[,;·]/)[0]?.trim() || regime
 }
 
-function dateLabel(value: string | null): string {
-  if (!value) return 'Date not set'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Date not set'
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' }).format(date)
-}
-
-export function MarketsOverview({ overview, news, thesisBrief }: MarketsOverviewProps) {
+export function MarketsOverview({ overview }: MarketsOverviewProps) {
   const sessionLabel = tradingSessionLabel(overview.leadership?.tradingDate)
   const brief = buildMarketDailyBrief(overview)
   const memoImplications = withoutParticipationLanguage(overview.memo.sectorImplications.map((item) => item.text))
@@ -180,57 +171,9 @@ export function MarketsOverview({ overview, news, thesisBrief }: MarketsOverview
         </aside> : null}
       </section>
 
-      {thesisBrief ? <section className="market-thesis-brief" aria-labelledby="market-thesis-brief-title">
-        <header className="market-section-heading">
-          <div>
-            <p className="markets-eyebrow">Thesis book</p>
-            <h2 id="market-thesis-brief-title">What the system is testing</h2>
-            <p>{thesisBrief.modelCount} active models · {thesisBrief.predictionCount} open predictions · {thesisBrief.observationCount} material observations{thesisBrief.crossDomainLinkCount > 0 ? ` · ${thesisBrief.crossDomainLinkCount} linked mechanisms` : ''}</p>
-          </div>
-          <MarketsIntentLink href="/markets/theses">Open thesis library <ArrowRight size={15} aria-hidden="true" /></MarketsIntentLink>
-        </header>
-        <div className="market-thesis-brief-grid">
-          <div className="market-thesis-brief-models">
-            {thesisBrief.models.map((model) => <article key={model.id}>
-              <div><span>Active model</span><small>{Math.round(model.confidence)}% confidence · {model.evidenceCount} source{model.evidenceCount === 1 ? '' : 's'}</small></div>
-              <h3>{model.title}</h3>
-              <p>{model.whyNow}</p>
-              <footer>{model.predictionCount} open test{model.predictionCount === 1 ? '' : 's'} · {model.exposureCount} mapped exposure{model.exposureCount === 1 ? '' : 's'}</footer>
-            </article>)}
-          </div>
-          <aside className="market-thesis-brief-tests" aria-label="Next thesis tests">
-            <p className="markets-eyebrow">Next tests</p>
-            {thesisBrief.predictions.length > 0 ? thesisBrief.predictions.map((prediction) => <article key={prediction.id}>
-              <span>{dateLabel(prediction.deadline)}</span>
-              <strong>{prediction.modelTitle}</strong>
-              <p>{prediction.prediction}</p>
-            </article>) : <p className="market-thesis-brief-empty">No pending model test has a dated evaluation window.</p>}
-          </aside>
-        </div>
-      </section> : null}
+      <MarketThesisBrief />
 
-      {news.length > 0 ? (
-        <section className="market-brief-news" aria-labelledby="market-brief-news-title">
-          <header className="market-section-heading">
-            <div>
-              <p className="markets-eyebrow">Live context</p>
-              <h2 id="market-brief-news-title">News moving through the market</h2>
-              <p>Source-linked context for the session. Open the original reporting before assigning causality.</p>
-            </div>
-            <MarketsIntentLink href="/markets/events">All events <ArrowRight size={15} aria-hidden="true" /></MarketsIntentLink>
-          </header>
-          <div className="market-brief-news-list">
-            {news.map((item) => (
-              <a key={item.id} href={item.url} target="_blank" rel="noreferrer">
-                <span>{item.category ?? 'Markets'}</span>
-                <strong>{item.title}</strong>
-                <small>{item.source} · {formatEvidenceTime(item.publishedAt)}</small>
-                <ArrowSquareOut size={15} aria-hidden="true" />
-              </a>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <MarketBriefNews relevantSymbols={overview.candidates?.map((candidate) => candidate.symbol) ?? []} />
 
       {overview.leadership ? (
         <section className="market-structure-panel" aria-labelledby="market-structure-title">
