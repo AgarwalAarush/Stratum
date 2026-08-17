@@ -49,6 +49,7 @@ export function buildCodexExecArgs(options: {
   webSearch?: boolean
 }): string[] {
   const args = [
+    ...(options.webSearch ? ['--search'] : []),
     'exec',
     '--model', options.model,
     '--ephemeral',
@@ -62,7 +63,6 @@ export function buildCodexExecArgs(options: {
     '--output-schema', options.schemaPath,
     '--output-last-message', options.outputPath,
   ]
-  if (options.webSearch) args.push('--search')
   args.push('-')
   return args
 }

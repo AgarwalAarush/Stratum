@@ -52,7 +52,9 @@ test('Codex native search is opt-in per approved run', () => {
   const base = { model: 'gpt-5.6-terra', schemaPath: '/tmp/schema.json', outputPath: '/tmp/out.json', cwd: '/tmp' }
   assert.equal(buildCodexExecArgs(base).includes('--search'), false)
   assert.equal(buildCodexExecArgs(base).includes('--skip-git-repo-check'), true)
-  assert.equal(buildCodexExecArgs({ ...base, webSearch: true }).includes('--search'), true)
+  const searched = buildCodexExecArgs({ ...base, webSearch: true })
+  assert.equal(searched.includes('--search'), true)
+  assert.ok(searched.indexOf('--search') < searched.indexOf('exec'))
 })
 
 test('event pre-grouping corroborates diverse reporting and distinguishes Taiwan company news', () => {
