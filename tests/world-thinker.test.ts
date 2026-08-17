@@ -1,8 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { execFile as execFileCallback } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 
 import { buildCodexExecArgs } from '../lib/server/codex-exec.ts'
 import { clusterWorldEventSources, nextWorldEventProcessingState, reconcileExtractedClusters, transitionWorldClaimState, worldEventExtractionPrompt } from '../lib/server/world-events.ts'
@@ -12,6 +14,7 @@ import { type WorldNode, type WorldOpportunityLead, type WorldUpdateProposal } f
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
 
 const now = '2026-08-17T18:00:00.000Z'
+const execFile = promisify(execFileCallback)
 
 function node(overrides: Partial<WorldNode> = {}): WorldNode {
   return {
@@ -157,6 +160,18 @@ test('proposal graph validation fails before publication for unstated relationsh
   const current = node({ id: 'current', kind: 'current', title: 'Current world assessment', aliases: [], claims: [], sourceIds: [], relationships: [], body: 'A provisional assessment.', summary: 'A provisional assessment.' })
   const invalid = proposal([current, node({ relationships: [{ type: 'depends_on', targetId: 'missing-situation', description: 'This node was never declared.' }] })])
   assert.throws(() => validateWorldProposalAgainstState(invalid, []), /Unknown relationship target missing-situation/)
+})
+
+test('world market CLI resolves only host-projected active tradable assets', async () => {
+  const dataRoot = await mkdtemp(join(tmpdir(), 'stratum-world-cli-test-'))
+  const root = join(dataRoot, 'world-model')
+  await initializeWorldRepository({ root, branch: 'shadow/world-thinker' })
+  await mkdir(join(dataRoot, 'runtime'), { recursive: true })
+  await writeFile(join(dataRoot, 'runtime/asset-registry.json'), JSON.stringify([{ symbol: 'PWR', name: 'Quanta Services Inc.' }]))
+  const { stdout } = await execFile(process.execPath, ['--experimental-strip-types', join(process.cwd(), 'scripts/world-cli.ts'), 'market', 'PWR'], {
+    env: { ...process.env, STRATUM_DATA_ROOT: dataRoot, STRATUM_WORLD_ROOT: root, STRATUM_WORLD_BRANCH: 'shadow/world-thinker' },
+  })
+  assert.deepEqual(JSON.parse(stdout), [{ symbol: 'PWR', name: 'Quanta Services Inc.', active: true, tradable: true }])
 })
 
 test('research bridge preserves explicit thresholds, dedupe, per-run, and daily caps', () => {

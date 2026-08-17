@@ -62,11 +62,23 @@ if (command === 'sources') {
 }
 
 if (command === 'market') {
-  if (!argument.trim()) fail('Usage: world market <market-or-hypothesis-id>')
+  if (!argument.trim()) fail('Usage: world market <market-or-hypothesis-id|symbol-or-issuer>')
   const node = nodes.find((candidate) => candidate.id === argument && (candidate.kind === 'market' || candidate.kind === 'hypothesis'))
-  if (!node) fail(`Unknown market or hypothesis: ${argument}`)
-  const targetIds = new Set(node.relationships.map((relationship) => relationship.targetId))
-  emit({ node, connected: nodes.filter((candidate) => targetIds.has(candidate.id) || candidate.relationships.some((relationship) => relationship.targetId === node.id)) })
+  if (node) {
+    const targetIds = new Set(node.relationships.map((relationship) => relationship.targetId))
+    emit({ node, connected: nodes.filter((candidate) => targetIds.has(candidate.id) || candidate.relationships.some((relationship) => relationship.targetId === node.id)) })
+  }
+  const dataRoot = process.env.STRATUM_DATA_ROOT?.trim() || join(root, '..')
+  const assets = await readJson(join(dataRoot, 'runtime/asset-registry.json'))
+  const query = argument.trim().toLowerCase()
+  emit(assets.filter((asset) => {
+    if (!asset || typeof asset !== 'object') return false
+    const row = asset as Record<string, unknown>
+    return String(row.symbol ?? '').toLowerCase() === query || String(row.name ?? '').toLowerCase().includes(query)
+  }).slice(0, 20).map((asset) => {
+    const row = asset as Record<string, unknown>
+    return { symbol: String(row.symbol), name: String(row.name), active: true, tradable: true }
+  }))
 }
 
 if (command === 'portfolio-context') {
