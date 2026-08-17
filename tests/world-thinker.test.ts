@@ -6,7 +6,7 @@ import { join } from 'node:path'
 
 import { buildCodexExecArgs } from '../lib/server/codex-exec.ts'
 import { clusterWorldEventSources, nextWorldEventProcessingState, reconcileExtractedClusters, transitionWorldClaimState, worldEventExtractionPrompt } from '../lib/server/world-events.ts'
-import { commitWorldUpdate, initializeWorldRepository, parseWorldNode, renderWorldNode } from '../lib/server/world-repository.ts'
+import { commitWorldUpdate, initializeWorldRepository, parseWorldNode, renderWorldNode, validateWorldProposalAgainstState } from '../lib/server/world-repository.ts'
 import { selectResearchableWorldLeads } from '../lib/server/world-thinker.ts'
 import { type WorldNode, type WorldOpportunityLead, type WorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
@@ -151,6 +151,12 @@ test('proposal validation rejects unsourced factual claims and accepts labeled a
   const bad = proposal([current, node({ id: 'bad', title: 'Unsupported fact', aliases: [], claims: [{ text: 'Unsupported fact.', sourceIds: [] }] })])
   bad.baseCommit = committed.commit
   await assert.rejects(commitWorldUpdate(bad, { root, branch: 'shadow/world-thinker', push: false }), /has no source/)
+})
+
+test('proposal graph validation fails before publication for unstated relationship targets', () => {
+  const current = node({ id: 'current', kind: 'current', title: 'Current world assessment', aliases: [], claims: [], sourceIds: [], relationships: [], body: 'A provisional assessment.', summary: 'A provisional assessment.' })
+  const invalid = proposal([current, node({ relationships: [{ type: 'depends_on', targetId: 'missing-situation', description: 'This node was never declared.' }] })])
+  assert.throws(() => validateWorldProposalAgainstState(invalid, []), /Unknown relationship target missing-situation/)
 })
 
 test('research bridge preserves explicit thresholds, dedupe, per-run, and daily caps', () => {

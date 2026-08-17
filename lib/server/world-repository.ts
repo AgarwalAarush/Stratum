@@ -302,7 +302,7 @@ export async function writeWorldIndexes(root = worldRepositoryRoot()): Promise<v
   await atomicWrite(join(root, 'world/index/nodes.jsonl'), records.map((record) => JSON.stringify(record)).join('\n') + (records.length ? '\n' : ''))
 }
 
-function validateProposalAgainstState(proposal: WorldUpdateProposal, existing: WorldNode[]): void {
+export function validateWorldProposalAgainstState(proposal: WorldUpdateProposal, existing: WorldNode[]): void {
   const sourceIds = new Set(proposal.sources.map((source) => source.id))
   const nodeIds = new Set([...existing.map((node) => node.id), ...proposal.upserts.map((node) => node.id)])
   if (sourceIds.size !== proposal.sources.length) throw new Error('Proposal contains duplicate source IDs')
@@ -381,7 +381,7 @@ export async function commitWorldUpdate(rawProposal: unknown, options: WorldRepo
     await initializeWorldRepository({ root, branch, remote: options.remote })
     await runGit(root, ['worktree', 'add', '--detach', worktree, branch])
     const existing = (await readWorldNodes(worktree)).map((entry) => entry.node)
-    validateProposalAgainstState(proposal, existing)
+    validateWorldProposalAgainstState(proposal, existing)
     const byId = new Map(existing.map((node) => [node.id, node]))
     for (const archive of proposal.archives) {
       const current = byId.get(archive.nodeId)!
@@ -399,7 +399,7 @@ export async function commitWorldUpdate(rawProposal: unknown, options: WorldRepo
     await atomicWrite(join(worktree, 'world/index/opportunity-leads.json'), renderLeads(mergedLeads))
     await writeWorldIndexes(worktree)
     const reparsed = await readWorldNodes(worktree)
-    validateProposalAgainstState({ ...proposal, upserts: reparsed.map((entry) => entry.node), archives: [] }, [])
+    validateWorldProposalAgainstState({ ...proposal, upserts: reparsed.map((entry) => entry.node), archives: [] }, [])
     const status = await runGit(worktree, ['status', '--porcelain'])
     if (!status) return { commit: await runGit(worktree, ['rev-parse', 'HEAD']), branch, changedPaths: [], pushPending: false }
     await runGit(worktree, ['add', 'world'])
