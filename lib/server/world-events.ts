@@ -173,6 +173,43 @@ function validateExtractedClusters(value: unknown): { clusters: ExtractedCluster
   return { clusters }
 }
 
+export function reconcileExtractedClusters(
+  candidates: WorldEventClusterCandidate[],
+  extracted: { clusters: ExtractedCluster[] },
+): WorldEventClusterCandidate[] {
+  const sourceEntries = candidates.flatMap((cluster) => cluster.sources).map((source) => [source.id, source] as const)
+  const sources = new Map(sourceEntries)
+  const expectedIds = new Set(sourceEntries.map(([id]) => id))
+  const returnedIds = extracted.clusters.flatMap((cluster) => cluster.sourceIds)
+  const returnedIdSet = new Set(returnedIds)
+  const invalidLineage = returnedIds.length !== returnedIdSet.size
+    || returnedIdSet.size !== expectedIds.size
+    || [...returnedIdSet].some((id) => !expectedIds.has(id))
+  if (invalidLineage) return candidates
+
+  const reconciled: WorldEventClusterCandidate[] = []
+  for (const cluster of extracted.clusters) {
+    const grouped = cluster.sourceIds.map((id) => sources.get(id)).filter((source): source is WorldEventSourceInput => Boolean(source))
+    const deterministic = clusterWorldEventSources(grouped)[0]
+    if (!deterministic) return candidates
+    reconciled.push({
+      ...deterministic,
+      title: cluster.title,
+      actors: cluster.actors,
+      geographies: cluster.geographies,
+      channels: cluster.channels,
+      claimState: cluster.claimState,
+      materiality: cluster.materiality,
+      novelty: cluster.novelty,
+      summary: cluster.summary,
+      sourceIds: grouped.map((source) => source.id),
+      decisiveNewEvent: deterministic.decisiveNewEvent || cluster.materiality >= 85,
+      processingState: cluster.materiality < 20 ? 'noise' : 'pending',
+    })
+  }
+  return reconciled
+}
+
 export function worldEventExtractionPrompt(candidates: WorldEventClusterCandidate[]): string {
   const untrusted = candidates.map((cluster) => ({
     fingerprint: cluster.fingerprint, proposedTitle: cluster.title, deterministicMateriality: cluster.materiality,
@@ -188,12 +225,7 @@ async function enrichClusters(candidates: WorldEventClusterCandidate[], options:
     prompt: worldEventExtractionPrompt(candidates), schemaPath: 'schemas/world-event-cluster.schema.json', validate: validateExtractedClusters,
     model: selection.model, cwd: process.cwd(), timeoutMs: 4 * 60_000,
   })
-  const sources = new Map(candidates.flatMap((cluster) => cluster.sources).map((source) => [source.id, source]))
-  return result.data.clusters.map((cluster) => {
-    const grouped = cluster.sourceIds.map((id) => sources.get(id)).filter((source): source is WorldEventSourceInput => Boolean(source))
-    const prior = candidates.find((candidate) => candidate.fingerprint === cluster.fingerprint) ?? clusterWorldEventSources(grouped)[0]
-    return { ...prior, ...cluster, id: cluster.fingerprint, firstSeenAt: prior.firstSeenAt, lastSeenAt: prior.lastSeenAt, eventAt: prior.eventAt, sourceDiversity: new Set(grouped.map((source) => sourceHost(source.url, source.publisher))).size, thesisDependency: prior.thesisDependency, portfolioDependency: prior.portfolioDependency, decisiveNewEvent: prior.decisiveNewEvent || cluster.materiality >= 85, processingState: cluster.materiality < 20 ? 'noise' : 'pending', sources: grouped }
-  })
+  return reconcileExtractedClusters(candidates, result.data)
 }
 
 async function attachWorldEventDependencies(clusters: WorldEventClusterCandidate[]): Promise<WorldEventClusterCandidate[]> {
