@@ -75,7 +75,7 @@ interface ThinkerContext {
 const MAX_CONTEXT_NODES = 60
 const MAX_EVENTS = 80
 const MAX_EXTRACTS = 8
-const MAX_ASSETS = 10_000
+const MAX_ASSETS = 25_000
 const MAX_PROMPT_CHARACTERS = 180_000
 
 function worldDataRoot(root: string): string {

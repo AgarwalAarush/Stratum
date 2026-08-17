@@ -167,7 +167,7 @@ test('world market CLI resolves only host-projected active tradable assets', asy
   const root = join(dataRoot, 'world-model')
   await initializeWorldRepository({ root, branch: 'shadow/world-thinker' })
   await mkdir(join(dataRoot, 'runtime'), { recursive: true })
-  await writeFile(join(dataRoot, 'runtime/asset-registry.json'), JSON.stringify([{ symbol: 'PWR', name: 'Quanta Services Inc.' }]))
+  await writeFile(join(dataRoot, 'runtime/asset-registry.json'), JSON.stringify([{ symbol: 'MPWX', name: 'Tradr 2X Long MPWR Daily ETF' }, { symbol: 'PWR', name: 'Quanta Services Inc.' }]))
   const { stdout } = await execFile(process.execPath, ['--experimental-strip-types', join(process.cwd(), 'scripts/world-cli.ts'), 'market', 'PWR'], {
     env: { ...process.env, STRATUM_DATA_ROOT: dataRoot, STRATUM_WORLD_ROOT: root, STRATUM_WORLD_BRANCH: 'shadow/world-thinker' },
   })

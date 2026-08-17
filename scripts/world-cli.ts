@@ -71,12 +71,10 @@ if (command === 'market') {
   const dataRoot = process.env.STRATUM_DATA_ROOT?.trim() || join(root, '..')
   const assets = await readJson(join(dataRoot, 'runtime/asset-registry.json'))
   const query = argument.trim().toLowerCase()
-  emit(assets.filter((asset) => {
-    if (!asset || typeof asset !== 'object') return false
-    const row = asset as Record<string, unknown>
-    return String(row.symbol ?? '').toLowerCase() === query || String(row.name ?? '').toLowerCase().includes(query)
-  }).slice(0, 20).map((asset) => {
-    const row = asset as Record<string, unknown>
+  const normalized = assets.filter((asset): asset is Record<string, unknown> => Boolean(asset && typeof asset === 'object'))
+  const exact = normalized.filter((row) => String(row.symbol ?? '').toLowerCase() === query)
+  const matches = exact.length ? exact : normalized.filter((row) => String(row.name ?? '').toLowerCase().includes(query))
+  emit(matches.slice(0, 20).map((row) => {
     return { symbol: String(row.symbol), name: String(row.name), active: true, tradable: true }
   }))
 }
