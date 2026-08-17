@@ -295,6 +295,14 @@ async function updateRun(id: string, changes: Record<string, unknown>): Promise<
 export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ runId: string; status: string; commit: string | null; criticVerdict: WorldCritique['verdict']; queuedResearch: Array<Record<string, unknown>> }> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const staleBefore = new Date(Date.now() - 30 * 60_000).toISOString()
+  const { error: staleRunError } = await supabase.from('world_thinker_runs').update({
+    status: 'failed',
+    error: 'Recovered after worker interruption',
+    finished_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).in('status', ['orienting', 'thinking', 'criticizing', 'revising', 'committing']).lt('started_at', staleBefore)
+  if (staleRunError) throw new Error(`Unable to recover stale World Thinker runs: ${staleRunError.message}`)
   const branch = options.branch ?? worldRepositoryBranch()
   const root = options.root ?? worldRepositoryRoot()
   const { data: run, error: runError } = await supabase.from('world_thinker_runs').insert({ trigger: options.trigger, status: 'orienting', branch, agent_job_id: options.agentJobId ?? null }).select('id').single()

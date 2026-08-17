@@ -54,6 +54,7 @@ export function buildCodexExecArgs(options: {
     '--ephemeral',
     '--ignore-user-config',
     '--ignore-rules',
+    '--skip-git-repo-check',
     '--sandbox', 'read-only',
     '--config', 'approval_policy="never"',
     '--config', 'shell_environment_policy.inherit="none"',
