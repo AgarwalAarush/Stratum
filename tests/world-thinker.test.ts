@@ -177,4 +177,6 @@ test('all World Thinker schemas are valid JSON', async () => {
     const contents = await readFile(join(process.cwd(), 'schemas', `${name}.schema.json`), 'utf8')
     assert.doesNotThrow(() => JSON.parse(contents))
   }
+  const proposalSchema = JSON.parse(await readFile(join(process.cwd(), 'schemas/world-update-proposal.schema.json'), 'utf8'))
+  assert.equal(proposalSchema.$defs.probabilityRange.properties.label.type, 'string')
 })
