@@ -92,12 +92,20 @@ export async function runCodexJson<T>(options: CodexExecOptions<T>): Promise<Cod
       child.stderr.on('data', (chunk: Buffer) => {
         stderr = `${stderr}${chunk.toString()}`.slice(-8_000)
       })
+      child.stdin.on('error', (error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        reject(new Error(`Codex input stream failed: ${error.message}${stderr.trim() ? `\n${stderr.trim()}` : ''}`))
+      })
       child.on('error', (error) => {
+        if (settled) return
         settled = true
         clearTimeout(timeout)
         reject(error)
       })
       child.on('close', (code) => {
+        if (settled) return
         settled = true
         clearTimeout(timeout)
         if (code === 0) resolvePromise()
