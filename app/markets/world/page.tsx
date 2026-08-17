@@ -3,6 +3,7 @@ import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import type { WorldNode } from '@/lib/markets/world-thinker-types'
 import { fetchWorldWorkspace } from '@/lib/server/world-projection'
 import { WorldLeadActions, WorldRefreshAction } from '@/components/markets/WorldActions'
+import { WorldMarkdown } from '@/components/markets/WorldMarkdown'
 
 function formatTime(value: string | null): string {
   if (!value) return 'Unavailable'
@@ -60,7 +61,7 @@ export default async function MarketsWorldPage() {
           <div className="world-section-heading"><p className="markets-eyebrow">Current assessment</p><span>As of {formatTime(world.dataAsOf)}</span></div>
           <h2>{world.current?.title ?? 'World model awaiting its first shadow projection'}</h2>
           <p>{world.current?.summary ?? 'The repository and worker pipeline are ready, but no validated World Thinker commit has been projected yet.'}</p>
-          {world.current?.body ? <div className="world-current-body">{world.current.body}</div> : null}
+          {world.current?.body ? <WorldMarkdown className="world-current-body" >{world.current.body}</WorldMarkdown> : null}
         </article>
         <aside className="world-health" aria-label="Thinker health">
           <p className="markets-eyebrow">Thinker health</p>
@@ -78,7 +79,7 @@ export default async function MarketsWorldPage() {
 
       <section className="world-delta" aria-label="Material changes">
         <div className="world-section-heading"><p className="markets-eyebrow">Material change since the preceding commit</p><span>{changes ? formatTime(changes.asOf) : 'No journal yet'}</span></div>
-        {changes ? <><h2>{changes.title}</h2><p>{changes.summary}</p><div className="world-journal-body">{changes.body}</div></> : <p className="world-empty-copy">The first validated run will establish the change journal.</p>}
+        {changes ? <><h2>{changes.title}</h2><p>{changes.summary}</p><WorldMarkdown className="world-journal-body">{changes.body}</WorldMarkdown></> : <p className="world-empty-copy">The first validated run will establish the change journal.</p>}
       </section>
 
       <div className="world-knowledge-grid">
