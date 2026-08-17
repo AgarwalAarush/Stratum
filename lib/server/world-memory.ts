@@ -699,6 +699,24 @@ function normalizeThesis(
   }
 }
 
+/**
+ * Market-thesis versions are immutable. A workspace, however, is a current
+ * decision surface: showing every still-active historical revision makes one
+ * hypothesis look like several independent live models. Keep the highest
+ * version for each hypothesis here, at the read boundary, so the overview and
+ * thesis library agree on what is current.
+ */
+export function selectCurrentMarketThesisVersions(theses: MarketThesisVersion[]): MarketThesisVersion[] {
+  const latestByHypothesis = new Map<string, MarketThesisVersion>()
+  for (const thesis of theses) {
+    const current = latestByHypothesis.get(thesis.hypothesisId)
+    if (!current || thesis.version > current.version || (thesis.version === current.version && thesis.generatedAt > current.generatedAt)) {
+      latestByHypothesis.set(thesis.hypothesisId, thesis)
+    }
+  }
+  return [...latestByHypothesis.values()].sort((left, right) => right.generatedAt.localeCompare(left.generatedAt))
+}
+
 export async function fetchMarketThesisWorkspace(ownerId: string): Promise<MarketThesisWorkspaceData> {
   const supabase = getSupabaseClient()
   if (!supabase) return { baseline: null, hypotheses: [], theses: [], frontiers: [], crossDomainLinks: [] }
@@ -781,13 +799,20 @@ export async function fetchMarketThesisWorkspace(ownerId: string): Promise<Marke
       if (!latestResearchByHypothesis.has(normalized.hypothesisId)) latestResearchByHypothesis.set(normalized.hypothesisId, normalized)
     }
   }
+  const theses = (thesisResult.data ?? []).map((item) => normalizeThesis(
+    item as RecordValue,
+    predictionsByThesis.get(item.id) ?? [],
+    exposuresByThesis.get(item.id) ?? [],
+    latestPredictionEvaluationByPrediction,
+    companyThesesByMarketVersion.get(item.id) ?? [],
+  ))
   return {
     baseline: baselineRow ? normalizeBaseline(baselineRow) : null,
     hypotheses: (hypothesisResult.data ?? []).map((item) => {
       const hypothesis = normalizeHypothesis(item as RecordValue)
       return { ...hypothesis, latestResearch: latestResearchByHypothesis.get(hypothesis.id) ?? null }
     }),
-    theses: (thesisResult.data ?? []).map((item) => normalizeThesis(item as RecordValue, predictionsByThesis.get(item.id) ?? [], exposuresByThesis.get(item.id) ?? [], latestPredictionEvaluationByPrediction, companyThesesByMarketVersion.get(item.id) ?? [])),
+    theses: selectCurrentMarketThesisVersions(theses),
     frontiers: frontierResult.error ? [] : (frontierResult.data ?? []).map((item) => normalizeResearchFrontier(item as RecordValue)),
     crossDomainLinks: crossDomainResult.error ? [] : (crossDomainResult.data ?? [])
       .map((item) => normalizeCrossDomainLink(item as RecordValue))
