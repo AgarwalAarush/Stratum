@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { currentWorldCommit, readWorldNodes, worldRepositoryBranch, worldRepositoryRoot } from '../lib/server/world-repository.ts'
+import { currentWorldCommit, worldRepositoryBranch, worldRepositoryRoot } from '../lib/server/world-repository.ts'
+import { readWorldCommit } from '../lib/server/world-projection.ts'
 
 function emit(value: unknown): never {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`)
@@ -24,7 +25,7 @@ const [command = 'status', argument = ''] = process.argv.slice(2)
 const root = worldRepositoryRoot()
 const branch = worldRepositoryBranch()
 const commit = await currentWorldCommit(root, branch)
-const entries = await readWorldNodes(root).catch(() => [])
+const entries = commit ? (await readWorldCommit(root, commit)).nodes : []
 const nodes = entries.map((entry) => entry.node)
 
 if (command === 'status') {

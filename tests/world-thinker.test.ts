@@ -172,6 +172,11 @@ test('world market CLI resolves only host-projected active tradable assets', asy
     env: { ...process.env, STRATUM_DATA_ROOT: dataRoot, STRATUM_WORLD_ROOT: root, STRATUM_WORLD_BRANCH: 'shadow/world-thinker' },
   })
   assert.deepEqual(JSON.parse(stdout), [{ symbol: 'PWR', name: 'Quanta Services Inc.', active: true, tradable: true }])
+  const { stdout: statusOutput } = await execFile(process.execPath, ['--experimental-strip-types', join(process.cwd(), 'scripts/world-cli.ts'), 'status'], {
+    env: { ...process.env, STRATUM_DATA_ROOT: dataRoot, STRATUM_WORLD_ROOT: root, STRATUM_WORLD_BRANCH: 'shadow/world-thinker' },
+  })
+  assert.equal(JSON.parse(statusOutput).branch, 'shadow/world-thinker')
+  assert.equal(JSON.parse(statusOutput).nodeCount, 1)
 })
 
 test('research bridge preserves explicit thresholds, dedupe, per-run, and daily caps', () => {
