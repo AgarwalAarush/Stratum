@@ -25,6 +25,15 @@ export interface WorldEventClusterCandidate extends WorldEventCluster {
   sources: WorldEventSourceInput[]
 }
 
+export function nextWorldEventProcessingState(
+  priorState: string | null | undefined,
+  proposedState: WorldEventCluster['processingState'],
+  hasNewSources: boolean,
+): WorldEventCluster['processingState'] {
+  if (priorState === 'processed' && !hasNewSources) return 'processed'
+  return proposedState
+}
+
 const STOPWORDS = new Set(['a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'has', 'in', 'is', 'it', 'its', 'of', 'on', 'or', 'says', 'the', 'to', 'with', 'after', 'amid', 'over', 'new'])
 const MATERIAL_TERMS: Array<[RegExp, number, string]> = [
   [/\b(war|attack|strike|invasion|missile|nuclear|military|ceasefire)\b/i, 35, 'security'],
@@ -283,9 +292,11 @@ export async function persistWorldEventClusters(clusters: WorldEventClusterCandi
   let updated = 0
   const urgent: string[] = []
   for (const cluster of clusters) {
-    const { data: prior } = await supabase.from('world_event_clusters').select('id,first_seen_at,last_seen_at,claim_state,source_diversity,source_ids,created_at,updated_at').eq('fingerprint', cluster.fingerprint).maybeSingle()
+    const { data: prior } = await supabase.from('world_event_clusters').select('id,first_seen_at,last_seen_at,claim_state,source_diversity,source_ids,processing_state,processed_at,created_at,updated_at').eq('fingerprint', cluster.fingerprint).maybeSingle()
     const priorSourceIds = Array.isArray(prior?.source_ids) ? prior.source_ids.filter((value): value is string => typeof value === 'string') : []
     const mergedSourceIds = [...new Set([...priorSourceIds, ...cluster.sourceIds])]
+    const hasNewSources = cluster.sourceIds.some((sourceId) => !priorSourceIds.includes(sourceId))
+    const processingState = nextWorldEventProcessingState(prior?.processing_state, cluster.processingState, hasNewSources)
     const row = {
       fingerprint: cluster.fingerprint, title: cluster.title,
       first_seen_at: prior ? new Date(Math.min(Date.parse(prior.first_seen_at), Date.parse(cluster.firstSeenAt))).toISOString() : cluster.firstSeenAt,
@@ -295,7 +306,9 @@ export async function persistWorldEventClusters(clusters: WorldEventClusterCandi
       claim_state: prior ? transitionWorldClaimState(prior.claim_state as WorldClaimState, cluster.claimState) : cluster.claimState,
       materiality: cluster.materiality, novelty: cluster.novelty,
       source_diversity: Math.max(Number(prior?.source_diversity ?? 0), cluster.sourceDiversity), thesis_dependency: cluster.thesisDependency, portfolio_dependency: cluster.portfolioDependency,
-      decisive_new_event: cluster.decisiveNewEvent, processing_state: cluster.processingState, summary: cluster.summary, source_ids: mergedSourceIds, updated_at: new Date().toISOString(),
+      decisive_new_event: cluster.decisiveNewEvent, processing_state: processingState,
+      processed_at: processingState === 'processed' ? prior?.processed_at ?? new Date().toISOString() : null,
+      summary: cluster.summary, source_ids: mergedSourceIds, updated_at: new Date().toISOString(),
     }
     const { data, error } = await supabase.from('world_event_clusters').upsert(row, { onConflict: 'fingerprint' }).select('id,created_at,updated_at').single()
     if (error || !data) throw new Error(`Unable to persist world event cluster: ${error?.message ?? cluster.fingerprint}`)

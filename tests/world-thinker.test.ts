@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { buildCodexExecArgs } from '../lib/server/codex-exec.ts'
-import { clusterWorldEventSources, reconcileExtractedClusters, transitionWorldClaimState, worldEventExtractionPrompt } from '../lib/server/world-events.ts'
+import { clusterWorldEventSources, nextWorldEventProcessingState, reconcileExtractedClusters, transitionWorldClaimState, worldEventExtractionPrompt } from '../lib/server/world-events.ts'
 import { commitWorldUpdate, initializeWorldRepository, parseWorldNode, renderWorldNode } from '../lib/server/world-repository.ts'
 import { selectResearchableWorldLeads } from '../lib/server/world-thinker.ts'
 import { type WorldNode, type WorldOpportunityLead, type WorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
@@ -92,6 +92,12 @@ test('event extraction falls back deterministically when model lineage is incomp
   assert.equal(reconciled.length, 1)
   assert.equal(reconciled[0].fingerprint, candidates[0].fingerprint)
   assert.deepEqual(reconciled[0].sourceIds.sort(), ['feed:one', 'feed:two'])
+})
+
+test('event retry preserves processed state until genuinely new evidence arrives', () => {
+  assert.equal(nextWorldEventProcessingState('processed', 'pending', false), 'processed')
+  assert.equal(nextWorldEventProcessingState('processed', 'pending', true), 'pending')
+  assert.equal(nextWorldEventProcessingState('failed', 'pending', false), 'pending')
 })
 
 test('claim-state transitions preserve contradiction and retraction instead of false resolution', () => {
