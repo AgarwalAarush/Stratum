@@ -46,6 +46,9 @@ import { getSupabaseClient } from './supabase.ts'
 import { materializeIntelligenceSourceReferrals } from './intelligence-source-referrals.ts'
 import { fetchPortfolioResearchCoverage, fetchPortfolioResearchSeedOwners } from './portfolio-research-seeding.ts'
 import { selectControlledExposureResearch } from '../markets/market-exposure-research.ts'
+import { refreshWorldEvents } from './world-events.ts'
+import { runWorldThinker } from './world-thinker.ts'
+import { projectWorldRepository } from './world-projection.ts'
 
 export const AGENT_JOB_TYPES = [
   'sync-market-assets',
@@ -92,6 +95,9 @@ export const AGENT_JOB_TYPES = [
   'monitor-market-theses',
   'backup-market-corpus',
   'verify-market-corpus',
+  'refresh-world-events',
+  'run-world-thinker',
+  'project-world-repository',
 ] as const
 
 export type AgentJobType = typeof AGENT_JOB_TYPES[number]
@@ -143,6 +149,19 @@ export function parseAgentJobType(value: unknown): AgentJobType {
 }
 
 export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), payload: Record<string, unknown> = {}): string {
+  if (jobType === 'refresh-world-events') {
+    const bucket = new Date(now)
+    bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
+    return `${jobType}:${bucket.toISOString()}`
+  }
+  if (jobType === 'run-world-thinker') {
+    if (payload.trigger === 'company_research' && typeof payload.worldOpportunityLeadId === 'string') return `${jobType}:company-research:${payload.worldOpportunityLeadId}`
+    const minutes = payload.trigger === 'urgent' ? 20 : 12 * 60
+    const bucket = new Date(now)
+    bucket.setTime(Math.floor(bucket.getTime() / (minutes * 60_000)) * minutes * 60_000)
+    return `${jobType}:${payload.trigger === 'urgent' ? 'urgent' : String(payload.trigger ?? 'scheduled')}:${bucket.toISOString()}`
+  }
+  if (jobType === 'project-world-repository' && typeof payload.commit === 'string') return `${jobType}:${payload.commit}`
   if (jobType === 'run-market-thesis-cycle' && typeof payload.cycleDate === 'string' && (payload.cycle === 'pre-market' || payload.cycle === 'post-close')) {
     return `${jobType}:${payload.cycleDate}:${payload.cycle}`
   }
@@ -297,6 +316,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-robinhood-portfolio') return 'robinhood'
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'fetch-stock-price-history' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
+  if (jobType === 'project-world-repository') return 'market-data'
   if (jobType === 'ingest-world-source' || jobType === 'run-market-thesis-cycle' || jobType === 'verify-world-source-health' || jobType === 'preflight-world-source-candidate' || jobType === 'collect-world-source-documents') return 'market-data'
   if (jobType === 'triage-world-observation-proposals' || jobType === 'scout-market-research') return 'codex'
   if (
@@ -331,7 +351,11 @@ export function marketModelRoutingForAgentJob(
   jobType: AgentJobType,
   environment: NodeJS.ProcessEnv = process.env,
 ): MarketModelSelection[] {
-  const tasks = jobType === 'scout-world-sources'
+  const tasks = jobType === 'refresh-world-events'
+    ? ['world_event_extraction'] as const
+    : jobType === 'run-world-thinker'
+      ? ['world_thinker', 'world_critic'] as const
+      : jobType === 'scout-world-sources'
     ? ['source_scout'] as const
     : jobType === 'scout-market-research'
       ? ['research_planning'] as const
@@ -370,6 +394,8 @@ export function shouldRefreshClosedMarket(
  * behind a backlog of routine market-refresh work, while it remains only
  * operational telemetry—not admission authority. */
 export function agentJobPriority(jobType: AgentJobType): number {
+  if (jobType === 'run-world-thinker') return 25
+  if (jobType === 'refresh-world-events' || jobType === 'project-world-repository') return 35
   if (jobType === 'preflight-world-source-candidate') return 20
   if (jobType === 'verify-world-source-health') return 30
   if (jobType === 'scout-world-sources' || jobType === 'scout-market-research' || jobType === 'review-world-source-coverage' || jobType === 'scan-intelligence-source-referrals' || jobType === 'route-market-research-frontiers' || jobType === 'orchestrate-market-research' || jobType === 'auto-accept-observation-proposals') return 40
@@ -381,6 +407,7 @@ export function agentJobPriority(jobType: AgentJobType): number {
 /** Short, bounded refreshes should not hold the sole worker for as long as an
  * intentionally long research generation. */
 export function agentJobStaleAfterMs(jobType: AgentJobType, defaultStaleAfterMs = 45 * 60 * 1_000): number {
+  if (jobType === 'run-world-thinker') return 35 * 60 * 1_000
   if (jobType === 'refresh-market-screener' || jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence') return 10 * 60 * 1_000
   return defaultStaleAfterMs
 }
@@ -614,6 +641,16 @@ async function runMarketThesisCycle(
 ): Promise<Record<string, unknown>> {
   if (!isMarketWorldModelEnabled()) return { skipped: 'MARKET_WORLD_MODEL_ENABLED is false' }
 
+  if (process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true') {
+    await reportProgress(10, 'collecting governed sources for the World Thinker')
+    const collection = await collectGovernedWorldSourceDocuments()
+    await reportProgress(50, 'refreshing broad event awareness')
+    const events = await refreshWorldEvents()
+    const thinker = await enqueueAgentJob('run-world-thinker', { trigger: 'scheduled', eventClusterIds: events.urgent.length ? events.urgent : undefined })
+    await reportProgress(100, 'source collection complete; World Thinker queued')
+    return { cycle, cutover: true, collection, events, thinker, note: 'Fixed baselines and domain templates are retained as immutable history and no longer create hypotheses.' }
+  }
+
   await reportProgress(5, 'checking governed source health')
   const health = await auditWorldSourceHealth().catch((error) => ({
     healthy: 0,
@@ -672,6 +709,27 @@ async function executeJob(
   job: AgentJobRecord,
   reportProgress: (progress: number, phase: string) => Promise<void> = async () => {},
 ): Promise<unknown> {
+  if (job.job_type === 'refresh-world-events') {
+    const result = await refreshWorldEvents()
+    if (job.payload.runThinkerAfter === true) {
+      await enqueueAgentJob('run-world-thinker', { trigger: 'manual', eventClusterIds: result.urgent.length ? result.urgent : undefined })
+    } else if (result.urgent.length > 0) {
+      await enqueueAgentJob('run-world-thinker', { trigger: 'urgent', eventClusterIds: result.urgent })
+    }
+    return result
+  }
+
+  if (job.job_type === 'run-world-thinker') {
+    const trigger = job.payload.trigger
+    if (trigger !== 'scheduled' && trigger !== 'urgent' && trigger !== 'manual' && trigger !== 'backfill' && trigger !== 'company_research') throw new Error('World Thinker trigger is invalid')
+    const eventClusterIds = Array.isArray(job.payload.eventClusterIds) ? job.payload.eventClusterIds.filter((value): value is string => typeof value === 'string') : undefined
+    return runWorldThinker({ trigger, eventClusterIds, agentJobId: job.id, canonicalProjection: process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true' })
+  }
+
+  if (job.job_type === 'project-world-repository') {
+    return projectWorldRepository({ commit: typeof job.payload.commit === 'string' ? job.payload.commit : undefined, canonical: process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true' })
+  }
+
   if (job.job_type === 'run-market-thesis-cycle') {
     if (!validMarketThesisCycle(job.payload.cycle)) throw new Error('Market thesis cycle requires a valid cycle')
     return runMarketThesisCycle(job.payload.cycle, reportProgress)
@@ -825,7 +883,15 @@ async function executeJob(
           : undefined,
       },
     )
-    return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf }
+    const worldOpportunityLeadId = typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : null
+    if (worldOpportunityLeadId) {
+      const supabase = getSupabaseClient()
+      if (supabase) await supabase.from('world_opportunity_leads').update({ status: 'researched', research_note_id: note.id, updated_at: new Date().toISOString() }).eq('id', worldOpportunityLeadId)
+      await enqueueAgentJob('run-world-thinker', {
+        trigger: 'company_research', worldOpportunityLeadId, researchNoteId: note.id, symbol,
+      }, `run-world-thinker:company-research:${worldOpportunityLeadId}:${note.id}`)
+    }
+    return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf, worldOpportunityLeadId }
   }
 
   if (job.job_type === 'generate-etf-research') {
@@ -1075,6 +1141,13 @@ async function executeJob(
   }
 
   if (job.job_type === 'orchestrate-market-research') {
+    if (process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true') {
+      const supabase = getSupabaseClient()
+      if (!supabase) throw new Error('Supabase service credentials are not configured')
+      const { data, error } = await supabase.from('agent_jobs').select('id,job_type,status').in('job_type', ['generate-company-research', 'event-refresh-company-research']).in('status', ['queued', 'running']).limit(scheduledMarketResearchRunLimit())
+      if (error) throw new Error(`Unable to inspect bounded research execution: ${error.message}`)
+      return { cutover: true, activeResearchJobs: data ?? [], note: 'World opportunity leads own planning; the worker continues bounded company-research execution only.' }
+    }
     const { runMarketResearchOrchestration } = await import('./market-research-orchestrator.ts')
     await reportProgress(5, 'reading governed evidence, frontier, and lead signals across active domains')
     const result = await runMarketResearchOrchestration({ trigger: job.payload.trigger === 'manual' ? 'manual' : 'scheduled' })

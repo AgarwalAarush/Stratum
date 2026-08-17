@@ -15,6 +15,7 @@ const WORKER_CONCURRENCY = workerJobConcurrency()
 const schedulerEnabled = process.env.WORKER_SCHEDULER_ENABLED !== 'false'
 const fmpEnabled = Boolean(process.env.FMP_API_KEY)
 const codexEnabled = process.env.CODEX_SYNTHESIS_ENABLED !== 'false'
+const worldThinkerEnabled = codexEnabled && process.env.STRATUM_WORLD_THINKER_ENABLED !== 'false'
 const robinhoodEnabled = isRobinhoodPortfolioSyncConfigured()
 const workerId = process.env.WORKER_ID ?? `${hostname()}:${process.pid}`
 const runOnce = process.argv.includes('--once')
@@ -135,6 +136,7 @@ async function main() {
           includeFmp: fmpEnabled,
           includeCodex: codexEnabled,
           includeRobinhood: robinhoodEnabled,
+          includeWorldThinker: worldThinkerEnabled,
         })
         nextScheduleAt = Date.now() + SCHEDULER_INTERVAL_MS
         for (const job of scheduled) {
