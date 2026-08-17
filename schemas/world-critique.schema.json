@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorldCritique",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "summary", "unsupportedClaimPaths", "duplicateNodeIds", "missingContradictions", "investmentBoundaryViolations", "revisionInstructions"],
+  "properties": {
+    "verdict": { "enum": ["pass", "revise", "reject"] }, "summary": { "type": "string", "maxLength": 3000 },
+    "unsupportedClaimPaths": { "$ref": "#/definitions/list" }, "duplicateNodeIds": { "$ref": "#/definitions/list" },
+    "missingContradictions": { "$ref": "#/definitions/list" }, "investmentBoundaryViolations": { "$ref": "#/definitions/list" },
+    "revisionInstructions": { "$ref": "#/definitions/list" }
+  },
+  "definitions": { "list": { "type": "array", "maxItems": 50, "items": { "type": "string" } } }
+}

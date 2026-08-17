@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorldThinkerRunSummary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "trigger", "status", "checkpoint", "baseCommit", "resultCommit", "contextManifest", "criticVerdict", "modelMetadata", "error", "startedAt", "finishedAt"],
+  "properties": {
+    "id": { "type": "string" }, "trigger": { "enum": ["scheduled", "urgent", "manual", "backfill", "company_research"] },
+    "status": { "enum": ["queued", "orienting", "thinking", "criticizing", "revising", "committed", "rejected", "failed", "push_pending", "projected"] },
+    "checkpoint": { "type": ["string", "null"] }, "baseCommit": { "type": ["string", "null"] }, "resultCommit": { "type": ["string", "null"] },
+    "contextManifest": { "type": "object" }, "criticVerdict": { "type": ["string", "null"], "enum": ["pass", "revise", "reject", null] },
+    "modelMetadata": { "type": "object" }, "error": { "type": ["string", "null"] }, "startedAt": { "type": "string", "format": "date-time" }, "finishedAt": { "type": ["string", "null"] }
+  }
+}

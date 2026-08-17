@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorldOpportunityLead",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "originatingNodeId", "originatingHypothesisId", "symbol", "issuer", "valueChainRole", "whatChanged", "whyNow", "transmissionMechanism", "captureMechanism", "captureConditions", "supportingSourceIds", "contradictingSourceIds", "evidenceGaps", "decisiveQuestions", "catalysts", "falsifiers", "expectationsQuestion", "dimensions", "decisiveNewEvent"],
+  "properties": {
+    "id": { "type": "string" }, "originatingNodeId": { "type": "string" }, "originatingHypothesisId": { "type": "string" },
+    "symbol": { "type": "string", "pattern": "^[A-Z][A-Z0-9.-]{0,11}$" }, "issuer": { "type": "string" }, "valueChainRole": { "type": "string" },
+    "whatChanged": { "type": "string" }, "whyNow": { "type": "string" }, "transmissionMechanism": { "type": "string" }, "captureMechanism": { "type": "string" },
+    "captureConditions": { "type": "array", "items": { "type": "string" } }, "supportingSourceIds": { "type": "array", "items": { "type": "string" } },
+    "contradictingSourceIds": { "type": "array", "items": { "type": "string" } }, "evidenceGaps": { "type": "array", "items": { "type": "string" } },
+    "decisiveQuestions": { "type": "array", "items": { "type": "string" } }, "catalysts": { "type": "array", "items": { "type": "string" } },
+    "falsifiers": { "type": "array", "items": { "type": "string" } }, "expectationsQuestion": { "type": "string" }, "decisiveNewEvent": { "type": "boolean" },
+    "dimensions": { "type": "object", "additionalProperties": false, "required": ["materiality", "transmissionConfidence", "capturePlausibility", "expectationsGap", "evidenceReadiness", "portfolioRelevance", "investability"], "properties": { "materiality": { "$ref": "#/definitions/score" }, "transmissionConfidence": { "$ref": "#/definitions/score" }, "capturePlausibility": { "$ref": "#/definitions/score" }, "expectationsGap": { "$ref": "#/definitions/score" }, "evidenceReadiness": { "$ref": "#/definitions/score" }, "portfolioRelevance": { "$ref": "#/definitions/score" }, "investability": { "$ref": "#/definitions/score" } } }
+  },
+  "definitions": { "score": { "type": "integer", "minimum": 0, "maximum": 100 } }
+}

@@ -1,0 +1,8 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorldHypothesis",
+  "allOf": [
+    { "$ref": "world-node.schema.json" },
+    { "type": "object", "required": ["mechanism", "economicVariable", "constrainedLayer", "rentRecipient", "expectationsQuestion", "catalysts", "falsifiers"], "properties": { "kind": { "const": "hypothesis" }, "mechanism": { "type": "string" }, "economicVariable": { "type": "string" }, "constrainedLayer": { "type": "string" }, "rentRecipient": { "type": "string" }, "expectationsQuestion": { "type": "string" }, "catalysts": { "type": "array", "items": { "type": "string" } }, "falsifiers": { "type": "array", "items": { "type": "string" } } } }
+  ]
+}

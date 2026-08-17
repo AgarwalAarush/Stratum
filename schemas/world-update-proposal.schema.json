@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorldUpdateProposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["asOf", "trigger", "baseCommit", "orientation", "eventClassifications", "sources", "upserts", "archives", "opportunityLeads", "journal"],
+  "properties": {
+    "asOf": { "type": "string", "format": "date-time" }, "trigger": { "enum": ["scheduled", "urgent", "manual", "backfill", "company_research"] },
+    "baseCommit": { "type": ["string", "null"] }, "orientation": { "type": "string", "maxLength": 4000 },
+    "eventClassifications": { "type": "array", "maxItems": 100, "items": { "type": "object", "additionalProperties": false, "required": ["eventClusterId", "classification", "rationale"], "properties": { "eventClusterId": { "type": "string" }, "classification": { "enum": ["confirmation", "contradiction", "novelty", "noise", "uncertainty"] }, "rationale": { "type": "string" } } } },
+    "sources": { "type": "array", "maxItems": 150, "items": { "type": "object", "additionalProperties": false, "required": ["id", "url", "title", "claimState", "stance"], "properties": { "id": { "type": "string" }, "url": { "type": "string" }, "title": { "type": "string" }, "publisher": { "type": "string" }, "publishedAt": { "type": "string" }, "claimState": { "enum": ["reported", "corroborated", "officially_confirmed", "contested", "retracted", "superseded"] }, "stance": { "enum": ["supporting", "contradicting", "neutral"] } } } },
+    "upserts": { "type": "array", "maxItems": 40, "items": { "$ref": "#/$defs/node" } },
+    "archives": { "type": "array", "maxItems": 40, "items": { "type": "object", "additionalProperties": false, "required": ["nodeId", "reason"], "properties": { "nodeId": { "type": "string" }, "reason": { "type": "string" }, "replacementId": { "type": "string" } } } },
+    "opportunityLeads": { "type": "array", "maxItems": 12, "items": { "$ref": "#/$defs/lead" } },
+    "journal": { "type": "object", "additionalProperties": false, "required": ["title", "summary", "materialChanges", "beliefChanges", "scenarioChanges", "newInvestigations", "attentionIndicators"], "properties": { "title": { "type": "string" }, "summary": { "type": "string" }, "materialChanges": { "$ref": "#/$defs/stringList" }, "beliefChanges": { "$ref": "#/$defs/stringList" }, "scenarioChanges": { "$ref": "#/$defs/stringList" }, "newInvestigations": { "$ref": "#/$defs/stringList" }, "attentionIndicators": { "$ref": "#/$defs/stringList" } } }
+  },
+  "$defs": {
+    "stringList": { "type": "array", "maxItems": 20, "items": { "type": "string" } },
+    "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "relationship": { "type": "object", "additionalProperties": false, "required": ["type", "targetId", "description"], "properties": { "type": { "type": "string" }, "targetId": { "type": "string" }, "description": { "type": "string" } } },
+    "claim": { "type": "object", "additionalProperties": false, "required": ["text", "sourceIds", "assessment"], "properties": { "text": { "type": "string" }, "sourceIds": { "type": "array", "items": { "type": "string" } }, "assessment": { "type": "boolean" } } },
+    "indicator": { "type": "object", "additionalProperties": false, "required": ["id", "label", "condition", "direction", "threshold", "sourceIds"], "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "condition": { "type": "string" }, "direction": { "enum": ["higher", "lower", "crosses", "changes"] }, "threshold": { "type": ["string", "null"] }, "sourceIds": { "type": "array", "items": { "type": "string" } } } },
+    "probabilityRange": { "type": ["object", "null"], "additionalProperties": false, "required": ["low", "high", "label"], "properties": { "low": { "$ref": "#/$defs/score" }, "high": { "$ref": "#/$defs/score" }, "label": { "const": "assessment" } } },
+    "node": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "kind", "title", "status", "asOf", "confidence", "importance", "aliases", "relationships", "sourceIds", "nextReviewAt", "summary", "claims", "indicators", "body", "supersedes", "changeSummary", "probabilityRange", "signposts", "mechanism", "economicVariable", "constrainedLayer", "rentRecipient", "expectationsQuestion", "catalysts", "falsifiers"],
+      "properties": {
+        "id": { "type": "string", "minLength": 3, "maxLength": 160 }, "kind": { "enum": ["actor", "situation", "theme", "market", "scenario", "hypothesis", "journal", "current"] },
+        "title": { "type": "string", "minLength": 3, "maxLength": 300 }, "status": { "enum": ["active", "monitoring", "dormant", "superseded", "archived"] },
+        "asOf": { "type": "string" }, "confidence": { "$ref": "#/$defs/score" }, "importance": { "$ref": "#/$defs/score" },
+        "aliases": { "type": "array", "maxItems": 30, "items": { "type": "string" } }, "relationships": { "type": "array", "maxItems": 50, "items": { "$ref": "#/$defs/relationship" } },
+        "sourceIds": { "type": "array", "maxItems": 100, "items": { "type": "string" } }, "nextReviewAt": { "type": "string" }, "summary": { "type": "string", "maxLength": 2000 },
+        "claims": { "type": "array", "maxItems": 50, "items": { "$ref": "#/$defs/claim" } }, "indicators": { "type": "array", "maxItems": 30, "items": { "$ref": "#/$defs/indicator" } },
+        "body": { "type": "string", "maxLength": 16000 }, "supersedes": { "type": ["string", "null"] }, "changeSummary": { "type": ["string", "null"] },
+        "probabilityRange": { "$ref": "#/$defs/probabilityRange" }, "signposts": { "type": "array", "maxItems": 20, "items": { "type": "string" } },
+        "mechanism": { "type": ["string", "null"] }, "economicVariable": { "type": ["string", "null"] }, "constrainedLayer": { "type": ["string", "null"] },
+        "rentRecipient": { "type": ["string", "null"] }, "expectationsQuestion": { "type": ["string", "null"] }, "catalysts": { "type": "array", "maxItems": 20, "items": { "type": "string" } }, "falsifiers": { "type": "array", "maxItems": 20, "items": { "type": "string" } }
+      }
+    },
+    "lead": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "originatingNodeId", "originatingHypothesisId", "symbol", "issuer", "valueChainRole", "whatChanged", "whyNow", "transmissionMechanism", "captureMechanism", "captureConditions", "supportingSourceIds", "contradictingSourceIds", "evidenceGaps", "decisiveQuestions", "catalysts", "falsifiers", "expectationsQuestion", "dimensions", "decisiveNewEvent"],
+      "properties": {
+        "id": { "type": "string" }, "originatingNodeId": { "type": "string" }, "originatingHypothesisId": { "type": "string" }, "symbol": { "type": "string", "pattern": "^[A-Z][A-Z0-9.-]{0,11}$" },
+        "issuer": { "type": "string" }, "valueChainRole": { "type": "string" }, "whatChanged": { "type": "string" }, "whyNow": { "type": "string" }, "transmissionMechanism": { "type": "string" }, "captureMechanism": { "type": "string" },
+        "captureConditions": { "$ref": "#/$defs/stringList" }, "supportingSourceIds": { "$ref": "#/$defs/stringList" }, "contradictingSourceIds": { "$ref": "#/$defs/stringList" }, "evidenceGaps": { "$ref": "#/$defs/stringList" },
+        "decisiveQuestions": { "$ref": "#/$defs/stringList" }, "catalysts": { "$ref": "#/$defs/stringList" }, "falsifiers": { "$ref": "#/$defs/stringList" }, "expectationsQuestion": { "type": "string" }, "decisiveNewEvent": { "type": "boolean" },
+        "dimensions": { "type": "object", "additionalProperties": false, "required": ["materiality", "transmissionConfidence", "capturePlausibility", "expectationsGap", "evidenceReadiness", "portfolioRelevance", "investability"], "properties": { "materiality": { "$ref": "#/$defs/score" }, "transmissionConfidence": { "$ref": "#/$defs/score" }, "capturePlausibility": { "$ref": "#/$defs/score" }, "expectationsGap": { "$ref": "#/$defs/score" }, "evidenceReadiness": { "$ref": "#/$defs/score" }, "portfolioRelevance": { "$ref": "#/$defs/score" }, "investability": { "$ref": "#/$defs/score" } } }
+      }
+    }
+  }
+}

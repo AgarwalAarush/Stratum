@@ -1,0 +1,8 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorldScenario",
+  "allOf": [
+    { "$ref": "world-node.schema.json" },
+    { "type": "object", "properties": { "kind": { "const": "scenario" }, "probabilityRange": { "type": "object", "required": ["low", "high", "label"], "properties": { "low": { "type": "number", "minimum": 0, "maximum": 100 }, "high": { "type": "number", "minimum": 0, "maximum": 100 }, "label": { "const": "assessment" } } }, "signposts": { "type": "array", "items": { "type": "string" } } } }
+  ]
+}
