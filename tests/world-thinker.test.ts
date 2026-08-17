@@ -180,3 +180,24 @@ test('all World Thinker schemas are valid JSON', async () => {
   const proposalSchema = JSON.parse(await readFile(join(process.cwd(), 'schemas/world-update-proposal.schema.json'), 'utf8'))
   assert.equal(proposalSchema.$defs.probabilityRange.properties.label.type, 'string')
 })
+
+test('model-facing World schemas satisfy strict Responses object requirements', async () => {
+  const visit = (value: unknown, path = '$'): void => {
+    if (!value || typeof value !== 'object') return
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => visit(item, `${path}[${index}]`))
+      return
+    }
+    const schema = value as Record<string, unknown>
+    if (schema.type === 'object' && schema.properties && typeof schema.properties === 'object') {
+      const propertyNames = Object.keys(schema.properties as Record<string, unknown>).sort()
+      assert.deepEqual(Array.isArray(schema.required) ? [...schema.required].sort() : [], propertyNames, `${path} must require every declared property`)
+      assert.equal(schema.additionalProperties, false, `${path} must forbid undeclared properties`)
+    }
+    Object.entries(schema).forEach(([key, child]) => visit(child, `${path}.${key}`))
+  }
+
+  for (const name of ['world-update-proposal', 'world-critique']) {
+    visit(JSON.parse(await readFile(join(process.cwd(), 'schemas', `${name}.schema.json`), 'utf8')))
+  }
+})
