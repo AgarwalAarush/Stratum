@@ -70,7 +70,7 @@ test('Codex runner arguments enforce ephemeral read-only schema output', () => {
   })
   assert.deepEqual(args, [
     'exec', '--model', 'gpt-5.6-terra', '--ephemeral',
-    '--ignore-user-config', '--ignore-rules', '--sandbox', 'read-only',
+    '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--sandbox', 'read-only',
     '--config', 'approval_policy="never"',
     '--config', 'shell_environment_policy.inherit="none"', '--cd', '/repo',
     '--output-schema', '/repo/schemas/market-memo.schema.json',
