@@ -15,6 +15,8 @@ export interface CodexExecOptions<T> {
   cwd?: string
   executable?: string
   timeoutMs?: number
+  /** Enables Codex native web search for this run only. */
+  webSearch?: boolean
 }
 
 export interface CodexExecResult<T> {
@@ -44,8 +46,9 @@ export function buildCodexExecArgs(options: {
   schemaPath: string
   outputPath: string
   cwd: string
+  webSearch?: boolean
 }): string[] {
-  return [
+  const args = [
     'exec',
     '--model', options.model,
     '--ephemeral',
@@ -57,8 +60,10 @@ export function buildCodexExecArgs(options: {
     '--cd', options.cwd,
     '--output-schema', options.schemaPath,
     '--output-last-message', options.outputPath,
-    '-',
   ]
+  if (options.webSearch) args.push('--search')
+  args.push('-')
+  return args
 }
 
 export async function runCodexJson<T>(options: CodexExecOptions<T>): Promise<CodexExecResult<T>> {
@@ -67,7 +72,7 @@ export async function runCodexJson<T>(options: CodexExecOptions<T>): Promise<Cod
   const model = options.model ?? AI_MODELS.scheduledSynthesis
   const schemaPath = resolve(cwd, options.schemaPath)
   const outputPath = join(tmpdir(), `stratum-codex-${randomUUID()}.json`)
-  const args = buildCodexExecArgs({ model, schemaPath, outputPath, cwd })
+  const args = buildCodexExecArgs({ model, schemaPath, outputPath, cwd, webSearch: options.webSearch })
 
   try {
     const childEnv = buildCodexExecEnv()
