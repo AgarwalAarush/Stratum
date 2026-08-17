@@ -343,6 +343,60 @@ function calculateBrokeragePortfolioSummary(
   }
 }
 
+/**
+ * Reprices an already-loaded workspace without re-reading its portfolio,
+ * decision, inbox, and ledger records. Brokerage account totals remain the
+ * broker-of-record snapshot; screener quotes only fill a missing holding price.
+ */
+export function applyPortfolioQuotes(
+  workspace: PortfolioWorkspaceData,
+  availableQuotes: PortfolioQuote[],
+): PortfolioWorkspaceData {
+  const quotes = new Map(availableQuotes.map((quote) => [quote.symbol, quote.price]))
+  return {
+    ...workspace,
+    portfolios: workspace.portfolios.map((portfolio) => {
+      if (portfolio.dataSource === 'ledger') {
+        return calculatePortfolioSummary(
+          portfolio.account,
+          workspace.portfolioTransactions.filter((transaction) => transaction.portfolioId === portfolio.account.id && transaction.voidedAt === null),
+          quotes,
+        )
+      }
+      return {
+        ...portfolio,
+        holdings: portfolio.holdings.map((holding) => {
+          const currentPrice = holding.currentPrice ?? quotes.get(holding.symbol) ?? null
+          const currentValue = currentPrice === null ? null : currentPrice * holding.quantity
+          return {
+            ...holding,
+            currentPrice,
+            currentValue,
+            unrealizedPnl: currentValue === null ? null : currentValue - holding.totalCost,
+          }
+        }),
+      }
+    }),
+  }
+}
+
+/** Lightweight owner context for event ranking; it intentionally avoids the
+ * full Portfolio workspace and its ledger, review, and constraint reads. */
+export async function fetchPortfolioEventSymbols(ownerId: string): Promise<string[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase || !validOwnerId(ownerId)) return []
+  const [positions, decisions, watchlists] = await Promise.all([
+    supabase.from('manual_positions').select('symbol').eq('owner_id', ownerId),
+    supabase.from('thesis_decisions').select('symbol').eq('owner_id', ownerId),
+    supabase.from('market_watchlists').select('market_watchlist_items(symbol)').eq('owner_id', ownerId),
+  ])
+  return [...new Set([
+    ...(positions.data ?? []).map((row) => String(row.symbol)),
+    ...(decisions.data ?? []).map((row) => String(row.symbol)),
+    ...(watchlists.data ?? []).flatMap((row) => (row.market_watchlist_items ?? []).map((item: { symbol: string }) => item.symbol)),
+  ].map((symbol) => symbol.trim().toUpperCase()).filter((symbol) => /^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol)))].sort()
+}
+
 function normalizeInbox(row: Record<string, unknown>): DecisionInboxItem {
   return {
     id: String(row.id),

@@ -7457,6 +7457,19 @@ body:has(.markets-shell) {
   border-bottom: 1px solid var(--market-line);
 }
 
+.markets-feed-loading {
+  border-bottom: 1px solid var(--market-line);
+  display: grid;
+  margin-top: 24px;
+}
+
+.markets-feed-loading span {
+  animation: markets-skeleton 1.6s ease-in-out infinite;
+  border-bottom: 1px solid var(--market-line);
+  display: block;
+  height: 112px;
+}
+
 .markets-feed-empty h2 {
   margin: 10px 0;
   font-size: 22px;

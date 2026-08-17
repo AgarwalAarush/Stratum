@@ -7,6 +7,7 @@ interface MarketsFeedPageProps {
   description: string
   items: NewsItem[]
   emptyMessage: string
+  loading?: boolean
 }
 
 function formatTimestamp(value: string): string {
@@ -19,7 +20,7 @@ function formatTimestamp(value: string): string {
   }).format(new Date(value))
 }
 
-export function MarketsFeedPage({ eyebrow, title, description, items, emptyMessage }: MarketsFeedPageProps) {
+export function MarketsFeedPage({ eyebrow, title, description, items, emptyMessage, loading = false }: MarketsFeedPageProps) {
   const categories = [...new Set(items.map((item) => item.category ?? 'Markets'))]
 
   return (
@@ -31,11 +32,11 @@ export function MarketsFeedPage({ eyebrow, title, description, items, emptyMessa
       </header>
 
       <div className="markets-feed-meta">
-        <span>{items.length} current signals</span>
+        <span>{loading ? 'Loading ranked signals' : `${items.length} current signals`}</span>
         <span>Private preview · API and RSS sources</span>
       </div>
 
-      {items.length === 0 ? (
+      {loading ? <div className="markets-feed-loading" aria-live="polite"><span /><span /><span /><span /></div> : items.length === 0 ? (
         <div className="markets-feed-empty">
           <p className="markets-eyebrow">No current items</p>
           <h2>{emptyMessage}</h2>

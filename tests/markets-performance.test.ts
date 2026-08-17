@@ -65,6 +65,31 @@ test('Markets Overview defers owner-specific thesis reads until after the snapsh
   assert.match(route, /fetchMarketThesisWorkspace\(user\.id\)/)
 })
 
+test('Markets Events paints its shell before collecting live sources', () => {
+  const page = source('app/markets/events/page.tsx')
+  const feed = source('components/markets/MarketEventsFeed.tsx')
+  const route = source('app/api/markets/events/route.ts')
+  const service = source('lib/server/market-events.ts')
+
+  assert.doesNotMatch(page, /fetchFinanceDeals|fetchPortfolioWorkspace/)
+  assert.match(page, /<MarketEventsFeed focusedSymbol=/)
+  assert.match(feed, /window\.setTimeout\(\(\) =>/)
+  assert.match(feed, /loading=\{items === null\}/)
+  assert.match(route, /fetchPortfolioEventSymbols\(user\.id\)/)
+  assert.match(service, /cachedFetchWithFallback/)
+  assert.match(service, /stratum:markets:events:v1:/)
+})
+
+test('Portfolio loads its workspace once and reprices the loaded data', () => {
+  const page = source('app/markets/portfolio/page.tsx')
+  const portfolio = source('lib/server/portfolio.ts')
+
+  assert.equal((page.match(/fetchPortfolioWorkspace\(user\.id\)/g) ?? []).length, 1)
+  assert.match(page, /applyPortfolioQuotes\(initialData/)
+  assert.match(portfolio, /export function applyPortfolioQuotes/)
+  assert.match(portfolio, /export async function fetchPortfolioEventSymbols/)
+})
+
 test('Intelligence pages server-seed one scope payload and lazy-load optional UI', () => {
   const scopePage = source('app/(intelligence)/[scope]/page.tsx')
   const scopeFeed = source('components/sections/ScopeFeed.tsx')
