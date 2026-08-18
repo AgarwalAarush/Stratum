@@ -11,15 +11,18 @@ function formatTime(value: string | null): string {
 }
 
 function shortCommit(value: string | null): string {
-  return value ? value.slice(0, 10) : 'no commit'
+  return value ? value.slice(0, 10) : 'No commit'
 }
 
-function NodeList({ title, nodes }: { title: string; nodes: WorldNode[] }) {
-  const emptyLabel = title.replace(/^active\s+/i, '').toLowerCase()
+function countLabel(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`
+}
+
+function NodeList({ title, nodes, empty }: { title: string; nodes: WorldNode[]; empty: string }) {
   return (
     <section className="world-node-group">
-      <div className="world-section-heading"><p className="markets-eyebrow">{title}</p><span>{nodes.length}</span></div>
-      {nodes.length === 0 ? <p className="world-empty-copy">No active {emptyLabel} in the projected commit.</p> : (
+      <div className="world-group-heading"><h3>{title}</h3><span>{nodes.length}</span></div>
+      {nodes.length === 0 ? <p className="world-empty-copy">{empty}</p> : (
         <div className="world-node-list">
           {nodes.slice(0, 8).map((node) => (
             <Link href={`/markets/world/${encodeURIComponent(node.id)}`} key={node.id} className="world-node-row">
@@ -45,71 +48,107 @@ export default async function MarketsWorldPage() {
   await requireAllowedMarketUser()
   const world = await fetchWorldWorkspace()
   const changes = world.latestChanges[0]
+  const needsAttention = world.health.lastRunStatus === 'failed' || Boolean(world.health.failure)
+  const operatingState = needsAttention ? 'Needs attention' : world.freshness === 'current' ? 'Healthy' : world.freshness
+  const activeModelCount = world.situations.length + world.themes.length + world.actors.length + world.scenarios.length + world.hypotheses.length
+
   return (
     <div className="world-page">
-      <header className="world-hero">
+      <header className="world-header">
         <div>
-          <p className="markets-eyebrow">Persistent world model · source-linked · owner controlled</p>
-          <h1 className="markets-display world-title">What changed in the world—and where could value accrue?</h1>
-          <p className="world-deck">The Thinker maintains causal state, challenges prior beliefs, and queues company investigations. It cannot accept a thesis, allocate capital, or trade.</p>
+          <p className="markets-eyebrow">World intelligence</p>
+          <h1 className="markets-display world-title">A living model of what matters.</h1>
+          <p className="world-deck">Material change, causal transmission, and company investigations—kept separate from thesis acceptance and capital decisions.</p>
         </div>
-        <div className="world-hero-control"><WorldRefreshAction /><span data-freshness={world.freshness}>{world.freshness}</span></div>
+        <div className="world-header-actions">
+          <WorldRefreshAction />
+          <span className={`world-operating-state${needsAttention ? ' world-operating-state--attention' : ''}`} data-freshness={world.freshness}>{operatingState}</span>
+        </div>
       </header>
 
-      <section className="world-current-grid" aria-label="Current world assessment">
-        <article className="world-current-assessment">
-          <div className="world-section-heading"><p className="markets-eyebrow">Current assessment</p><span>As of {formatTime(world.dataAsOf)}</span></div>
-          <h2>{world.current?.title ?? 'World model awaiting its first shadow projection'}</h2>
-          <p>{world.current?.summary ?? 'The repository and worker pipeline are ready, but no validated World Thinker commit has been projected yet.'}</p>
-          {world.current?.body ? <WorldMarkdown className="world-current-body" >{world.current.body}</WorldMarkdown> : null}
+      <section className="world-status-rail" aria-label="World Thinker status">
+        <div><span>Mode</span><strong>{world.canonical ? 'Canonical' : 'Shadow evaluation'}</strong><small>{world.branch ?? 'No projected branch'}</small></div>
+        <div><span>World state</span><strong>{activeModelCount} active nodes</strong><small>Updated {formatTime(world.dataAsOf)}</small></div>
+        <div className={world.health.pendingEvents > 0 ? 'world-status-rail--attention' : undefined}><span>Event queue</span><strong>{countLabel(world.health.pendingEvents, 'event')}</strong><small>{world.health.failedEvents ? countLabel(world.health.failedEvents, 'failed event') : 'Awaiting classification'}</small></div>
+        <div><span>Research funnel</span><strong>{countLabel(world.leads.length, 'company lead')}</strong><small>Qualified investigations only</small></div>
+      </section>
+
+      {needsAttention ? (
+        <section className="world-run-alert" role="alert">
+          <div><p className="markets-eyebrow">Run health</p><strong>The latest run failed validation; the prior validated world state remains published.</strong></div>
+          <details><summary>Technical detail</summary><p>{world.health.failure ?? 'The latest World Thinker run did not complete.'}</p></details>
+        </section>
+      ) : null}
+
+      <section className="world-priority-grid" aria-label="Latest world intelligence">
+        <article className="world-delta" id="latest-change">
+          <div className="world-section-heading"><p className="markets-eyebrow">Since the last update</p><span>{changes ? formatTime(changes.asOf) : 'No journal yet'}</span></div>
+          {changes ? (
+            <>
+              <h2>{changes.title}</h2>
+              <p>{changes.summary}</p>
+              <details className="world-journal-details">
+                <summary>Read the full change journal</summary>
+                <WorldMarkdown className="world-journal-body">{changes.body}</WorldMarkdown>
+              </details>
+            </>
+          ) : <p className="world-empty-copy">The first validated run will establish the change journal.</p>}
         </article>
-        <aside className="world-health" aria-label="Thinker health">
-          <p className="markets-eyebrow">Thinker health</p>
-          <dl>
-            <div><dt>Projected commit</dt><dd>{shortCommit(world.commit)}</dd></div>
-            <div><dt>Branch</dt><dd>{world.branch ?? 'not projected'}</dd></div>
-            <div><dt>Last run</dt><dd>{world.health.lastRunStatus ?? 'none'}</dd></div>
-            <div><dt>Pending events</dt><dd>{world.health.pendingEvents}</dd></div>
-            <div><dt>Failed events</dt><dd>{world.health.failedEvents}</dd></div>
-            <div><dt>Projection</dt><dd>{world.canonical ? 'canonical' : 'shadow'}</dd></div>
+
+        <aside className="world-current-assessment" aria-label="Current world assessment">
+          <div className="world-section-heading"><p className="markets-eyebrow">Current stance</p><span>{shortCommit(world.commit)}</span></div>
+          <h2>{world.current?.title ?? 'Awaiting the first projection'}</h2>
+          <p>{world.current?.summary ?? 'The repository is ready, but no validated World Thinker commit has been projected.'}</p>
+          {world.current?.body ? <WorldMarkdown className="world-current-body">{world.current.body}</WorldMarkdown> : null}
+          <dl className="world-current-meta">
+            <div><dt>Last run</dt><dd>{world.health.lastRunStatus ?? 'None'}</dd></div>
+            <div><dt>Run started</dt><dd>{formatTime(world.health.lastRunAt)}</dd></div>
+            <div><dt>Projection</dt><dd>{world.canonical ? 'Canonical' : 'Shadow'}</dd></div>
           </dl>
-          {world.health.failure ? <p className="world-health-error" role="alert">{world.health.failure}</p> : null}
         </aside>
       </section>
 
-      <section className="world-delta" aria-label="Material changes">
-        <div className="world-section-heading"><p className="markets-eyebrow">Material change since the preceding commit</p><span>{changes ? formatTime(changes.asOf) : 'No journal yet'}</span></div>
-        {changes ? <><h2>{changes.title}</h2><p>{changes.summary}</p><WorldMarkdown className="world-journal-body">{changes.body}</WorldMarkdown></> : <p className="world-empty-copy">The first validated run will establish the change journal.</p>}
+      <section className="world-model-section" id="active-model">
+        <div className="world-section-heading world-section-heading--major">
+          <div><p className="markets-eyebrow">Active model</p><h2>What the Thinker is tracking</h2></div>
+          <span>{world.situations.length} situations · {world.themes.length} themes · {world.actors.length} actors</span>
+        </div>
+        <div className="world-knowledge-grid">
+          <NodeList title="Situations" nodes={world.situations} empty="No active situations have been established." />
+          <NodeList title="Structural themes" nodes={world.themes} empty="No structural themes have been established." />
+          <NodeList title="Actors" nodes={world.actors} empty="No actor currently warrants a durable active node." />
+        </div>
       </section>
 
-      <div className="world-knowledge-grid">
-        <NodeList title="Active situations" nodes={world.situations} />
-        <NodeList title="Structural themes" nodes={world.themes} />
-        <NodeList title="Actors" nodes={world.actors} />
-      </div>
+      <section className="world-forward-grid" aria-label="Scenarios and economic transmission">
+        <div className="world-scenarios">
+          <div className="world-section-heading"><div><p className="markets-eyebrow">Scenario branches</p><h2>What could change next</h2></div><span>Assessments, not forecasts</span></div>
+          {world.scenarios.length === 0 ? <p className="world-empty-copy">No active scenario branches have been projected.</p> : world.scenarios.map((scenario) => (
+            <Link href={`/markets/world/${encodeURIComponent(scenario.id)}`} key={scenario.id} className="world-scenario-row">
+              <div><strong>{scenario.title}</strong><p>{scenario.summary}</p></div>
+              {scenario.indicators.length ? <ul>{scenario.indicators.slice(0, 3).map((indicator) => <li key={indicator.id}>{indicator.label}: {indicator.condition}</li>)}</ul> : <small>No monitored indicators yet.</small>}
+            </Link>
+          ))}
+        </div>
 
-      <section className="world-scenarios">
-        <div className="world-section-heading"><p className="markets-eyebrow">Scenario branches and indicators</p><span>Assessments, not forecasts</span></div>
-        {world.scenarios.length === 0 ? <p className="world-empty-copy">No active scenario branches have been projected.</p> : world.scenarios.map((scenario) => (
-          <Link href={`/markets/world/${encodeURIComponent(scenario.id)}`} key={scenario.id} className="world-scenario-row">
-            <div><strong>{scenario.title}</strong><p>{scenario.summary}</p></div>
-            <ul>{scenario.indicators.slice(0, 3).map((indicator) => <li key={indicator.id}>{indicator.label}: {indicator.condition}</li>)}</ul>
-          </Link>
-        ))}
+        <div className="world-transmission">
+          <div className="world-section-heading"><div><p className="markets-eyebrow">Economic transmission</p><h2>Where value may accrue</h2></div><span>Falsifiable hypotheses</span></div>
+          {world.hypotheses.length === 0 ? <p className="world-empty-copy">No active cross-domain hypothesis has passed the critic.</p> : world.hypotheses.map((hypothesis) => (
+            <Link href={`/markets/world/${encodeURIComponent(hypothesis.id)}`} key={hypothesis.id} className="world-transmission-row">
+              <strong>{hypothesis.title}</strong><p>{hypothesis.summary}</p><small>{hypothesis.relationships.map((relationship) => relationship.description).slice(0, 3).join(' → ')}</small>
+            </Link>
+          ))}
+        </div>
       </section>
 
-      <section className="world-transmission">
-        <div className="world-section-heading"><p className="markets-eyebrow">Causal and economic transmission</p><span>Hypotheses remain falsifiable</span></div>
-        {world.hypotheses.length === 0 ? <p className="world-empty-copy">No active cross-domain hypothesis has passed the critic.</p> : world.hypotheses.map((hypothesis) => (
-          <Link href={`/markets/world/${encodeURIComponent(hypothesis.id)}`} key={hypothesis.id} className="world-transmission-row">
-            <span>{hypothesis.title}</span><p>{hypothesis.summary}</p><small>{hypothesis.relationships.map((relationship) => relationship.description).slice(0, 3).join(' → ')}</small>
-          </Link>
-        ))}
-      </section>
-
-      <section className="world-leads">
-        <div className="world-section-heading"><p className="markets-eyebrow">Company investigations</p><span>Research leads, never buy recommendations</span></div>
-        {world.leads.length === 0 ? <p className="world-empty-copy">No company lead currently clears the explicit research gates.</p> : (
+      <section className="world-leads" id="company-investigations">
+        <div className="world-section-heading world-section-heading--major"><div><p className="markets-eyebrow">Company investigations</p><h2>Names that clear the research gates</h2></div><span>Research leads, never buy recommendations</span></div>
+        {world.leads.length === 0 ? (
+          <div className="world-empty-state">
+            <div><strong>No company lead currently clears every gate.</strong><p>The Thinker has not yet found a verified security with sufficient materiality, transmission confidence, and a specific capture mechanism.</p></div>
+            <Link href="/markets/candidates">Open Candidate Scout →</Link>
+          </div>
+        ) : (
           <div className="world-lead-list">
             {world.leads.map((lead) => {
               const id = leadValue(lead, 'id')
