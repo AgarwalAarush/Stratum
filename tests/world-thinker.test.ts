@@ -10,7 +10,8 @@ import { buildCodexExecArgs } from '../lib/server/codex-exec.ts'
 import { clusterWorldEventSources, nextWorldEventProcessingState, reconcileExtractedClusters, transitionWorldClaimState, worldEventExtractionPrompt } from '../lib/server/world-events.ts'
 import { commitWorldUpdate, initializeWorldRepository, parseWorldNode, renderWorldNode, validateWorldProposalAgainstState } from '../lib/server/world-repository.ts'
 import { selectResearchableWorldLeads } from '../lib/server/world-thinker.ts'
-import { type WorldNode, type WorldOpportunityLead, type WorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
+import { type WorldNode, type WorldOpportunityLead, type WorldUpdateProposal, validateWorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
+import { latestDistinctWorldJournals } from '../lib/server/world-projection.ts'
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
 
 const now = '2026-08-17T18:00:00.000Z'
@@ -160,6 +161,19 @@ test('proposal graph validation fails before publication for unstated relationsh
   const current = node({ id: 'current', kind: 'current', title: 'Current world assessment', aliases: [], claims: [], sourceIds: [], relationships: [], body: 'A provisional assessment.', summary: 'A provisional assessment.' })
   const invalid = proposal([current, node({ relationships: [{ type: 'depends_on', targetId: 'missing-situation', description: 'This node was never declared.' }] })])
   assert.throws(() => validateWorldProposalAgainstState(invalid, []), /Unknown relationship target missing-situation/)
+})
+
+test('host-owned journals cannot be duplicated by model upserts', () => {
+  const current = node({ id: 'current', kind: 'current', title: 'Current world assessment', aliases: [], claims: [], sourceIds: [], relationships: [], body: 'A provisional assessment.', summary: 'A provisional assessment.' })
+  const journal = node({ id: 'journal-model-copy', kind: 'journal', title: 'Daily classification', aliases: [], claims: [], indicators: [], relationships: [], body: 'A duplicate journal.', summary: 'A duplicate journal.' })
+  assert.throws(() => validateWorldUpdateProposal(proposal([current, journal])), /journals are rendered by the host/)
+})
+
+test('projected journal feed collapses legacy duplicates deterministically', () => {
+  const latest = node({ id: 'journal-host', kind: 'journal', title: 'Daily classification', asOf: now, importance: 100 })
+  const duplicate = node({ id: 'journal-model-copy', kind: 'journal', title: 'Daily classification', asOf: now, importance: 40 })
+  const older = node({ id: 'journal-older', kind: 'journal', title: 'Prior classification', asOf: '2026-08-16T18:00:00.000Z', importance: 100 })
+  assert.deepEqual(latestDistinctWorldJournals([duplicate, older, latest], 2).map((item) => item.id), ['journal-host', 'journal-older'])
 })
 
 test('world market CLI resolves only host-projected active tradable assets', async () => {

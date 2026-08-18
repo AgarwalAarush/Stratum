@@ -6,7 +6,7 @@ import { validateWorldCritique, validateWorldUpdateProposal } from '../markets/w
 import { runCodexJson } from './codex-exec.ts'
 import { selectMarketModel } from './market-model-policy.ts'
 import { commitWorldUpdate, currentWorldCommit, validateWorldProposalAgainstState, worldRepositoryBranch, worldRepositoryRoot } from './world-repository.ts'
-import { projectWorldRepository, readWorldCommit } from './world-projection.ts'
+import { latestDistinctWorldJournals, projectWorldRepository, readWorldCommit } from './world-projection.ts'
 import { readWorldCorpusExtract } from './world-corpus.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { fetchPortfolioResearchCoverage } from './portfolio-research-seeding.ts'
@@ -170,7 +170,7 @@ export async function retrieveWorldThinkerContext(options: Pick<WorldThinkerOpti
   const [baseCommit, pending, portfolio, assetRegistry] = await Promise.all([currentWorldCommit(root, branch), loadPendingEvents(options.eventClusterIds), loadSanitizedPortfolioDependencies(), loadActiveAssetRegistry()])
   const snapshot = baseCommit ? await readWorldCommit(root, baseCommit) : { nodes: [], sources: [], leads: [] }
   const current = snapshot.nodes.find((entry) => entry.node.kind === 'current')?.node ?? null
-  const journals = snapshot.nodes.map((entry) => entry.node).filter((node) => node.kind === 'journal').sort((a, b) => Date.parse(b.asOf) - Date.parse(a.asOf)).slice(0, 2)
+  const journals = latestDistinctWorldJournals(snapshot.nodes.map((entry) => entry.node), 2)
   const relevantNodes = selectRelevantNodes(snapshot.nodes.map((entry) => entry.node), pending.events)
   const evidenceExcerpts = await loadEvidenceExcerpts(pending.sources)
   const runtimeDirectory = join(worldDataRoot(root), 'runtime')
@@ -205,7 +205,7 @@ function thinkerPrompt(context: ThinkerContext, trigger: WorldUpdateProposal['tr
 
 Orient against prior state. Classify every new event as confirmation, contradiction, novelty, noise, or uncertainty. Maintain actors, situations, structural themes, markets, scenario branches, monitoring indicators, and falsifiable hypotheses without requiring a predeclared domain template. Preserve contested claims. Every factual claim must cite exact source IDs from the ledger; assessments must be labeled. Do not invent prices, values, sources, issuers, or symbols. Every relationship target and archive target must be either a prior-state node ID or a node included in this proposal's upserts; omit a relationship instead of referencing an unstated node.
 
-For each opportunity, trace event -> mechanism -> economic variable -> constrained layer -> rent recipient -> expectations question before naming a company. Include capture conditions, contradictions, gaps, catalysts, and falsifiers. Every hypothesis upsert must populate non-empty mechanism, economicVariable, constrainedLayer, rentRecipient, expectationsQuestion, catalysts, and falsifiers; omit an immature hypothesis instead of returning null or empty specialized fields. Every scenario requires at least one signpost. Before emitting any company lead, resolve its exact active/tradable symbol and issuer with the read-only command ${worldCli} market <symbol-or-issuer>; omit the lead if that command returns no verified asset. A lead is only a research queue candidate. Never accept a company thesis, recommend a purchase, allocate capital, or propose a trade. Return one bounded WorldUpdateProposal matching the schema. The upserts array must contain exactly one node with kind "current" and id "current", even on the first run; summarize the current assessment concisely there. Do not delete nodes; archive or supersede them. Use stable IDs.
+For each opportunity, trace event -> mechanism -> economic variable -> constrained layer -> rent recipient -> expectations question before naming a company. Include capture conditions, contradictions, gaps, catalysts, and falsifiers. Every hypothesis upsert must populate non-empty mechanism, economicVariable, constrainedLayer, rentRecipient, expectationsQuestion, catalysts, and falsifiers; omit an immature hypothesis instead of returning null or empty specialized fields. Every scenario requires at least one signpost. Before emitting any company lead, resolve its exact active/tradable symbol and issuer with the read-only command ${worldCli} market <symbol-or-issuer>; omit the lead if that command returns no verified asset. A lead is only a research queue candidate. Never accept a company thesis, recommend a purchase, allocate capital, or propose a trade. Return one bounded WorldUpdateProposal matching the schema. The upserts array must contain exactly one node with kind "current" and id "current", even on the first run; summarize the current assessment concisely there. Never include a node with kind "journal" in upserts; the host deterministically renders the journal from the proposal.journal fields. Do not delete nodes; archive or supersede them. Use stable IDs.
 
 UNTRUSTED_CONTEXT
 ${json}

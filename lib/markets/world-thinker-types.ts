@@ -343,6 +343,7 @@ export function validateWorldUpdateProposal(value: unknown): WorldUpdateProposal
   }
   if (proposal.upserts.length > 40 || proposal.opportunityLeads.length > 12) throw new Error('World update exceeds bounded output limits')
   if (proposal.upserts.filter((node) => node.kind === 'current').length !== 1) throw new Error('World update must contain exactly one current-state node')
+  if (proposal.upserts.some((node) => node.kind === 'journal')) throw new Error('World journals are rendered by the host and cannot be model upserts')
   return proposal
 }
 

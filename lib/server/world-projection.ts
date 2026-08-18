@@ -121,6 +121,20 @@ export interface WorldWorkspace {
   }
 }
 
+export function latestDistinctWorldJournals(nodes: WorldNode[], limit = 2): WorldNode[] {
+  const seen = new Set<string>()
+  return nodes
+    .filter((node) => node.kind === 'journal')
+    .sort((a, b) => Date.parse(b.asOf) - Date.parse(a.asOf) || b.importance - a.importance)
+    .filter((node) => {
+      const key = `${node.asOf}|${node.title.trim().toLowerCase()}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, Math.max(1, limit))
+}
+
 function freshness(asOf: string | null): WorldWorkspace['freshness'] {
   if (!asOf) return 'unavailable'
   const hours = (Date.now() - Date.parse(asOf)) / 3_600_000
@@ -146,7 +160,7 @@ export async function fetchWorldWorkspace(): Promise<WorldWorkspace> {
   }
   const nodes = rows.map((row) => row.structured_content)
   const current = nodes.find((node) => node.kind === 'current') ?? null
-  const journals = nodes.filter((node) => node.kind === 'journal').sort((a, b) => Date.parse(b.asOf) - Date.parse(a.asOf)).slice(0, 2)
+  const journals = latestDistinctWorldJournals(nodes, 2)
   const events = (eventResult.data ?? []) as Array<{ processing_state: string; source_diversity: number }>
   const run = runResult.data as { status: string; result_commit: string | null; started_at: string; error: string | null } | null
   return {
