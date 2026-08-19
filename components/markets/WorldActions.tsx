@@ -60,7 +60,7 @@ export function WorldLeadActions({ leadId, status }: { leadId: string; status: s
   )
 }
 
-export function WorldSystemAction({ action, label, payload = {} }: { action: 'resume-replay' | 'refresh-frontier' | 'retry-replay-batch' | 'retry-quarantined-event'; label: string; payload?: Record<string, unknown> }) {
+export function WorldSystemAction({ action, label, payload = {} }: { action: 'resume-replay' | 'refresh-frontier' | 'retry-replay-batch' | 'retry-quarantined-event' | 'start-policy-experiment' | 'rollback-policy'; label: string; payload?: Record<string, unknown> }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -70,6 +70,33 @@ export function WorldSystemAction({ action, label, payload = {} }: { action: 're
         try { setError(null); await performWorldAction({ action, ...payload }); router.refresh() }
         catch (cause) { setError(cause instanceof Error ? cause.message : 'Action failed') }
       })} disabled={pending}>{pending ? 'Queueing…' : label}</button>
+      {error ? <small role="alert">{error}</small> : null}
+    </span>
+  )
+}
+
+export function WorldReviewControl({ category, subjectType, subjectId, currentLabel }: { category: string; subjectType: string; subjectId: string; currentLabel: string | null }) {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const options = category === 'suspected_miss'
+    ? [['important', 'Important'], ['not_important', 'Not important'], ['needs_followup', 'Follow up']]
+    : category === 'false_positive'
+      ? [['incorrect', 'False positive'], ['correct', 'Correct route'], ['needs_followup', 'Follow up']]
+      : [['useful', 'Useful'], ['not_useful', 'Not useful'], ['needs_followup', 'Follow up']]
+  return (
+    <span className="world-review-control">
+      <select aria-label="Review label" defaultValue={currentLabel ?? ''} disabled={pending || subjectId.startsWith('placeholder:')} onChange={(event) => {
+        const label = event.target.value
+        if (!label) return
+        startTransition(async () => {
+          try { setError(null); await performWorldAction({ action: 'label-review', category, subjectType, subjectId, label }); router.refresh() }
+          catch (cause) { setError(cause instanceof Error ? cause.message : 'Label failed') }
+        })
+      }}>
+        <option value="">Review…</option>
+        {options.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+      </select>
       {error ? <small role="alert">{error}</small> : null}
     </span>
   )

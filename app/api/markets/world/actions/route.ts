@@ -3,6 +3,7 @@ import { getAllowedMarketUser } from '@/lib/auth/markets-session'
 import { enqueueAgentJob } from '@/lib/server/agent-jobs'
 import { getSupabaseClient } from '@/lib/server/supabase'
 import { fetchWorldReplayStatus, startWorldReplay } from '@/lib/server/world-replay'
+import { labelWorldReview, rollbackWorldPolicy, startWorldPolicyExperiment } from '@/lib/server/world-governance'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,6 +71,23 @@ export async function POST(request: NextRequest) {
       if (error) throw new Error(error.message)
       const job = await enqueueAgentJob('run-world-thinker', { trigger: 'urgent', eventClusterIds: [body.eventClusterId] }, `run-world-thinker:retry:${body.eventClusterId}:${new Date().toISOString()}`)
       return NextResponse.json({ queued: true, ...job })
+    }
+    if (body.action === 'label-review') {
+      const categories = ['suspected_miss', 'false_positive', 'promoted_change', 'compound_link', 'coverage_problem']
+      const subjectTypes = ['event', 'signal', 'node', 'link', 'source', 'policy']
+      const labels = ['important', 'not_important', 'correct', 'incorrect', 'useful', 'not_useful', 'needs_followup']
+      if (typeof body.category !== 'string' || !categories.includes(body.category) || typeof body.subjectType !== 'string' || !subjectTypes.includes(body.subjectType) || typeof body.subjectId !== 'string' || typeof body.label !== 'string' || !labels.includes(body.label)) return NextResponse.json({ error: 'A valid World review label is required' }, { status: 400 })
+      await labelWorldReview({ ownerId: user.id, category: body.category as Parameters<typeof labelWorldReview>[0]['category'], subjectType: body.subjectType as Parameters<typeof labelWorldReview>[0]['subjectType'], subjectId: body.subjectId, label: body.label, notes: typeof body.notes === 'string' ? body.notes : undefined })
+      return NextResponse.json({ labeled: true })
+    }
+    if (body.action === 'start-policy-experiment') {
+      const changes = body.changes && typeof body.changes === 'object' ? body.changes as Parameters<typeof startWorldPolicyExperiment>[0] : {}
+      return NextResponse.json({ started: true, ...await startWorldPolicyExperiment(changes, user.id) })
+    }
+    if (body.action === 'rollback-policy') {
+      if (typeof body.version !== 'string') return NextResponse.json({ error: 'A policy version is required' }, { status: 400 })
+      await rollbackWorldPolicy(body.version)
+      return NextResponse.json({ rolledBack: true })
     }
     return NextResponse.json({ error: 'Unsupported World Thinker action' }, { status: 400 })
   } catch (error) {

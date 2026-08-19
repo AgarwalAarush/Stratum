@@ -50,7 +50,7 @@ export default async function MarketsWorldPage() {
   const changes = world.latestChanges[0]
   const needsAttention = world.health.lastRunStatus === 'failed' || Boolean(world.health.failure) || world.health.quarantinedEvents > 0 || world.replay.run?.status === 'failed'
   const operatingState = needsAttention ? 'Needs attention' : world.freshness === 'current' ? 'Healthy' : world.freshness
-  const activeModelCount = world.situations.length + world.themes.length + world.actors.length + world.scenarios.length + world.hypotheses.length
+  const activeModelCount = world.situations.length + world.themes.length + world.actors.length + world.scenarios.length + world.hypotheses.length + world.indicators.length
   const healthyCoverage = world.coverage.filter((frontier) => frontier.status === 'healthy').length
   const replay = world.replay.run
   const replayPercent = replay && replay.weeksTotal > 0 ? Math.round((replay.weeksCompleted / replay.weeksTotal) * 100) : null
@@ -172,6 +172,11 @@ export default async function MarketsWorldPage() {
           ))}
         </div>
       </section>
+
+      {world.indicators.length ? <section className="world-model-section" aria-label="Monitoring indicators">
+        <div className="world-section-heading world-section-heading--major"><div><p className="markets-eyebrow">Durable indicators</p><h2>Conditions that can activate compound signals</h2></div><span>{world.indicators.length} tracked</span></div>
+        <div className="world-node-list">{world.indicators.slice(0, 12).map((indicator) => <Link href={`/markets/world/${encodeURIComponent(indicator.id)}`} key={indicator.id} className="world-node-row"><div><strong>{indicator.title}</strong><p>{indicator.summary}</p></div><div className="world-node-metrics"><span>{indicator.status}</span><span>Review {formatTime(indicator.nextReviewAt)}</span></div></Link>)}</div>
+      </section> : null}
 
       <section className="world-leads" id="company-investigations">
         <div className="world-section-heading world-section-heading--major"><div><p className="markets-eyebrow">Company investigations</p><h2>Names that clear the research gates</h2></div><span>Research leads, never buy recommendations</span></div>
