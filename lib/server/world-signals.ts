@@ -32,13 +32,17 @@ function signalFingerprint(cluster: WorldEventClusterCandidate): string {
   return createHash('sha256').update(signature).digest('hex')
 }
 
-function activationConditions(cluster: WorldEventClusterCandidate): string[] {
-  const text = `${cluster.title} ${cluster.summary} ${cluster.channels.join(' ')}`
+export function worldSignalActivationConditions(cluster: WorldEventClusterCandidate): string[] {
+  const evidenceText = `${cluster.title} ${cluster.summary}`
+  const classifiedText = `${evidenceText} ${cluster.channels.join(' ')}`
   const conditions: string[] = []
-  if (/el ni[nñ]o|la ni[nñ]a|enso|climate|weather|drought|flood/i.test(text)) conditions.push('crop failure or food-price disruption', 'hydropower or reservoir stress', 'insurance losses or commodity disruption')
-  if (/authoritarian|institution|election|emergency powers/i.test(text)) conditions.push('institutional rules change', 'capital controls, sanctions, or expropriation risk', 'country-specific policy transmission')
-  if (/taiwan|semiconductor|chip|export control/i.test(text)) conditions.push('shipping or fabrication disruption', 'binding export-control enforcement', 'inventory, lead-time, or substitution response')
-  if (/bank|sovereign|credit|liquidity|default/i.test(text)) conditions.push('funding spread or deposit stress', 'official intervention', 'cross-border credit transmission')
+  // Require explicit ENSO language from the sourced title/summary. A loose
+  // /enso/ match also catches words such as "censorship", "sensors", and
+  // "Stephenson", contaminating unrelated signals with climate conditions.
+  if (/\benso\b|\bel ni[nñ]o\b|\bla ni[nñ]a\b/i.test(evidenceText)) conditions.push('crop failure or food-price disruption', 'hydropower or reservoir stress', 'insurance losses or commodity disruption')
+  if (/\bauthoritarian\w*\b|\binstitution\w*\b|\belection\w*\b|\bemergency powers?\b/i.test(classifiedText)) conditions.push('institutional rules change', 'capital controls, sanctions, or expropriation risk', 'country-specific policy transmission')
+  if (/\btaiwan\w*\b|\bsemiconductor\w*\b|\bchips?\b|\bexport controls?\b/i.test(classifiedText)) conditions.push('shipping or fabrication disruption', 'binding export-control enforcement', 'inventory, lead-time, or substitution response')
+  if (/\bbanks?\b|\bbanking\b|\bsovereign\w*\b|\bcredit\b|\bliquidity\b|\bdefault\w*\b/i.test(classifiedText)) conditions.push('funding spread or deposit stress', 'official intervention', 'cross-border credit transmission')
   if (conditions.length === 0) conditions.push('new corroborating evidence establishes a durable economic channel')
   return conditions
 }
@@ -71,8 +75,14 @@ function overlap(left: string[], right: string[]): string[] {
 }
 
 export function worldSignalActivationSatisfied(conditions: string[], evidence: string): boolean {
-  const compoundTerms = /crop|food|hydropower|reservoir|insurance|commodity|shipping|fabrication|export|inventory|lead time|funding|deposit|intervention|credit|capital control|sanction|expropriation/i
-  return compoundTerms.test(conditions.join(' ')) && compoundTerms.test(evidence)
+  const conditionText = conditions.join(' ')
+  const families = [
+    { condition: /crop failure|hydropower|reservoir stress|insurance losses|commodity disruption/i, evidence: /\bcrops?\b|\bfood(?: prices?| inflation| shortage| disruption)?\b|\bhydropower\b|\breservoir\w*\b|\binsurance(?: losses?| claims?)?\b|\bcommodit(?:y|ies)(?: prices?| disruption)?\b/i },
+    { condition: /institutional rules|capital controls|expropriation|country-specific policy/i, evidence: /\binstitutional rules?\b|\bemergency powers?\b|\bcapital controls?\b|\bsanctions?\b|\bexpropriat\w*\b|\bpolicy transmission\b/i },
+    { condition: /shipping or fabrication|export-control enforcement|inventory, lead-time/i, evidence: /\bshipping\b|\bfabrication\b|\bfoundr(?:y|ies)\b|\bexport controls?\b|\binventor(?:y|ies)\b|\blead[ -]times?\b|\bsubstitut\w*\b/i },
+    { condition: /funding spread|deposit stress|official intervention|cross-border credit/i, evidence: /\bfunding spreads?\b|\bdeposit(?: flight| stress| outflows?)\b|\bofficial intervention\b|\bcross-border credit\b|\bliquidity support\b/i },
+  ]
+  return families.some((family) => family.condition.test(conditionText) && family.evidence.test(evidence))
 }
 
 function activationSatisfied(prior: SignalRow, cluster: WorldEventClusterCandidate): boolean {
@@ -110,14 +120,14 @@ export async function persistWorldSignalForEvent(clusterId: string, cluster: Wor
     geographies: union(priorRow ? asStrings(priorRow.geographies) : [], cluster.geographies),
     domains: union(priorRow ? asStrings(priorRow.domains) : [], cluster.channels),
     economic_channels: union(priorRow ? asStrings(priorRow.economic_channels) : [], cluster.channels),
-    activation_conditions: union(priorRow ? asStrings(priorRow.activation_conditions) : [], activationConditions(cluster)),
+    activation_conditions: union(priorRow ? asStrings(priorRow.activation_conditions) : [], worldSignalActivationConditions(cluster)),
     related_signal_ids: relatedSignalIds,
     related_node_ids: priorRow ? asStrings(priorRow.related_node_ids) : [],
     first_observed_at: firstObservedAt,
     last_observed_at: cluster.lastSeenAt,
     last_matched_at: related.length ? new Date().toISOString() : null,
     next_review_at: new Date(Date.parse(cluster.lastSeenAt) + (decision.route === 'awareness' ? 90 : 30) * 24 * 60 * 60_000).toISOString(),
-    search_text: union([cluster.title, cluster.summary], cluster.actors, cluster.geographies, cluster.channels, activationConditions(cluster)).join(' '),
+    search_text: union([cluster.title, cluster.summary], cluster.actors, cluster.geographies, cluster.channels, worldSignalActivationConditions(cluster)).join(' '),
     updated_at: new Date().toISOString(),
   }
   const { error: signalError } = await supabase.from('world_signals').upsert(row, { onConflict: 'fingerprint' })

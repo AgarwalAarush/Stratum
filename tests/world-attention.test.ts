@@ -14,7 +14,7 @@ import {
 import { WORLD_BENCHMARK_CASES } from '../lib/markets/world-benchmark.ts'
 import { boundWorldSpecialistLenses } from '../lib/server/world-specialists.ts'
 import { clusterWorldEventSources, mapWorldEventBatchesWithConcurrency } from '../lib/server/world-events.ts'
-import { shouldPersistWorldSignal, worldSignalActivationSatisfied } from '../lib/server/world-signals.ts'
+import { shouldPersistWorldSignal, worldSignalActivationConditions, worldSignalActivationSatisfied } from '../lib/server/world-signals.ts'
 
 function source(overrides: Partial<AttentionSource> = {}): AttentionSource {
   return { id: 's1', title: 'Routine quarterly earnings beat estimates', url: 'https://financialmodelingprep.com/news/1', publisher: 'FMP stock news', publishedAt: '2026-08-18T10:00:00.000Z', fetchedAt: '2026-08-18T10:05:00.000Z', ...overrides }
@@ -110,6 +110,20 @@ test('dormant ENSO activation conditions reactivate on compound crop, power, or 
   const conditions = ['crop failure or food-price disruption', 'hydropower or reservoir stress', 'insurance losses or commodity disruption']
   assert.equal(worldSignalActivationSatisfied(conditions, 'New drought evidence shows crop losses and reservoir stress'), true)
   assert.equal(worldSignalActivationSatisfied(conditions, 'A routine quarterly earnings release'), false)
+  assert.equal(worldSignalActivationSatisfied(conditions, 'Semiconductor inventory and export controls tightened'), false)
+})
+
+test('ENSO matching uses word boundaries and cannot be triggered by unrelated words', () => {
+  for (const title of ['A tool that removes censorship from open-weight LLMs', 'Quantum magnetic sensors improve GPS resilience', 'Stephenson Harwood legal update']) {
+    const item = candidate({ title, summary: title, channels: [], geographies: [] })
+    assert.deepEqual(worldSignalActivationConditions(item as ReturnType<typeof clusterWorldEventSources>[number]), ['new corroborating evidence establishes a durable economic channel'])
+  }
+  const enso = candidate({ title: 'ENSO outlook shifts toward El Niño', summary: 'The Pacific cycle may alter weather', channels: ['climate'] })
+  assert.deepEqual(worldSignalActivationConditions(enso as ReturnType<typeof clusterWorldEventSources>[number]), [
+    'crop failure or food-price disruption',
+    'hydropower or reservoir stress',
+    'insurance losses or commodity disruption',
+  ])
 })
 
 test('compact weak-signal memory excludes low-information awareness without deleting its event', () => {
