@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   DEFAULT_WORLD_ATTENTION_POLICY,
@@ -124,6 +125,13 @@ test('ENSO matching uses word boundaries and cannot be triggered by unrelated wo
     'hydropower or reservoir stress',
     'insurance losses or commodity disruption',
   ])
+})
+
+test('signal hygiene migration demotes without deleting immutable weak-signal history', () => {
+  const migration = readFileSync(new URL('../supabase/migrations/202608190002_world_signal_hygiene.sql', import.meta.url), 'utf8')
+  assert.match(migration, /set status = 'dormant'/)
+  assert.match(migration, /new corroborating evidence establishes a durable economic channel/)
+  assert.doesNotMatch(migration, /delete\s+from\s+public\.world_signals/i)
 })
 
 test('compact weak-signal memory excludes low-information awareness without deleting its event', () => {
