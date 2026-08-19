@@ -437,10 +437,10 @@ export function validateWorldUpdateDraft(value: unknown): WorldUpdateDraft {
   const administrativeTimestamp = new Date().toISOString()
   const draftUpserts = Array.isArray(input.upserts) ? input.upserts.map((node) => {
     const canonicalNode = validateWorldNode({ ...record(node, 'node draft'), asOf: administrativeTimestamp, nextReviewAt: administrativeTimestamp })
-    const draftNode = { ...canonicalNode } as WorldNode & { asOf?: string; nextReviewAt?: string }
-    delete draftNode.asOf
-    delete draftNode.nextReviewAt
-    return draftNode as WorldNodeDraft
+    const { asOf, nextReviewAt, ...draftNode } = canonicalNode
+    void asOf
+    void nextReviewAt
+    return draftNode
   }) : []
   const canonical = validateWorldUpdateProposal({ ...input, upserts: draftUpserts.map((node) => ({ ...node, asOf: administrativeTimestamp, nextReviewAt: administrativeTimestamp })), asOf: administrativeTimestamp, trigger: 'scheduled', baseCommit: null, eventClassifications: classifications.map((item) => ({ eventClusterId: item.eventKey, classification: item.classification, rationale: item.rationale })) })
   return {

@@ -24,6 +24,8 @@ alter table public.world_event_cluster_sources
   add column if not exists source_lane text,
   add column if not exists source_family text;
 
+alter table public.world_replay_batches add column if not exists used_historical_gap_search boolean not null default false;
+
 alter table public.world_event_cluster_sources drop constraint if exists world_event_cluster_sources_lane_check;
 alter table public.world_event_cluster_sources add constraint world_event_cluster_sources_lane_check
   check (source_lane is null or source_lane in ('official_primary','global_reporting','specialist','research_data','company_disclosure','market_commentary','pr_syndication','community_discovery'));
@@ -136,6 +138,26 @@ create table if not exists public.world_policy_experiments (
   updated_at timestamptz not null default now(),
   check (ends_at >= started_at + interval '7 days')
 );
+
+create or replace function public.promote_world_attention_policy(p_version text)
+returns public.world_attention_policy_versions
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare promoted public.world_attention_policy_versions;
+begin
+  perform pg_advisory_xact_lock(hashtextextended('world-attention-policy', 0));
+  if not exists (select 1 from public.world_attention_policy_versions where version = p_version) then
+    raise exception 'World attention policy does not exist';
+  end if;
+  update public.world_attention_policy_versions set status = 'rolled_back', updated_at = now() where status = 'active';
+  update public.world_attention_policy_versions set status = 'active', activated_at = now(), updated_at = now() where version = p_version returning * into promoted;
+  return promoted;
+end;
+$$;
+revoke all on function public.promote_world_attention_policy(text) from public, anon, authenticated;
+grant execute on function public.promote_world_attention_policy(text) to service_role;
 
 create table if not exists public.world_review_labels (
   id uuid primary key default gen_random_uuid(),

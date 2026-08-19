@@ -33,6 +33,7 @@ export interface WorldReplayBatch {
   thinkerRunIds: string[]
   resultCommits: string[]
   usedDeterministicFallback: boolean
+  usedHistoricalGapSearch: boolean
   error: string | null
 }
 
@@ -66,6 +67,7 @@ interface ReplayBatchRow {
   thinker_run_ids: string[]
   result_commits: string[]
   used_deterministic_fallback: boolean
+  used_historical_gap_search?: boolean
   error: string | null
 }
 
@@ -79,6 +81,7 @@ function normalizeReplayBatch(batch: ReplayBatchRow): WorldReplayBatch {
     batchIndex: Number(batch.batch_index), status: String(batch.status), attemptCount: Number(batch.attempt_count), sourceCount: Number(batch.source_count),
     clusterCount: Number(batch.cluster_count), eventCursor: Number(batch.event_cursor ?? 0), eventClusterIds: batch.event_cluster_ids ?? [],
     thinkerRunIds: batch.thinker_run_ids ?? [], resultCommits: batch.result_commits ?? [], usedDeterministicFallback: batch.used_deterministic_fallback === true,
+    usedHistoricalGapSearch: batch.used_historical_gap_search === true,
     error: typeof batch.error === 'string' ? batch.error : null,
   }
 }
@@ -135,6 +138,7 @@ export async function processWorldReplayStep(replayRunId: string, options: { mod
       const { data: updated, error } = await supabase.from('world_replay_batches').update({
         status: 'thinking', source_count: window.sourceCount, cluster_count: window.clusterCount, event_cluster_ids: window.eventClusterIds,
         used_deterministic_fallback: window.usedDeterministicFallback, error: null, updated_at: new Date().toISOString(),
+        used_historical_gap_search: window.usedHistoricalGapSearch,
       }).eq('id', batch.id).select('*').single()
       if (error || !updated) throw new Error(`Unable to checkpoint clustered replay batch: ${error?.message ?? 'unknown error'}`)
       batch = updated as ReplayBatchRow
@@ -164,7 +168,7 @@ export async function processWorldReplayStep(replayRunId: string, options: { mod
     await supabase.from('world_replay_runs').update({
       status: complete ? 'completed' : 'running', cursor_at: weekEnd.toISOString(), weeks_completed: replay.weeksCompleted + 1,
       sources_scanned: replay.sourcesScanned + batch.source_count, clusters_retained: replay.clustersRetained + batch.cluster_count,
-      search_gap_weeks: replay.searchGapWeeks + (batch.source_count === 0 ? 1 : 0), finished_at: complete ? now : null, error: null, updated_at: now,
+      search_gap_weeks: replay.searchGapWeeks + (batch.used_historical_gap_search ? 1 : 0), finished_at: complete ? now : null, error: null, updated_at: now,
     }).eq('id', replay.id)
     return { replay: await loadReplayRun(replay.id), complete, batchId: String(batch.id), nextStep: complete ? 'complete' : `cluster:${weekEnd.toISOString()}` }
   } catch (error) {

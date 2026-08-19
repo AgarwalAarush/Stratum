@@ -112,6 +112,7 @@ export interface WorldWorkspace {
   themes: WorldNode[]
   scenarios: WorldNode[]
   hypotheses: WorldNode[]
+  indicators: WorldNode[]
   leads: Array<Record<string, unknown>>
   coverage: WorldCoverageFrontier[]
   replay: { run: WorldReplayRun | null; batches: WorldReplayBatch[] }
@@ -152,7 +153,7 @@ function freshness(asOf: string | null): WorldWorkspace['freshness'] {
 
 export async function fetchWorldWorkspace(): Promise<WorldWorkspace> {
   const supabase = getSupabaseClient()
-  if (!supabase) return { commit: null, branch: null, canonical: false, dataAsOf: null, freshness: 'unavailable', current: null, latestChanges: [], actors: [], situations: [], themes: [], scenarios: [], hypotheses: [], leads: [], coverage: [], replay: { run: null, batches: [] }, health: { lastRunAt: null, lastRunStatus: null, lastCommit: null, pendingEvents: 0, failedEvents: 0, quarantinedEvents: 0, oldestPendingAt: null, sourceCount: 0, failure: 'Supabase is not configured', lastSuccessfulRunAt: null, lastSuccessfulCommit: null } }
+  if (!supabase) return { commit: null, branch: null, canonical: false, dataAsOf: null, freshness: 'unavailable', current: null, latestChanges: [], actors: [], situations: [], themes: [], scenarios: [], hypotheses: [], indicators: [], leads: [], coverage: [], replay: { run: null, batches: [] }, health: { lastRunAt: null, lastRunStatus: null, lastCommit: null, pendingEvents: 0, failedEvents: 0, quarantinedEvents: 0, oldestPendingAt: null, sourceCount: 0, failure: 'Supabase is not configured', lastSuccessfulRunAt: null, lastSuccessfulCommit: null } }
   const replayPromise = import('./world-replay.ts').then(({ fetchWorldReplayStatus }) => fetchWorldReplayStatus())
   const [projectionResult, runResult, successfulRunResult, eventResult, leadResult, coverage, replay] = await Promise.all([
     supabase.from('world_repository_projections').select('*').order('is_canonical', { ascending: false }).order('projected_at', { ascending: false }).limit(1).maybeSingle(),
@@ -186,6 +187,7 @@ export async function fetchWorldWorkspace(): Promise<WorldWorkspace> {
     themes: nodes.filter((node) => node.kind === 'theme' && ['active', 'monitoring'].includes(node.status)),
     scenarios: nodes.filter((node) => node.kind === 'scenario' && ['active', 'monitoring'].includes(node.status)),
     hypotheses: nodes.filter((node) => node.kind === 'hypothesis' && ['active', 'monitoring'].includes(node.status)),
+    indicators: nodes.filter((node) => node.kind === 'indicator' && ['active', 'monitoring'].includes(node.status)),
     leads: (leadResult.data ?? []) as Array<Record<string, unknown>>,
     coverage,
     replay,

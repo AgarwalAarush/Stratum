@@ -170,7 +170,15 @@ test('host materializes exact event keys and rejects invented or omitted model I
     ], sources: canonical.sources, upserts: canonical.upserts, archives: canonical.archives, opportunityLeads: canonical.opportunityLeads, journal: canonical.journal,
   } satisfies WorldUpdateDraft
   const context = { baseCommit: 'abc123', eventKeyMap: [{ eventKey: 'E001', eventClusterId: 'event-uuid-1' }, { eventKey: 'E002', eventClusterId: 'event-uuid-2' }] }
-  assert.deepEqual(materializeWorldUpdateProposal(draft, context, 'urgent', now).eventClassifications.map((item) => item.eventClusterId), ['event-uuid-1', 'event-uuid-2'])
+  const materialized = materializeWorldUpdateProposal(draft, context, 'urgent', now)
+  assert.deepEqual(materialized.eventClassifications.map((item) => item.eventClusterId), ['event-uuid-1', 'event-uuid-2'])
+  assert.equal(materialized.upserts[0].asOf, now)
+  assert.equal(materialized.upserts[0].nextReviewAt, '2026-08-20T18:00:00.000Z')
+  const nodeSchema = ((schema.$defs as Record<string, { required: string[]; properties: Record<string, unknown> }>).node)
+  assert.equal(nodeSchema.required.includes('asOf'), false)
+  assert.equal(nodeSchema.required.includes('nextReviewAt'), false)
+  assert.equal('asOf' in nodeSchema.properties, false)
+  assert.equal('nextReviewAt' in nodeSchema.properties, false)
   assert.throws(() => materializeWorldUpdateProposal({ ...draft, eventClassifications: draft.eventClassifications.slice(0, 1) }, context, 'urgent', now), /omitted event classification E002/)
   assert.throws(() => materializeWorldUpdateProposal({ ...draft, eventClassifications: [{ ...draft.eventClassifications[0], eventKey: 'E999' }, draft.eventClassifications[1]] }, context, 'urgent', now), /unknown event key E999/)
 })

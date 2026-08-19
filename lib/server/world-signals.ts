@@ -55,11 +55,13 @@ function overlap(left: string[], right: string[]): string[] {
   return [...normalizedTerms(left)].filter((term) => rightTerms.has(term))
 }
 
-function activationSatisfied(prior: SignalRow, cluster: WorldEventClusterCandidate): boolean {
-  const conditions = asStrings(prior.activation_conditions).join(' ')
-  const newEvidence = `${cluster.title} ${cluster.summary} ${cluster.channels.join(' ')}`
+export function worldSignalActivationSatisfied(conditions: string[], evidence: string): boolean {
   const compoundTerms = /crop|food|hydropower|reservoir|insurance|commodity|shipping|fabrication|export|inventory|lead time|funding|deposit|intervention|credit|capital control|sanction|expropriation/i
-  return compoundTerms.test(conditions) && compoundTerms.test(newEvidence)
+  return compoundTerms.test(conditions.join(' ')) && compoundTerms.test(evidence)
+}
+
+function activationSatisfied(prior: SignalRow, cluster: WorldEventClusterCandidate): boolean {
+  return worldSignalActivationSatisfied(asStrings(prior.activation_conditions), `${cluster.title} ${cluster.summary} ${cluster.channels.join(' ')}`)
 }
 
 export async function persistWorldSignalForEvent(clusterId: string, cluster: WorldEventClusterCandidate, decision: WorldAttentionDecision): Promise<{ signalId: string | null; linkedSignalIds: string[]; reactivatedSignalIds: string[] }> {

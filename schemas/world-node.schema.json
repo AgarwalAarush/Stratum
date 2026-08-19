@@ -6,7 +6,7 @@
   "required": ["id", "kind", "title", "status", "asOf", "confidence", "importance", "aliases", "relationships", "sourceIds", "nextReviewAt", "summary", "claims", "indicators", "body"],
   "properties": {
     "id": { "type": "string", "minLength": 3, "maxLength": 160 },
-    "kind": { "enum": ["actor", "situation", "theme", "market", "scenario", "hypothesis", "journal", "current"] },
+    "kind": { "enum": ["actor", "situation", "theme", "market", "scenario", "hypothesis", "indicator", "journal", "current"] },
     "title": { "type": "string", "minLength": 3, "maxLength": 300 },
     "status": { "enum": ["active", "monitoring", "dormant", "superseded", "archived"] },
     "asOf": { "type": "string", "format": "date-time" },

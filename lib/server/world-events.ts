@@ -11,6 +11,8 @@ import { getSupabaseClient } from './supabase.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { fetchPortfolioResearchCoverage } from './portfolio-research-seeding.ts'
 import { persistWorldSignalForEvent } from './world-signals.ts'
+import { evaluateDueWorldPolicyExperiments, loadWorldAttentionPolicySet, recordShadowWorldAttentionDecisions } from './world-governance.ts'
+import { searchHistoricalWorldGap } from './world-historical-gap.ts'
 
 export interface WorldEventSourceInput {
   id: string
@@ -124,7 +126,7 @@ function clusterFingerprint(clusterSources: WorldEventSourceInput[]): string {
 }
 
 export function clusterWorldEventSources(sources: WorldEventSourceInput[], now = new Date()): WorldEventClusterCandidate[] {
-  const ordered = sources.slice().filter((source) => source.title.trim() && source.url.trim()).sort((a, b) => Date.parse(a.fetchedAt) - Date.parse(b.fetchedAt) || a.id.localeCompare(b.id))
+  const ordered = sources.slice().filter((source) => source.title.trim() && source.url.trim()).sort((a, b) => Date.parse(a.publishedAt ?? a.fetchedAt) - Date.parse(b.publishedAt ?? b.fetchedAt) || Date.parse(a.fetchedAt) - Date.parse(b.fetchedAt) || a.id.localeCompare(b.id))
   const groups: WorldEventSourceInput[][] = []
   for (const source of ordered) {
     const sourceTokens = tokens(source.title)
@@ -397,6 +399,7 @@ export async function persistWorldEventClusters(clusters: WorldEventClusterCandi
   const urgent: string[] = []
   const clusterIds: string[] = []
   const clusterIdByFingerprint: Record<string, string> = {}
+  const policies = await loadWorldAttentionPolicySet()
   for (const cluster of clusters) {
     const attention = cluster.attention ?? routeWorldAttention(cluster)
     const routedProcessingState: WorldEventCluster['processingState'] = attention.route === 'noise' ? 'noise' : ['awareness', 'monitor', 'company_only'].includes(attention.route) ? 'deferred' : cluster.processingState
@@ -444,6 +447,7 @@ export async function persistWorldEventClusters(clusters: WorldEventClusterCandi
     }, { onConflict: 'event_cluster_id,policy_version' })
     if (decisionError) throw new Error(`Unable to persist World attention decision: ${decisionError.message}`)
     await persistWorldSignalForEvent(String(data.id), cluster, attention)
+    await recordShadowWorldAttentionDecisions(String(data.id), cluster, policies.shadow)
     if (attention.route === 'urgent') urgent.push(String(data.id))
   }
   return { created, updated, urgent, clusterIds, clusterIdByFingerprint }
@@ -456,34 +460,41 @@ export async function refreshWorldEvents(options: { since?: Date; until?: Date; 
   const persistedSources = await fetchEventSources(since, until)
   const sources = [...new Map([...persistedSources, ...autonomous.sources].map((source) => [source.id, source])).values()]
   const candidates = await attachWorldEventDependencies(clusterWorldEventSources(sources, until))
-  const routed = selectWorldModelCandidates(candidates, undefined, until)
+  const { active: activePolicy } = await loadWorldAttentionPolicySet()
+  const routed = selectWorldModelCandidates(candidates, activePolicy, until)
   const selected = routed.filter((candidate) => candidate.attention.selectedForEnrichment)
   const enriched = await enrichClusters(selected, options)
   const enrichedByFingerprint = new Map(enriched.map((cluster) => [cluster.fingerprint, cluster]))
   const clusters = routed.map((candidate) => {
     const enrichedCandidate = enrichedByFingerprint.get(candidate.fingerprint) ?? candidate
-    return { ...enrichedCandidate, attention: { ...routeWorldAttention(enrichedCandidate), selectedForEnrichment: candidate.attention.selectedForEnrichment } }
+    return { ...enrichedCandidate, attention: { ...routeWorldAttention(enrichedCandidate, activePolicy), selectedForEnrichment: candidate.attention.selectedForEnrichment } }
   })
   const persisted = await persistWorldEventClusters(clusters)
+  await evaluateDueWorldPolicyExperiments(until)
   return { scanned: sources.length, clustered: clusters.length, ...persisted, topicsSucceeded: autonomous.topicsSucceeded, topicsFailed: autonomous.topicsFailed }
 }
 
-export async function processWorldEventWindow(options: { since: Date; until: Date; model?: boolean }): Promise<{ sourceCount: number; clusterCount: number; eventClusterIds: string[]; usedDeterministicFallback: boolean }> {
-  const sources = await fetchEventSources(options.since, options.until, 'published')
+export async function processWorldEventWindow(options: { since: Date; until: Date; model?: boolean }): Promise<{ sourceCount: number; clusterCount: number; eventClusterIds: string[]; usedDeterministicFallback: boolean; usedHistoricalGapSearch: boolean }> {
+  const corpusSources = await fetchEventSources(options.since, options.until, 'published')
+  const gapSources = corpusSources.length < 5 && options.model !== false
+    ? await searchHistoricalWorldGap({ since: options.since, until: options.until, cwd: process.env.STRATUM_DATA_ROOT?.trim() || process.cwd() })
+    : []
+  const sources = [...new Map([...corpusSources, ...gapSources].map((source) => [source.id, source])).values()]
   const deterministic = await attachWorldEventDependencies(clusterWorldEventSources(sources, options.until))
-  const routed = selectWorldModelCandidates(deterministic, undefined, options.until)
+  const { active: activePolicy } = await loadWorldAttentionPolicySet()
+  const routed = selectWorldModelCandidates(deterministic, activePolicy, options.until)
   const enriched = await enrichClusters(routed.filter((candidate) => candidate.attention.selectedForEnrichment), { model: options.model })
   const enrichedByFingerprint = new Map(enriched.map((cluster) => [cluster.fingerprint, cluster]))
   const candidates = routed.map((candidate) => {
     const enrichedCandidate = enrichedByFingerprint.get(candidate.fingerprint) ?? candidate
-    return { ...enrichedCandidate, attention: { ...routeWorldAttention(enrichedCandidate), selectedForEnrichment: candidate.attention.selectedForEnrichment } }
+    return { ...enrichedCandidate, attention: { ...routeWorldAttention(enrichedCandidate, activePolicy), selectedForEnrichment: candidate.attention.selectedForEnrichment } }
   })
   const retained = candidates.filter((cluster) => cluster.thesisDependency || cluster.portfolioDependency).concat(
     candidates.filter((cluster) => !cluster.thesisDependency && !cluster.portfolioDependency).sort((a, b) => b.materiality - a.materiality || b.sourceDiversity - a.sourceDiversity).slice(0, 25),
   ).filter((cluster, index, array) => array.findIndex((item) => item.fingerprint === cluster.fingerprint) === index)
   const persisted = await persistWorldEventClusters(candidates)
   const eventClusterIds = retained.map((cluster) => persisted.clusterIdByFingerprint[cluster.fingerprint]).filter((id): id is string => Boolean(id))
-  return { sourceCount: sources.length, clusterCount: retained.length, eventClusterIds, usedDeterministicFallback: retained.some((cluster) => cluster.enrichmentStatus === 'fallback') }
+  return { sourceCount: sources.length, clusterCount: retained.length, eventClusterIds, usedDeterministicFallback: retained.some((cluster) => cluster.enrichmentStatus === 'fallback'), usedHistoricalGapSearch: gapSources.length > 0 }
 }
 
 export async function backfillWorldEvents(options: { since: Date; until?: Date; model?: boolean; onWeek?: (summary: Record<string, unknown>) => Promise<void> }): Promise<{ weeks: number; clusters: number }> {

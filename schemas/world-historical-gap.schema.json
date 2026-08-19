@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorldHistoricalGapSearch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sources"],
+  "properties": {
+    "sources": {
+      "type": "array",
+      "maxItems": 25,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url", "title", "publisher", "publishedAt", "relevance"],
+        "properties": {
+          "url": { "type": "string" }, "title": { "type": "string" }, "publisher": { "type": "string" },
+          "publishedAt": { "type": "string", "format": "date-time" }, "relevance": { "type": "string" }
+        }
+      }
+    }
+  }
+}

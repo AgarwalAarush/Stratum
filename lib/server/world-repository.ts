@@ -19,7 +19,7 @@ import { deriveWorldCoverageIndex } from '../markets/world-coverage.ts'
 const execFile = promisify(execFileCallback)
 const WORLD_DIRECTORY_BY_KIND: Record<WorldNodeKind, string> = {
   actor: 'world/actors', situation: 'world/situations', theme: 'world/themes', market: 'world/markets',
-  scenario: 'world/scenarios', hypothesis: 'world/theses', journal: 'world/journal', current: 'world',
+  scenario: 'world/scenarios', hypothesis: 'world/theses', indicator: 'world/indicators', journal: 'world/journal', current: 'world',
 }
 
 const GUIDANCE_FILES: Record<string, string> = {
@@ -39,7 +39,7 @@ Trace opportunity ideas in this order: event to mechanism to economic variable t
 `,
   'ONTOLOGY.md': `# Ontology
 
-Stable node kinds are actors, situations, themes, markets, scenarios, hypotheses, journals, and the current assessment. Relationships are directed and descriptive. Nodes are never deleted: revise in place, supersede, or archive them. Aliases aid retrieval but do not create a second canonical entity.
+Stable node kinds are actors, situations, themes, markets, scenarios, hypotheses, indicators, journals, and the current assessment. Indicators are durable observable conditions such as ENSO state, reservoir stress, credit spreads, capacity additions, or institutional rule changes. Relationships are directed and descriptive. Nodes are never deleted: revise in place, supersede, or archive them. Aliases aid retrieval but do not create a second canonical entity.
 `,
   'RETRIEVAL.md': `# Retrieval
 
@@ -83,6 +83,22 @@ Historical checks cover Iran conflict, China-Taiwan security versus company news
   'TOOLS.md': `# Tools
 
 The read-only world CLI exposes status, search, show, neighbors, changes, sources, market, and portfolio-context. The final command returns sanitized dependencies only and its output must never be persisted in this repository. Live web search is bounded to approved Thinker and research runs.
+`,
+  'ATTENTION_POLICY.md': `# Attention Policy
+
+Stratum is recall-first at the evidence boundary and selective at the active-World boundary. Raw evidence, event history, attention decisions, weak signals, and lineage are never deleted by World processing. Low priority changes processing, not retention.
+
+Sources route through official/primary, global reporting, specialist, research/data, company disclosure, market commentary, PR/syndication, and community/discovery lanes. Syndicated copies retain every URL but count as one source family. Attention records evidence quality, novelty, magnitude, system reach, duration, propagation, transmission clarity, time sensitivity, active dependency, and uncertainty separately.
+
+Routes are urgent, investigate, monitor, awareness, company-only, and noise. Weak evidence with large possible consequences becomes an investigation. Numeric thresholds and lane quotas may change by at most ten percent after a seven-day shadow experiment; trust, ontology, permissions, evidence gates, call caps, research limits, and investment boundaries cannot auto-change.
+`,
+  'ECONOMIC_IMPORTANCE.md': `# Economic Importance
+
+Importance is causal, not popularity. Test event -> actor or physical change -> economic variable -> reach and duration -> constraint or excess capacity -> adaptive responses and substitutes -> possible rent recipient -> expectations question -> indicators and falsifiers. A company name may appear only after this chain and remains an independent research question.
+`,
+  'SPECIALISTS.md': `# Specialists
+
+Four bounded read-only lenses support the World Thinker: geopolitics and institutions; physical economy, climate, energy, resources, supply chains, health, and demographics; macro, sovereigns, credit, liquidity, and markets; and technology and industrial capacity. The host selects one primary and at most one cross-domain lens. Urgent runs use at most one. Specialists cannot write, queue research, change policy, call each other, recommend investments, accept theses, allocate capital, or trade.
 `,
 }
 
