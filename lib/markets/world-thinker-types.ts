@@ -146,6 +146,31 @@ export interface WorldSpecialistAssessment {
   sourceIds: string[]
 }
 
+export function validateWorldSpecialistAssessment(value: unknown): WorldSpecialistAssessment {
+  const input = record(value, 'specialist assessment')
+  const classifications = Array.isArray(input.classifications) ? input.classifications.map((entry, index) => {
+    const item = record(entry, `specialist classifications[${index}]`)
+    return {
+      eventClusterId: string(item.eventClusterId, 'specialist classification eventClusterId', 160),
+      classification: enumValue(item.classification, ['confirmation', 'contradiction', 'novelty', 'noise', 'uncertainty'] as const, 'specialist classification'),
+      rationale: string(item.rationale, 'specialist classification rationale', 2_000),
+    }
+  }) : []
+  const causalChannels = Array.isArray(input.causalChannels) ? input.causalChannels.map((entry, index) => {
+    const item = record(entry, `causalChannels[${index}]`)
+    return { cause: string(item.cause, 'causal cause', 1_000), effect: string(item.effect, 'causal effect', 1_000), mechanism: string(item.mechanism, 'causal mechanism', 2_000), sourceIds: strings(item.sourceIds, 'causal sourceIds', 30) }
+  }) : []
+  return {
+    lens: enumValue(input.lens, ['geopolitics_institutions', 'physical_economy', 'macro_finance', 'technology_industrial_capacity'] as const, 'specialist lens'),
+    eventClusterIds: strings(input.eventClusterIds, 'specialist eventClusterIds', 30), classifications, causalChannels,
+    affectedVariables: strings(input.affectedVariables, 'specialist affectedVariables', 30), reach: string(input.reach, 'specialist reach', 2_000), duration: string(input.duration, 'specialist duration', 2_000),
+    relatedSignalIds: strings(input.relatedSignalIds, 'specialist relatedSignalIds', 50), contradictions: strings(input.contradictions, 'specialist contradictions', 30),
+    evidenceGaps: strings(input.evidenceGaps, 'specialist evidenceGaps', 30), activationConditions: strings(input.activationConditions, 'specialist activationConditions', 30),
+    monitoringIndicators: strings(input.monitoringIndicators, 'specialist monitoringIndicators', 30), candidateHypotheses: strings(input.candidateHypotheses, 'specialist candidateHypotheses', 20),
+    sourceIds: strings(input.sourceIds, 'specialist sourceIds', 100),
+  }
+}
+
 export interface WorldOpportunityLead {
   id: string
   originatingNodeId: string

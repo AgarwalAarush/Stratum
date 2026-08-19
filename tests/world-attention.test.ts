@@ -12,6 +12,7 @@ import {
   type AttentionSource,
 } from '../lib/markets/world-attention.ts'
 import { WORLD_BENCHMARK_CASES } from '../lib/markets/world-benchmark.ts'
+import { boundWorldSpecialistLenses } from '../lib/server/world-specialists.ts'
 
 function source(overrides: Partial<AttentionSource> = {}): AttentionSource {
   return { id: 's1', title: 'Routine quarterly earnings beat estimates', url: 'https://financialmodelingprep.com/news/1', publisher: 'FMP stock news', publishedAt: '2026-08-18T10:00:00.000Z', fetchedAt: '2026-08-18T10:05:00.000Z', ...overrides }
@@ -72,4 +73,10 @@ test('seed benchmark covers 75-100 cases and every required family', () => {
   assert.ok(WORLD_BENCHMARK_CASES.length >= 75 && WORLD_BENCHMARK_CASES.length <= 100)
   const families = new Set(WORLD_BENCHMARK_CASES.map((item) => item.family))
   for (const family of ['iran', 'china_taiwan', 'authoritarianism', 'enso', 'sovereign_banking', 'export_controls', 'ai_power', 'routine_earnings', 'pr_syndication', 'contradictory_reporting']) assert.ok(families.has(family))
+})
+
+test('specialist routing enforces one urgent and at most two scheduled lenses', () => {
+  const lenses = ['physical_economy', 'macro_finance', 'geopolitics_institutions'] as const
+  assert.deepEqual(boundWorldSpecialistLenses([...lenses], 'urgent'), ['physical_economy'])
+  assert.deepEqual(boundWorldSpecialistLenses([...lenses], 'scheduled'), ['physical_economy', 'macro_finance'])
 })
