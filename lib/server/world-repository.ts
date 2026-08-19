@@ -14,6 +14,7 @@ import {
   validateWorldNode,
   validateWorldUpdateProposal,
 } from '../markets/world-thinker-types.ts'
+import { deriveWorldCoverageIndex } from '../markets/world-coverage.ts'
 
 const execFile = promisify(execFileCallback)
 const WORLD_DIRECTORY_BY_KIND: Record<WorldNodeKind, string> = {
@@ -300,6 +301,22 @@ export async function writeWorldIndexes(root = worldRepositoryRoot()): Promise<v
   })).sort((a, b) => a.id.localeCompare(b.id))
   await atomicWrite(join(root, 'world/index/nodes.json'), `${JSON.stringify(records, null, 2)}\n`)
   await atomicWrite(join(root, 'world/index/nodes.jsonl'), records.map((record) => JSON.stringify(record)).join('\n') + (records.length ? '\n' : ''))
+  const coverage = deriveWorldCoverageIndex(nodes.map((entry) => entry.node))
+  await atomicWrite(join(root, 'world/index/coverage.json'), `${JSON.stringify(coverage, null, 2)}\n`)
+  await atomicWrite(join(root, 'world/coverage.md'), [
+    '# World coverage',
+    '',
+    'This host-generated index shows which monitored frontiers have durable active nodes. Operational freshness and source diversity remain in the Stratum projection.',
+    '',
+    ...coverage.flatMap((frontier) => [
+      `## ${frontier.label}`,
+      '',
+      frontier.description,
+      '',
+      frontier.nodeCount > 0 ? `Active nodes: ${frontier.activeNodeIds.join(', ')}` : 'Active nodes: none.',
+      '',
+    ]),
+  ].join('\n'))
 }
 
 export function validateWorldProposalAgainstState(proposal: WorldUpdateProposal, existing: WorldNode[]): void {

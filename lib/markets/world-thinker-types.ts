@@ -101,7 +101,7 @@ export interface WorldEventCluster {
   thesisDependency: boolean
   portfolioDependency: boolean
   decisiveNewEvent: boolean
-  processingState: 'pending' | 'processing' | 'processed' | 'noise' | 'failed'
+  processingState: 'pending' | 'processing' | 'processed' | 'noise' | 'failed' | 'quarantined'
   summary: string
   sourceIds: string[]
 }
@@ -160,6 +160,20 @@ export interface WorldUpdateProposal {
     newInvestigations: string[]
     attentionIndicators: string[]
   }
+}
+
+export interface WorldUpdateDraft {
+  orientation: string
+  eventClassifications: Array<{
+    eventKey: string
+    classification: WorldChangeClassification
+    rationale: string
+  }>
+  sources: WorldSourceReference[]
+  upserts: WorldNode[]
+  archives: Array<{ nodeId: string; reason: string; replacementId?: string }>
+  opportunityLeads: WorldOpportunityLead[]
+  journal: WorldUpdateProposal['journal']
 }
 
 export interface WorldCritique {
@@ -345,6 +359,24 @@ export function validateWorldUpdateProposal(value: unknown): WorldUpdateProposal
   if (proposal.upserts.filter((node) => node.kind === 'current').length !== 1) throw new Error('World update must contain exactly one current-state node')
   if (proposal.upserts.some((node) => node.kind === 'journal')) throw new Error('World journals are rendered by the host and cannot be model upserts')
   return proposal
+}
+
+export function validateWorldUpdateDraft(value: unknown): WorldUpdateDraft {
+  const input = record(value, 'world update draft')
+  const classifications = Array.isArray(input.eventClassifications) ? input.eventClassifications.map((entry, index) => {
+    const item = record(entry, `eventClassifications[${index}]`)
+    return { eventKey: string(item.eventKey, 'classification.eventKey', 16), classification: enumValue(item.classification, ['confirmation', 'contradiction', 'novelty', 'noise', 'uncertainty'] as const, 'classification.classification'), rationale: string(item.rationale, 'classification.rationale', 2_000) }
+  }) : []
+  const canonical = validateWorldUpdateProposal({ ...input, asOf: new Date().toISOString(), trigger: 'scheduled', baseCommit: null, eventClassifications: classifications.map((item) => ({ eventClusterId: item.eventKey, classification: item.classification, rationale: item.rationale })) })
+  return {
+    orientation: canonical.orientation,
+    eventClassifications: classifications,
+    sources: canonical.sources,
+    upserts: canonical.upserts,
+    archives: canonical.archives,
+    opportunityLeads: canonical.opportunityLeads,
+    journal: canonical.journal,
+  }
 }
 
 export function validateWorldCritique(value: unknown): WorldCritique {
