@@ -7,12 +7,13 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 
 import { buildCodexExecArgs } from '../lib/server/codex-exec.ts'
-import { clusterWorldEventSources, nextWorldEventProcessingState, reconcileExtractedClusters, transitionWorldClaimState, worldEventExtractionPrompt } from '../lib/server/world-events.ts'
+import { clusterWorldEventSources, nextWorldEventProcessingState, partitionWorldEventCandidates, reconcileExtractedClusters, transitionWorldClaimState, worldEventExtractionPrompt } from '../lib/server/world-events.ts'
 import { commitWorldUpdate, initializeWorldRepository, parseWorldNode, renderWorldNode, validateWorldProposalAgainstState } from '../lib/server/world-repository.ts'
-import { selectResearchableWorldLeads } from '../lib/server/world-thinker.ts'
-import { type WorldNode, type WorldOpportunityLead, type WorldUpdateProposal, validateWorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
+import { buildWorldUpdateDraftSchema, materializeWorldUpdateProposal, selectResearchableWorldLeads } from '../lib/server/world-thinker.ts'
+import { type WorldNode, type WorldOpportunityLead, type WorldUpdateDraft, type WorldUpdateProposal, validateWorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
 import { latestDistinctWorldJournals } from '../lib/server/world-projection.ts'
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
+import { assessWorldCoverage, deriveWorldCoverageIndex } from '../lib/markets/world-coverage.ts'
 
 const now = '2026-08-17T18:00:00.000Z'
 const execFile = promisify(execFileCallback)
@@ -104,6 +105,20 @@ test('event retry preserves processed state until genuinely new evidence arrives
   assert.equal(nextWorldEventProcessingState('processed', 'pending', false), 'processed')
   assert.equal(nextWorldEventProcessingState('processed', 'pending', true), 'pending')
   assert.equal(nextWorldEventProcessingState('failed', 'pending', false), 'pending')
+  assert.equal(nextWorldEventProcessingState('quarantined', 'pending', false), 'quarantined')
+  assert.equal(nextWorldEventProcessingState('quarantined', 'pending', true), 'pending')
+})
+
+test('event enrichment partitions model work into bounded microbatches', () => {
+  const template = clusterWorldEventSources([{ id: 'feed:0', feedItemId: '0', title: 'Central bank policy changes sovereign outlook', url: 'https://publisher.example/news', publisher: 'Publisher', publishedAt: now, fetchedAt: now }])[0]
+  const candidates = Array.from({ length: 30 }, (_, index) => ({
+    ...template, fingerprint: `fingerprint-${index}`, title: `${template.title} ${index}`, sourceIds: [`feed:${index}`],
+    sources: [{ ...template.sources[0], id: `feed:${index}`, feedItemId: String(index), url: `https://publisher${index}.example/news` }],
+  }))
+  const batches = partitionWorldEventCandidates(candidates)
+  assert.ok(batches.length >= 2)
+  assert.ok(batches.every((batch) => batch.length <= 25))
+  assert.ok(batches.every((batch) => batch.reduce((sum, item) => sum + item.sourceIds.length, 0) <= 100))
 })
 
 test('claim-state transitions preserve contradiction and retraction instead of false resolution', () => {
@@ -129,6 +144,37 @@ test('historical evaluation topics enter the broad sensor without fixed domain t
   assert.equal(noise.processingState, 'noise')
 })
 
+test('coverage frontiers expose geopolitical and institutional blind spots explicitly', () => {
+  const china = node({ id: 'situation-taiwan-strait', title: 'Taiwan Strait pressure', aliases: ['China Taiwan'], summary: 'Cross-strait military pressure remains active.' })
+  const institutions = node({ id: 'theme-democratic-backsliding', kind: 'theme', title: 'Authoritarian consolidation', aliases: ['democratic backsliding'], summary: 'Emergency powers weaken institutions.' })
+  const coverage = deriveWorldCoverageIndex([china, institutions])
+  assert.deepEqual(coverage.find((frontier) => frontier.id === 'china-taiwan')?.activeNodeIds, ['situation-taiwan-strait'])
+  assert.deepEqual(coverage.find((frontier) => frontier.id === 'political-institutions')?.activeNodeIds, ['theme-democratic-backsliding'])
+  assert.equal(assessWorldCoverage({ lastEvidenceAt: now, sourceFamilyCount: 1, activeNodeCount: 1 }, new Date(now)), 'thin')
+  assert.equal(assessWorldCoverage({ lastEvidenceAt: now, sourceFamilyCount: 2, activeNodeCount: 1 }, new Date(now)), 'healthy')
+})
+
+test('host materializes exact event keys and rejects invented or omitted model IDs', async () => {
+  const source = JSON.parse(await readFile(join(process.cwd(), 'schemas/world-update-proposal.schema.json'), 'utf8')) as Record<string, unknown>
+  const schema = buildWorldUpdateDraftSchema(source, ['E001', 'E002'])
+  const classifications = (schema.properties as Record<string, { minItems: number; maxItems: number; items: { properties: Record<string, { enum?: string[] }> } }>).eventClassifications
+  assert.equal(classifications.minItems, 2)
+  assert.equal(classifications.maxItems, 2)
+  assert.deepEqual(classifications.items.properties.eventKey.enum, ['E001', 'E002'])
+
+  const canonical = proposal()
+  const draft = {
+    orientation: canonical.orientation, eventClassifications: [
+      { eventKey: 'E001', classification: 'novelty' as const, rationale: 'New evidence.' },
+      { eventKey: 'E002', classification: 'confirmation' as const, rationale: 'Corroborated.' },
+    ], sources: canonical.sources, upserts: canonical.upserts, archives: canonical.archives, opportunityLeads: canonical.opportunityLeads, journal: canonical.journal,
+  } satisfies WorldUpdateDraft
+  const context = { baseCommit: 'abc123', eventKeyMap: [{ eventKey: 'E001', eventClusterId: 'event-uuid-1' }, { eventKey: 'E002', eventClusterId: 'event-uuid-2' }] }
+  assert.deepEqual(materializeWorldUpdateProposal(draft, context, 'urgent', now).eventClassifications.map((item) => item.eventClusterId), ['event-uuid-1', 'event-uuid-2'])
+  assert.throws(() => materializeWorldUpdateProposal({ ...draft, eventClassifications: draft.eventClassifications.slice(0, 1) }, context, 'urgent', now), /omitted event classification E002/)
+  assert.throws(() => materializeWorldUpdateProposal({ ...draft, eventClassifications: [{ ...draft.eventClassifications[0], eventKey: 'E999' }, draft.eventClassifications[1]] }, context, 'urgent', now), /unknown event key E999/)
+})
+
 test('world node Markdown is deterministic and parseable', () => {
   const rendered = renderWorldNode(node())
   assert.equal(renderWorldNode(node()), rendered)
@@ -152,6 +198,9 @@ test('proposal validation rejects unsourced factual claims and accepts labeled a
   const index = JSON.parse(await readFile(join(root, 'world/index/nodes.json'), 'utf8')) as unknown[]
   // The root worktree remains on main; publication moved the shadow ref atomically.
   assert.equal(index.length, 1)
+  const coverage = JSON.parse(await readFile(join(root, 'world/index/coverage.json'), 'utf8')) as unknown[]
+  assert.equal(coverage.length, 10)
+  assert.match(await readFile(join(root, 'world/coverage.md'), 'utf8'), /China and Taiwan/)
   const bad = proposal([current, node({ id: 'bad', title: 'Unsupported fact', aliases: [], claims: [{ text: 'Unsupported fact.', sourceIds: [] }] })])
   bad.baseCommit = committed.commit
   await assert.rejects(commitWorldUpdate(bad, { root, branch: 'shadow/world-thinker', push: false }), /has no source/)
