@@ -10,7 +10,7 @@ import { promisify } from 'node:util'
 import { buildCodexExecArgs } from '../lib/server/codex-exec.ts'
 import { clusterWorldEventSources, nextWorldEventProcessingState, partitionWorldEventCandidates, reconcileExtractedClusters, transitionWorldClaimState, worldEventExtractionPrompt } from '../lib/server/world-events.ts'
 import { commitWorldUpdate, initializeWorldRepository, parseWorldNode, renderWorldNode, validateWorldProposalAgainstState } from '../lib/server/world-repository.ts'
-import { buildWorldUpdateDraftSchema, materializeWorldUpdateProposal, selectResearchableWorldLeads } from '../lib/server/world-thinker.ts'
+import { buildWorldUpdateDraftSchema, materializeWorldUpdateProposal, selectResearchableWorldLeads, validateWorldUpdateDraftWithHostSources } from '../lib/server/world-thinker.ts'
 import { type WorldNode, type WorldOpportunityLead, type WorldUpdateDraft, type WorldUpdateProposal, validateWorldUpdateDraft, validateWorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
 import { latestDistinctWorldJournals } from '../lib/server/world-projection.ts'
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
@@ -235,6 +235,34 @@ test('host materializes exact event keys and rejects invented or omitted model I
   assert.equal(carriedForward.upserts.filter((item) => item.kind === 'current').length, 1)
   assert.equal(carriedForward.upserts[0].id, 'current')
   assert.throws(() => materializeWorldUpdateProposal(withoutCurrent, { ...context, current: null }, 'urgent', now), /exactly one current-state node/)
+})
+
+test('host restores canonical source metadata before validating a Thinker draft', () => {
+  const canonical = proposal()
+  const draft = {
+    orientation: canonical.orientation,
+    eventClassifications: [{ eventKey: 'E001', classification: 'novelty', rationale: 'New evidence.' }],
+    sources: [{ ...canonical.sources[0], url: '', title: 'Model-altered title', publisher: 'Unknown' }],
+    upserts: canonical.upserts,
+    archives: canonical.archives,
+    opportunityLeads: canonical.opportunityLeads,
+    journal: canonical.journal,
+  }
+  const validated = validateWorldUpdateDraftWithHostSources(draft, [{
+    source_id: 'feed:1', url: 'https://reuters.com/canonical', title: 'Canonical title', publisher: 'Reuters',
+    published_at: now, claim_state: 'corroborated', stance: 'supporting',
+  }])
+  assert.equal(validated.sources[0].url, 'https://reuters.com/canonical')
+  assert.equal(validated.sources[0].title, 'Canonical title')
+  assert.equal(validated.sources[0].publisher, 'Reuters')
+  assert.throws(() => validateWorldUpdateDraftWithHostSources({ ...draft, sources: [{ ...draft.sources[0], id: 'search:unknown' }] }, []), /source\.url/)
+})
+
+test('discovery evidence retries never update immutable World documents', () => {
+  const gapSource = readFileSync(new URL('../lib/server/world-historical-gap.ts', import.meta.url), 'utf8')
+  const thinkerSource = readFileSync(new URL('../lib/server/world-thinker.ts', import.meta.url), 'utf8')
+  assert.match(gapSource, /onConflict: 'content_hash', ignoreDuplicates: true/)
+  assert.match(thinkerSource, /onConflict: 'content_hash', ignoreDuplicates: true/)
 })
 
 test('world node Markdown is deterministic and parseable', () => {

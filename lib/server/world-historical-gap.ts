@@ -36,7 +36,10 @@ export async function searchHistoricalWorldGap(options: { since: Date; until: Da
     publisher: source.publisher, source_tier: 'discovery', mime_type: 'text/html', extraction_status: 'pending', published_at: source.publishedAt,
     metadata: { historicalGapSearch: true, relevance: source.relevance, searchWindow: { since: options.since.toISOString(), until: options.until.toISOString() }, model: result.metadata.model },
   }))
-  const { error } = await supabase.from('world_documents').upsert(rows, { onConflict: 'content_hash' })
+  // Evidence rows are append-only. A replay may rediscover the same URL in an
+  // overlapping window, so conflict handling must be DO NOTHING rather than an
+  // UPDATE that trips the immutable-document guard.
+  const { error } = await supabase.from('world_documents').upsert(rows, { onConflict: 'content_hash', ignoreDuplicates: true })
   if (error) throw new Error(`Unable to persist historical gap sources: ${error.message}`)
   const hashes = rows.map((row) => row.content_hash)
   const { data, error: loadError } = await supabase.from('world_documents').select('id,content_hash,canonical_url,title,publisher,published_at,ingested_at,metadata').in('content_hash', hashes)

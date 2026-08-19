@@ -406,6 +406,32 @@ export function materializeWorldUpdateProposal(draft: WorldUpdateDraft, context:
   return { ...draft, upserts, asOf, trigger, baseCommit: context.baseCommit, eventClassifications }
 }
 
+export function validateWorldUpdateDraftWithHostSources(
+  value: unknown,
+  sources: Array<Pick<EventSourceRow, 'source_id' | 'url' | 'title' | 'publisher' | 'published_at' | 'claim_state' | 'stance'>>,
+): WorldUpdateDraft {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return validateWorldUpdateDraft(value)
+  const input = value as Record<string, unknown>
+  if (!Array.isArray(input.sources)) return validateWorldUpdateDraft(value)
+  const known = new Map(sources.map((source) => [source.source_id, source]))
+  const hydratedSources = input.sources.map((candidate) => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return candidate
+    const item = candidate as Record<string, unknown>
+    const host = typeof item.id === 'string' ? known.get(item.id) : undefined
+    if (!host) return candidate
+    return {
+      ...item,
+      url: host.url,
+      title: host.title,
+      publisher: host.publisher ?? undefined,
+      publishedAt: host.published_at ?? undefined,
+      claimState: host.claim_state,
+      stance: host.stance,
+    }
+  })
+  return validateWorldUpdateDraft({ ...input, sources: hydratedSources })
+}
+
 export function buildWorldUpdateDraftSchema(proposalSchema: Record<string, unknown>, eventKeys: string[]): Record<string, unknown> {
   const cloned = structuredClone(proposalSchema) as Record<string, unknown>
   cloned.title = 'WorldUpdateDraft'
@@ -474,7 +500,7 @@ async function captureWorldSearchSources(proposal: WorldUpdateProposal, context:
       metadata: { worldSearch: true, sourceId: source.id, claimState: source.claimState, stance: source.stance, capturedAt: new Date().toISOString() },
     }
   })
-  const { error } = await supabase.from('world_documents').upsert(rows, { onConflict: 'content_hash' })
+  const { error } = await supabase.from('world_documents').upsert(rows, { onConflict: 'content_hash', ignoreDuplicates: true })
   if (error) throw new Error(`Unable to capture World Thinker search lineage: ${error.message}`)
 }
 
@@ -578,9 +604,10 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
     context.retrievalLedger.push({ order: 5.75, specialistLenses: context.specialistAssessments.map((assessment) => assessment.lens), readOnly: true })
     await updateRun(runId, { context_manifest: context.manifest, retrieval_ledger: context.retrievalLedger })
     draftSchemaPath = await writeWorldUpdateDraftSchema(context, runId, root)
+    const hostSources = context.sources
     const thinkerSelection = selectMarketModel(context.needsWebSearch ? 'world_web_research' : 'world_thinker')
     const draftResult = await runCodexJson({
-      prompt: thinkerPrompt(context, options.trigger), schemaPath: draftSchemaPath, validate: validateWorldUpdateDraft,
+      prompt: thinkerPrompt(context, options.trigger), schemaPath: draftSchemaPath, validate: (value) => validateWorldUpdateDraftWithHostSources(value, hostSources),
       model: thinkerSelection.model, cwd: worldDataRoot(root), webSearch: context.needsWebSearch, timeoutMs: 20 * 60_000,
     })
     let proposal = materializeWorldUpdateProposal(draftResult.data, context, options.trigger)
@@ -598,7 +625,7 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
     if (critique.verdict === 'revise') {
       await updateRun(runId, { status: 'revising', critic_verdict: 'revise' })
       const revision = await runCodexJson({
-        prompt: revisionPrompt(context, proposal, critique), schemaPath: draftSchemaPath, validate: validateWorldUpdateDraft,
+        prompt: revisionPrompt(context, proposal, critique), schemaPath: draftSchemaPath, validate: (value) => validateWorldUpdateDraftWithHostSources(value, hostSources),
         model: thinkerSelection.model, cwd: worldDataRoot(root), timeoutMs: 15 * 60_000,
       })
       proposal = materializeWorldUpdateProposal(revision.data, context, options.trigger)
