@@ -92,7 +92,7 @@ export default async function MarketsWorldPage() {
       {replay && replay.status !== 'completed' ? (
         <section className="world-replay-notice" aria-label="Historical replay progress">
           <div><p className="markets-eyebrow">Historical memory</p><strong>{replay.status === 'failed' ? 'Replay needs attention' : 'One-year replay is building the model'}</strong></div>
-          <div className="world-replay-progress"><span style={{ width: `${replayPercent ?? 0}%` }} /><small>{replay.weeksCompleted} of {replay.weeksTotal} weeks · {replayPercent ?? 0}%</small></div>
+          <div className="world-replay-progress"><span style={{ width: `${replayPercent ?? 0}%` }} /><small>{replay.weeksCompleted} resolved · {replay.weeksVerified} evidence-backed · {replay.weeksUncovered} uncovered</small></div>
           <Link href="/markets/world/system">View progress →</Link>
         </section>
       ) : null}

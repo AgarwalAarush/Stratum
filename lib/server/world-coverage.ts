@@ -10,6 +10,8 @@ interface CoverageRow {
   priority: number
   status: WorldCoverageFrontier['status']
   source_family_count: number
+  evidence_event_count?: number
+  weak_signal_count?: number
   active_node_ids: string[]
   open_questions: string[]
   last_evidence_at: string | null
@@ -21,7 +23,7 @@ interface CoverageRow {
 function normalizeCoverageRow(row: CoverageRow): WorldCoverageFrontier {
   return {
     id: row.id, label: row.label, description: row.description, queryTerms: row.query_terms ?? [], priority: row.priority,
-    status: row.status, sourceFamilyCount: row.source_family_count, activeNodeIds: row.active_node_ids ?? [], openQuestions: row.open_questions ?? [],
+    status: row.status, sourceFamilyCount: row.source_family_count, evidenceEventCount: Number(row.evidence_event_count ?? 0), weakSignalCount: Number(row.weak_signal_count ?? 0), activeNodeIds: row.active_node_ids ?? [], openQuestions: row.open_questions ?? [],
     lastEvidenceAt: row.last_evidence_at, lastReviewedAt: row.last_reviewed_at, lastSearchAt: row.last_search_at, nextReviewAt: row.next_review_at,
   }
 }
@@ -48,7 +50,7 @@ export async function ensureWorldCoverageFrontiers(): Promise<void> {
 
 export async function loadWorldCoverageFrontiers(): Promise<WorldCoverageFrontier[]> {
   const supabase = getSupabaseClient()
-  const uninitialized = () => WORLD_COVERAGE_FRONTIERS.map((frontier) => ({ ...frontier, status: 'blind_spot' as const, sourceFamilyCount: 0, activeNodeIds: [], openQuestions: [], lastEvidenceAt: null, lastReviewedAt: null, lastSearchAt: null, nextReviewAt: new Date().toISOString() }))
+  const uninitialized = () => WORLD_COVERAGE_FRONTIERS.map((frontier) => ({ ...frontier, status: 'blind_spot' as const, sourceFamilyCount: 0, evidenceEventCount: 0, weakSignalCount: 0, activeNodeIds: [], openQuestions: [], lastEvidenceAt: null, lastReviewedAt: null, lastSearchAt: null, nextReviewAt: new Date().toISOString() }))
   if (!supabase) return uninitialized()
   const { data, error } = await supabase.from('world_coverage_frontiers').select('*').order('priority', { ascending: false })
   if (error && (error.code === '42P01' || error.code === 'PGRST205')) return uninitialized()
@@ -68,16 +70,17 @@ export async function refreshWorldCoverageState(nodes: WorldNode[], now = new Da
   if (!supabase) return loadWorldCoverageFrontiers()
   const frontiers = await loadWorldCoverageFrontiers()
   const since = new Date(now.getTime() - 30 * 24 * 60 * 60_000).toISOString()
-  const { data: events, error } = await supabase.from('world_event_clusters').select('id,title,summary,actors,geographies,channels,last_seen_at').gte('last_seen_at', since)
+  const { data: events, error } = await supabase.from('world_event_clusters').select('id,title,summary,actors,geographies,channels,last_seen_at,source_ids').gte('last_seen_at', since)
   if (error) throw new Error(`Unable to evaluate world coverage: ${error.message}`)
   const sourceFamilies = new Map<string, Set<string>>()
   const eventIds = (events ?? []).flatMap((event) => typeof event.id === 'string' ? [event.id] : [])
   for (let index = 0; index < eventIds.length; index += 200) {
-    const { data: sources, error: sourceError } = await supabase.from('world_event_cluster_sources').select('cluster_id,publisher,url').in('cluster_id', eventIds.slice(index, index + 200))
+    const { data: sources, error: sourceError } = await supabase.from('world_event_cluster_sources').select('cluster_id,publisher,url,source_family').in('cluster_id', eventIds.slice(index, index + 200))
     if (sourceError) throw new Error(`Unable to evaluate world source diversity: ${sourceError.message}`)
     for (const source of sources ?? []) {
+      const persistedFamily = typeof source.source_family === 'string' && source.source_family.trim() ? source.source_family.trim().toLowerCase() : null
       const publisher = typeof source.publisher === 'string' && source.publisher.trim() ? source.publisher.trim().toLowerCase() : null
-      let family = publisher
+      let family = persistedFamily ?? publisher
       if (!family && typeof source.url === 'string') {
         try { family = new URL(source.url).hostname.replace(/^www\./, '').toLowerCase() } catch { family = null }
       }
@@ -88,15 +91,19 @@ export async function refreshWorldCoverageState(nodes: WorldNode[], now = new Da
     }
   }
   const activeNodes = nodes.filter((node) => ['active', 'monitoring'].includes(node.status) && node.kind !== 'current' && node.kind !== 'journal')
+  const { data: signals, error: signalError } = await supabase.from('world_signals').select('id,title,summary,entities,geographies,domains,economic_channels,status').in('status', ['observed', 'monitoring', 'activated'])
+  if (signalError && signalError.code !== '42P01' && signalError.code !== 'PGRST205') throw new Error(`Unable to evaluate weak-signal coverage: ${signalError.message}`)
   const updates = frontiers.map((frontier) => {
-    const matchingEvents = (events ?? []).filter((event) => matchesWorldCoverageFrontier(frontier, [event.title, event.summary, ...(event.actors ?? []), ...(event.geographies ?? []), ...(event.channels ?? [])].join(' ')))
-    const matchingNodes = activeNodes.filter((node) => matchesWorldCoverageFrontier(frontier, [node.id, node.title, node.summary, ...node.aliases].join(' ')))
+    const matchingEvents = (events ?? []).filter((event) => matchesWorldCoverageFrontier(frontier, { title: event.title, summary: event.summary, actors: event.actors ?? [], geographies: event.geographies ?? [], channels: event.channels ?? [] }))
+    const matchingEventSourceIds = new Set(matchingEvents.flatMap((event) => Array.isArray(event.source_ids) ? event.source_ids.filter((id): id is string => typeof id === 'string') : []))
+    const matchingNodes = activeNodes.filter((node) => node.sourceIds.some((sourceId) => matchingEventSourceIds.has(sourceId)) || matchesWorldCoverageFrontier(frontier, { title: `${node.id} ${node.title} ${node.aliases.join(' ')}`, summary: node.summary }))
+    const matchingSignals = (signals ?? []).filter((signal) => matchesWorldCoverageFrontier(frontier, { title: signal.title, summary: signal.summary, actors: signal.entities ?? [], geographies: signal.geographies ?? [], channels: [...(signal.domains ?? []), ...(signal.economic_channels ?? [])] }))
     const lastEvidenceAt = matchingEvents.map((event) => String(event.last_seen_at)).sort().at(-1) ?? null
     const sourceFamilyCount = new Set(matchingEvents.flatMap((event) => [...(sourceFamilies.get(String(event.id)) ?? [])])).size
     const status = assessWorldCoverage({ lastEvidenceAt, sourceFamilyCount, activeNodeCount: matchingNodes.length }, now)
     const nextReviewHours = status === 'healthy' ? 24 : status === 'thin' ? 8 : 6
     return {
-      ...worldCoverageUpsertIdentity(frontier), status, source_family_count: sourceFamilyCount, active_node_ids: matchingNodes.map((node) => node.id),
+      ...worldCoverageUpsertIdentity(frontier), status, source_family_count: sourceFamilyCount, evidence_event_count: matchingEvents.length, weak_signal_count: matchingSignals.length, active_node_ids: matchingNodes.map((node) => node.id),
       last_evidence_at: lastEvidenceAt, last_reviewed_at: now.toISOString(), next_review_at: new Date(now.getTime() + nextReviewHours * 3_600_000).toISOString(), updated_at: now.toISOString(),
     }
   })

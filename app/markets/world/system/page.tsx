@@ -94,8 +94,8 @@ export default async function WorldSystemPage() {
         <div className="world-system-table">
           {world.coverage.map((frontier) => <div className="world-system-table-row" key={frontier.id}>
             <div><span className={`world-coverage-state world-coverage-state--${frontier.status}`}>{frontier.status.replace('_', ' ')}</span><strong>{frontier.label}</strong><p>{frontier.description}</p></div>
-            <div><span>Sources</span><strong>{frontier.sourceFamilyCount}</strong></div>
-            <div><span>Nodes</span><strong>{frontier.activeNodeIds.length}</strong></div>
+            <div><span>Evidence</span><strong>{frontier.evidenceEventCount} events</strong><p>{frontier.sourceFamilyCount} source families</p></div>
+            <div><span>Memory</span><strong>{frontier.activeNodeIds.length} active nodes</strong><p>{frontier.weakSignalCount} weak signals</p></div>
             <div><span>Reviewed</span><strong>{formatTime(frontier.lastReviewedAt)}</strong></div>
             <WorldSystemAction action="refresh-frontier" label="Investigate" payload={{ frontierId: frontier.id }} />
           </div>)}
@@ -103,13 +103,13 @@ export default async function WorldSystemPage() {
       </section>
 
       <section className="world-system-section" id="replay">
-        <div className="world-section-heading world-section-heading--major"><div><p className="markets-eyebrow">Historical replay</p><h2>{replay ? `${replay.weeksCompleted} of ${replay.weeksTotal} weeks complete` : 'Replay has not started'}</h2></div>{!replay || replay.status !== 'completed' ? <WorldSystemAction action="resume-replay" label={replay ? 'Resume replay' : 'Start replay'} /> : <span>Complete</span>}</div>
+        <div className="world-section-heading world-section-heading--major"><div><p className="markets-eyebrow">Historical replay</p><h2>{replay ? `${replay.weeksVerified} evidence-backed of ${replay.weeksTotal} weeks` : 'Replay has not started'}</h2>{replay ? <p>{replay.weeksCompleted} resolved · {replay.weeksProjected} produced retained clusters · {replay.weeksUncovered} explicitly uncovered</p> : null}</div>{!replay || replay.status !== 'completed' ? <WorldSystemAction action="resume-replay" label={replay ? 'Resume replay' : 'Start replay'} /> : <span>Complete</span>}</div>
         {replay?.error ? <p className="world-system-error">{replay.error}</p> : null}
         <div className="world-system-table world-system-table--batches">
           {world.replay.batches.slice(0, 12).map((batch) => <div className="world-system-table-row" key={batch.id}>
-            <div><strong>{formatTime(batch.weekStart)} – {formatTime(batch.weekEnd)}</strong><p>{batch.sourceCount} sources · {batch.clusterCount} retained clusters</p></div>
+            <div><strong>{formatTime(batch.weekStart)} – {formatTime(batch.weekEnd)}</strong><p>{batch.sourceCount} sources from {batch.sourceFamilies.length} families · {batch.clusterCount} retained clusters</p></div>
             <div><span>Status</span><strong>{batch.status}</strong></div>
-            <div><span>Attempts</span><strong>{batch.attemptCount}</strong></div>
+            <div><span>Attempts</span><strong>{batch.attemptCount}{batch.recoveryCount ? ` · ${batch.recoveryCount} recovered` : ''}</strong></div>
             <div><span>Events</span><strong>{batch.eventCursor} / {batch.eventClusterIds.length}</strong></div>
             {batch.status === 'failed' ? <WorldSystemAction action="retry-replay-batch" label="Retry" payload={{ batchId: batch.id }} /> : <span />}
           </div>)}

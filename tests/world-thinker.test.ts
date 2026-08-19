@@ -14,8 +14,9 @@ import { buildWorldUpdateDraftSchema, materializeWorldUpdateProposal, selectRese
 import { type WorldNode, type WorldOpportunityLead, type WorldUpdateDraft, type WorldUpdateProposal, validateWorldUpdateDraft, validateWorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
 import { latestDistinctWorldJournals } from '../lib/server/world-projection.ts'
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
-import { WORLD_COVERAGE_FRONTIERS, assessWorldCoverage, deriveWorldCoverageIndex } from '../lib/markets/world-coverage.ts'
+import { WORLD_COVERAGE_FRONTIERS, assessWorldCoverage, deriveWorldCoverageIndex, matchesWorldCoverageFrontier } from '../lib/markets/world-coverage.ts'
 import { worldCoverageUpsertIdentity } from '../lib/server/world-coverage.ts'
+import { classifyWorldReplayBatchOutcome } from '../lib/server/world-replay.ts'
 
 const now = '2026-08-17T18:00:00.000Z'
 const execFile = promisify(execFileCallback)
@@ -146,6 +147,13 @@ test('historical evaluation topics enter the broad sensor without fixed domain t
   assert.equal(noise.processingState, 'noise')
 })
 
+test('replay never presents a source-free week as projected', () => {
+  assert.equal(classifyWorldReplayBatchOutcome({ sourceCount: 0, clusterCount: 0, usedDeterministicFallback: false }), 'documented_empty')
+  assert.equal(classifyWorldReplayBatchOutcome({ sourceCount: 12, clusterCount: 0, usedDeterministicFallback: false }), 'screened')
+  assert.equal(classifyWorldReplayBatchOutcome({ sourceCount: 12, clusterCount: 3, usedDeterministicFallback: false }), 'projected')
+  assert.equal(classifyWorldReplayBatchOutcome({ sourceCount: 12, clusterCount: 3, usedDeterministicFallback: true }), 'fallback')
+})
+
 test('coverage frontiers expose geopolitical and institutional blind spots explicitly', () => {
   const china = node({ id: 'situation-taiwan-strait', title: 'Taiwan Strait pressure', aliases: ['China Taiwan'], summary: 'Cross-strait military pressure remains active.' })
   const institutions = node({ id: 'theme-democratic-backsliding', kind: 'theme', title: 'Authoritarian consolidation', aliases: ['democratic backsliding'], summary: 'Emergency powers weaken institutions.' })
@@ -154,6 +162,23 @@ test('coverage frontiers expose geopolitical and institutional blind spots expli
   assert.deepEqual(coverage.find((frontier) => frontier.id === 'political-institutions')?.activeNodeIds, ['theme-democratic-backsliding'])
   assert.equal(assessWorldCoverage({ lastEvidenceAt: now, sourceFamilyCount: 1, activeNodeCount: 1 }, new Date(now)), 'thin')
   assert.equal(assessWorldCoverage({ lastEvidenceAt: now, sourceFamilyCount: 2, activeNodeCount: 1 }, new Date(now)), 'healthy')
+})
+
+test('coverage attribution rejects broad token collisions and preserves structured matches', () => {
+  const byId = (id: string) => WORLD_COVERAGE_FRONTIERS.find((frontier) => frontier.id === id)!
+  const ebola = { title: 'Ebola response expands in DRC and Uganda', summary: 'A public health emergency requires regional outbreak monitoring.', actors: ['WHO'], geographies: ['Uganda'], channels: ['health'] }
+  assert.equal(matchesWorldCoverageFrontier(byId('political-institutions'), ebola), false)
+  assert.equal(matchesWorldCoverageFrontier(byId('iran-middle-east'), ebola), false)
+  assert.equal(matchesWorldCoverageFrontier(byId('russia-europe-security'), ebola), false)
+  assert.equal(matchesWorldCoverageFrontier(byId('health-demographics-labor'), ebola), true)
+
+  const taiwan = { title: 'Military exercises intensify around the Taiwan Strait', actors: ['China'], geographies: ['Taiwan'], channels: ['security'] }
+  assert.equal(matchesWorldCoverageFrontier(byId('china-taiwan'), taiwan), true)
+  const enso = { title: 'El Nino raises drought and crop-failure risk', summary: 'Reservoir and hydropower conditions bear watching.', geographies: ['South America'], channels: ['climate'] }
+  assert.equal(matchesWorldCoverageFrontier(byId('energy-resources-climate'), enso), true)
+  const dataCenter = { title: 'Data center power constraints delay capacity', channels: ['economic_channel'] }
+  assert.equal(matchesWorldCoverageFrontier(byId('iran-middle-east'), dataCenter), false)
+  assert.equal(matchesWorldCoverageFrontier(byId('russia-europe-security'), dataCenter), false)
 })
 
 test('coverage refresh upserts include required immutable frontier identity', () => {

@@ -492,9 +492,22 @@ export async function refreshWorldEvents(options: { since?: Date; until?: Date; 
   return { scanned: sources.length, clustered: clusters.length, ...persisted, topicsSucceeded: autonomous.topicsSucceeded, topicsFailed: autonomous.topicsFailed }
 }
 
-export async function processWorldEventWindow(options: { since: Date; until: Date; model?: boolean }): Promise<{ sourceCount: number; clusterCount: number; eventClusterIds: string[]; usedDeterministicFallback: boolean; usedHistoricalGapSearch: boolean }> {
+export interface WorldEventWindowSummary {
+  sourceCount: number
+  sourceIds: string[]
+  sourceUrls: string[]
+  sourceFamilies: string[]
+  clusterCount: number
+  eventClusterIds: string[]
+  usedDeterministicFallback: boolean
+  historicalGapSearchAttempted: boolean
+  usedHistoricalGapSearch: boolean
+}
+
+export async function processWorldEventWindow(options: { since: Date; until: Date; model?: boolean }): Promise<WorldEventWindowSummary> {
   const corpusSources = await fetchEventSources(options.since, options.until, 'published')
-  const gapSources = corpusSources.length < 5 && options.model !== false
+  const historicalGapSearchAttempted = corpusSources.length < 5 && options.model !== false
+  const gapSources = historicalGapSearchAttempted
     ? await searchHistoricalWorldGap({ since: options.since, until: options.until, cwd: process.env.STRATUM_DATA_ROOT?.trim() || process.cwd() })
     : []
   const sources = [...new Map([...corpusSources, ...gapSources].map((source) => [source.id, source])).values()]
@@ -512,7 +525,17 @@ export async function processWorldEventWindow(options: { since: Date; until: Dat
   ).filter((cluster, index, array) => array.findIndex((item) => item.fingerprint === cluster.fingerprint) === index)
   const persisted = await persistWorldEventClusters(candidates)
   const eventClusterIds = retained.map((cluster) => persisted.clusterIdByFingerprint[cluster.fingerprint]).filter((id): id is string => Boolean(id))
-  return { sourceCount: sources.length, clusterCount: retained.length, eventClusterIds, usedDeterministicFallback: retained.some((cluster) => cluster.enrichmentStatus === 'fallback'), usedHistoricalGapSearch: gapSources.length > 0 }
+  return {
+    sourceCount: sources.length,
+    sourceIds: sources.map((source) => source.id),
+    sourceUrls: [...new Set(sources.map((source) => source.url).filter(Boolean))],
+    sourceFamilies: [...new Set(sources.map(canonicalWorldSourceFamily))],
+    clusterCount: retained.length,
+    eventClusterIds,
+    usedDeterministicFallback: retained.some((cluster) => cluster.enrichmentStatus === 'fallback'),
+    historicalGapSearchAttempted,
+    usedHistoricalGapSearch: gapSources.length > 0,
+  }
 }
 
 export async function backfillWorldEvents(options: { since: Date; until?: Date; model?: boolean; onWeek?: (summary: Record<string, unknown>) => Promise<void> }): Promise<{ weeks: number; clusters: number }> {
