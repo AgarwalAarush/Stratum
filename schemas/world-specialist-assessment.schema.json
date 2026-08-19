@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorldSpecialistAssessment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["lens", "eventClusterIds", "classifications", "causalChannels", "affectedVariables", "reach", "duration", "relatedSignalIds", "contradictions", "evidenceGaps", "activationConditions", "monitoringIndicators", "candidateHypotheses", "sourceIds"],
+  "properties": {
+    "lens": { "enum": ["geopolitics_institutions", "physical_economy", "macro_finance", "technology_industrial_capacity"] },
+    "eventClusterIds": { "$ref": "#/$defs/strings" },
+    "classifications": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["eventClusterId", "classification", "rationale"], "properties": { "eventClusterId": { "type": "string" }, "classification": { "enum": ["confirmation", "contradiction", "novelty", "noise", "uncertainty"] }, "rationale": { "type": "string" } } } },
+    "causalChannels": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["cause", "effect", "mechanism", "sourceIds"], "properties": { "cause": { "type": "string" }, "effect": { "type": "string" }, "mechanism": { "type": "string" }, "sourceIds": { "$ref": "#/$defs/strings" } } } },
+    "affectedVariables": { "$ref": "#/$defs/strings" }, "reach": { "type": "string" }, "duration": { "type": "string" },
+    "relatedSignalIds": { "$ref": "#/$defs/strings" }, "contradictions": { "$ref": "#/$defs/strings" }, "evidenceGaps": { "$ref": "#/$defs/strings" },
+    "activationConditions": { "$ref": "#/$defs/strings" }, "monitoringIndicators": { "$ref": "#/$defs/strings" },
+    "candidateHypotheses": { "$ref": "#/$defs/strings" }, "sourceIds": { "$ref": "#/$defs/strings" }
+  },
+  "$defs": { "strings": { "type": "array", "maxItems": 100, "items": { "type": "string" } } }
+}

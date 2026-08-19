@@ -6,7 +6,7 @@ import { AI_MODELS } from '../ai/config.ts'
  * remain on the stronger tier. Deterministic ingestion is not represented here
  * because it should not invoke a model at all.
  */
-export type MarketModelTask = 'source_scout' | 'observation_triage' | 'research_planning' | 'hypothesis_analysis' | 'hypothesis_critic' | 'prediction_evaluation' | 'world_event_extraction' | 'world_thinker' | 'world_critic' | 'world_web_research'
+export type MarketModelTask = 'source_scout' | 'observation_triage' | 'research_planning' | 'hypothesis_analysis' | 'hypothesis_critic' | 'prediction_evaluation' | 'world_event_extraction' | 'world_specialist' | 'world_thinker' | 'world_critic' | 'world_web_research'
 export type MarketModelTier = 'cheap' | 'standard' | 'strong'
 
 export interface MarketModelSelection {
@@ -47,6 +47,7 @@ export function selectMarketModel(task: MarketModelTask, environment: NodeJS.Pro
     return { task, tier: 'standard', model: standard, rationale: 'Bounded planning or evaluation over persisted evidence; it cannot publish a thesis.' }
   }
   if (task === 'world_thinker') return { task, tier: 'strong', model: environment.STRATUM_WORLD_THINKER_MODEL ?? strong, rationale: 'Durable cross-domain world synthesis requires the strong reasoning tier and an independent critic.' }
+  if (task === 'world_specialist') return { task, tier: 'strong', model: environment.STRATUM_WORLD_SPECIALIST_MODEL ?? strong, rationale: 'A bounded read-only specialist tests causal channels and missing evidence but cannot update state or queue research.' }
   if (task === 'world_critic') return { task, tier: 'strong', model: environment.STRATUM_WORLD_CRITIC_MODEL ?? strong, rationale: 'Independent adversarial review controls publication of world updates and opportunity leads.' }
   if (task === 'world_web_research') return { task, tier: 'strong', model: environment.STRATUM_WORLD_WEB_MODEL ?? strong, rationale: 'Bounded live research is enabled only to close consequential evidence gaps in approved world runs.' }
   return { task, tier: 'strong', model: strong, rationale: 'Causal research and adversarial critique can affect a durable market artifact but still require source and promotion gates.' }

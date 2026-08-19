@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorldAttentionDecision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["route", "dimensions", "reasons", "policyVersion", "selectedForEnrichment", "specialistLenses"],
+  "properties": {
+    "route": { "enum": ["urgent", "investigate", "monitor", "awareness", "company_only", "noise"] },
+    "dimensions": { "type": "object", "additionalProperties": false, "required": ["evidenceQuality", "novelty", "magnitude", "systemReach", "duration", "propagationPotential", "transmissionClarity", "timeSensitivity", "activeDependency", "uncertainty"], "properties": { "evidenceQuality": { "$ref": "#/$defs/score" }, "novelty": { "$ref": "#/$defs/score" }, "magnitude": { "$ref": "#/$defs/score" }, "systemReach": { "$ref": "#/$defs/score" }, "duration": { "$ref": "#/$defs/score" }, "propagationPotential": { "$ref": "#/$defs/score" }, "transmissionClarity": { "$ref": "#/$defs/score" }, "timeSensitivity": { "$ref": "#/$defs/score" }, "activeDependency": { "$ref": "#/$defs/score" }, "uncertainty": { "$ref": "#/$defs/score" } } },
+    "reasons": { "type": "array", "items": { "type": "string" } }, "policyVersion": { "type": "string" },
+    "selectedForEnrichment": { "type": "boolean" },
+    "specialistLenses": { "type": "array", "maxItems": 2, "items": { "enum": ["geopolitics_institutions", "physical_economy", "macro_finance", "technology_industrial_capacity"] } }
+  },
+  "$defs": { "score": { "type": "integer", "minimum": 0, "maximum": 100 } }
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorldSignal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "fingerprint", "status", "title", "summary", "eventClusterIds", "sourceIds", "entities", "geographies", "domains", "economicChannels", "activationConditions", "relatedSignalIds", "relatedNodeIds", "firstObservedAt", "lastObservedAt", "nextReviewAt"],
+  "properties": {
+    "id": { "type": "string" }, "fingerprint": { "type": "string" },
+    "status": { "enum": ["observed", "monitoring", "activated", "contradicted", "superseded", "dormant"] },
+    "title": { "type": "string" }, "summary": { "type": "string" },
+    "eventClusterIds": { "$ref": "#/$defs/strings" }, "sourceIds": { "$ref": "#/$defs/strings" },
+    "entities": { "$ref": "#/$defs/strings" }, "geographies": { "$ref": "#/$defs/strings" },
+    "domains": { "$ref": "#/$defs/strings" }, "economicChannels": { "$ref": "#/$defs/strings" },
+    "activationConditions": { "$ref": "#/$defs/strings" }, "relatedSignalIds": { "$ref": "#/$defs/strings" },
+    "relatedNodeIds": { "$ref": "#/$defs/strings" }, "firstObservedAt": { "type": "string", "format": "date-time" },
+    "lastObservedAt": { "type": "string", "format": "date-time" }, "lastMatchedAt": { "type": ["string", "null"], "format": "date-time" },
+    "nextReviewAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": { "strings": { "type": "array", "maxItems": 100, "items": { "type": "string" } } }
+}

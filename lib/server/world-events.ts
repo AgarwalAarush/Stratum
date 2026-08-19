@@ -4,11 +4,13 @@ import type { FeedItemRow } from '../data/overview-persistence.ts'
 import { persistFeedItems } from '../data/overview-persistence.ts'
 import { fetchNewsItemsByTopic, type NewsTopic } from '../data/rss.ts'
 import { type WorldClaimState, type WorldEventCluster } from '../markets/world-thinker-types.ts'
+import { canonicalWorldSourceFamily, classifyWorldSourceLane, primaryWorldSourceLane, routeWorldAttention, selectWorldModelCandidates, type WorldAttentionDecision } from '../markets/world-attention.ts'
 import { runCodexJson } from './codex-exec.ts'
 import { selectMarketModel } from './market-model-policy.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { fetchPortfolioResearchCoverage } from './portfolio-research-seeding.ts'
+import { persistWorldSignalForEvent } from './world-signals.ts'
 
 export interface WorldEventSourceInput {
   id: string
@@ -26,6 +28,7 @@ export interface WorldEventSourceInput {
 export interface WorldEventClusterCandidate extends WorldEventCluster {
   sources: WorldEventSourceInput[]
   enrichmentStatus?: 'deterministic' | 'enriched' | 'fallback' | 'failed'
+  attention?: WorldAttentionDecision
 }
 
 const WORLD_SENSOR_TOPICS: NewsTopic[] = [
@@ -139,7 +142,7 @@ export function clusterWorldEventSources(sources: WorldEventSourceInput[], now =
     const materiality = Math.min(100, Math.max(...material.map((item) => item.score)) + Math.min(15, (new Set(group.map((source) => sourceHost(source.url, source.publisher))).size - 1) * 5))
     const fingerprint = clusterFingerprint(group)
     const dates = group.map((source) => Date.parse(source.publishedAt ?? source.fetchedAt)).filter(Number.isFinite)
-    const sourceDiversity = new Set(group.map((source) => sourceHost(source.url, source.publisher))).size
+    const sourceDiversity = new Set(group.map(canonicalWorldSourceFamily)).size
     return {
       id: fingerprint,
       fingerprint,
@@ -346,7 +349,7 @@ async function ingestAutonomousWorldFeeds(): Promise<{ sources: WorldEventSource
   return { sources: feedRowsToWorldSources(rows), topicsSucceeded, topicsFailed }
 }
 
-async function fetchEventSources(since: Date, until: Date): Promise<WorldEventSourceInput[]> {
+async function fetchEventSources(since: Date, until: Date, chronology: 'fetched' | 'published' = 'fetched'): Promise<WorldEventSourceInput[]> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const feedRows: FeedItemRow[] = []
@@ -354,27 +357,29 @@ async function fetchEventSources(since: Date, until: Date): Promise<WorldEventSo
   const pageSize = 1_000
   let feedCursor: { at: string; id: string } | null = null
   let documentCursor: { at: string; id: string } | null = null
+  const feedTimeColumn = chronology === 'published' ? 'published_at' : 'fetched_at'
+  const documentTimeColumn = chronology === 'published' ? 'published_at' : 'ingested_at'
   while (true) {
-    let query = supabase.from('feed_items').select('id,item_type,scope,section,title,url,published_at,fetched_at,metadata').gte('fetched_at', since.toISOString()).lt('fetched_at', until.toISOString()).order('fetched_at', { ascending: true }).order('id', { ascending: true }).limit(pageSize)
-    if (feedCursor) query = query.or(`fetched_at.gt.${feedCursor.at},and(fetched_at.eq.${feedCursor.at},id.gt.${feedCursor.id})`)
+    let query = supabase.from('feed_items').select('id,item_type,scope,section,title,url,published_at,fetched_at,metadata').gte(feedTimeColumn, since.toISOString()).lt(feedTimeColumn, until.toISOString()).order(feedTimeColumn, { ascending: true }).order('id', { ascending: true }).limit(pageSize)
+    if (feedCursor) query = query.or(`${feedTimeColumn}.gt.${feedCursor.at},and(${feedTimeColumn}.eq.${feedCursor.at},id.gt.${feedCursor.id})`)
     const { data, error } = await query
     if (error) throw new Error(`Unable to load feed items for event clustering: ${error.message}`)
     const page = (data ?? []) as FeedItemRow[]
     feedRows.push(...page)
     if (page.length < pageSize) break
     const last = page.at(-1)!
-    feedCursor = { at: last.fetched_at, id: last.id }
+    feedCursor = { at: chronology === 'published' ? String(last.published_at) : last.fetched_at, id: last.id }
   }
   while (true) {
-    let query = supabase.from('world_documents').select('id,title,canonical_url,publisher,published_at,ingested_at,metadata').gte('ingested_at', since.toISOString()).lt('ingested_at', until.toISOString()).order('ingested_at', { ascending: true }).order('id', { ascending: true }).limit(pageSize)
-    if (documentCursor) query = query.or(`ingested_at.gt.${documentCursor.at},and(ingested_at.eq.${documentCursor.at},id.gt.${documentCursor.id})`)
+    let query = supabase.from('world_documents').select('id,title,canonical_url,publisher,published_at,ingested_at,metadata').gte(documentTimeColumn, since.toISOString()).lt(documentTimeColumn, until.toISOString()).order(documentTimeColumn, { ascending: true }).order('id', { ascending: true }).limit(pageSize)
+    if (documentCursor) query = query.or(`${documentTimeColumn}.gt.${documentCursor.at},and(${documentTimeColumn}.eq.${documentCursor.at},id.gt.${documentCursor.id})`)
     const { data, error } = await query
     if (error) throw new Error(`Unable to load world documents for event clustering: ${error.message}`)
     const page = (data ?? []) as Array<Record<string, unknown>>
     documentRows.push(...page)
     if (page.length < pageSize) break
     const last = page.at(-1)!
-    documentCursor = { at: String(last.ingested_at), id: String(last.id) }
+    documentCursor = { at: String(chronology === 'published' ? last.published_at : last.ingested_at), id: String(last.id) }
   }
   const feedSources = feedRowsToWorldSources(feedRows)
   const documentSources = documentRows.map((item) => ({
@@ -384,19 +389,22 @@ async function fetchEventSources(since: Date, until: Date): Promise<WorldEventSo
   return [...feedSources, ...documentSources]
 }
 
-export async function persistWorldEventClusters(clusters: WorldEventClusterCandidate[]): Promise<{ created: number; updated: number; urgent: string[]; clusterIds: string[] }> {
+export async function persistWorldEventClusters(clusters: WorldEventClusterCandidate[]): Promise<{ created: number; updated: number; urgent: string[]; clusterIds: string[]; clusterIdByFingerprint: Record<string, string> }> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   let created = 0
   let updated = 0
   const urgent: string[] = []
   const clusterIds: string[] = []
+  const clusterIdByFingerprint: Record<string, string> = {}
   for (const cluster of clusters) {
+    const attention = cluster.attention ?? routeWorldAttention(cluster)
+    const routedProcessingState: WorldEventCluster['processingState'] = attention.route === 'noise' ? 'noise' : ['awareness', 'monitor', 'company_only'].includes(attention.route) ? 'deferred' : cluster.processingState
     const { data: prior } = await supabase.from('world_event_clusters').select('id,first_seen_at,last_seen_at,claim_state,source_diversity,source_ids,processing_state,processed_at,created_at,updated_at').eq('fingerprint', cluster.fingerprint).maybeSingle()
     const priorSourceIds = Array.isArray(prior?.source_ids) ? prior.source_ids.filter((value): value is string => typeof value === 'string') : []
     const mergedSourceIds = [...new Set([...priorSourceIds, ...cluster.sourceIds])]
     const hasNewSources = cluster.sourceIds.some((sourceId) => !priorSourceIds.includes(sourceId))
-    const processingState = nextWorldEventProcessingState(prior?.processing_state, cluster.processingState, hasNewSources)
+    const processingState = nextWorldEventProcessingState(prior?.processing_state, routedProcessingState, hasNewSources)
     const row = {
       fingerprint: cluster.fingerprint, title: cluster.title,
       first_seen_at: prior ? new Date(Math.min(Date.parse(prior.first_seen_at), Date.parse(cluster.firstSeenAt))).toISOString() : cluster.firstSeenAt,
@@ -408,6 +416,8 @@ export async function persistWorldEventClusters(clusters: WorldEventClusterCandi
       source_diversity: Math.max(Number(prior?.source_diversity ?? 0), cluster.sourceDiversity), thesis_dependency: cluster.thesisDependency, portfolio_dependency: cluster.portfolioDependency,
       decisive_new_event: cluster.decisiveNewEvent, processing_state: processingState,
       enrichment_status: cluster.enrichmentStatus ?? 'deterministic',
+      source_lane: primaryWorldSourceLane(cluster.sources), attention_route: attention.route, attention_dimensions: attention.dimensions,
+      attention_reasons: attention.reasons, policy_version: attention.policyVersion, triaged_at: new Date().toISOString(), specialist_lenses: attention.specialistLenses,
       processed_at: processingState === 'processed' ? prior?.processed_at ?? new Date().toISOString() : null,
       summary: cluster.summary, source_ids: mergedSourceIds, updated_at: new Date().toISOString(),
     }
@@ -417,17 +427,26 @@ export async function persistWorldEventClusters(clusters: WorldEventClusterCandi
     if (wasCreated) created += 1
     else updated += 1
     clusterIds.push(String(data.id))
+    clusterIdByFingerprint[cluster.fingerprint] = String(data.id)
     const sourceRows = cluster.sources.map((source) => ({
       cluster_id: data.id, source_id: source.id, feed_item_id: source.feedItemId ?? null, document_id: source.documentId ?? null, url: source.url, title: source.title,
       publisher: source.publisher, published_at: source.publishedAt, stance: 'neutral', claim_state: cluster.claimState,
+      source_lane: classifyWorldSourceLane(source), source_family: canonicalWorldSourceFamily(source),
     }))
     if (sourceRows.length) {
       const { error: sourceError } = await supabase.from('world_event_cluster_sources').upsert(sourceRows, { onConflict: 'cluster_id,source_id' })
       if (sourceError) throw new Error(`Unable to persist world event lineage: ${sourceError.message}`)
     }
-    if (cluster.materiality >= 75 || cluster.thesisDependency || cluster.portfolioDependency) urgent.push(String(data.id))
+    const { error: decisionError } = await supabase.from('world_attention_decisions').upsert({
+      event_cluster_id: data.id, policy_version: attention.policyVersion, source_lane: primaryWorldSourceLane(cluster.sources), route: attention.route,
+      dimensions: attention.dimensions, reasons: attention.reasons, selected_for_enrichment: attention.selectedForEnrichment,
+      specialist_lenses: attention.specialistLenses, decided_at: new Date().toISOString(),
+    }, { onConflict: 'event_cluster_id,policy_version' })
+    if (decisionError) throw new Error(`Unable to persist World attention decision: ${decisionError.message}`)
+    await persistWorldSignalForEvent(String(data.id), cluster, attention)
+    if (attention.route === 'urgent') urgent.push(String(data.id))
   }
-  return { created, updated, urgent, clusterIds }
+  return { created, updated, urgent, clusterIds, clusterIdByFingerprint }
 }
 
 export async function refreshWorldEvents(options: { since?: Date; until?: Date; model?: boolean; autonomousFeeds?: boolean } = {}): Promise<{ scanned: number; clustered: number; created: number; updated: number; urgent: string[]; clusterIds: string[]; topicsSucceeded: string[]; topicsFailed: string[] }> {
@@ -436,20 +455,35 @@ export async function refreshWorldEvents(options: { since?: Date; until?: Date; 
   const autonomous = options.autonomousFeeds === false ? { sources: [] as WorldEventSourceInput[], topicsSucceeded: [] as string[], topicsFailed: [] as string[] } : await ingestAutonomousWorldFeeds()
   const persistedSources = await fetchEventSources(since, until)
   const sources = [...new Map([...persistedSources, ...autonomous.sources].map((source) => [source.id, source])).values()]
-  const candidates = clusterWorldEventSources(sources, until)
-  const clusters = await attachWorldEventDependencies(await enrichClusters(candidates, options))
+  const candidates = await attachWorldEventDependencies(clusterWorldEventSources(sources, until))
+  const routed = selectWorldModelCandidates(candidates, undefined, until)
+  const selected = routed.filter((candidate) => candidate.attention.selectedForEnrichment)
+  const enriched = await enrichClusters(selected, options)
+  const enrichedByFingerprint = new Map(enriched.map((cluster) => [cluster.fingerprint, cluster]))
+  const clusters = routed.map((candidate) => {
+    const enrichedCandidate = enrichedByFingerprint.get(candidate.fingerprint) ?? candidate
+    return { ...enrichedCandidate, attention: { ...routeWorldAttention(enrichedCandidate), selectedForEnrichment: candidate.attention.selectedForEnrichment } }
+  })
   const persisted = await persistWorldEventClusters(clusters)
   return { scanned: sources.length, clustered: clusters.length, ...persisted, topicsSucceeded: autonomous.topicsSucceeded, topicsFailed: autonomous.topicsFailed }
 }
 
 export async function processWorldEventWindow(options: { since: Date; until: Date; model?: boolean }): Promise<{ sourceCount: number; clusterCount: number; eventClusterIds: string[]; usedDeterministicFallback: boolean }> {
-  const sources = await fetchEventSources(options.since, options.until)
-  const candidates = await attachWorldEventDependencies(await enrichClusters(clusterWorldEventSources(sources, options.until), { model: options.model }))
+  const sources = await fetchEventSources(options.since, options.until, 'published')
+  const deterministic = await attachWorldEventDependencies(clusterWorldEventSources(sources, options.until))
+  const routed = selectWorldModelCandidates(deterministic, undefined, options.until)
+  const enriched = await enrichClusters(routed.filter((candidate) => candidate.attention.selectedForEnrichment), { model: options.model })
+  const enrichedByFingerprint = new Map(enriched.map((cluster) => [cluster.fingerprint, cluster]))
+  const candidates = routed.map((candidate) => {
+    const enrichedCandidate = enrichedByFingerprint.get(candidate.fingerprint) ?? candidate
+    return { ...enrichedCandidate, attention: { ...routeWorldAttention(enrichedCandidate), selectedForEnrichment: candidate.attention.selectedForEnrichment } }
+  })
   const retained = candidates.filter((cluster) => cluster.thesisDependency || cluster.portfolioDependency).concat(
     candidates.filter((cluster) => !cluster.thesisDependency && !cluster.portfolioDependency).sort((a, b) => b.materiality - a.materiality || b.sourceDiversity - a.sourceDiversity).slice(0, 25),
   ).filter((cluster, index, array) => array.findIndex((item) => item.fingerprint === cluster.fingerprint) === index)
-  const persisted = await persistWorldEventClusters(retained)
-  return { sourceCount: sources.length, clusterCount: retained.length, eventClusterIds: persisted.clusterIds, usedDeterministicFallback: retained.some((cluster) => cluster.enrichmentStatus === 'fallback') }
+  const persisted = await persistWorldEventClusters(candidates)
+  const eventClusterIds = retained.map((cluster) => persisted.clusterIdByFingerprint[cluster.fingerprint]).filter((id): id is string => Boolean(id))
+  return { sourceCount: sources.length, clusterCount: retained.length, eventClusterIds, usedDeterministicFallback: retained.some((cluster) => cluster.enrichmentStatus === 'fallback') }
 }
 
 export async function backfillWorldEvents(options: { since: Date; until?: Date; model?: boolean; onWeek?: (summary: Record<string, unknown>) => Promise<void> }): Promise<{ weeks: number; clusters: number }> {

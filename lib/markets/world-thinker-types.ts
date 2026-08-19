@@ -1,4 +1,4 @@
-export const WORLD_NODE_KINDS = ['actor', 'situation', 'theme', 'market', 'scenario', 'hypothesis', 'journal', 'current'] as const
+export const WORLD_NODE_KINDS = ['actor', 'situation', 'theme', 'market', 'scenario', 'hypothesis', 'indicator', 'journal', 'current'] as const
 export type WorldNodeKind = typeof WORLD_NODE_KINDS[number]
 
 export const WORLD_CLAIM_STATES = ['reported', 'corroborated', 'officially_confirmed', 'contested', 'retracted', 'superseded'] as const
@@ -101,8 +101,48 @@ export interface WorldEventCluster {
   thesisDependency: boolean
   portfolioDependency: boolean
   decisiveNewEvent: boolean
-  processingState: 'pending' | 'processing' | 'processed' | 'noise' | 'failed' | 'quarantined'
+  processingState: 'pending' | 'processing' | 'processed' | 'noise' | 'deferred' | 'failed' | 'quarantined'
   summary: string
+  sourceIds: string[]
+}
+
+export type WorldSignalStatus = 'observed' | 'monitoring' | 'activated' | 'contradicted' | 'superseded' | 'dormant'
+
+export interface WorldSignal {
+  id: string
+  fingerprint: string
+  status: WorldSignalStatus
+  title: string
+  summary: string
+  eventClusterIds: string[]
+  sourceIds: string[]
+  entities: string[]
+  geographies: string[]
+  domains: string[]
+  economicChannels: string[]
+  activationConditions: string[]
+  relatedSignalIds: string[]
+  relatedNodeIds: string[]
+  firstObservedAt: string
+  lastObservedAt: string
+  lastMatchedAt?: string
+  nextReviewAt: string
+}
+
+export interface WorldSpecialistAssessment {
+  lens: 'geopolitics_institutions' | 'physical_economy' | 'macro_finance' | 'technology_industrial_capacity'
+  eventClusterIds: string[]
+  classifications: Array<{ eventClusterId: string; classification: WorldChangeClassification; rationale: string }>
+  causalChannels: Array<{ cause: string; effect: string; mechanism: string; sourceIds: string[] }>
+  affectedVariables: string[]
+  reach: string
+  duration: string
+  relatedSignalIds: string[]
+  contradictions: string[]
+  evidenceGaps: string[]
+  activationConditions: string[]
+  monitoringIndicators: string[]
+  candidateHypotheses: string[]
   sourceIds: string[]
 }
 
@@ -162,6 +202,8 @@ export interface WorldUpdateProposal {
   }
 }
 
+export type WorldNodeDraft = Omit<WorldNode, 'asOf' | 'nextReviewAt'>
+
 export interface WorldUpdateDraft {
   orientation: string
   eventClassifications: Array<{
@@ -170,7 +212,7 @@ export interface WorldUpdateDraft {
     rationale: string
   }>
   sources: WorldSourceReference[]
-  upserts: WorldNode[]
+  upserts: WorldNodeDraft[]
   archives: Array<{ nodeId: string; reason: string; replacementId?: string }>
   opportunityLeads: WorldOpportunityLead[]
   journal: WorldUpdateProposal['journal']
@@ -367,12 +409,20 @@ export function validateWorldUpdateDraft(value: unknown): WorldUpdateDraft {
     const item = record(entry, `eventClassifications[${index}]`)
     return { eventKey: string(item.eventKey, 'classification.eventKey', 16), classification: enumValue(item.classification, ['confirmation', 'contradiction', 'novelty', 'noise', 'uncertainty'] as const, 'classification.classification'), rationale: string(item.rationale, 'classification.rationale', 2_000) }
   }) : []
-  const canonical = validateWorldUpdateProposal({ ...input, asOf: new Date().toISOString(), trigger: 'scheduled', baseCommit: null, eventClassifications: classifications.map((item) => ({ eventClusterId: item.eventKey, classification: item.classification, rationale: item.rationale })) })
+  const administrativeTimestamp = new Date().toISOString()
+  const draftUpserts = Array.isArray(input.upserts) ? input.upserts.map((node) => {
+    const canonicalNode = validateWorldNode({ ...record(node, 'node draft'), asOf: administrativeTimestamp, nextReviewAt: administrativeTimestamp })
+    const draftNode = { ...canonicalNode } as WorldNode & { asOf?: string; nextReviewAt?: string }
+    delete draftNode.asOf
+    delete draftNode.nextReviewAt
+    return draftNode as WorldNodeDraft
+  }) : []
+  const canonical = validateWorldUpdateProposal({ ...input, upserts: draftUpserts.map((node) => ({ ...node, asOf: administrativeTimestamp, nextReviewAt: administrativeTimestamp })), asOf: administrativeTimestamp, trigger: 'scheduled', baseCommit: null, eventClassifications: classifications.map((item) => ({ eventClusterId: item.eventKey, classification: item.classification, rationale: item.rationale })) })
   return {
     orientation: canonical.orientation,
     eventClassifications: classifications,
     sources: canonical.sources,
-    upserts: canonical.upserts,
+    upserts: draftUpserts,
     archives: canonical.archives,
     opportunityLeads: canonical.opportunityLeads,
     journal: canonical.journal,

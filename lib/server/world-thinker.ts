@@ -344,7 +344,15 @@ export function materializeWorldUpdateProposal(draft: WorldUpdateDraft, context:
     return { eventClusterId, classification: classification.classification, rationale: classification.rationale }
   })
   for (const entry of context.eventKeyMap) if (!seen.has(entry.eventKey)) throw new Error(`World draft omitted event classification ${entry.eventKey}`)
-  return { ...draft, asOf, trigger, baseCommit: context.baseCommit, eventClassifications }
+  const reviewDays: Record<WorldNode['kind'], number> = {
+    current: 1, situation: 3, indicator: 7, hypothesis: 7, scenario: 14, actor: 30, theme: 30, market: 14, journal: 1,
+  }
+  const upserts: WorldNode[] = draft.upserts.map((node) => ({
+    ...node,
+    asOf,
+    nextReviewAt: new Date(Date.parse(asOf) + reviewDays[node.kind] * 24 * 60 * 60_000).toISOString(),
+  }))
+  return { ...draft, upserts, asOf, trigger, baseCommit: context.baseCommit, eventClassifications }
 }
 
 export function buildWorldUpdateDraftSchema(proposalSchema: Record<string, unknown>, eventKeys: string[]): Record<string, unknown> {
@@ -361,6 +369,10 @@ export function buildWorldUpdateDraftSchema(proposalSchema: Record<string, unkno
   classifications.items.required = ['eventKey', 'classification', 'rationale']
   delete classifications.items.properties.eventClusterId
   classifications.items.properties.eventKey = { type: 'string', enum: eventKeys.length ? eventKeys : ['NO_EVENTS'] }
+  const definitions = cloned.$defs as { node: { required: string[]; properties: Record<string, unknown> } }
+  definitions.node.required = definitions.node.required.filter((key) => !['asOf', 'nextReviewAt'].includes(key))
+  delete definitions.node.properties.asOf
+  delete definitions.node.properties.nextReviewAt
   return cloned
 }
 
