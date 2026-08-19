@@ -14,7 +14,7 @@ import {
 import { WORLD_BENCHMARK_CASES } from '../lib/markets/world-benchmark.ts'
 import { boundWorldSpecialistLenses } from '../lib/server/world-specialists.ts'
 import { clusterWorldEventSources, mapWorldEventBatchesWithConcurrency } from '../lib/server/world-events.ts'
-import { worldSignalActivationSatisfied } from '../lib/server/world-signals.ts'
+import { shouldPersistWorldSignal, worldSignalActivationSatisfied } from '../lib/server/world-signals.ts'
 
 function source(overrides: Partial<AttentionSource> = {}): AttentionSource {
   return { id: 's1', title: 'Routine quarterly earnings beat estimates', url: 'https://financialmodelingprep.com/news/1', publisher: 'FMP stock news', publishedAt: '2026-08-18T10:00:00.000Z', fetchedAt: '2026-08-18T10:05:00.000Z', ...overrides }
@@ -110,4 +110,20 @@ test('dormant ENSO activation conditions reactivate on compound crop, power, or 
   const conditions = ['crop failure or food-price disruption', 'hydropower or reservoir stress', 'insurance losses or commodity disruption']
   assert.equal(worldSignalActivationSatisfied(conditions, 'New drought evidence shows crop losses and reservoir stress'), true)
   assert.equal(worldSignalActivationSatisfied(conditions, 'A routine quarterly earnings release'), false)
+})
+
+test('compact weak-signal memory excludes low-information awareness without deleting its event', () => {
+  const lowInformation = candidate({
+    title: 'Self-Portrait by Ernst Mach', summary: 'A historical image', materiality: 15, novelty: 45,
+    channels: [], geographies: [], sources: [source({ title: 'Self-Portrait by Ernst Mach', url: 'https://example.org/mach', publisher: 'Example' })],
+  })
+  const awareness = routeWorldAttention(lowInformation)
+  assert.equal(awareness.route, 'awareness')
+  assert.equal(shouldPersistWorldSignal(lowInformation as ReturnType<typeof clusterWorldEventSources>[number], awareness), false)
+
+  const enso = candidate({
+    title: 'ENSO outlook shifts toward El Niño', summary: 'Climate outlook may affect crops and hydropower', materiality: 45, novelty: 50,
+    channels: ['climate'], geographies: ['Pacific'], sources: [source({ title: 'ENSO outlook shifts toward El Niño', url: 'https://climate.gov/enso', publisher: 'NOAA' })],
+  })
+  assert.equal(shouldPersistWorldSignal(enso as ReturnType<typeof clusterWorldEventSources>[number], routeWorldAttention(enso)), true)
 })

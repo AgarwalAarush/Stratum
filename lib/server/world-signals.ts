@@ -50,6 +50,21 @@ function statusFor(decision: WorldAttentionDecision, claimState: string): WorldS
   return 'observed'
 }
 
+export function shouldPersistWorldSignal(cluster: WorldEventClusterCandidate, decision: WorldAttentionDecision): boolean {
+  if (decision.route === 'noise' || decision.route === 'company_only') return false
+  if (decision.route !== 'awareness') return true
+  const dimensions = decision.dimensions
+  const durableOrConnected = Math.max(
+    dimensions.systemReach,
+    dimensions.duration,
+    dimensions.propagationPotential,
+    dimensions.transmissionClarity,
+  ) >= 45
+  const structuredConcept = cluster.channels.length > 0 || cluster.geographies.length > 0
+  const officialPrimary = decision.reasons.some((reason) => reason.includes('official or primary'))
+  return durableOrConnected || structuredConcept || officialPrimary
+}
+
 function overlap(left: string[], right: string[]): string[] {
   const rightTerms = normalizedTerms(right)
   return [...normalizedTerms(left)].filter((term) => rightTerms.has(term))
@@ -65,7 +80,7 @@ function activationSatisfied(prior: SignalRow, cluster: WorldEventClusterCandida
 }
 
 export async function persistWorldSignalForEvent(clusterId: string, cluster: WorldEventClusterCandidate, decision: WorldAttentionDecision): Promise<{ signalId: string | null; linkedSignalIds: string[]; reactivatedSignalIds: string[] }> {
-  if (decision.route === 'noise' || decision.route === 'company_only') return { signalId: null, linkedSignalIds: [], reactivatedSignalIds: [] }
+  if (!shouldPersistWorldSignal(cluster, decision)) return { signalId: null, linkedSignalIds: [], reactivatedSignalIds: [] }
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const fingerprint = signalFingerprint(cluster)
