@@ -10,7 +10,7 @@ import { buildCodexExecArgs } from '../lib/server/codex-exec.ts'
 import { clusterWorldEventSources, nextWorldEventProcessingState, partitionWorldEventCandidates, reconcileExtractedClusters, transitionWorldClaimState, worldEventExtractionPrompt } from '../lib/server/world-events.ts'
 import { commitWorldUpdate, initializeWorldRepository, parseWorldNode, renderWorldNode, validateWorldProposalAgainstState } from '../lib/server/world-repository.ts'
 import { buildWorldUpdateDraftSchema, materializeWorldUpdateProposal, selectResearchableWorldLeads } from '../lib/server/world-thinker.ts'
-import { type WorldNode, type WorldOpportunityLead, type WorldUpdateDraft, type WorldUpdateProposal, validateWorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
+import { type WorldNode, type WorldOpportunityLead, type WorldUpdateDraft, type WorldUpdateProposal, validateWorldUpdateDraft, validateWorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
 import { latestDistinctWorldJournals } from '../lib/server/world-projection.ts'
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
 import { assessWorldCoverage, deriveWorldCoverageIndex } from '../lib/markets/world-coverage.ts'
@@ -169,11 +169,13 @@ test('host materializes exact event keys and rejects invented or omitted model I
       { eventKey: 'E002', classification: 'confirmation' as const, rationale: 'Corroborated.' },
     ], sources: canonical.sources, upserts: canonical.upserts, archives: canonical.archives, opportunityLeads: canonical.opportunityLeads, journal: canonical.journal,
   } satisfies WorldUpdateDraft
-  const context = { baseCommit: 'abc123', eventKeyMap: [{ eventKey: 'E001', eventClusterId: 'event-uuid-1' }, { eventKey: 'E002', eventClusterId: 'event-uuid-2' }] }
+  const currentNode = node({ id: 'current', kind: 'current', title: 'Current world assessment', aliases: [], claims: [], sourceIds: [], relationships: [], body: 'A provisional assessment.', summary: 'A provisional assessment.' })
+  const context = { baseCommit: 'abc123', current: currentNode, eventKeyMap: [{ eventKey: 'E001', eventClusterId: 'event-uuid-1' }, { eventKey: 'E002', eventClusterId: 'event-uuid-2' }] }
   const materialized = materializeWorldUpdateProposal(draft, context, 'urgent', now)
   assert.deepEqual(materialized.eventClassifications.map((item) => item.eventClusterId), ['event-uuid-1', 'event-uuid-2'])
-  assert.equal(materialized.upserts[0].asOf, now)
-  assert.equal(materialized.upserts[0].nextReviewAt, '2026-08-20T18:00:00.000Z')
+  const materializedSituation = materialized.upserts.find((item) => item.id === 'situation-iran-conflict')!
+  assert.equal(materializedSituation.asOf, now)
+  assert.equal(materializedSituation.nextReviewAt, '2026-08-20T18:00:00.000Z')
   const nodeSchema = ((schema.$defs as Record<string, { required: string[]; properties: Record<string, unknown> }>).node)
   assert.equal(nodeSchema.required.includes('asOf'), false)
   assert.equal(nodeSchema.required.includes('nextReviewAt'), false)
@@ -181,6 +183,13 @@ test('host materializes exact event keys and rejects invented or omitted model I
   assert.equal('nextReviewAt' in nodeSchema.properties, false)
   assert.throws(() => materializeWorldUpdateProposal({ ...draft, eventClassifications: draft.eventClassifications.slice(0, 1) }, context, 'urgent', now), /omitted event classification E002/)
   assert.throws(() => materializeWorldUpdateProposal({ ...draft, eventClassifications: [{ ...draft.eventClassifications[0], eventKey: 'E999' }, draft.eventClassifications[1]] }, context, 'urgent', now), /unknown event key E999/)
+
+  const withoutCurrent = { ...draft, upserts: draft.upserts.filter((item) => item.kind !== 'current') }
+  assert.equal(validateWorldUpdateDraft(withoutCurrent).upserts.length, 1)
+  const carriedForward = materializeWorldUpdateProposal(withoutCurrent, context, 'urgent', now)
+  assert.equal(carriedForward.upserts.filter((item) => item.kind === 'current').length, 1)
+  assert.equal(carriedForward.upserts[0].id, 'current')
+  assert.throws(() => materializeWorldUpdateProposal(withoutCurrent, { ...context, current: null }, 'urgent', now), /exactly one current-state node/)
 })
 
 test('world node Markdown is deterministic and parseable', () => {

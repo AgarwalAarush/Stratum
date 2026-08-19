@@ -397,7 +397,7 @@ export function validateWorldOpportunityLead(value: unknown): WorldOpportunityLe
   }
 }
 
-export function validateWorldUpdateProposal(value: unknown): WorldUpdateProposal {
+export function validateWorldUpdateProposal(value: unknown, options: { requireCurrent?: boolean } = {}): WorldUpdateProposal {
   const input = record(value, 'world update proposal')
   const sources = Array.isArray(input.sources) ? input.sources.map(validateWorldSourceReference) : []
   const upserts = Array.isArray(input.upserts) ? input.upserts.map(validateWorldNode) : []
@@ -423,7 +423,8 @@ export function validateWorldUpdateProposal(value: unknown): WorldUpdateProposal
     },
   }
   if (proposal.upserts.length > 40 || proposal.opportunityLeads.length > 12) throw new Error('World update exceeds bounded output limits')
-  if (proposal.upserts.filter((node) => node.kind === 'current').length !== 1) throw new Error('World update must contain exactly one current-state node')
+  const currentCount = proposal.upserts.filter((node) => node.kind === 'current').length
+  if (currentCount > 1 || options.requireCurrent !== false && currentCount !== 1) throw new Error('World update must contain exactly one current-state node')
   if (proposal.upserts.some((node) => node.kind === 'journal')) throw new Error('World journals are rendered by the host and cannot be model upserts')
   return proposal
 }
@@ -442,7 +443,7 @@ export function validateWorldUpdateDraft(value: unknown): WorldUpdateDraft {
     void nextReviewAt
     return draftNode
   }) : []
-  const canonical = validateWorldUpdateProposal({ ...input, upserts: draftUpserts.map((node) => ({ ...node, asOf: administrativeTimestamp, nextReviewAt: administrativeTimestamp })), asOf: administrativeTimestamp, trigger: 'scheduled', baseCommit: null, eventClassifications: classifications.map((item) => ({ eventClusterId: item.eventKey, classification: item.classification, rationale: item.rationale })) })
+  const canonical = validateWorldUpdateProposal({ ...input, upserts: draftUpserts.map((node) => ({ ...node, asOf: administrativeTimestamp, nextReviewAt: administrativeTimestamp })), asOf: administrativeTimestamp, trigger: 'scheduled', baseCommit: null, eventClassifications: classifications.map((item) => ({ eventClusterId: item.eventKey, classification: item.classification, rationale: item.rationale })) }, { requireCurrent: false })
   return {
     orientation: canonical.orientation,
     eventClassifications: classifications,

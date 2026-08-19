@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
-import type { WorldCritique, WorldEventCluster, WorldNode, WorldOpportunityLead, WorldSignal, WorldSpecialistAssessment, WorldUpdateDraft, WorldUpdateProposal } from '../markets/world-thinker-types.ts'
+import type { WorldCritique, WorldEventCluster, WorldNode, WorldNodeDraft, WorldOpportunityLead, WorldSignal, WorldSpecialistAssessment, WorldUpdateDraft, WorldUpdateProposal } from '../markets/world-thinker-types.ts'
 import { validateWorldCritique, validateWorldUpdateDraft } from '../markets/world-thinker-types.ts'
 import { runCodexJson } from './codex-exec.ts'
 import { selectMarketModel } from './market-model-policy.ts'
@@ -374,7 +374,7 @@ EVENT_KEYS
 ${JSON.stringify(context.eventKeyMap)}`
 }
 
-export function materializeWorldUpdateProposal(draft: WorldUpdateDraft, context: Pick<ThinkerContext, 'baseCommit' | 'eventKeyMap'>, trigger: WorldUpdateProposal['trigger'], asOf = new Date().toISOString()): WorldUpdateProposal {
+export function materializeWorldUpdateProposal(draft: WorldUpdateDraft, context: Pick<ThinkerContext, 'baseCommit' | 'eventKeyMap'> & { current?: WorldNode | null }, trigger: WorldUpdateProposal['trigger'], asOf = new Date().toISOString()): WorldUpdateProposal {
   const ids = new Map(context.eventKeyMap.map((entry) => [entry.eventKey, entry.eventClusterId]))
   const seen = new Set<string>()
   const eventClassifications = draft.eventClassifications.map((classification) => {
@@ -388,7 +388,17 @@ export function materializeWorldUpdateProposal(draft: WorldUpdateDraft, context:
   const reviewDays: Record<WorldNode['kind'], number> = {
     current: 1, situation: 3, indicator: 7, hypothesis: 7, scenario: 14, actor: 30, theme: 30, market: 14, journal: 1,
   }
-  const upserts: WorldNode[] = draft.upserts.map((node) => ({
+  const currentDrafts = draft.upserts.filter((node) => node.kind === 'current')
+  if (currentDrafts.length > 1) throw new Error('World update must contain exactly one current-state node')
+  let sourceUpserts: WorldNodeDraft[] = draft.upserts
+  if (currentDrafts.length === 0) {
+    if (!context.current) throw new Error('World update must contain exactly one current-state node')
+    const { asOf: _asOf, nextReviewAt: _nextReviewAt, ...currentDraft } = context.current
+    void _asOf
+    void _nextReviewAt
+    sourceUpserts = [currentDraft, ...draft.upserts]
+  }
+  const upserts: WorldNode[] = sourceUpserts.map((node) => ({
     ...node,
     asOf,
     nextReviewAt: new Date(Date.parse(asOf) + reviewDays[node.kind] * 24 * 60 * 60_000).toISOString(),
