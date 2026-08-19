@@ -13,7 +13,8 @@ import { buildWorldUpdateDraftSchema, materializeWorldUpdateProposal, selectRese
 import { type WorldNode, type WorldOpportunityLead, type WorldUpdateDraft, type WorldUpdateProposal, validateWorldUpdateDraft, validateWorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
 import { latestDistinctWorldJournals } from '../lib/server/world-projection.ts'
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
-import { assessWorldCoverage, deriveWorldCoverageIndex } from '../lib/markets/world-coverage.ts'
+import { WORLD_COVERAGE_FRONTIERS, assessWorldCoverage, deriveWorldCoverageIndex } from '../lib/markets/world-coverage.ts'
+import { worldCoverageUpsertIdentity } from '../lib/server/world-coverage.ts'
 
 const now = '2026-08-17T18:00:00.000Z'
 const execFile = promisify(execFileCallback)
@@ -152,6 +153,16 @@ test('coverage frontiers expose geopolitical and institutional blind spots expli
   assert.deepEqual(coverage.find((frontier) => frontier.id === 'political-institutions')?.activeNodeIds, ['theme-democratic-backsliding'])
   assert.equal(assessWorldCoverage({ lastEvidenceAt: now, sourceFamilyCount: 1, activeNodeCount: 1 }, new Date(now)), 'thin')
   assert.equal(assessWorldCoverage({ lastEvidenceAt: now, sourceFamilyCount: 2, activeNodeCount: 1 }, new Date(now)), 'healthy')
+})
+
+test('coverage refresh upserts include required immutable frontier identity', () => {
+  const frontier = WORLD_COVERAGE_FRONTIERS[0]
+  const row = worldCoverageUpsertIdentity(frontier)
+  assert.equal(row.id, frontier.id)
+  assert.equal(row.label, frontier.label)
+  assert.equal(row.description, frontier.description)
+  assert.deepEqual(row.query_terms, frontier.queryTerms)
+  assert.equal(row.priority, frontier.priority)
 })
 
 test('host materializes exact event keys and rejects invented or omitted model IDs', async () => {

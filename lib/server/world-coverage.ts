@@ -1,4 +1,4 @@
-import { WORLD_COVERAGE_FRONTIERS, assessWorldCoverage, matchesWorldCoverageFrontier, type WorldCoverageFrontier } from '../markets/world-coverage.ts'
+import { WORLD_COVERAGE_FRONTIERS, assessWorldCoverage, matchesWorldCoverageFrontier, type WorldCoverageFrontier, type WorldCoverageFrontierDefinition } from '../markets/world-coverage.ts'
 import type { WorldNode } from '../markets/world-thinker-types.ts'
 import { getSupabaseClient } from './supabase.ts'
 
@@ -26,11 +26,21 @@ function normalizeCoverageRow(row: CoverageRow): WorldCoverageFrontier {
   }
 }
 
+export function worldCoverageUpsertIdentity(frontier: WorldCoverageFrontierDefinition): Pick<CoverageRow, 'id' | 'label' | 'description' | 'query_terms' | 'priority'> {
+  return {
+    id: frontier.id,
+    label: frontier.label,
+    description: frontier.description,
+    query_terms: frontier.queryTerms,
+    priority: frontier.priority,
+  }
+}
+
 export async function ensureWorldCoverageFrontiers(): Promise<void> {
   const supabase = getSupabaseClient()
   if (!supabase) return
   const rows = WORLD_COVERAGE_FRONTIERS.map((frontier) => ({
-    id: frontier.id, label: frontier.label, description: frontier.description, query_terms: frontier.queryTerms, priority: frontier.priority, updated_at: new Date().toISOString(),
+    ...worldCoverageUpsertIdentity(frontier), updated_at: new Date().toISOString(),
   }))
   const { error } = await supabase.from('world_coverage_frontiers').upsert(rows, { onConflict: 'id' })
   if (error) throw new Error(`Unable to initialize world coverage frontiers: ${error.message}`)
@@ -86,7 +96,7 @@ export async function refreshWorldCoverageState(nodes: WorldNode[], now = new Da
     const status = assessWorldCoverage({ lastEvidenceAt, sourceFamilyCount, activeNodeCount: matchingNodes.length }, now)
     const nextReviewHours = status === 'healthy' ? 24 : status === 'thin' ? 8 : 6
     return {
-      id: frontier.id, status, source_family_count: sourceFamilyCount, active_node_ids: matchingNodes.map((node) => node.id),
+      ...worldCoverageUpsertIdentity(frontier), status, source_family_count: sourceFamilyCount, active_node_ids: matchingNodes.map((node) => node.id),
       last_evidence_at: lastEvidenceAt, last_reviewed_at: now.toISOString(), next_review_at: new Date(now.getTime() + nextReviewHours * 3_600_000).toISOString(), updated_at: now.toISOString(),
     }
   })
