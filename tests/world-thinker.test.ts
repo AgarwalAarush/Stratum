@@ -124,6 +124,12 @@ test('event enrichment partitions model work into bounded microbatches', () => {
   assert.ok(batches.every((batch) => batch.reduce((sum, item) => sum + item.sourceIds.length, 0) <= 100))
 })
 
+test('autonomous World sensing consumes persisted rows without a long URL re-query', () => {
+  const source = readFileSync(new URL('../lib/server/world-events.ts', import.meta.url), 'utf8')
+  assert.match(source, /const rows = await persistFeedItems/)
+  assert.doesNotMatch(source, /\.in\('url', urls/)
+})
+
 test('claim-state transitions preserve contradiction and retraction instead of false resolution', () => {
   assert.equal(transitionWorldClaimState('reported', 'corroborated'), 'corroborated')
   assert.equal(transitionWorldClaimState('corroborated', 'contested'), 'contested')

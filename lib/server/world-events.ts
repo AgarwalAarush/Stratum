@@ -355,18 +355,15 @@ async function ingestAutonomousWorldFeeds(): Promise<{ sources: WorldEventSource
     const items = await fetchNewsItemsByTopic(topic, 20)
     if (items.length === 0) throw new Error(`No items returned for ${topic}`)
     const globalTopic = ['us-news', 'geopolitics', 'european-union', 'climate-environment', 'global-supply-chains', 'global-summits', 'global-health', 'global-macro-finance', 'institutions-governance', 'energy-resources', 'demographics-migration'].includes(topic)
-    await persistFeedItems(globalTopic ? 'global-news' : 'ai-research', globalTopic ? `news-${topic}` : topic, items, { strict: true })
-    return { topic, urls: items.map((item) => item.url) }
+    const rows = await persistFeedItems(globalTopic ? 'global-news' : 'ai-research', globalTopic ? `news-${topic}` : topic, items, { strict: true })
+    return { topic, rows }
   }))
   const topicsSucceeded = results.flatMap((result) => result.status === 'fulfilled' ? [result.value.topic] : [])
   const topicsFailed = WORLD_SENSOR_TOPICS.filter((topic) => !topicsSucceeded.includes(topic))
-  const urls = [...new Set(results.flatMap((result) => result.status === 'fulfilled' ? result.value.urls : []))]
-  const rows: FeedItemRow[] = []
-  for (let index = 0; index < urls.length; index += 100) {
-    const { data, error } = await supabase.from('feed_items').select('id,item_type,scope,section,title,url,published_at,fetched_at,metadata').in('url', urls.slice(index, index + 100))
-    if (error) throw new Error(`Unable to resolve autonomous feed items: ${error.message}`)
-    rows.push(...(data ?? []) as FeedItemRow[])
-  }
+  // Use rows returned by the upsert. Re-querying hundreds of long Google News
+  // URLs via a PostgREST `in(...)` GET can exceed intermediary URL limits and
+  // turn an otherwise successful sensor pass into a transport failure.
+  const rows = results.flatMap((result) => result.status === 'fulfilled' ? result.value.rows : [])
   return { sources: feedRowsToWorldSources(rows), topicsSucceeded, topicsFailed }
 }
 
