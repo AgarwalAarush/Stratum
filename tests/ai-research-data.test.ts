@@ -433,6 +433,34 @@ test('fetchNewsItemsByTopic retains attributable Google News evidence when URL d
   assert.equal(first.canonicalSource, 'Reuters')
 })
 
+test('background sensing can skip Google URL enrichment without dropping evidence', async (t) => {
+  clearCacheForTests()
+
+  const originalFetch = global.fetch
+  let articlePageCalls = 0
+  const articleId = 'CBSensorDoesNotNeedDecode123'
+  global.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes(`news.google.com/articles/${articleId}`)) {
+      articlePageCalls += 1
+      return new Response('', { status: 429 })
+    }
+    return new Response(
+      `<rss><channel><item><title>Governance evidence</title><link>https://news.google.com/rss/articles/${articleId}</link><pubDate>Thu, 06 Mar 2026 12:00:00 GMT</pubDate><source url="https://apnews.com/example">AP News</source></item></channel></rss>`,
+      { status: 200, headers: { 'Content-Type': 'application/xml' } },
+    )
+  }) as typeof fetch
+
+  t.after(() => {
+    global.fetch = originalFetch
+  })
+
+  const items = await fetchNewsItemsByTopic('institutions-governance', 5, { resolveGoogleUrls: false })
+  assert.equal(items.length, 1)
+  assert.equal(articlePageCalls, 0)
+  assert.equal(items[0].canonicalSource, 'AP News')
+})
+
 test('news topic route returns valid SectionData for valid topic', async (t) => {
   clearCacheForTests()
 

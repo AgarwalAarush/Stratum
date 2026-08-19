@@ -352,7 +352,10 @@ async function ingestAutonomousWorldFeeds(): Promise<{ sources: WorldEventSource
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const results = await Promise.allSettled(WORLD_SENSOR_TOPICS.map(async (topic) => {
-    const items = await fetchNewsItemsByTopic(topic, 20)
+    // Publisher attribution and the RSS article URL are sufficient for event
+    // admission. Canonical URL decoding is optional enrichment and is both
+    // rate-limited and unnecessary on this latency-sensitive worker path.
+    const items = await fetchNewsItemsByTopic(topic, 20, { resolveGoogleUrls: false })
     if (items.length === 0) throw new Error(`No items returned for ${topic}`)
     const globalTopic = ['us-news', 'geopolitics', 'european-union', 'climate-environment', 'global-supply-chains', 'global-summits', 'global-health', 'global-macro-finance', 'institutions-governance', 'energy-resources', 'demographics-migration'].includes(topic)
     const rows = await persistFeedItems(globalTopic ? 'global-news' : 'ai-research', globalTopic ? `news-${topic}` : topic, items, { strict: true })

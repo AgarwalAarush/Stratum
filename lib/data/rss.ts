@@ -413,6 +413,7 @@ export function isNewsTopic(value: string): value is NewsTopic {
 export async function fetchNewsItemsByTopic(
   topic: NewsTopic,
   limit = DEFAULT_MAX_ITEMS,
+  options: { resolveGoogleUrls?: boolean } = {},
 ): Promise<NewsItem[]> {
   const feeds = NEWS_TOPIC_FEEDS[topic] ?? []
   if (feeds.length === 0) return []
@@ -442,7 +443,7 @@ export async function fetchNewsItemsByTopic(
     deduped.sort((a, b) => b.publishedAt - a.publishedAt)
 
     const final = deduped.slice(0, limit)
-    await resolveGoogleNewsUrls(final)
+    if (options.resolveGoogleUrls !== false) await resolveGoogleNewsUrls(final)
     // URL decoding is an enrichment step, not an evidence-admission gate. Google
     // periodically changes its article-page format and can rate-limit the
     // decoder. The RSS URL remains a valid, attributable source link, so retain
