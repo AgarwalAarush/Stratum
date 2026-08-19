@@ -48,16 +48,17 @@ export default async function MarketsWorldPage() {
   await requireAllowedMarketUser()
   const world = await fetchWorldWorkspace()
   const changes = world.latestChanges[0]
-  const needsAttention = world.health.lastRunStatus === 'failed' || Boolean(world.health.failure) || world.health.quarantinedEvents > 0 || world.replay.run?.status === 'failed'
+  const runNeedsAttention = world.health.lastRunStatus === 'failed' || (Boolean(world.health.failure) && world.health.lastRunStatus !== 'rejected')
+  const needsAttention = runNeedsAttention || world.health.quarantinedEvents > 0 || world.replay.run?.status === 'failed'
   const operatingState = needsAttention ? 'Needs attention' : world.freshness === 'current' ? 'Healthy' : world.freshness
   const activeModelCount = world.situations.length + world.themes.length + world.actors.length + world.scenarios.length + world.hypotheses.length + world.indicators.length
   const healthyCoverage = world.coverage.filter((frontier) => frontier.status === 'healthy').length
   const replay = world.replay.run
   const replayPercent = replay && replay.weeksTotal > 0 ? Math.round((replay.weeksCompleted / replay.weeksTotal) * 100) : null
-  const attentionHeadline = world.health.lastRunStatus === 'failed' || world.health.failure
+  const attentionHeadline = runNeedsAttention
     ? 'The latest run failed; the prior validated world state remains published.'
     : replay?.status === 'failed' ? 'Historical replay paused after a failed batch; live world state remains available.'
-      : `${countLabel(world.health.quarantinedEvents, 'event')} need manual review after repeated failures.`
+      : `${countLabel(world.health.quarantinedEvents, 'event')} ${world.health.quarantinedEvents === 1 ? 'needs' : 'need'} manual review after repeated failures.`
 
   return (
     <div className="world-page">
@@ -117,7 +118,7 @@ export default async function MarketsWorldPage() {
           <p>{world.current?.summary ?? 'The repository is ready, but no validated World Thinker commit has been projected.'}</p>
           {world.current?.body ? <WorldMarkdown className="world-current-body">{world.current.body}</WorldMarkdown> : null}
           <dl className="world-current-meta">
-            <div><dt>Last run</dt><dd>{world.health.lastRunStatus ?? 'None'}</dd></div>
+            <div><dt>Last run</dt><dd>{world.health.lastRunStatus === 'rejected' ? 'no material update' : world.health.lastRunStatus ?? 'None'}</dd></div>
             <div><dt>Run started</dt><dd>{formatTime(world.health.lastRunAt)}</dd></div>
             <div><dt>Projection</dt><dd>{world.canonical ? 'Canonical' : 'Shadow'}</dd></div>
           </dl>
