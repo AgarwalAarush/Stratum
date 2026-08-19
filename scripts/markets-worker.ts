@@ -6,6 +6,7 @@ import type { AgentJobType } from '../lib/server/agent-jobs.ts'
 import { workerJobConcurrency } from '../lib/server/market-model-policy.ts'
 import { isRobinhoodPortfolioSyncConfigured } from '../lib/server/robinhood-portfolio-sync.ts'
 import { ensureDeclaredMarketDomainPacks } from '../lib/server/world-source-control.ts'
+import { ensureWorldCoverageFrontiers } from '../lib/server/world-coverage.ts'
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 5_000)
 const SCHEDULER_INTERVAL_MS = Number(process.env.WORKER_SCHEDULER_INTERVAL_MS ?? 60_000)
@@ -89,6 +90,7 @@ async function main() {
   }
   console.info(JSON.stringify({ level: 'info', workerId, event: 'worker_concurrency', concurrency: WORKER_CONCURRENCY }))
   const domainSync = await ensureDeclaredMarketDomainPacks()
+  if (worldThinkerEnabled) await ensureWorldCoverageFrontiers()
   if (domainSync.inserted.length > 0 || domainSync.upgraded.length > 0) {
     console.info(JSON.stringify({ level: 'info', workerId, event: 'market_domain_packs_synchronized', ...domainSync }))
   }

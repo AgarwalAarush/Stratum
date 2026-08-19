@@ -96,6 +96,7 @@ export const AGENT_JOB_TYPES = [
   'backup-market-corpus',
   'verify-market-corpus',
   'refresh-world-events',
+  'run-world-replay',
   'run-world-thinker',
   'project-world-repository',
 ] as const
@@ -160,6 +161,10 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     const bucket = new Date(now)
     bucket.setTime(Math.floor(bucket.getTime() / (minutes * 60_000)) * minutes * 60_000)
     return `${jobType}:${payload.trigger === 'urgent' ? 'urgent' : String(payload.trigger ?? 'scheduled')}:${bucket.toISOString()}`
+  }
+  if (jobType === 'run-world-replay') {
+    if (typeof payload.replayRunId === 'string') return `${jobType}:${payload.replayRunId}:${String(payload.cursorAt ?? 'next')}:${String(payload.step ?? 'start')}`
+    return `${jobType}:${now.toISOString().slice(0, 10)}`
   }
   if (jobType === 'project-world-repository' && typeof payload.commit === 'string') return `${jobType}:${payload.commit}`
   if (jobType === 'run-market-thesis-cycle' && typeof payload.cycleDate === 'string' && (payload.cycle === 'pre-market' || payload.cycle === 'post-close')) {
@@ -316,7 +321,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-robinhood-portfolio') return 'robinhood'
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'fetch-stock-price-history' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
-  if (jobType === 'project-world-repository') return 'market-data'
+  if (jobType === 'project-world-repository' || jobType === 'run-world-replay') return 'market-data'
   if (jobType === 'ingest-world-source' || jobType === 'run-market-thesis-cycle' || jobType === 'verify-world-source-health' || jobType === 'preflight-world-source-candidate' || jobType === 'collect-world-source-documents') return 'market-data'
   if (jobType === 'triage-world-observation-proposals' || jobType === 'scout-market-research') return 'codex'
   if (
@@ -395,6 +400,7 @@ export function shouldRefreshClosedMarket(
  * operational telemetry—not admission authority. */
 export function agentJobPriority(jobType: AgentJobType): number {
   if (jobType === 'run-world-thinker') return 25
+  if (jobType === 'run-world-replay') return 70
   if (jobType === 'refresh-world-events' || jobType === 'project-world-repository') return 35
   if (jobType === 'preflight-world-source-candidate') return 20
   if (jobType === 'verify-world-source-health') return 30
@@ -408,6 +414,7 @@ export function agentJobPriority(jobType: AgentJobType): number {
  * intentionally long research generation. */
 export function agentJobStaleAfterMs(jobType: AgentJobType, defaultStaleAfterMs = 45 * 60 * 1_000): number {
   if (jobType === 'run-world-thinker') return 35 * 60 * 1_000
+  if (jobType === 'run-world-replay') return 45 * 60 * 1_000
   if (jobType === 'refresh-market-screener' || jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence') return 10 * 60 * 1_000
   return defaultStaleAfterMs
 }
@@ -719,11 +726,32 @@ async function executeJob(
     return result
   }
 
+  if (job.job_type === 'run-world-replay') {
+    const { processWorldReplayStep, startWorldReplay } = await import('./world-replay.ts')
+    const replay = typeof job.payload.replayRunId === 'string'
+      ? { id: job.payload.replayRunId }
+      : await startWorldReplay({
+        since: typeof job.payload.since === 'string' ? new Date(job.payload.since) : undefined,
+        until: typeof job.payload.until === 'string' ? new Date(job.payload.until) : undefined,
+      })
+    const result = await processWorldReplayStep(replay.id, { model: job.payload.model !== false })
+    if (!result.complete) await enqueueAgentJob('run-world-replay', { replayRunId: replay.id, cursorAt: result.replay.cursorAt, step: result.nextStep, model: job.payload.model !== false })
+    return result
+  }
+
   if (job.job_type === 'run-world-thinker') {
     const trigger = job.payload.trigger
     if (trigger !== 'scheduled' && trigger !== 'urgent' && trigger !== 'manual' && trigger !== 'backfill' && trigger !== 'company_research') throw new Error('World Thinker trigger is invalid')
     const eventClusterIds = Array.isArray(job.payload.eventClusterIds) ? job.payload.eventClusterIds.filter((value): value is string => typeof value === 'string') : undefined
-    return runWorldThinker({ trigger, eventClusterIds, agentJobId: job.id, canonicalProjection: process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true' })
+    const coverageFrontierIds = Array.isArray(job.payload.coverageFrontierIds)
+      ? job.payload.coverageFrontierIds.filter((value): value is string => typeof value === 'string')
+      : typeof job.payload.coverageFrontierId === 'string' ? [job.payload.coverageFrontierId] : undefined
+    return runWorldThinker({
+      trigger, eventClusterIds, coverageFrontierIds, agentJobId: job.id, canonicalProjection: process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true',
+      worldOpportunityLeadId: typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : undefined,
+      researchNoteId: typeof job.payload.researchNoteId === 'string' ? job.payload.researchNoteId : undefined,
+      symbol: typeof job.payload.symbol === 'string' ? job.payload.symbol : undefined,
+    })
   }
 
   if (job.job_type === 'project-world-repository') {
