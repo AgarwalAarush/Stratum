@@ -6,6 +6,24 @@ import { loadWorldAttentionPolicySet } from './world-governance.ts'
 
 interface BenchmarkEventRow { id: string; title: string; summary: string; materiality: number; source_ids: string[]; last_seen_at: string }
 
+export function selectBalancedWorldBenchmarkCandidates<T extends { classification: { family: string } }>(candidates: T[], limit: number): T[] {
+  const byFamily = new Map<string, T[]>()
+  for (const item of candidates) byFamily.set(item.classification.family, [...(byFamily.get(item.classification.family) ?? []), item])
+  const selected: T[] = []
+  let round = 0
+  while (selected.length < Math.min(limit, candidates.length)) {
+    let added = false
+    for (const family of [...byFamily.keys()].sort()) {
+      const item = byFamily.get(family)?.[round]
+      if (item) { selected.push(item); added = true }
+      if (selected.length >= limit) break
+    }
+    if (!added) break
+    round += 1
+  }
+  return selected
+}
+
 function normalizeCase(row: Record<string, unknown>): PersistedWorldBenchmarkCase {
   return {
     id: String(row.id), eventClusterId: String(row.event_cluster_id), family: String(row.family), title: String(row.title),
@@ -52,20 +70,7 @@ export async function seedWorldBenchmarkFromEventLedger(limit = WORLD_BENCHMARK_
     const classification = classifyWorldBenchmarkFamily({ title: event.title, summary: event.summary, sourceLane, route: decision.route as WorldAttentionRoute })
     return [{ event, decision, classification, sources: sources.get(event.id) ?? [] }]
   })
-  const byFamily = new Map<string, typeof classified>()
-  for (const item of classified) byFamily.set(item.classification.family, [...(byFamily.get(item.classification.family) ?? []), item])
-  const selected: typeof classified = []
-  let round = 0
-  while (selected.length < Math.min(limit, classified.length)) {
-    let added = false
-    for (const family of [...byFamily.keys()].sort()) {
-      const item = byFamily.get(family)?.[round]
-      if (item) { selected.push(item); added = true }
-      if (selected.length >= limit) break
-    }
-    if (!added) break
-    round += 1
-  }
+  const selected = selectBalancedWorldBenchmarkCandidates(classified, limit)
   const rows = selected.map(({ event, decision, classification, sources: eventSources }) => ({
     event_cluster_id: event.id, family: classification.family, title: event.title, materiality: event.materiality,
     official_primary: eventSources.some((source) => source.source_lane === 'official_primary'), source_ids: event.source_ids ?? [],
@@ -142,7 +147,10 @@ export async function fetchWorldBenchmarkSnapshot(): Promise<{ cases: PersistedW
   const supabase = getSupabaseClient()
   if (!supabase) return { cases: [], runs: [], target: WORLD_BENCHMARK_TARGET }
   const [caseResult, runResult] = await Promise.all([
-    supabase.from('world_benchmark_cases').select('*').order('status', { ascending: false }).order('materiality', { ascending: false }).limit(WORLD_BENCHMARK_TARGET.maximum),
+    // A refresh never deletes older owner-reviewed cases, so recency must lead
+    // the projection. Otherwise a high-materiality prior selection can crowd
+    // newly sampled families out of the active 100-case review surface.
+    supabase.from('world_benchmark_cases').select('*').order('updated_at', { ascending: false }).order('status', { ascending: false }).order('materiality', { ascending: false }).limit(WORLD_BENCHMARK_TARGET.maximum),
     supabase.from('world_benchmark_runs').select('*').order('started_at', { ascending: false }).limit(10),
   ])
   if (caseResult.error) throw new Error(`Unable to load World benchmark cases: ${caseResult.error.message}`)

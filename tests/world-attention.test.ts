@@ -13,7 +13,7 @@ import {
   type AttentionSource,
 } from '../lib/markets/world-attention.ts'
 import { WORLD_BENCHMARK_FAMILIES, WORLD_BENCHMARK_TARGET, classifyWorldBenchmarkFamily, type PersistedWorldBenchmarkCase } from '../lib/markets/world-benchmark.ts'
-import { calculateWorldBenchmarkMetrics } from '../lib/server/world-benchmark.ts'
+import { calculateWorldBenchmarkMetrics, selectBalancedWorldBenchmarkCandidates } from '../lib/server/world-benchmark.ts'
 import { NEWS_TOPIC_FEEDS, NEWS_TOPICS } from '../lib/data/rss.ts'
 import { boundWorldSpecialistLenses } from '../lib/server/world-specialists.ts'
 import { clusterWorldEventSources, mapWorldEventBatchesWithConcurrency } from '../lib/server/world-events.ts'
@@ -102,6 +102,16 @@ test('benchmark defines a 75-100 real-case target and every required family with
   for (const family of ['iran', 'china_taiwan', 'authoritarianism', 'enso', 'sovereign_banking', 'export_controls', 'ai_power', 'routine_earnings', 'pr_syndication', 'contradictory_reporting']) assert.ok(families.has(family))
   assert.equal(classifyWorldBenchmarkFamily({ title: 'El Niño raises hydropower risk' }).family, 'enso')
   assert.equal(classifyWorldBenchmarkFamily({ title: 'Company announces product', sourceLane: 'pr_syndication' }).family, 'pr_syndication')
+})
+
+test('benchmark selection reserves room for every family present before filling deeper cases', () => {
+  const candidates = [
+    ...Array.from({ length: 20 }, (_, index) => ({ id: `iran-${index}`, classification: { family: 'iran' } })),
+    { id: 'enso-1', classification: { family: 'enso' } },
+    { id: 'sovereign-1', classification: { family: 'sovereign_banking' } },
+  ]
+  const selected = selectBalancedWorldBenchmarkCandidates(candidates, 5)
+  assert.deepEqual(new Set(selected.map((item) => item.classification.family)), new Set(['enso', 'iran', 'sovereign_banking']))
 })
 
 test('benchmark metrics separate recall, exact route, noise rejection, and specialist accuracy', () => {
