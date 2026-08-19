@@ -12,6 +12,10 @@ type GlobalNewsTopic =
   | 'global-supply-chains'
   | 'global-summits'
   | 'global-health'
+  | 'global-macro-finance'
+  | 'institutions-governance'
+  | 'energy-resources'
+  | 'demographics-migration'
 
 const GLOBAL_NEWS_TOPICS: GlobalNewsTopic[] = [
   'us-news',
@@ -21,6 +25,10 @@ const GLOBAL_NEWS_TOPICS: GlobalNewsTopic[] = [
   'global-supply-chains',
   'global-summits',
   'global-health',
+  'global-macro-finance',
+  'institutions-governance',
+  'energy-resources',
+  'demographics-migration',
 ]
 
 function isGlobalNewsTopic(value: string): value is GlobalNewsTopic {
@@ -35,6 +43,10 @@ export const CACHE_TTL_SECONDS: Record<GlobalNewsTopic, number> = {
   'global-supply-chains': 3_600,
   'global-summits': 3_600,
   'global-health': 3_600,
+  'global-macro-finance': 3_600,
+  'institutions-governance': 3_600,
+  'energy-resources': 3_600,
+  'demographics-migration': 3_600,
 }
 
 const CACHE_TIER_BY_TOPIC: Record<GlobalNewsTopic, CacheTier> = {
@@ -45,6 +57,10 @@ const CACHE_TIER_BY_TOPIC: Record<GlobalNewsTopic, CacheTier> = {
   'global-supply-chains': 'medium',
   'global-summits': 'slow',
   'global-health': 'medium',
+  'global-macro-finance': 'medium',
+  'institutions-governance': 'medium',
+  'energy-resources': 'medium',
+  'demographics-migration': 'slow',
 }
 
 function emptySection(): SectionData {

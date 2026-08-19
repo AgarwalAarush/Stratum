@@ -21,8 +21,10 @@ interface CoverageRow {
 }
 
 function normalizeCoverageRow(row: CoverageRow): WorldCoverageFrontier {
+  const definition = WORLD_COVERAGE_FRONTIERS.find((frontier) => frontier.id === row.id)
   return {
     id: row.id, label: row.label, description: row.description, queryTerms: row.query_terms ?? [], priority: row.priority,
+    entityTerms: definition?.entityTerms ?? [], phrases: definition?.phrases ?? [], termGroups: definition?.termGroups ?? [], channels: definition?.channels,
     status: row.status, sourceFamilyCount: row.source_family_count, evidenceEventCount: Number(row.evidence_event_count ?? 0), weakSignalCount: Number(row.weak_signal_count ?? 0), activeNodeIds: row.active_node_ids ?? [], openQuestions: row.open_questions ?? [],
     lastEvidenceAt: row.last_evidence_at, lastReviewedAt: row.last_reviewed_at, lastSearchAt: row.last_search_at, nextReviewAt: row.next_review_at,
   }

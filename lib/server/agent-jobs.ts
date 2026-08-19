@@ -96,6 +96,7 @@ export const AGENT_JOB_TYPES = [
   'backup-market-corpus',
   'verify-market-corpus',
   'refresh-world-events',
+  'refresh-world-benchmark',
   'run-world-replay',
   'run-world-thinker',
   'project-world-repository',
@@ -321,7 +322,7 @@ export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
   if (jobType === 'sync-robinhood-portfolio') return 'robinhood'
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'fetch-stock-price-history' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
-  if (jobType === 'project-world-repository' || jobType === 'run-world-replay') return 'market-data'
+  if (jobType === 'project-world-repository' || jobType === 'run-world-replay' || jobType === 'refresh-world-benchmark') return 'market-data'
   if (jobType === 'ingest-world-source' || jobType === 'run-market-thesis-cycle' || jobType === 'verify-world-source-health' || jobType === 'preflight-world-source-candidate' || jobType === 'collect-world-source-documents') return 'market-data'
   if (jobType === 'triage-world-observation-proposals' || jobType === 'scout-market-research') return 'codex'
   if (
@@ -401,6 +402,7 @@ export function shouldRefreshClosedMarket(
 export function agentJobPriority(jobType: AgentJobType): number {
   if (jobType === 'run-world-thinker') return 25
   if (jobType === 'run-world-replay') return 70
+  if (jobType === 'refresh-world-benchmark') return 80
   if (jobType === 'refresh-world-events' || jobType === 'project-world-repository') return 35
   if (jobType === 'preflight-world-source-candidate') return 20
   if (jobType === 'verify-world-source-health') return 30
@@ -724,6 +726,13 @@ async function executeJob(
       await enqueueAgentJob('run-world-thinker', { trigger: 'urgent', eventClusterIds: result.urgent })
     }
     return result
+  }
+
+  if (job.job_type === 'refresh-world-benchmark') {
+    const { evaluateWorldBenchmark, seedWorldBenchmarkFromEventLedger } = await import('./world-benchmark.ts')
+    const seeded = await seedWorldBenchmarkFromEventLedger()
+    const evaluation = await evaluateWorldBenchmark()
+    return { seeded, evaluation }
   }
 
   if (job.job_type === 'run-world-replay') {

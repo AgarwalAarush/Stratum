@@ -94,6 +94,9 @@ export function buildDueAgentJobs(
     if ((newYork.hour === 6 || newYork.hour === 18) && newYork.minute < 10) {
       jobs.push(scheduledJob('run-world-thinker', now, { trigger: 'scheduled' }))
     }
+    if (newYork.weekday === 'Sun' && newYork.hour === 20 && newYork.minute < 10) {
+      jobs.push(scheduledJob('refresh-world-benchmark', now))
+    }
   }
   // Research existing exposure before adjacent discovery. This run only creates
   // durable company-research jobs; it cannot create an investment decision.

@@ -1,39 +1,63 @@
-import type { WorldAttentionRoute, WorldSpecialistLens } from './world-attention.ts'
+import type { WorldAttentionRoute, WorldSpecialistLens, WorldSourceLane } from './world-attention.ts'
 
-export interface WorldBenchmarkCase {
+export const WORLD_BENCHMARK_TARGET = { minimum: 75, maximum: 100 } as const
+
+export interface WorldBenchmarkFamilyDefinition {
   id: string
-  family: string
-  title: string
-  expectedRoute: WorldAttentionRoute
-  expectedPrimaryLens?: WorldSpecialistLens
+  label: string
+  pattern: RegExp
   hardCase: boolean
-  ownerLabel: 'seeded_pending_review' | 'confirmed'
 }
 
-const templates: Array<Omit<WorldBenchmarkCase, 'id' | 'ownerLabel'>> = [
-  { family: 'iran', title: 'Official military escalation threatens Gulf shipping and energy flows', expectedRoute: 'urgent', expectedPrimaryLens: 'geopolitics_institutions', hardCase: true },
-  { family: 'china_taiwan', title: 'Taiwan Strait exercise changes shipping and semiconductor risk', expectedRoute: 'investigate', expectedPrimaryLens: 'geopolitics_institutions', hardCase: true },
-  { family: 'authoritarianism', title: 'Emergency powers weaken courts and independent institutions', expectedRoute: 'investigate', expectedPrimaryLens: 'geopolitics_institutions', hardCase: true },
-  { family: 'enso', title: 'El Niño forecast raises crop hydropower reservoir and insurance risks', expectedRoute: 'monitor', expectedPrimaryLens: 'physical_economy', hardCase: true },
-  { family: 'sovereign_banking', title: 'Sovereign funding stress transmits into bank liquidity', expectedRoute: 'investigate', expectedPrimaryLens: 'macro_finance', hardCase: true },
-  { family: 'export_controls', title: 'Export controls constrain advanced chip production capacity', expectedRoute: 'investigate', expectedPrimaryLens: 'technology_industrial_capacity', hardCase: true },
-  { family: 'ai_power', title: 'Data center electricity load meets interconnection capacity constraint', expectedRoute: 'investigate', expectedPrimaryLens: 'physical_economy', hardCase: true },
-  { family: 'routine_earnings', title: 'Company beats quarterly EPS and revenue estimates', expectedRoute: 'company_only', hardCase: false },
-  { family: 'pr_syndication', title: 'Syndicated press release repeats a product announcement', expectedRoute: 'company_only', hardCase: false },
-  { family: 'contradictory_reporting', title: 'Unconfirmed ceasefire claim is disputed by officials', expectedRoute: 'investigate', expectedPrimaryLens: 'geopolitics_institutions', hardCase: true },
-  { family: 'viral_noise', title: 'Viral post repeats a claim without new factual evidence', expectedRoute: 'noise', hardCase: false },
-  { family: 'climate_food_credit', title: 'Drought crop losses raise food inflation and farm credit stress', expectedRoute: 'investigate', expectedPrimaryLens: 'physical_economy', hardCase: true },
-  { family: 'health_labor', title: 'Disease outbreak disrupts labor availability and logistics capacity', expectedRoute: 'investigate', expectedPrimaryLens: 'physical_economy', hardCase: true },
-  { family: 'cyber_physical', title: 'Cyberattack shuts down a systemically important logistics network', expectedRoute: 'urgent', expectedPrimaryLens: 'technology_industrial_capacity', hardCase: true },
-  { family: 'demographics_fiscal', title: 'Demographic decline raises structural labor and fiscal pressure', expectedRoute: 'monitor', expectedPrimaryLens: 'physical_economy', hardCase: true },
-  { family: 'commodity_substitution', title: 'Critical mineral shortage accelerates substitution and recycling', expectedRoute: 'investigate', expectedPrimaryLens: 'physical_economy', hardCase: true }
+export const WORLD_BENCHMARK_FAMILIES: WorldBenchmarkFamilyDefinition[] = [
+  { id: 'iran', label: 'Iran and regional conflict', pattern: /\b(?:iran|iranian|tehran|hormuz)\b/i, hardCase: true },
+  { id: 'china_taiwan', label: 'China and Taiwan', pattern: /\b(?:taiwan|taiwanese|taipei|cross[- ]strait)\b/i, hardCase: true },
+  { id: 'authoritarianism', label: 'Authoritarianism and institutions', pattern: /\b(?:authoritarian|autocra|democratic backsliding|coup|emergency powers|martial law)\b/i, hardCase: true },
+  { id: 'enso', label: 'ENSO and climate transmission', pattern: /\b(?:enso|el ni[nñ]o|la ni[nñ]a|drought|hydropower|crop failure)\b/i, hardCase: true },
+  { id: 'sovereign_banking', label: 'Sovereign and banking stress', pattern: /\b(?:sovereign|bank failure|banking stress|funding stress|liquidity crisis)\b/i, hardCase: true },
+  { id: 'export_controls', label: 'Export controls and industrial policy', pattern: /\b(?:export controls?|tariffs?|sanctions?|embargo|industrial policy)\b/i, hardCase: true },
+  { id: 'ai_power', label: 'AI and power capacity', pattern: /\b(?:data cent(?:er|re)|artificial intelligence|ai)\b.*\b(?:power|electricity|grid|capacity)\b|\b(?:power|electricity|grid)\b.*\b(?:data cent(?:er|re)|ai)\b/i, hardCase: true },
+  { id: 'contradictory_reporting', label: 'Contradictory reporting', pattern: /\b(?:disputed|contested|retracted|denied|unconfirmed|contradict)\b/i, hardCase: true },
+  { id: 'climate_food_credit', label: 'Climate, food, and credit', pattern: /\b(?:food inflation|crop loss|agricultural credit|farm credit|reservoir stress)\b/i, hardCase: true },
+  { id: 'health_labor', label: 'Health and labor capacity', pattern: /\b(?:outbreak|epidemic|pandemic|ebola)\b/i, hardCase: true },
+  { id: 'cyber_physical', label: 'Cyber and physical systems', pattern: /\b(?:cyberattack|ransomware|cyber attack)\b/i, hardCase: true },
+  { id: 'demographics_fiscal', label: 'Demographics and fiscal capacity', pattern: /\b(?:demographic|aging population|fertility decline)\b/i, hardCase: true },
+  { id: 'commodity_substitution', label: 'Commodity constraint and substitution', pattern: /\b(?:critical mineral|commodity shortage|substitution|recycling capacity)\b/i, hardCase: true },
+  { id: 'routine_earnings', label: 'Routine earnings', pattern: /\b(?:quarterly earnings|eps|revenue estimates|price target|upgrade|downgrade)\b/i, hardCase: false },
+  { id: 'pr_syndication', label: 'PR syndication', pattern: /\b(?:press release|product announcement|pr newswire|business wire|globe newswire)\b/i, hardCase: false },
+  { id: 'viral_noise', label: 'Viral noise', pattern: /\b(?:viral|rumor|social media post|without evidence)\b/i, hardCase: false },
 ]
 
-export const WORLD_BENCHMARK_CASES: WorldBenchmarkCase[] = templates.flatMap((template, templateIndex) =>
-  Array.from({ length: 5 }, (_, variationIndex) => ({
-    ...template,
-    id: `WB-${String(templateIndex * 5 + variationIndex + 1).padStart(3, '0')}`,
-    title: variationIndex === 0 ? template.title : `${template.title} - evidence variation ${variationIndex + 1}`,
-    ownerLabel: 'seeded_pending_review' as const,
-  })),
-)
+export interface BenchmarkClassificationInput {
+  title: string
+  summary?: string
+  sourceLane?: WorldSourceLane | null
+  route?: WorldAttentionRoute | null
+}
+
+export function classifyWorldBenchmarkFamily(input: BenchmarkClassificationInput): { family: string; hardCase: boolean } {
+  const text = `${input.title} ${input.summary ?? ''}`
+  const matched = WORLD_BENCHMARK_FAMILIES.find((family) => family.pattern.test(text))
+  if (matched) return { family: matched.id, hardCase: matched.hardCase }
+  if (input.sourceLane === 'pr_syndication') return { family: 'pr_syndication', hardCase: false }
+  if (input.route === 'company_only') return { family: 'routine_company', hardCase: false }
+  if (input.route === 'noise') return { family: 'general_noise', hardCase: false }
+  return { family: 'novel_cross_domain', hardCase: true }
+}
+
+export interface PersistedWorldBenchmarkCase {
+  id: string
+  eventClusterId: string
+  family: string
+  title: string
+  materiality: number
+  officialPrimary: boolean
+  sourceIds: string[]
+  sourceUrls: string[]
+  observedRoute: WorldAttentionRoute
+  observedSpecialistLenses: WorldSpecialistLens[]
+  expectedRoute: WorldAttentionRoute | null
+  expectedPrimaryLens: WorldSpecialistLens | null
+  hardCase: boolean
+  status: 'pending_owner_review' | 'confirmed' | 'rejected'
+}

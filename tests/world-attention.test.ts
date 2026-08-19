@@ -12,10 +12,12 @@ import {
   type AttentionCandidate,
   type AttentionSource,
 } from '../lib/markets/world-attention.ts'
-import { WORLD_BENCHMARK_CASES } from '../lib/markets/world-benchmark.ts'
+import { WORLD_BENCHMARK_FAMILIES, WORLD_BENCHMARK_TARGET, classifyWorldBenchmarkFamily, type PersistedWorldBenchmarkCase } from '../lib/markets/world-benchmark.ts'
+import { calculateWorldBenchmarkMetrics } from '../lib/server/world-benchmark.ts'
+import { NEWS_TOPIC_FEEDS, NEWS_TOPICS } from '../lib/data/rss.ts'
 import { boundWorldSpecialistLenses } from '../lib/server/world-specialists.ts'
 import { clusterWorldEventSources, mapWorldEventBatchesWithConcurrency } from '../lib/server/world-events.ts'
-import { shouldPersistWorldSignal, worldSignalActivationConditions, worldSignalActivationSatisfied } from '../lib/server/world-signals.ts'
+import { selectWorldSignalRelations, shouldPersistWorldSignal, worldSignalActivationConditions, worldSignalActivationSatisfied } from '../lib/server/world-signals.ts'
 
 function source(overrides: Partial<AttentionSource> = {}): AttentionSource {
   return { id: 's1', title: 'Routine quarterly earnings beat estimates', url: 'https://financialmodelingprep.com/news/1', publisher: 'FMP stock news', publishedAt: '2026-08-18T10:00:00.000Z', fetchedAt: '2026-08-18T10:05:00.000Z', ...overrides }
@@ -65,6 +67,14 @@ test('attention budgets preserve lane fairness and cap model candidates', () => 
   assert.equal(decisions.filter((item) => item.attention.selectedForEnrichment).length, 30)
 })
 
+test('broad World sensing includes macro, institutions, resources, demographics, and explicit ENSO discovery', () => {
+  for (const topic of ['global-macro-finance', 'institutions-governance', 'energy-resources', 'demographics-migration'] as const) {
+    assert.ok(NEWS_TOPICS.includes(topic))
+    assert.ok(NEWS_TOPIC_FEEDS[topic].length >= 3)
+  }
+  assert.ok(NEWS_TOPIC_FEEDS['climate-environment'].some((feed) => /ENSO/.test(feed.name)))
+})
+
 test('event enrichment uses bounded concurrency so three sensor batches do not run serially', async () => {
   let active = 0
   let maximumActive = 0
@@ -86,10 +96,30 @@ test('policy auto-tuning cannot move numeric controls by more than ten percent',
   assert.equal(tuned.laneBudgets.global_reporting, 33)
 })
 
-test('seed benchmark covers 75-100 cases and every required family', () => {
-  assert.ok(WORLD_BENCHMARK_CASES.length >= 75 && WORLD_BENCHMARK_CASES.length <= 100)
-  const families = new Set(WORLD_BENCHMARK_CASES.map((item) => item.family))
+test('benchmark defines a 75-100 real-case target and every required family without synthetic prompt copies', () => {
+  assert.deepEqual(WORLD_BENCHMARK_TARGET, { minimum: 75, maximum: 100 })
+  const families = new Set(WORLD_BENCHMARK_FAMILIES.map((item) => item.id))
   for (const family of ['iran', 'china_taiwan', 'authoritarianism', 'enso', 'sovereign_banking', 'export_controls', 'ai_power', 'routine_earnings', 'pr_syndication', 'contradictory_reporting']) assert.ok(families.has(family))
+  assert.equal(classifyWorldBenchmarkFamily({ title: 'El Niño raises hydropower risk' }).family, 'enso')
+  assert.equal(classifyWorldBenchmarkFamily({ title: 'Company announces product', sourceLane: 'pr_syndication' }).family, 'pr_syndication')
+})
+
+test('benchmark metrics separate recall, exact route, noise rejection, and specialist accuracy', () => {
+  const benchmarkCase = (overrides: Partial<PersistedWorldBenchmarkCase & { actualRoute: 'urgent' | 'investigate' | 'monitor' | 'awareness' | 'company_only' | 'noise' | null; actualSpecialistLenses: string[] }> = {}) => ({
+    id: 'case-1', eventClusterId: 'event-1', family: 'iran', title: 'Iran escalation', materiality: 90, officialPrimary: true,
+    sourceIds: ['feed:1'], sourceUrls: ['https://example.com/1'], observedRoute: 'urgent' as const, observedSpecialistLenses: ['geopolitics_institutions' as const],
+    expectedRoute: 'urgent' as const, expectedPrimaryLens: 'geopolitics_institutions' as const, hardCase: true, status: 'confirmed' as const,
+    actualRoute: 'urgent' as const, actualSpecialistLenses: ['geopolitics_institutions'], ...overrides,
+  })
+  const evaluated = calculateWorldBenchmarkMetrics([
+    benchmarkCase(),
+    benchmarkCase({ id: 'case-2', eventClusterId: 'event-2', family: 'viral_noise', officialPrimary: false, expectedRoute: 'noise', expectedPrimaryLens: null, hardCase: false, actualRoute: 'awareness', actualSpecialistLenses: [] }),
+  ])
+  assert.equal(evaluated.metrics.highMaterialityRecall, 1)
+  assert.equal(evaluated.metrics.officialPrimaryRecall, 1)
+  assert.equal(evaluated.metrics.routeAccuracy, 0.5)
+  assert.equal(evaluated.metrics.noiseRejection, 0)
+  assert.equal(evaluated.metrics.specialistAccuracy, 1)
 })
 
 test('specialist routing enforces one urgent and at most two scheduled lenses', () => {
@@ -112,6 +142,21 @@ test('dormant ENSO activation conditions reactivate on compound crop, power, or 
   assert.equal(worldSignalActivationSatisfied(conditions, 'New drought evidence shows crop losses and reservoir stress'), true)
   assert.equal(worldSignalActivationSatisfied(conditions, 'A routine quarterly earnings release'), false)
   assert.equal(worldSignalActivationSatisfied(conditions, 'Semiconductor inventory and export controls tightened'), false)
+})
+
+test('weak-signal linking requires compound structure and caps activation versus association links', () => {
+  const cluster = { actors: ['China', 'TSMC'], geographies: ['Taiwan'], channels: ['semiconductor', 'shipping'] }
+  const candidates = [
+    { id: 'generic-channel', status: 'observed' as const, entities: [], geographies: [], channels: ['shipping'], activates: false },
+    { id: 'compound', status: 'observed' as const, entities: ['China'], geographies: ['Taiwan'], channels: [], activates: false },
+    ...Array.from({ length: 5 }, (_, index) => ({ id: `activation-${index}`, status: 'dormant' as const, entities: [], geographies: [], channels: [], activates: true })),
+    ...Array.from({ length: 8 }, (_, index) => ({ id: `association-${index}`, status: 'observed' as const, entities: ['China'], geographies: ['Taiwan'], channels: ['shipping'], activates: false })),
+  ]
+  const selected = selectWorldSignalRelations(cluster, candidates)
+  assert.equal(selected.some((item) => item.id === 'generic-channel'), false)
+  assert.equal(selected.filter((item) => item.activates).length, 3)
+  assert.equal(selected.filter((item) => !item.activates).length, 5)
+  assert.equal(selected.length, 8)
 })
 
 test('ENSO matching uses word boundaries and cannot be triggered by unrelated words', () => {

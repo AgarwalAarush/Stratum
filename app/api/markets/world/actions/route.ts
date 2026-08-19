@@ -4,6 +4,8 @@ import { enqueueAgentJob } from '@/lib/server/agent-jobs'
 import { getSupabaseClient } from '@/lib/server/supabase'
 import { fetchWorldReplayStatus, startWorldReplay } from '@/lib/server/world-replay'
 import { labelWorldReview, rollbackWorldPolicy, startWorldPolicyExperiment } from '@/lib/server/world-governance'
+import { evaluateWorldBenchmark, labelWorldBenchmarkCase, seedWorldBenchmarkFromEventLedger } from '@/lib/server/world-benchmark'
+import { WORLD_ATTENTION_ROUTES, WORLD_SPECIALIST_LENSES } from '@/lib/markets/world-attention'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,6 +80,15 @@ export async function POST(request: NextRequest) {
       const labels = ['important', 'not_important', 'correct', 'incorrect', 'useful', 'not_useful', 'needs_followup']
       if (typeof body.category !== 'string' || !categories.includes(body.category) || typeof body.subjectType !== 'string' || !subjectTypes.includes(body.subjectType) || typeof body.subjectId !== 'string' || typeof body.label !== 'string' || !labels.includes(body.label)) return NextResponse.json({ error: 'A valid World review label is required' }, { status: 400 })
       await labelWorldReview({ ownerId: user.id, category: body.category as Parameters<typeof labelWorldReview>[0]['category'], subjectType: body.subjectType as Parameters<typeof labelWorldReview>[0]['subjectType'], subjectId: body.subjectId, label: body.label, notes: typeof body.notes === 'string' ? body.notes : undefined })
+      return NextResponse.json({ labeled: true })
+    }
+    if (body.action === 'seed-benchmark') return NextResponse.json({ seeded: true, ...await seedWorldBenchmarkFromEventLedger() })
+    if (body.action === 'evaluate-benchmark') return NextResponse.json({ evaluated: true, ...await evaluateWorldBenchmark() })
+    if (body.action === 'label-benchmark') {
+      if (typeof body.caseId !== 'string' || (body.status !== 'confirmed' && body.status !== 'rejected')) return NextResponse.json({ error: 'A benchmark case and status are required' }, { status: 400 })
+      if (body.status === 'confirmed' && (typeof body.expectedRoute !== 'string' || !WORLD_ATTENTION_ROUTES.includes(body.expectedRoute as never))) return NextResponse.json({ error: 'A confirmed benchmark case requires a valid expected route' }, { status: 400 })
+      if (body.expectedPrimaryLens != null && (typeof body.expectedPrimaryLens !== 'string' || !WORLD_SPECIALIST_LENSES.includes(body.expectedPrimaryLens as never))) return NextResponse.json({ error: 'The expected specialist lens is invalid' }, { status: 400 })
+      await labelWorldBenchmarkCase({ caseId: body.caseId, ownerId: user.id, status: body.status, expectedRoute: body.expectedRoute as never, expectedPrimaryLens: body.expectedPrimaryLens as never, notes: typeof body.notes === 'string' ? body.notes : undefined })
       return NextResponse.json({ labeled: true })
     }
     if (body.action === 'start-policy-experiment') {

@@ -630,7 +630,7 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
       if (context.explorationFrontiers.length) await recordWorldCoverageSearch(context.explorationFrontiers.map((frontier) => frontier.id))
       const committedSnapshot = await readWorldCommit(root, committed.commit)
       await refreshWorldCoverageState(committedSnapshot.nodes.map((entry) => entry.node))
-      await updateRun(runId, { status: committed.pushPending ? 'push_pending' : 'projected', projection_status: 'projected', finished_at: new Date().toISOString() })
+      await updateRun(runId, { status: committed.pushPending ? 'push_pending' : 'projected', projection_status: 'projected', opportunity_lead_count: proposal.opportunityLeads.length, research_queued_count: queuedResearch.filter((item) => !item.deduplicated).length, finished_at: new Date().toISOString() })
       return { runId, status: committed.pushPending ? 'push_pending' : 'projected', commit: committed.commit, criticVerdict: 'pass', queuedResearch }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

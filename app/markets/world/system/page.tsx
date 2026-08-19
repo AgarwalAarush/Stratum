@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { fetchWorldRuns, fetchWorldWorkspace } from '@/lib/server/world-projection'
-import { WorldReviewControl, WorldSystemAction } from '@/components/markets/WorldActions'
+import { WorldBenchmarkControl, WorldReviewControl, WorldSystemAction } from '@/components/markets/WorldActions'
 import { fetchWorldGovernanceSnapshot } from '@/lib/server/world-governance'
+import { fetchWorldBenchmarkSnapshot } from '@/lib/server/world-benchmark'
 
 function formatTime(value: unknown): string {
   if (typeof value !== 'string') return 'Unavailable'
@@ -24,7 +25,7 @@ function runError(value: unknown): string {
 
 export default async function WorldSystemPage() {
   await requireAllowedMarketUser()
-  const [world, runs, governance] = await Promise.all([fetchWorldWorkspace(), fetchWorldRuns(30), fetchWorldGovernanceSnapshot()])
+  const [world, runs, governance, benchmark] = await Promise.all([fetchWorldWorkspace(), fetchWorldRuns(30), fetchWorldGovernanceSnapshot(), fetchWorldBenchmarkSnapshot()])
   const replay = world.replay.run
   const attentionTotal = governance.routeVolumes.reduce((sum, item) => sum + item.count, 0)
   const activePolicy = governance.policies.find((policy) => policy.status === 'active')
@@ -37,7 +38,7 @@ export default async function WorldSystemPage() {
       </header>
 
       <nav className="world-system-nav" aria-label="World system sections">
-        <a href="#attention">Attention</a><a href="#signals">Weak signals</a><a href="#review">Weekly review</a><a href="#coverage">Coverage</a><a href="#replay">Replay</a><a href="#runs">Runs</a>
+        <a href="#attention">Attention</a><a href="#signals">Weak signals</a><a href="#review">Weekly review</a><a href="#benchmark">Benchmark</a><a href="#coverage">Coverage</a><a href="#replay">Replay</a><a href="#runs">Runs</a>
       </nav>
 
       <section className="world-system-summary" aria-label="World system summary">
@@ -45,6 +46,21 @@ export default async function WorldSystemPage() {
         <div><span>Last successful</span><strong>{world.health.lastSuccessfulCommit?.slice(0, 10) ?? 'None'}</strong><small>{formatTime(world.health.lastSuccessfulRunAt)}</small></div>
         <div><span>Work queue</span><strong>{world.health.pendingEvents + world.health.failedEvents} events</strong><small>{world.health.quarantinedEvents} quarantined</small></div>
         <div><span>Oldest pending</span><strong>{formatTime(world.health.oldestPendingAt)}</strong><small>Live and replay work are isolated</small></div>
+      </section>
+
+      <section className="world-system-section" id="benchmark">
+        <div className="world-section-heading world-section-heading--major"><div><p className="markets-eyebrow">Historical benchmark</p><h2>Real events, owner-labeled outcomes</h2><p>{benchmark.cases.filter((item) => item.status === 'confirmed').length} confirmed · {benchmark.cases.filter((item) => item.status === 'pending_owner_review').length} awaiting review · target {benchmark.target.minimum}–{benchmark.target.maximum}</p></div><div><WorldSystemAction action="seed-benchmark" label="Refresh real cases" /><WorldSystemAction action="evaluate-benchmark" label="Run evaluation" /></div></div>
+        {benchmark.runs[0] ? <div className="world-policy-row"><div><span>Latest evaluation</span><strong>{text(benchmark.runs[0].status)}</strong><p>{Number(benchmark.runs[0].case_count ?? 0)} owner-labeled cases; insufficient labels never count as a passed gate.</p></div><div>{benchmark.runs.slice(0, 3).map((run) => <span key={text(run.id)}>{text(run.policy_version)} · {text(run.status)}</span>)}</div></div> : null}
+        <div className="world-system-table">
+          {benchmark.cases.filter((item) => item.status !== 'rejected').slice(0, 20).map((item) => <div className="world-system-table-row" key={item.id}>
+            <div><span className={`world-coverage-state world-coverage-state--${item.status === 'confirmed' ? 'healthy' : 'thin'}`}>{item.status.replaceAll('_', ' ')}</span><strong>{item.title}</strong><p>{item.family.replaceAll('_', ' ')} · materiality {item.materiality} · {item.sourceUrls.length} exact source links</p></div>
+            <div><span>Observed</span><strong>{item.observedRoute.replace('_', ' ')}</strong></div>
+            <div><span>Expected</span><strong>{item.expectedRoute?.replace('_', ' ') ?? 'Owner review'}</strong></div>
+            <div><span>Evidence</span><strong>{item.officialPrimary ? 'Official included' : `${item.sourceIds.length} sources`}</strong></div>
+            <WorldBenchmarkControl caseId={item.id} currentRoute={item.expectedRoute} currentLens={item.expectedPrimaryLens} status={item.status} />
+          </div>)}
+          {benchmark.cases.length === 0 ? <p className="world-empty-copy">Seed the benchmark from the event ledger. No synthetic prompt variations are accepted.</p> : null}
+        </div>
       </section>
 
       <section className="world-system-section" id="attention">
@@ -125,7 +141,7 @@ export default async function WorldSystemPage() {
             <div><span>Status</span><strong>{text(run.status)}</strong></div>
             <div><span>Started</span><strong>{formatTime(run.started_at)}</strong></div>
             <div><span>Commit</span><strong>{text(run.result_commit).slice(0, 10)}</strong></div>
-            <span />
+            <div><span>Research bridge</span><strong>{Number(run.opportunity_lead_count ?? 0)} proposed · {Number(run.research_queued_count ?? 0)} queued</strong></div>
           </div>)}
         </div>
       </section>

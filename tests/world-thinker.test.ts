@@ -321,6 +321,8 @@ test('World Thinker schedules sensors every tick and full runs at 06:00 and 18:0
   assert.ok(midday.includes('refresh-world-events'))
   assert.equal(midday.includes('run-world-thinker'), false)
   assert.equal(buildDueAgentJobs(new Date('2026-08-17T10:05:00Z')).some((job) => job.jobType === 'refresh-world-events'), false)
+  const weekly = buildDueAgentJobs(new Date('2026-08-17T00:05:00Z'), { includeWorldThinker: true }).map((job) => job.jobType)
+  assert.ok(weekly.includes('refresh-world-benchmark'))
 })
 
 test('all World Thinker schemas are valid JSON', async () => {

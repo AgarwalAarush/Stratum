@@ -35,6 +35,7 @@ export interface WorldEventClusterCandidate extends WorldEventCluster {
 
 const WORLD_SENSOR_TOPICS: NewsTopic[] = [
   'us-news', 'geopolitics', 'european-union', 'climate-environment', 'global-supply-chains', 'global-summits', 'global-health',
+  'global-macro-finance', 'institutions-governance', 'energy-resources', 'demographics-migration',
   'policy', 'cybersecurity', 'infra-hardware', 'new-technology',
 ]
 const EVENT_ENRICHMENT_MAX_CLUSTERS = 25
@@ -353,7 +354,7 @@ async function ingestAutonomousWorldFeeds(): Promise<{ sources: WorldEventSource
   const results = await Promise.allSettled(WORLD_SENSOR_TOPICS.map(async (topic) => {
     const items = await fetchNewsItemsByTopic(topic, 20)
     if (items.length === 0) throw new Error(`No items returned for ${topic}`)
-    const globalTopic = ['us-news', 'geopolitics', 'european-union', 'climate-environment', 'global-supply-chains', 'global-summits', 'global-health'].includes(topic)
+    const globalTopic = ['us-news', 'geopolitics', 'european-union', 'climate-environment', 'global-supply-chains', 'global-summits', 'global-health', 'global-macro-finance', 'institutions-governance', 'energy-resources', 'demographics-migration'].includes(topic)
     await persistFeedItems(globalTopic ? 'global-news' : 'ai-research', globalTopic ? `news-${topic}` : topic, items, { strict: true })
     return { topic, urls: items.map((item) => item.url) }
   }))

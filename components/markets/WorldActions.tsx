@@ -60,7 +60,7 @@ export function WorldLeadActions({ leadId, status }: { leadId: string; status: s
   )
 }
 
-export function WorldSystemAction({ action, label, payload = {} }: { action: 'resume-replay' | 'refresh-frontier' | 'retry-replay-batch' | 'retry-quarantined-event' | 'start-policy-experiment' | 'rollback-policy'; label: string; payload?: Record<string, unknown> }) {
+export function WorldSystemAction({ action, label, payload = {} }: { action: 'resume-replay' | 'refresh-frontier' | 'retry-replay-batch' | 'retry-quarantined-event' | 'start-policy-experiment' | 'rollback-policy' | 'seed-benchmark' | 'evaluate-benchmark'; label: string; payload?: Record<string, unknown> }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -70,6 +70,43 @@ export function WorldSystemAction({ action, label, payload = {} }: { action: 're
         try { setError(null); await performWorldAction({ action, ...payload }); router.refresh() }
         catch (cause) { setError(cause instanceof Error ? cause.message : 'Action failed') }
       })} disabled={pending}>{pending ? 'Queueing…' : label}</button>
+      {error ? <small role="alert">{error}</small> : null}
+    </span>
+  )
+}
+
+export function WorldBenchmarkControl({ caseId, currentRoute, currentLens, status }: { caseId: string; currentRoute: string | null; currentLens: string | null; status: string }) {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <span className="world-review-control">
+      <select aria-label="Expected benchmark route" value={status === 'confirmed' ? currentRoute ?? '' : ''} disabled={pending} onChange={(event) => {
+        const expectedRoute = event.target.value
+        if (!expectedRoute) return
+        startTransition(async () => {
+          try { setError(null); await performWorldAction({ action: 'label-benchmark', caseId, status: 'confirmed', expectedRoute }); router.refresh() }
+          catch (cause) { setError(cause instanceof Error ? cause.message : 'Benchmark label failed') }
+        })
+      }}>
+        <option value="">Expected route…</option>
+        {['urgent', 'investigate', 'monitor', 'awareness', 'company_only', 'noise'].map((route) => <option value={route} key={route}>{route.replace('_', ' ')}</option>)}
+      </select>
+      <select aria-label="Expected benchmark specialist" value={status === 'confirmed' ? currentLens ?? '' : ''} disabled={pending || !currentRoute} onChange={(event) => {
+        const expectedPrimaryLens = event.target.value || null
+        if (!currentRoute) return
+        startTransition(async () => {
+          try { setError(null); await performWorldAction({ action: 'label-benchmark', caseId, status: 'confirmed', expectedRoute: currentRoute, expectedPrimaryLens }); router.refresh() }
+          catch (cause) { setError(cause instanceof Error ? cause.message : 'Benchmark lens label failed') }
+        })
+      }}>
+        <option value="">No specialist expected</option>
+        {['geopolitics_institutions', 'physical_economy', 'macro_finance', 'technology_industrial_capacity'].map((lens) => <option value={lens} key={lens}>{lens.replaceAll('_', ' ')}</option>)}
+      </select>
+      <button type="button" disabled={pending} onClick={() => startTransition(async () => {
+        try { setError(null); await performWorldAction({ action: 'label-benchmark', caseId, status: 'rejected' }); router.refresh() }
+        catch (cause) { setError(cause instanceof Error ? cause.message : 'Benchmark rejection failed') }
+      })}>Exclude</button>
       {error ? <small role="alert">{error}</small> : null}
     </span>
   )

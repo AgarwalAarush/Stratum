@@ -24,6 +24,10 @@ export type NewsTopic =
   | 'global-supply-chains'
   | 'global-summits'
   | 'global-health'
+  | 'global-macro-finance'
+  | 'institutions-governance'
+  | 'energy-resources'
+  | 'demographics-migration'
 
 const FEED_TIMEOUT_MS = 8_000
 const OVERALL_DEADLINE_MS = 25_000
@@ -67,6 +71,10 @@ export const NEWS_TOPICS: NewsTopic[] = [
   'global-supply-chains',
   'global-summits',
   'global-health',
+  'global-macro-finance',
+  'institutions-governance',
+  'energy-resources',
+  'demographics-migration',
 ]
 
 const TOPIC_LABELS: Record<NewsTopic, string> = {
@@ -85,6 +93,10 @@ const TOPIC_LABELS: Record<NewsTopic, string> = {
   'global-supply-chains': 'Global Supply Chains',
   'global-summits': 'Global Summits & Conferences',
   'global-health': 'Global Health',
+  'global-macro-finance': 'Global Macro & Finance',
+  'institutions-governance': 'Institutions & Governance',
+  'energy-resources': 'Energy & Resources',
+  'demographics-migration': 'Demographics & Migration',
 }
 
 export const NEWS_TOPIC_FEEDS: Record<NewsTopic, ServerFeed[]> = {
@@ -198,6 +210,7 @@ export const NEWS_TOPIC_FEEDS: Record<NewsTopic, ServerFeed[]> = {
     { name: 'Climate Change', url: gn('("climate change" OR "global warming" OR "climate crisis") when:3d') },
     { name: 'Energy Transition', url: gn('("energy transition" OR "renewable energy" OR "clean energy" OR "net zero") when:7d') },
     { name: 'Climate Policy', url: gn('("climate policy" OR "carbon emissions" OR "Paris Agreement" OR "climate legislation") when:7d') },
+    { name: 'ENSO & Weather', url: gn('(site:noaa.gov OR site:climate.gov OR site:wmo.int) (ENSO OR "El Nino" OR "La Nina" OR drought OR monsoon) when:14d') },
   ],
   'global-supply-chains': [
     { name: 'Supply Chain News', url: gn('("supply chain" disruption OR crisis OR shortage) when:3d') },
@@ -219,6 +232,26 @@ export const NEWS_TOPIC_FEEDS: Record<NewsTopic, ServerFeed[]> = {
     { name: 'Pandemic Watch', url: gn('(pandemic OR epidemic OR "disease outbreak" OR "public health emergency") when:7d') },
     { name: 'Global Health Policy', url: gn('("global health" policy OR "health crisis" OR "vaccine" OR "health equity") when:7d') },
     { name: 'Infectious Disease', url: gn('("infectious disease" OR "bird flu" OR mpox OR "drug resistant") when:7d') },
+  ],
+  'global-macro-finance': [
+    { name: 'Global Central Banks', url: gn('(site:reuters.com OR site:ft.com OR site:bloomberg.com) (central bank OR monetary policy OR inflation OR currency) when:3d') },
+    { name: 'Sovereign & Credit', url: gn('(sovereign debt OR sovereign default OR debt restructuring OR banking stress OR deposit flight OR credit crunch) when:7d') },
+    { name: 'IMF & BIS', url: gn('(site:imf.org OR site:bis.org OR site:worldbank.org) (outlook OR financial stability OR sovereign OR credit OR liquidity) when:14d') },
+  ],
+  'institutions-governance': [
+    { name: 'Institutional Change', url: gn('(authoritarianism OR "democratic backsliding" OR "emergency powers" OR coup OR martial law OR "rule of law") when:7d') },
+    { name: 'Elections & Governance', url: gn('(site:reuters.com OR site:apnews.com OR site:bbc.com) (election OR constitutional crisis OR civil unrest OR political repression) when:3d') },
+    { name: 'Rights & Democracy Research', url: gn('(site:freedomhouse.org OR site:v-dem.net OR site:idea.int) (democracy OR authoritarian OR election) when:30d') },
+  ],
+  'energy-resources': [
+    { name: 'Energy Systems', url: gn('(site:eia.gov OR site:iea.org OR site:ferc.gov OR site:nerc.com) (oil OR gas OR electricity OR grid OR capacity) when:14d') },
+    { name: 'Resources & Commodities', url: gn('(critical minerals OR copper OR uranium OR rare earth OR commodity shortage OR mining capacity) when:7d') },
+    { name: 'Food & Water', url: gn('(site:fao.org OR site:wfp.org OR site:usda.gov) (food prices OR crop failure OR drought OR water stress) when:14d') },
+  ],
+  'demographics-migration': [
+    { name: 'Population & Labor', url: gn('(site:un.org OR site:ilo.org OR site:oecd.org) (population OR demographic OR aging OR fertility OR labor force) when:30d') },
+    { name: 'Migration', url: gn('(migration OR refugees OR displacement OR immigration) (labor OR economy OR border OR remittances) when:7d') },
+    { name: 'Demographic Change', url: gn('("fertility rate" OR "aging population" OR "working-age population" OR "labor shortage") when:14d') },
   ],
 }
 

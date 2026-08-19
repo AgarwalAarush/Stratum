@@ -94,16 +94,18 @@ export async function evaluateDueWorldPolicyExperiments(now = new Date()): Promi
   if (error) throw new Error(`Unable to load due World policy experiments: ${error.message}`)
   const results = []
   for (const experiment of experiments ?? []) {
-    const [{ data: decisions }, { data: labels }] = await Promise.all([
+    const [{ data: decisions }, { data: labels }, { data: benchmarkCases }] = await Promise.all([
       supabase.from('world_attention_decisions').select('event_cluster_id,policy_version,route,selected_for_enrichment').in('policy_version', [experiment.baseline_version, experiment.candidate_version]).gte('decided_at', experiment.started_at),
       supabase.from('world_review_labels').select('subject_id,category,label').eq('owner_id', MARKETS_OWNER_ID).eq('subject_type', 'event').gte('created_at', experiment.started_at),
+      supabase.from('world_benchmark_cases').select('id,event_cluster_id,expected_route,hard_case').eq('status', 'confirmed').not('expected_route', 'is', null),
     ])
-    const labelMap = new Map((labels ?? []).map((label) => [String(label.subject_id), String(label.label)]))
+    const labelMap = new Map<string, boolean>((labels ?? []).map((label) => [String(label.subject_id), ['important', 'correct', 'useful'].includes(String(label.label))]))
+    for (const benchmark of benchmarkCases ?? []) labelMap.set(String(benchmark.event_cluster_id), ['urgent', 'investigate', 'monitor'].includes(String(benchmark.expected_route)))
     const score = (version: string) => {
       const rows = (decisions ?? []).filter((decision) => decision.policy_version === version && labelMap.has(String(decision.event_cluster_id)))
       let important = 0; let predicted = 0; let truePositive = 0
       for (const row of rows) {
-        const expected = ['important', 'correct', 'useful'].includes(labelMap.get(String(row.event_cluster_id))!)
+        const expected = labelMap.get(String(row.event_cluster_id)) === true
         const prediction = ['urgent', 'investigate', 'monitor'].includes(String(row.route))
         if (expected) important += 1
         if (prediction) predicted += 1
@@ -113,11 +115,17 @@ export async function evaluateDueWorldPolicyExperiments(now = new Date()): Promi
     }
     const baseline = score(String(experiment.baseline_version))
     const candidate = score(String(experiment.candidate_version))
-    const hardRegressions = (labels ?? []).filter((label) => label.category === 'suspected_miss' && label.label === 'important').filter((label) => {
+    const reviewHardRegressions = (labels ?? []).filter((label) => label.category === 'suspected_miss' && label.label === 'important').filter((label) => {
       const baselineDecision = (decisions ?? []).find((decision) => decision.policy_version === experiment.baseline_version && String(decision.event_cluster_id) === String(label.subject_id))
       const candidateDecision = (decisions ?? []).find((decision) => decision.policy_version === experiment.candidate_version && String(decision.event_cluster_id) === String(label.subject_id))
       return baselineDecision && candidateDecision && ['urgent', 'investigate', 'monitor'].includes(String(baselineDecision.route)) && !['urgent', 'investigate', 'monitor'].includes(String(candidateDecision.route))
     }).map((label) => String(label.subject_id))
+    const benchmarkHardRegressions = (benchmarkCases ?? []).filter((benchmark) => benchmark.hard_case === true).filter((benchmark) => {
+      const baselineDecision = (decisions ?? []).find((decision) => decision.policy_version === experiment.baseline_version && String(decision.event_cluster_id) === String(benchmark.event_cluster_id))
+      const candidateDecision = (decisions ?? []).find((decision) => decision.policy_version === experiment.candidate_version && String(decision.event_cluster_id) === String(benchmark.event_cluster_id))
+      return baselineDecision && candidateDecision && String(baselineDecision.route) === String(benchmark.expected_route) && String(candidateDecision.route) !== String(benchmark.expected_route)
+    }).map((benchmark) => String(benchmark.id))
+    const hardRegressions = [...new Set([...reviewHardRegressions, ...benchmarkHardRegressions])]
     const enoughLabels = Math.min(baseline.labeled, candidate.labeled) >= 20
     const recallPass = candidate.truePositive >= baseline.truePositive + 1 || candidate.recall >= baseline.recall + 0.02
     const precisionPass = candidate.precision >= baseline.precision - 0.02

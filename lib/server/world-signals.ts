@@ -89,6 +89,40 @@ function activationSatisfied(prior: SignalRow, cluster: WorldEventClusterCandida
   return worldSignalActivationSatisfied(asStrings(prior.activation_conditions), `${cluster.title} ${cluster.summary} ${cluster.channels.join(' ')}`)
 }
 
+export interface WorldSignalRelationCandidate {
+  id: string
+  status: WorldSignalStatus
+  entities: string[]
+  geographies: string[]
+  channels: string[]
+  activates: boolean
+}
+
+export interface WorldSignalRelation extends WorldSignalRelationCandidate {
+  entityMatches: string[]
+  geographyMatches: string[]
+  channelMatches: string[]
+  score: number
+}
+
+export function selectWorldSignalRelations(cluster: Pick<WorldEventClusterCandidate, 'actors' | 'geographies' | 'channels'>, candidates: WorldSignalRelationCandidate[], limit = 8): WorldSignalRelation[] {
+  const ranked = candidates.flatMap((candidate) => {
+    const entityMatches = overlap(cluster.actors, candidate.entities)
+    const geographyMatches = overlap(cluster.geographies, candidate.geographies)
+    const channelMatches = overlap(cluster.channels, candidate.channels)
+    const dimensions = [entityMatches.length > 0, geographyMatches.length > 0, channelMatches.length > 0].filter(Boolean).length
+    const score = Number(candidate.activates) * 100 + entityMatches.length * 4 + geographyMatches.length * 3 + channelMatches.length * 2
+    // A shared generic channel is not enough to connect two durable signals.
+    // Require an activation condition, two independent structured dimensions,
+    // or a strong entity match plus another concrete match.
+    const eligible = candidate.activates || dimensions >= 2 || (entityMatches.length >= 2 && (geographyMatches.length > 0 || channelMatches.length > 0))
+    return eligible ? [{ ...candidate, entityMatches, geographyMatches, channelMatches, score }] : []
+  }).sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
+  const activations = ranked.filter((item) => item.activates).slice(0, 3)
+  const compounds = ranked.filter((item) => !item.activates).slice(0, 5)
+  return [...activations, ...compounds].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)).slice(0, Math.max(0, limit))
+}
+
 export async function persistWorldSignalForEvent(clusterId: string, cluster: WorldEventClusterCandidate, decision: WorldAttentionDecision): Promise<{ signalId: string | null; linkedSignalIds: string[]; reactivatedSignalIds: string[] }> {
   if (!shouldPersistWorldSignal(cluster, decision)) return { signalId: null, linkedSignalIds: [], reactivatedSignalIds: [] }
   const supabase = getSupabaseClient()
@@ -98,11 +132,11 @@ export async function persistWorldSignalForEvent(clusterId: string, cluster: Wor
   const since = new Date(Date.parse(cluster.lastSeenAt) - 180 * 24 * 60 * 60_000).toISOString()
   const { data: relatedRows, error: relatedError } = await supabase.from('world_signals').select('id,status,title,summary,event_cluster_ids,source_ids,entities,geographies,domains,economic_channels,activation_conditions,related_signal_ids,related_node_ids,first_observed_at,last_observed_at,search_text').gte('last_observed_at', since).neq('id', signalId).limit(500)
   if (relatedError) throw new Error(`Unable to retrieve weak signals: ${relatedError.message}`)
-  const clusterFields = union(cluster.actors, cluster.geographies, cluster.channels)
-  const related = ((relatedRows ?? []) as SignalRow[]).map((row) => {
-    const matched = overlap(clusterFields, union(asStrings(row.entities), asStrings(row.geographies), asStrings(row.domains), asStrings(row.economic_channels)))
-    return { row, matched, activates: activationSatisfied(row, cluster) }
-  }).filter((item) => item.matched.length > 0 || item.activates).sort((a, b) => Number(b.activates) - Number(a.activates) || b.matched.length - a.matched.length).slice(0, 8)
+  const rowsById = new Map(((relatedRows ?? []) as SignalRow[]).map((row) => [row.id, row]))
+  const related = selectWorldSignalRelations(cluster, ((relatedRows ?? []) as SignalRow[]).map((row) => ({
+    id: row.id, status: row.status, entities: asStrings(row.entities), geographies: asStrings(row.geographies),
+    channels: union(asStrings(row.domains), asStrings(row.economic_channels)), activates: activationSatisfied(row, cluster),
+  }))).map((relation) => ({ ...relation, row: rowsById.get(relation.id)! }))
   const { data: prior, error: priorError } = await supabase.from('world_signals').select('*').eq('fingerprint', fingerprint).maybeSingle()
   if (priorError) throw new Error(`Unable to resolve weak signal: ${priorError.message}`)
   const priorRow = prior as SignalRow | null
@@ -136,9 +170,9 @@ export async function persistWorldSignalForEvent(clusterId: string, cluster: Wor
     source_signal_id: item.row.id,
     target_signal_id: signalId,
     event_cluster_id: clusterId,
-    match_dimensions: { sharedTerms: item.matched, entities: overlap(cluster.actors, asStrings(item.row.entities)), geographies: overlap(cluster.geographies, asStrings(item.row.geographies)), channels: overlap(cluster.channels, asStrings(item.row.economic_channels)) },
-    rationale: item.activates ? 'New event overlaps the prior signal and satisfies a recorded activation condition.' : `Structured overlap: ${item.matched.join(', ')}`,
+    rationale: item.activates ? 'New event satisfies a recorded activation condition.' : `Compound structured overlap across ${[item.entityMatches.length ? 'entities' : '', item.geographyMatches.length ? 'geographies' : '', item.channelMatches.length ? 'channels' : ''].filter(Boolean).join(' and ')}.`,
     activation_satisfied: item.activates,
+    match_dimensions: { entities: item.entityMatches, geographies: item.geographyMatches, channels: item.channelMatches, score: item.score },
   }))
   if (linkRows.length) {
     const { error: linkError } = await supabase.from('world_signal_links').upsert(linkRows, { onConflict: 'source_signal_id,target_signal_id,event_cluster_id' })
