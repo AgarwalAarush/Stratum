@@ -4,7 +4,7 @@ import type { WorldNode, WorldOpportunityLead, WorldSourceReference } from '../m
 import type { WorldCoverageFrontier } from '../markets/world-coverage.ts'
 import { parseWorldNode, worldRepositoryBranch, worldRepositoryRoot } from './world-repository.ts'
 import { getSupabaseClient } from './supabase.ts'
-import { loadWorldCoverageFrontiers } from './world-coverage.ts'
+import { loadWorldCoverageFrontiers, refreshWorldCoverageState } from './world-coverage.ts'
 import type { WorldReplayBatch, WorldReplayRun } from './world-replay.ts'
 
 const execFile = promisify(execFileCallback)
@@ -80,6 +80,24 @@ export async function projectWorldRepository(options: { root?: string; commit?: 
     if (promoteError) throw new Error(`Unable to promote world projection: ${promoteError.message}`)
   }
   return { commit, fileCount: rows.length, idempotent: false }
+}
+
+export async function reconcileWorldRepositoryProjection(options: { root?: string; commit?: string; branch?: string; canonical?: boolean } = {}): Promise<{ commit: string; fileCount: number; idempotent: boolean }> {
+  const result = await projectWorldRepository(options)
+  const root = options.root ?? worldRepositoryRoot()
+  const snapshot = await readWorldCommit(root, result.commit)
+  await refreshWorldCoverageState(snapshot.nodes.map((entry) => entry.node))
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const { data: run, error: runError } = await supabase.from('world_thinker_runs').select('id,push_pending').eq('result_commit', result.commit).order('started_at', { ascending: false }).limit(1).maybeSingle()
+  if (runError) throw new Error(`Unable to reconcile World run projection: ${runError.message}`)
+  if (run) {
+    const { error } = await supabase.from('world_thinker_runs').update({
+      status: run.push_pending ? 'push_pending' : 'projected', projection_status: 'projected', error: null, finished_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }).eq('id', run.id)
+    if (error) throw new Error(`Unable to reconcile World run projection: ${error.message}`)
+  }
+  return result
 }
 
 interface WorldIndexRow {

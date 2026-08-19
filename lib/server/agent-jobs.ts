@@ -48,7 +48,7 @@ import { fetchPortfolioResearchCoverage, fetchPortfolioResearchSeedOwners } from
 import { selectControlledExposureResearch } from '../markets/market-exposure-research.ts'
 import { refreshWorldEvents } from './world-events.ts'
 import { runWorldThinker } from './world-thinker.ts'
-import { projectWorldRepository } from './world-projection.ts'
+import { reconcileWorldRepositoryProjection } from './world-projection.ts'
 
 export const AGENT_JOB_TYPES = [
   'sync-market-assets',
@@ -755,7 +755,7 @@ async function executeJob(
   }
 
   if (job.job_type === 'project-world-repository') {
-    return projectWorldRepository({ commit: typeof job.payload.commit === 'string' ? job.payload.commit : undefined, canonical: process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true' })
+    return reconcileWorldRepositoryProjection({ commit: typeof job.payload.commit === 'string' ? job.payload.commit : undefined, canonical: process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true' })
   }
 
   if (job.job_type === 'run-market-thesis-cycle') {

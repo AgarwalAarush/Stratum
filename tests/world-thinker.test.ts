@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { execFile as execFileCallback } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -163,6 +164,14 @@ test('coverage refresh upserts include required immutable frontier identity', ()
   assert.equal(row.description, frontier.description)
   assert.deepEqual(row.query_terms, frontier.queryTerms)
   assert.equal(row.priority, frontier.priority)
+})
+
+test('projection retry reconciles coverage and the originating Thinker run', () => {
+  const projectionSource = readFileSync(new URL('../lib/server/world-projection.ts', import.meta.url), 'utf8')
+  const jobSource = readFileSync(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8')
+  assert.match(projectionSource, /refreshWorldCoverageState/)
+  assert.match(projectionSource, /projection_status: 'projected'/)
+  assert.match(jobSource, /reconcileWorldRepositoryProjection/)
 })
 
 test('host materializes exact event keys and rejects invented or omitted model IDs', async () => {
