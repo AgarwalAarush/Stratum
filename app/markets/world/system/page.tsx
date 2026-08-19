@@ -79,10 +79,11 @@ export default async function WorldSystemPage() {
         <div className="world-review-groups">
           {reviewGroups.map((category) => <section key={category}>
             <h3>{category.replaceAll('_', ' ')}</h3>
-            {governance.weeklyReview.filter((item) => item.category === category).map((item) => <div className="world-review-row" key={`${category}:${item.subjectId}`}>
+            {governance.weeklyReview.filter((item) => item.category === category && !item.subjectId.startsWith('placeholder:')).map((item) => <div className="world-review-row" key={`${category}:${item.subjectId}`}>
               <div><strong>{item.title}</strong><p>{item.detail}</p></div>
               <WorldReviewControl category={item.category} subjectType={item.subjectType} subjectId={item.subjectId} currentLabel={item.label} />
             </div>)}
+            {governance.weeklyReview.every((item) => item.category !== category || item.subjectId.startsWith('placeholder:')) ? <p className="world-review-empty">No candidate in this category yet.</p> : null}
           </section>)}
         </div>
         <div className="world-policy-row"><div><span>Policy experiments</span><strong>{governance.experiments.filter((experiment) => experiment.status === 'shadow').length} shadowing</strong><p>Only bounded numeric controls can change; a full seven-day gate is mandatory.</p></div><div>{governance.experiments.slice(0, 3).map((experiment) => <span key={text(experiment.id)}>{text(experiment.candidate_version)} · {text(experiment.status)}</span>)}</div></div>
