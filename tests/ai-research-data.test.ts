@@ -393,6 +393,46 @@ test('fetchNewsItemsByTopic preserves canonical publisher metadata for Google Ne
   assert.equal(first?.topic, 'policy')
 })
 
+test('fetchNewsItemsByTopic retains attributable Google News evidence when URL decoding fails', async (t) => {
+  clearCacheForTests()
+
+  const originalFetch = global.fetch
+  const articleId = 'CBUnresolvedButAttributed123'
+  global.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+
+    if (url.includes(`news.google.com/articles/${articleId}`)) {
+      return new Response('<main>Google changed this response shape</main>')
+    }
+
+    return new Response(
+      `
+        <rss><channel>
+          <item>
+            <title>Institutions remain under pressure</title>
+            <link>https://news.google.com/rss/articles/${articleId}</link>
+            <pubDate>Thu, 06 Mar 2026 12:00:00 GMT</pubDate>
+            <source url="https://www.reuters.com/world/example">Reuters</source>
+          </item>
+        </channel></rss>
+      `,
+      { status: 200, headers: { 'Content-Type': 'application/xml' } },
+    )
+  }) as typeof fetch
+
+  t.after(() => {
+    global.fetch = originalFetch
+  })
+
+  const items = await fetchNewsItemsByTopic('institutions-governance', 5)
+  const first = items[0] as NewsItem | undefined
+
+  assert.ok(first)
+  assert.match(first.url, /^https:\/\/news\.google\.com\/rss\/articles\//)
+  assert.equal(first.publisher, 'Reuters')
+  assert.equal(first.canonicalSource, 'Reuters')
+})
+
 test('news topic route returns valid SectionData for valid topic', async (t) => {
   clearCacheForTests()
 

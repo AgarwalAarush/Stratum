@@ -443,11 +443,13 @@ export async function fetchNewsItemsByTopic(
 
     const final = deduped.slice(0, limit)
     await resolveGoogleNewsUrls(final)
-    const resolved = final.filter((item) => {
-      if (!item.link?.includes('news.google.com')) return true
-      return !!item.resolvedLink
-    })
-    return resolved.map((item) => toNewsItem(item, topic))
+    // URL decoding is an enrichment step, not an evidence-admission gate. Google
+    // periodically changes its article-page format and can rate-limit the
+    // decoder. The RSS URL remains a valid, attributable source link, so retain
+    // the item and let later resolution/backfill replace it with the publisher
+    // URL when available. Dropping unresolved items silently erased entire new
+    // World sensor lanes during their first uncached fetch.
+    return final.map((item) => toNewsItem(item, topic))
   } finally {
     clearTimeout(deadlineTimeout)
   }
