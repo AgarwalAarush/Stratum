@@ -48,9 +48,16 @@ export default async function MarketsWorldPage() {
   await requireAllowedMarketUser()
   const world = await fetchWorldWorkspace()
   const changes = world.latestChanges[0]
-  const needsAttention = world.health.lastRunStatus === 'failed' || Boolean(world.health.failure)
+  const needsAttention = world.health.lastRunStatus === 'failed' || Boolean(world.health.failure) || world.health.quarantinedEvents > 0 || world.replay.run?.status === 'failed'
   const operatingState = needsAttention ? 'Needs attention' : world.freshness === 'current' ? 'Healthy' : world.freshness
   const activeModelCount = world.situations.length + world.themes.length + world.actors.length + world.scenarios.length + world.hypotheses.length
+  const healthyCoverage = world.coverage.filter((frontier) => frontier.status === 'healthy').length
+  const replay = world.replay.run
+  const replayPercent = replay && replay.weeksTotal > 0 ? Math.round((replay.weeksCompleted / replay.weeksTotal) * 100) : null
+  const attentionHeadline = world.health.lastRunStatus === 'failed' || world.health.failure
+    ? 'The latest run failed; the prior validated world state remains published.'
+    : replay?.status === 'failed' ? 'Historical replay paused after a failed batch; live world state remains available.'
+      : `${countLabel(world.health.quarantinedEvents, 'event')} need manual review after repeated failures.`
 
   return (
     <div className="world-page">
@@ -62,21 +69,30 @@ export default async function MarketsWorldPage() {
         </div>
         <div className="world-header-actions">
           <WorldRefreshAction />
+          <Link href="/markets/world/system" className="world-system-link">System health</Link>
           <span className={`world-operating-state${needsAttention ? ' world-operating-state--attention' : ''}`} data-freshness={world.freshness}>{operatingState}</span>
         </div>
       </header>
 
       <section className="world-status-rail" aria-label="World Thinker status">
         <div><span>Mode</span><strong>{world.canonical ? 'Canonical' : 'Shadow evaluation'}</strong><small>{world.branch ?? 'No projected branch'}</small></div>
-        <div><span>World state</span><strong>{activeModelCount} active nodes</strong><small>Updated {formatTime(world.dataAsOf)}</small></div>
-        <div className={world.health.pendingEvents > 0 ? 'world-status-rail--attention' : undefined}><span>Event queue</span><strong>{countLabel(world.health.pendingEvents, 'event')}</strong><small>{world.health.failedEvents ? countLabel(world.health.failedEvents, 'failed event') : 'Awaiting classification'}</small></div>
+        <div className={healthyCoverage < world.coverage.length ? 'world-status-rail--attention' : undefined}><span>Coverage</span><strong>{healthyCoverage} of {world.coverage.length} strong</strong><small>{activeModelCount} active world nodes</small></div>
+        <div className={world.health.pendingEvents > 0 || world.health.quarantinedEvents > 0 ? 'world-status-rail--attention' : undefined}><span>Event queue</span><strong>{countLabel(world.health.pendingEvents, 'event')}</strong><small>{world.health.quarantinedEvents ? countLabel(world.health.quarantinedEvents, 'quarantined event') : world.health.failedEvents ? countLabel(world.health.failedEvents, 'failed event') : 'Awaiting classification'}</small></div>
         <div><span>Research funnel</span><strong>{countLabel(world.leads.length, 'company lead')}</strong><small>Qualified investigations only</small></div>
       </section>
 
       {needsAttention ? (
         <section className="world-run-alert" role="alert">
-          <div><p className="markets-eyebrow">Run health</p><strong>The latest run failed validation; the prior validated world state remains published.</strong></div>
-          <details><summary>Technical detail</summary><p>{world.health.failure ?? 'The latest World Thinker run did not complete.'}</p></details>
+          <div><p className="markets-eyebrow">Run health</p><strong>{attentionHeadline}</strong></div>
+          <details><summary>Technical detail</summary><p>{world.health.failure ?? replay?.error ?? 'Open System health for the affected events and recovery controls.'}</p></details>
+        </section>
+      ) : null}
+
+      {replay && replay.status !== 'completed' ? (
+        <section className="world-replay-notice" aria-label="Historical replay progress">
+          <div><p className="markets-eyebrow">Historical memory</p><strong>{replay.status === 'failed' ? 'Replay needs attention' : 'One-year replay is building the model'}</strong></div>
+          <div className="world-replay-progress"><span style={{ width: `${replayPercent ?? 0}%` }} /><small>{replay.weeksCompleted} of {replay.weeksTotal} weeks · {replayPercent ?? 0}%</small></div>
+          <Link href="/markets/world/system">View progress →</Link>
         </section>
       ) : null}
 
@@ -120,6 +136,22 @@ export default async function MarketsWorldPage() {
         </div>
       </section>
 
+      <section className="world-coverage-section" id="world-coverage">
+        <div className="world-section-heading world-section-heading--major">
+          <div><p className="markets-eyebrow">World coverage</p><h2>Where the model is strong—and where it is looking next</h2></div>
+          <Link href="/markets/world/system">Coverage details →</Link>
+        </div>
+        <div className="world-coverage-grid">
+          {world.coverage.map((frontier) => (
+            <article key={frontier.id} className="world-coverage-row">
+              <div><span className={`world-coverage-state world-coverage-state--${frontier.status}`}>{frontier.status.replace('_', ' ')}</span><strong>{frontier.label}</strong></div>
+              <p>{frontier.description}</p>
+              <small>{frontier.activeNodeIds.length} active nodes · {frontier.sourceFamilyCount} recent sources</small>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="world-forward-grid" aria-label="Scenarios and economic transmission">
         <div className="world-scenarios">
           <div className="world-section-heading"><div><p className="markets-eyebrow">Scenario branches</p><h2>What could change next</h2></div><span>Assessments, not forecasts</span></div>
@@ -145,8 +177,8 @@ export default async function MarketsWorldPage() {
         <div className="world-section-heading world-section-heading--major"><div><p className="markets-eyebrow">Company investigations</p><h2>Names that clear the research gates</h2></div><span>Research leads, never buy recommendations</span></div>
         {world.leads.length === 0 ? (
           <div className="world-empty-state">
-            <div><strong>No company lead currently clears every gate.</strong><p>The Thinker has not yet found a verified security with sufficient materiality, transmission confidence, and a specific capture mechanism.</p></div>
-            <Link href="/markets/candidates">Open Candidate Scout →</Link>
+            <div><strong>No company lead currently clears every gate.</strong><p>The Thinker is developing {countLabel(world.hypotheses.length, 'economic question')}; a company appears here only after its transmission and capture mechanism can be independently tested.</p></div>
+            <Link href="#world-coverage">See what it is exploring →</Link>
           </div>
         ) : (
           <div className="world-lead-list">

@@ -59,3 +59,18 @@ export function WorldLeadActions({ leadId, status }: { leadId: string; status: s
     </div>
   )
 }
+
+export function WorldSystemAction({ action, label, payload = {} }: { action: 'resume-replay' | 'refresh-frontier' | 'retry-replay-batch' | 'retry-quarantined-event'; label: string; payload?: Record<string, unknown> }) {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <span className="world-system-action">
+      <button type="button" onClick={() => startTransition(async () => {
+        try { setError(null); await performWorldAction({ action, ...payload }); router.refresh() }
+        catch (cause) { setError(cause instanceof Error ? cause.message : 'Action failed') }
+      })} disabled={pending}>{pending ? 'Queueing…' : label}</button>
+      {error ? <small role="alert">{error}</small> : null}
+    </span>
+  )
+}
