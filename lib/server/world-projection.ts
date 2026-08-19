@@ -1,8 +1,11 @@
 import { execFile as execFileCallback } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { WorldNode, WorldOpportunityLead, WorldSourceReference } from '../markets/world-thinker-types.ts'
+import type { WorldCoverageFrontier } from '../markets/world-coverage.ts'
 import { parseWorldNode, worldRepositoryBranch, worldRepositoryRoot } from './world-repository.ts'
 import { getSupabaseClient } from './supabase.ts'
+import { loadWorldCoverageFrontiers } from './world-coverage.ts'
+import type { WorldReplayBatch, WorldReplayRun } from './world-replay.ts'
 
 const execFile = promisify(execFileCallback)
 
@@ -110,14 +113,20 @@ export interface WorldWorkspace {
   scenarios: WorldNode[]
   hypotheses: WorldNode[]
   leads: Array<Record<string, unknown>>
+  coverage: WorldCoverageFrontier[]
+  replay: { run: WorldReplayRun | null; batches: WorldReplayBatch[] }
   health: {
     lastRunAt: string | null
     lastRunStatus: string | null
     lastCommit: string | null
     pendingEvents: number
     failedEvents: number
+    quarantinedEvents: number
+    oldestPendingAt: string | null
     sourceCount: number
     failure: string | null
+    lastSuccessfulRunAt: string | null
+    lastSuccessfulCommit: string | null
   }
 }
 
@@ -143,12 +152,16 @@ function freshness(asOf: string | null): WorldWorkspace['freshness'] {
 
 export async function fetchWorldWorkspace(): Promise<WorldWorkspace> {
   const supabase = getSupabaseClient()
-  if (!supabase) return { commit: null, branch: null, canonical: false, dataAsOf: null, freshness: 'unavailable', current: null, latestChanges: [], actors: [], situations: [], themes: [], scenarios: [], hypotheses: [], leads: [], health: { lastRunAt: null, lastRunStatus: null, lastCommit: null, pendingEvents: 0, failedEvents: 0, sourceCount: 0, failure: 'Supabase is not configured' } }
-  const [projectionResult, runResult, eventResult, leadResult] = await Promise.all([
+  if (!supabase) return { commit: null, branch: null, canonical: false, dataAsOf: null, freshness: 'unavailable', current: null, latestChanges: [], actors: [], situations: [], themes: [], scenarios: [], hypotheses: [], leads: [], coverage: [], replay: { run: null, batches: [] }, health: { lastRunAt: null, lastRunStatus: null, lastCommit: null, pendingEvents: 0, failedEvents: 0, quarantinedEvents: 0, oldestPendingAt: null, sourceCount: 0, failure: 'Supabase is not configured', lastSuccessfulRunAt: null, lastSuccessfulCommit: null } }
+  const replayPromise = import('./world-replay.ts').then(({ fetchWorldReplayStatus }) => fetchWorldReplayStatus())
+  const [projectionResult, runResult, successfulRunResult, eventResult, leadResult, coverage, replay] = await Promise.all([
     supabase.from('world_repository_projections').select('*').order('is_canonical', { ascending: false }).order('projected_at', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('world_thinker_runs').select('status,result_commit,started_at,error').order('started_at', { ascending: false }).limit(1).maybeSingle(),
-    supabase.from('world_event_clusters').select('processing_state,source_diversity').in('processing_state', ['pending', 'failed']),
+    supabase.from('world_thinker_runs').select('result_commit,started_at').in('status', ['projected', 'push_pending']).not('result_commit', 'is', null).order('started_at', { ascending: false }).limit(1).maybeSingle(),
+    supabase.from('world_event_clusters').select('processing_state,source_diversity,first_seen_at').in('processing_state', ['pending', 'failed', 'quarantined']),
     supabase.from('world_opportunity_leads').select('*').order('created_at', { ascending: false }).limit(40),
+    loadWorldCoverageFrontiers(),
+    replayPromise,
   ])
   if (projectionResult.error) throw new Error(`Unable to load world projection: ${projectionResult.error.message}`)
   const projection = projectionResult.data as { commit_sha: string; branch: string; is_canonical: boolean } | null
@@ -161,8 +174,10 @@ export async function fetchWorldWorkspace(): Promise<WorldWorkspace> {
   const nodes = rows.map((row) => row.structured_content)
   const current = nodes.find((node) => node.kind === 'current') ?? null
   const journals = latestDistinctWorldJournals(nodes, 2)
-  const events = (eventResult.data ?? []) as Array<{ processing_state: string; source_diversity: number }>
+  const events = (eventResult.data ?? []) as Array<{ processing_state: string; source_diversity: number; first_seen_at: string }>
   const run = runResult.data as { status: string; result_commit: string | null; started_at: string; error: string | null } | null
+  const successfulRun = successfulRunResult.data as { result_commit: string | null; started_at: string } | null
+  const pendingDates = events.filter((event) => event.processing_state === 'pending' || event.processing_state === 'failed').map((event) => event.first_seen_at).sort()
   return {
     commit: projection?.commit_sha ?? null, branch: projection?.branch ?? null, canonical: projection?.is_canonical ?? false,
     dataAsOf: current?.asOf ?? null, freshness: freshness(current?.asOf ?? null), current, latestChanges: journals,
@@ -172,10 +187,14 @@ export async function fetchWorldWorkspace(): Promise<WorldWorkspace> {
     scenarios: nodes.filter((node) => node.kind === 'scenario' && ['active', 'monitoring'].includes(node.status)),
     hypotheses: nodes.filter((node) => node.kind === 'hypothesis' && ['active', 'monitoring'].includes(node.status)),
     leads: (leadResult.data ?? []) as Array<Record<string, unknown>>,
+    coverage,
+    replay,
     health: {
       lastRunAt: run?.started_at ?? null, lastRunStatus: run?.status ?? null, lastCommit: run?.result_commit ?? null,
       pendingEvents: events.filter((event) => event.processing_state === 'pending').length, failedEvents: events.filter((event) => event.processing_state === 'failed').length,
+      quarantinedEvents: events.filter((event) => event.processing_state === 'quarantined').length, oldestPendingAt: pendingDates[0] ?? null,
       sourceCount: events.reduce((sum, event) => sum + Number(event.source_diversity || 0), 0), failure: run?.error ?? null,
+      lastSuccessfulRunAt: successfulRun?.started_at ?? null, lastSuccessfulCommit: successfulRun?.result_commit ?? null,
     },
   }
 }
