@@ -13,7 +13,7 @@ import {
 } from '../lib/markets/world-attention.ts'
 import { WORLD_BENCHMARK_CASES } from '../lib/markets/world-benchmark.ts'
 import { boundWorldSpecialistLenses } from '../lib/server/world-specialists.ts'
-import { clusterWorldEventSources } from '../lib/server/world-events.ts'
+import { clusterWorldEventSources, mapWorldEventBatchesWithConcurrency } from '../lib/server/world-events.ts'
 import { worldSignalActivationSatisfied } from '../lib/server/world-signals.ts'
 
 function source(overrides: Partial<AttentionSource> = {}): AttentionSource {
@@ -62,6 +62,20 @@ test('attention budgets preserve lane fairness and cap model candidates', () => 
   const inputs = Array.from({ length: 80 }, (_, index) => candidate({ fingerprint: `f${index}`, title: `Global supply disruption ${index}`, summary: 'Persistent supply chain shortage and shipping disruption', materiality: 70, novelty: 70, sources: [source({ id: `s${index}`, title: `Global supply disruption ${index}`, url: `https://reuters.com/world/${index}`, publisher: 'Reuters' })] }))
   const decisions = selectWorldModelCandidates(inputs, DEFAULT_WORLD_ATTENTION_POLICY, new Date('2026-08-18T11:00:00.000Z'))
   assert.equal(decisions.filter((item) => item.attention.selectedForEnrichment).length, 30)
+})
+
+test('event enrichment uses bounded concurrency so three sensor batches do not run serially', async () => {
+  let active = 0
+  let maximumActive = 0
+  await mapWorldEventBatchesWithConcurrency([0, 1, 2], async () => {
+    active += 1
+    maximumActive = Math.max(maximumActive, active)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    active -= 1
+    return []
+  }, 2)
+  assert.equal(maximumActive, 2)
+  assert.equal(active, 0)
 })
 
 test('policy auto-tuning cannot move numeric controls by more than ten percent', () => {

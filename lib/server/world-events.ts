@@ -41,7 +41,8 @@ const EVENT_ENRICHMENT_MAX_CLUSTERS = 25
 const EVENT_ENRICHMENT_MAX_SOURCES = 100
 const EVENT_ENRICHMENT_MAX_CHARACTERS = 45_000
 const EVENT_ENRICHMENT_TIMEOUT_MS = 120_000
-const EVENT_ENRICHMENT_ATTEMPTS = 3
+const EVENT_ENRICHMENT_ATTEMPTS = 2
+const EVENT_ENRICHMENT_CONCURRENCY = 2
 
 export function nextWorldEventProcessingState(
   priorState: string | null | undefined,
@@ -287,11 +288,28 @@ async function enrichClusterBatch(candidates: WorldEventClusterCandidate[]): Pro
   return candidates.map((candidate) => ({ ...candidate, enrichmentStatus: 'fallback', summary: candidate.summary || `Deterministic fallback after enrichment failure: ${lastError instanceof Error ? lastError.message : String(lastError)}` }))
 }
 
+export async function mapWorldEventBatchesWithConcurrency<T>(
+  batches: T[],
+  worker: (batch: T) => Promise<WorldEventClusterCandidate[]>,
+  concurrency = EVENT_ENRICHMENT_CONCURRENCY,
+): Promise<WorldEventClusterCandidate[]> {
+  if (batches.length === 0) return []
+  const results = new Array<WorldEventClusterCandidate[]>(batches.length)
+  const workerCount = Math.max(1, Math.min(4, Math.floor(concurrency), batches.length))
+  let nextIndex = 0
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < batches.length) {
+      const index = nextIndex
+      nextIndex += 1
+      results[index] = await worker(batches[index])
+    }
+  }))
+  return results.flat()
+}
+
 async function enrichClusters(candidates: WorldEventClusterCandidate[], options: { model?: boolean } = {}): Promise<WorldEventClusterCandidate[]> {
   if (options.model === false || candidates.length === 0 || process.env.CODEX_SYNTHESIS_ENABLED === 'false') return candidates
-  const enriched: WorldEventClusterCandidate[] = []
-  for (const batch of partitionWorldEventCandidates(candidates)) enriched.push(...await enrichClusterBatch(batch))
-  return enriched
+  return mapWorldEventBatchesWithConcurrency(partitionWorldEventCandidates(candidates), enrichClusterBatch)
 }
 
 async function attachWorldEventDependencies(clusters: WorldEventClusterCandidate[]): Promise<WorldEventClusterCandidate[]> {
