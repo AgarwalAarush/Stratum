@@ -227,12 +227,14 @@ export interface CandidateSignal {
     | 'relative_valuation'
     | 'earnings_or_estimate_catalyst'
     | 'quality_improvement'
+    | 'extraordinary_price_move'
   summary: string
   materialKey: string
 }
 
 export type CandidateLane =
   | 'market_thesis'
+  | 'event_catalyst'
   | 'thesis_led'
   | 'dislocation'
   | 'fundamental_inflection'

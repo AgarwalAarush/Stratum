@@ -49,6 +49,7 @@ import { selectControlledExposureResearch } from '../markets/market-exposure-res
 import { refreshWorldEvents } from './world-events.ts'
 import { runWorldThinker } from './world-thinker.ts'
 import { reconcileWorldRepositoryProjection } from './world-projection.ts'
+import { findExtraordinaryBiotechMovers } from './biotech-catalysts.ts'
 
 export const AGENT_JOB_TYPES = [
   'sync-market-assets',
@@ -829,6 +830,15 @@ async function executeJob(
     if (assets.length === 0) assets = await syncAlpacaAssets(client)
     assets = await resolveMarketUniverse(assets)
     const snapshot = await materializeAlpacaScreener({ client, assets })
+    const biotechMovers = await findExtraordinaryBiotechMovers(snapshot.snapshotId)
+    if (biotechMovers.length > 0) {
+      const tradingDate = new Date(snapshot.dataAsOf).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+      await enqueueAgentJob(
+        'run-candidate-scout',
+        { tradingDate, reason: 'extraordinary-biotech-move', symbols: biotechMovers, marketSnapshotId: snapshot.snapshotId },
+        `run-candidate-scout:biotech:${tradingDate}:${biotechMovers.slice().sort().join(',')}`,
+      )
+    }
     const hydratePacketOwnerId = typeof job.payload.hydratePacketOwnerId === 'string'
       ? job.payload.hydratePacketOwnerId
       : null
@@ -897,7 +907,10 @@ async function executeJob(
   }
 
   if (job.job_type === 'run-candidate-scout') {
-    const briefs = await materializeCandidateScout()
+    const briefs = await materializeCandidateScout({
+      tradingDate: typeof job.payload.tradingDate === 'string' ? job.payload.tradingDate : undefined,
+      preferredSymbols: Array.isArray(job.payload.symbols) ? job.payload.symbols.filter((symbol): symbol is string => typeof symbol === 'string') : undefined,
+    })
     const tradingDate = briefs[0]?.tradingDate
       ?? (typeof job.payload.tradingDate === 'string' ? job.payload.tradingDate : null)
     if (tradingDate && new Date(`${tradingDate}T12:00:00.000Z`).getUTCDay() === 5) {

@@ -19,6 +19,8 @@ interface CandidateScoutMaterializationOptions {
   now?: Date
   fetchImpl?: typeof fetch
   targetCount?: number
+  tradingDate?: string
+  preferredSymbols?: string[]
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -168,6 +170,7 @@ export function multiLanePrefilter(
   stocks: StockLeadershipMetric[],
   trackingBySymbol: ReadonlyMap<string, CandidateTrackingContext>,
   count = 48,
+  preferredSymbols: readonly string[] = [],
 ): StockLeadershipMetric[] {
   const eligibleStocks = stocks.filter((stock) => !hasUnnormalizedPriceDiscontinuity(stock))
   const selected: StockLeadershipMetric[] = []
@@ -199,7 +202,13 @@ export function multiLanePrefilter(
   const leaders = eligibleStocks
     .filter((stock) => stock.observationCount >= 200)
     .sort((left, right) => leadershipScore(right) - leadershipScore(left))
+  const eventMovers = eligibleStocks
+    .filter((stock) => stock.dayReturn !== null && Math.abs(stock.dayReturn) >= 15)
+    .sort((left, right) => Math.abs(right.dayReturn ?? 0) - Math.abs(left.dayReturn ?? 0))
 
+  const bySymbol = new Map(eligibleStocks.map((stock) => [stock.symbol, stock]))
+  preferredSymbols.map((symbol) => bySymbol.get(symbol)).filter((stock): stock is StockLeadershipMetric => Boolean(stock)).forEach(add)
+  eventMovers.slice(0, 12).forEach(add)
   tracked.slice(0, 16).forEach(add)
   marketThesisExposures.slice(0, 16).forEach(add)
   dislocations.slice(0, 28).forEach(add)
@@ -419,7 +428,7 @@ export async function materializeCandidateScout(
   const screenerStocks = await loadExpandedScreenerMetrics(marketSnapshot.id)
   const stocks = mergeScreenerMetrics(leadershipStocks, screenerStocks)
   const groups = (groupRows ?? []).map((row) => normalizeGroup(row))
-  const prefiltered = multiLanePrefilter(stocks, trackingBySymbol)
+  const prefiltered = multiLanePrefilter(stocks, trackingBySymbol, 48, options.preferredSymbols)
   const fundamentals = await Promise.all(prefiltered.map((stock) =>
     fetchCandidateFundamentals(stock.symbol, stock.price, apiKey, options.fetchImpl ?? fetch, now)))
   const fundamentalsBySymbol = new Map(fundamentals.map((item) => [item.symbol, item]))
@@ -442,8 +451,9 @@ export async function materializeCandidateScout(
     }
   })
   const ranked = rankCandidateUniverse(classified, groups, fundamentals, 200, trackingBySymbol)
+  const tradingDate = options.tradingDate ?? snapshot.trading_date
   const briefs = selectCandidateBriefs(ranked, {
-    tradingDate: snapshot.trading_date,
+    tradingDate,
     generatedAt: now.toISOString(),
     targetCount: options.targetCount ?? 8,
     maximumPerSubIndustry: 2,

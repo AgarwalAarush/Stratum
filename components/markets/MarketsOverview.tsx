@@ -13,6 +13,7 @@ interface MarketsOverviewProps {
 
 const CANDIDATE_LANE_LABEL = {
   market_thesis: 'Market-thesis exposure',
+  event_catalyst: 'Event-driven investigation',
   thesis_led: 'Tracked-thesis selloff',
   dislocation: 'Possible overreaction',
   fundamental_inflection: 'Fundamental inflection',

@@ -163,6 +163,18 @@ test('multi-lane prefilter quarantines split-like price discontinuities', () => 
   assert.deepEqual(selected.map((item) => item.symbol), ['VALID'])
 })
 
+test('extraordinary price moves become event-driven investigations without becoming trade instructions', () => {
+  const mover = { ...stock('MRNA', 'Biotechnology', 186), sector: 'Health Care', dayReturn: 179.7, return5d: 181, relativeVolume: 3.2 }
+  const biotechFundamentals = { ...fundamentals('MRNA'), sector: 'Health Care', subIndustry: 'Biotechnology' }
+  const ranked = rankCandidateUniverse([mover], [], [biotechFundamentals])
+  assert.ok(ranked[0]?.signals.some((signal) => signal.kind === 'extraordinary_price_move'))
+  assert.ok(ranked[0]?.lanes.includes('event_catalyst'))
+  const brief = selectCandidateBriefs(ranked, { tradingDate: '2026-08-19', targetCount: 1 })[0]
+  assert.equal(brief?.primaryLane, 'event_catalyst')
+  assert.match(brief?.nextResearchQuestion ?? '', /What new evidence/)
+  assert.match(brief?.entryContext ?? '', /verify it against primary evidence/)
+})
+
 test('Candidate Scout expands beyond the S&P 500 to watched and owned names', async () => {
   const source = await readFile(new URL('../lib/server/candidate-scout.ts', import.meta.url), 'utf8')
   assert.match(source, /market_watchlist_items/)

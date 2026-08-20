@@ -65,6 +65,7 @@ const EMPTY_TRACKING: CandidateTrackingContext = {
 
 const LANE_ORDER: CandidateLane[] = [
   'market_thesis',
+  'event_catalyst',
   'thesis_led',
   'dislocation',
   'fundamental_inflection',
@@ -73,6 +74,7 @@ const LANE_ORDER: CandidateLane[] = [
 
 const LANE_TARGETS: Record<CandidateLane, number> = {
   market_thesis: 2,
+  event_catalyst: 2,
   thesis_led: 2,
   dislocation: 3,
   fundamental_inflection: 2,
@@ -148,6 +150,13 @@ function candidateSignals(
   tracking: CandidateTrackingContext,
 ): CandidateSignal[] {
   const signals: CandidateSignal[] = []
+  if (finite(stock.dayReturn) && Math.abs(stock.dayReturn) >= 15) {
+    signals.push({
+      kind: 'extraordinary_price_move',
+      summary: `${stock.symbol} moved ${stock.dayReturn >= 0 ? '+' : ''}${stock.dayReturn.toFixed(1)}% in one session; identify the event, test whether it changes long-run economics, and separate information from price reflexivity.`,
+      materialKey: `extraordinary-move:${Math.round(stock.dayReturn / 5) * 5}`,
+    })
+  }
   const selloff = selloffThreshold(stock, tracking)
   if (selloff.triggered) {
     signals.push({
@@ -323,6 +332,7 @@ function candidateLanes(
     && (fundamentals.revenueGrowth ?? 0) >= 0
   const lanes: CandidateLane[] = []
   if ((tracking.marketTheses?.length ?? 0) > 0 && signals.length > 0) lanes.push('market_thesis')
+  if (signals.some((signal) => signal.kind === 'extraordinary_price_move')) lanes.push('event_catalyst')
   if (tracked && hasSelloff) lanes.push('thesis_led')
   if (hasSelloff && ownershipSupport >= 2 && risk !== 'caution') lanes.push('dislocation')
   if (hasSelloff && estimateInflection) lanes.push('fundamental_inflection')
@@ -340,6 +350,7 @@ function priority(
   const dimensionValue = { strong: 3, positive: 2, mixed: 1, caution: 0 }
   const laneBonus = lanes.reduce((sum, lane) => sum + ({
     market_thesis: 7,
+    event_catalyst: 9,
     thesis_led: 8,
     dislocation: 6,
     fundamental_inflection: 4,
@@ -447,6 +458,7 @@ export function selectCandidateBriefs(
     const primaryLane = LANE_ORDER.find((lane) => lanes.includes(lane)) ?? lanes[0]!
     const primaryKinds: Record<CandidateLane, CandidateSignal['kind'][]> = {
       market_thesis: ['leadership_transition', 'company_group_divergence', 'price_volume_confirmation', 'selloff_dislocation', 'fundamental_resilience'],
+      event_catalyst: ['extraordinary_price_move'],
       thesis_led: ['tracked_thesis_dislocation'],
       dislocation: ['selloff_dislocation', 'fundamental_resilience'],
       fundamental_inflection: ['fundamental_resilience', 'earnings_or_estimate_catalyst'],
@@ -482,6 +494,7 @@ export function selectCandidateBriefs(
       },
       entryContext: ({
         market_thesis: 'Validate whether this company captures the parent market thesis through a material, defensible value-chain role before treating the exposure as investable.',
+        event_catalyst: 'Identify the event behind the move, verify it against primary evidence, and determine whether expectations moved more than the company’s long-run economics.',
         thesis_led: 'Review whether the selloff changed the accepted or user-tracked thesis; if not, reassess the entry zone.',
         dislocation: 'Test whether recent weakness is fundamentals-driven or an overreaction before considering an entry.',
         fundamental_inflection: 'Verify that improving estimates or operating evidence can outlast the current price weakness.',
@@ -523,6 +536,8 @@ export function selectCandidateBriefs(
         : signals.find((signal) => signal.kind === 'earnings_or_estimate_catalyst')?.summary ?? 'Watch for the next estimate revision or company filing.',
       nextResearchQuestion: primaryLane === 'market_thesis' && tracking.marketTheses?.[0]
         ? `Does ${stock.symbol} materially capture ${tracking.marketTheses[0].title}, or will substitutes and competitors capture more of the economics?`
+        : primaryLane === 'event_catalyst'
+        ? `What new evidence caused ${stock.symbol}'s move, and how much does it change approval, adoption, earnings, or platform value after accounting for what the price now implies?`
         : primaryLane === 'leadership'
         ? `Is ${stock.symbol}'s improvement durable enough to justify its valuation relative to ${stock.subIndustry} peers?`
         : `Did the selloff change ${stock.symbol}'s 1–2 year ownership case, or did it only improve the entry price?`,

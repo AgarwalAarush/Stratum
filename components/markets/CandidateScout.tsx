@@ -4,6 +4,7 @@ import type { CandidateBrief } from '@/lib/markets/types'
 
 const LANE_LABELS: Record<CandidateBrief['primaryLane'], string> = {
   market_thesis: 'Market-model exposure',
+  event_catalyst: 'Event-driven investigation',
   thesis_led: 'Thesis-led review',
   dislocation: 'Possible overreaction',
   fundamental_inflection: 'Fundamental inflection',
