@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { clinicalCatalystClusterKey, normalizeClinicalCatalyst } from '../lib/markets/biotech.ts'
+import { collapseCatalystViews, type BiotechCatalystView } from '../lib/server/biotech-catalysts.ts'
 import { clusterWorldEventSources } from '../lib/server/world-events.ts'
 import { routeWorldAttention } from '../lib/markets/world-attention.ts'
 
@@ -60,6 +61,33 @@ test('clinical catalyst identity helps collapse corroborating versions of one re
   const clusters = clusterWorldEventSources([first, second], new Date('2026-08-19T15:00:00.000Z'))
   assert.equal(clusters.length, 1)
   assert.equal(clusters[0]?.sourceDiversity, 2)
+})
+
+test('workspace projection collapses legacy identities that share the same immutable source', () => {
+  const canonical = normalizeClinicalCatalyst(modernaRelease)!
+  const source = {
+    sourceId: modernaRelease.id,
+    title: modernaRelease.title,
+    url: modernaRelease.url,
+    publisher: modernaRelease.publisher,
+    publishedAt: modernaRelease.publishedAt,
+    fetchedAt: modernaRelease.fetchedAt,
+    sourceLane: 'company_disclosure',
+    sourceFamily: 'modernatx.com',
+    sourceTimeAnomaly: false,
+  }
+  const view = (fingerprint: string, sourceCount: number, materiality: number): BiotechCatalystView => ({
+    ...canonical,
+    fingerprint,
+    materiality,
+    sourceIds: [modernaRelease.id],
+    eventClusterIds: [],
+    status: 'observed',
+    nextReviewAt: '2026-08-21T13:45:00.000Z',
+    sources: Array.from({ length: sourceCount }, () => source),
+  })
+  const collapsed = collapseCatalystViews([view('legacy', 1, 68), view('canonical', 3, 90)])
+  assert.deepEqual(collapsed.map((catalyst) => catalyst.fingerprint), ['canonical'])
 })
 
 test('Phase 3 endpoint success routes urgent to the physical-economy specialist', () => {

@@ -194,6 +194,25 @@ function catalystView(row: Record<string, unknown>, sources: BiotechCatalystSour
   }
 }
 
+export function collapseCatalystViews(catalysts: BiotechCatalystView[]): BiotechCatalystView[] {
+  const ranked = catalysts.slice().sort((left, right) => {
+    const leftStructure = [left.trialId, left.therapy, left.indication, left.phase].filter(Boolean).length
+    const rightStructure = [right.trialId, right.therapy, right.indication, right.phase].filter(Boolean).length
+    return right.sources.length - left.sources.length
+      || right.materiality - left.materiality
+      || rightStructure - leftStructure
+      || Date.parse(right.fetchedAt) - Date.parse(left.fetchedAt)
+  })
+  const claimedSources = new Set<string>()
+  const retained: BiotechCatalystView[] = []
+  for (const catalyst of ranked) {
+    if (catalyst.sourceIds.some((sourceId) => claimedSources.has(sourceId))) continue
+    retained.push(catalyst)
+    catalyst.sourceIds.forEach((sourceId) => claimedSources.add(sourceId))
+  }
+  return retained.sort((left, right) => Date.parse(right.publishedAt ?? right.fetchedAt) - Date.parse(left.publishedAt ?? left.fetchedAt))
+}
+
 export async function fetchBiotechWorkspace(limit = 80): Promise<BiotechWorkspace> {
   const supabase = getSupabaseClient()
   if (!supabase) return { catalysts: [], movers: [], dataAsOf: null, sourceFamilyCount: 0, urgentCount: 0, investigationCount: 0, timeAnomalyCount: 0 }
@@ -221,7 +240,7 @@ export async function fetchBiotechWorkspace(limit = 80): Promise<BiotechWorkspac
     publishedAt: typeof row.published_at === 'string' ? row.published_at : null, fetchedAt: String(row.fetched_at),
     sourceLane: String(row.source_lane), sourceFamily: String(row.source_family), sourceTimeAnomaly: Boolean(row.source_time_anomaly),
   }))
-  const catalysts = (catalystRows ?? []).map((row) => catalystView(row, sourceViews.filter((source) => source.catalystFingerprint === row.fingerprint)))
+  const catalysts = collapseCatalystViews((catalystRows ?? []).map((row) => catalystView(row, sourceViews.filter((source) => source.catalystFingerprint === row.fingerprint))))
   const symbols = [...new Set((moverResult.data ?? []).map((row) => String(row.symbol)))]
   const { data: candidates, error: candidateError } = symbols.length
     ? await supabase.from('candidate_briefs').select('id,symbol,status').in('symbol', symbols).order('generated_at', { ascending: false }).limit(200)
