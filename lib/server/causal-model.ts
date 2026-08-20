@@ -3,6 +3,7 @@ import type { WorldNode } from '../markets/world-thinker-types.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 type Row = Record<string, unknown>
+const MAX_OPEN_OWNER_REVIEWS = 10
 
 function record(value: unknown): Row {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Row : {}
@@ -59,7 +60,14 @@ async function attachDeltaOrCreate(payload: Row): Promise<void> {
     .in('status', ['pending', 'in_review', 'deferred']).maybeSingle()
   if (error) throw new Error(`Unable to inspect owner review queue: ${error.message}`)
   if (!open) {
-    const { error: insertError } = await supabase.from('owner_review_items').insert(payload)
+    const { count, error: countError } = await supabase.from('owner_review_items').select('id', { count: 'exact', head: true })
+      .eq('owner_id', payload.owner_id).in('status', ['pending', 'in_review'])
+    if (countError) throw new Error(`Unable to enforce owner review capacity: ${countError.message}`)
+    const deferred = Number(count ?? 0) >= MAX_OPEN_OWNER_REVIEWS
+    const { error: insertError } = await supabase.from('owner_review_items').insert({
+      ...payload, status: deferred ? 'deferred' : 'pending',
+      metadata: { ...record(payload.metadata), deferredByCapacity: deferred, reviewCapacity: MAX_OPEN_OWNER_REVIEWS },
+    })
     if (insertError) throw new Error(`Unable to create owner review item: ${insertError.message}`)
     return
   }
@@ -129,17 +137,20 @@ export interface CausalModelSnapshot {
   world: Row[]
   marketTheses: Row[]
   pendingReviews: Row[]
+  deferredReviewCount: number
 }
 
 export async function fetchCausalModelSnapshot(ownerId = MARKETS_OWNER_ID): Promise<CausalModelSnapshot> {
   const supabase = getSupabaseClient()
-  if (!supabase) return { world: [], marketTheses: [], pendingReviews: [] }
-  const [modelsResult, reviewResult] = await Promise.all([
+  if (!supabase) return { world: [], marketTheses: [], pendingReviews: [], deferredReviewCount: 0 }
+  const [modelsResult, reviewResult, deferredResult] = await Promise.all([
     supabase.from('causal_model_versions').select('*').in('state', ['active', 'monitoring', 'shadow']).order('as_of', { ascending: false }).limit(250),
-    supabase.from('owner_review_items').select('*').eq('owner_id', ownerId).in('status', ['pending', 'in_review', 'deferred']).order('priority', { ascending: false }).order('updated_at', { ascending: false }).limit(30),
+    supabase.from('owner_review_items').select('*').eq('owner_id', ownerId).in('status', ['pending', 'in_review']).order('priority', { ascending: false }).order('updated_at', { ascending: false }).limit(MAX_OPEN_OWNER_REVIEWS),
+    supabase.from('owner_review_items').select('id', { count: 'exact', head: true }).eq('owner_id', ownerId).eq('status', 'deferred'),
   ])
   if (modelsResult.error) throw new Error(`Unable to load causal model: ${modelsResult.error.message}`)
   if (reviewResult.error) throw new Error(`Unable to load owner review queue: ${reviewResult.error.message}`)
+  if (deferredResult.error) throw new Error(`Unable to load deferred owner reviews: ${deferredResult.error.message}`)
   const newest = new Map<string, Row>()
   for (const item of (modelsResult.data ?? []) as Row[]) {
     const key = String(item.causal_key)
@@ -149,7 +160,7 @@ export async function fetchCausalModelSnapshot(ownerId = MARKETS_OWNER_ID): Prom
   return {
     world: models.filter((item) => item.source_kind === 'world_node').sort((a, b) => number(b.importance) - number(a.importance)),
     marketTheses: models.filter((item) => item.source_kind === 'market_thesis').sort((a, b) => number(b.importance) - number(a.importance)),
-    pendingReviews: (reviewResult.data ?? []) as Row[],
+    pendingReviews: (reviewResult.data ?? []) as Row[], deferredReviewCount: Number(deferredResult.count ?? 0),
   }
 }
 
