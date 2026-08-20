@@ -2,9 +2,10 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { ArrowClockwise, List, X } from '@phosphor-icons/react'
+import { ArrowClockwise, List, Moon, Sun, X } from '@phosphor-icons/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StockSearch } from './StockSearch'
+import { useThemeStore } from '@/store/theme'
 
 const MARKET_NAV_ITEMS = [
   { href: '/markets', label: 'Overview' },
@@ -44,6 +45,12 @@ export function MarketsShell({ children }: { children: React.ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [dataAsOf, setDataAsOf] = useState<string>()
   const prefetchedRoutes = useRef(new Set<string>())
+  const { theme, setTheme, toggle: toggleTheme } = useThemeStore()
+
+  useEffect(() => {
+    const saved = localStorage.getItem('stratum-theme') as 'dark' | 'light' | null
+    if (saved && saved !== theme) setTheme(saved)
+  }, [setTheme, theme])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -114,6 +121,14 @@ export function MarketsShell({ children }: { children: React.ReactNode }) {
             onClick={refresh}
           >
             <ArrowClockwise size={17} weight="regular" className={refreshing ? 'markets-refreshing' : ''} />
+          </button>
+          <button
+            type="button"
+            className="markets-icon-button"
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            onClick={toggleTheme}
+          >
+            {theme === 'dark' ? <Sun size={17} weight="regular" /> : <Moon size={17} weight="regular" />}
           </button>
           <span className="markets-status-dot" aria-hidden="true" />
           <Link
