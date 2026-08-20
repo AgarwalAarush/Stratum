@@ -51,6 +51,13 @@ const SECTIONS: Array<{ label: string; fetch: () => Promise<SourceItem[]> }> = [
       return items.map((i) => ({ title: i.title, url: i.url }))
     },
   },
+  {
+    label: 'BIOTECH & CLINICAL CATALYSTS',
+    fetch: async () => {
+      const items = await fetchNewsItemsByTopic('biotech-clinical-regulatory', 5)
+      return items.map((i) => ({ title: i.title, url: i.url }))
+    },
+  },
 ]
 
 const FALLBACK_BULLETS = [
@@ -60,6 +67,7 @@ const FALLBACK_BULLETS = [
   'Global supply chain vulnerabilities remain elevated amid shifting trade corridors.',
   'International summits are producing mixed results on key multilateral agreements.',
   'Public health infrastructure investments are accelerating in response to emerging threats.',
+  'Clinical and regulatory developments remain evidence-bound until trial design, endpoints, safety, and source lineage are verified.',
 ]
 
 export async function generateGlobalNewsOverview(): Promise<OverviewData> {
@@ -92,7 +100,7 @@ export async function generateGlobalNewsOverview(): Promise<OverviewData> {
 
   const sourcesBlock = sourceIndex.map((s) => `[${s.n}] ${s.url}`).join('\n')
 
-  const prompt = `You are a daily intelligence briefing assistant focused on global affairs. Below are today's top headlines across geopolitics, EU policy, climate & environment, global supply chains, international summits, and global health. Each headline has a numbered source reference.
+  const prompt = `You are a daily intelligence briefing assistant focused on global affairs. Below are today's top headlines across geopolitics, EU policy, climate & environment, global supply chains, international summits, global health, and material biotech clinical or regulatory developments. Each headline has a numbered source reference.
 
 Headlines:
 ${headlineBlocks.join('\n')}

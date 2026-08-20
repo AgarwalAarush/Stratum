@@ -173,6 +173,13 @@ export const SCOPES: ScopeDef[] = [
         itemType: 'news',
         apiPath: '/api/global-news/news/global-health',
       },
+      {
+        id: 'biotech-clinical-regulatory',
+        label: 'Biotech & Clinical Catalysts',
+        sources: ['Clinical trials', 'FDA', 'Medical meetings'],
+        itemType: 'news',
+        apiPath: '/api/global-news/news/biotech-clinical-regulatory',
+      },
     ],
   },
 ]

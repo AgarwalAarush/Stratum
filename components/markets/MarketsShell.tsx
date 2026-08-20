@@ -9,6 +9,7 @@ import { StockSearch } from './StockSearch'
 const MARKET_NAV_ITEMS = [
   { href: '/markets', label: 'Overview' },
   { href: '/markets/world', label: 'World' },
+  { href: '/markets/biotech', label: 'Biotech' },
   { href: '/markets/candidates', label: 'Candidates' },
   { href: '/markets/explore', label: 'Explore' },
   { href: '/markets/portfolio', label: 'Portfolio' },

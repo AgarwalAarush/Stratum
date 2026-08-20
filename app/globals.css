@@ -789,6 +789,327 @@
   }
 }
 
+/* Biotech intelligence — clinical evidence, market reaction, and research boundary. */
+.biotech-page {
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 0 34px 72px;
+}
+
+.biotech-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(210px, .55fr);
+  gap: 48px;
+  align-items: end;
+  padding: 58px 0 34px;
+  border-bottom: 1px solid var(--market-border);
+}
+
+.biotech-hero h1 {
+  margin: 8px 0 13px;
+  font-size: clamp(42px, 5vw, 72px);
+  font-weight: 430;
+  letter-spacing: -.055em;
+  line-height: .94;
+}
+
+.biotech-hero > div:first-child > p:last-child {
+  max-width: 760px;
+  color: var(--market-text-muted);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.biotech-asof {
+  display: grid;
+  gap: 7px;
+  justify-items: end;
+  padding-bottom: 3px;
+  text-align: right;
+}
+
+.biotech-asof span,
+.biotech-metrics span,
+.biotech-catalyst-meta,
+.biotech-catalyst-links,
+.biotech-catalyst-row summary,
+.biotech-movers dt {
+  color: var(--market-text-dim);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.biotech-asof strong {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.biotech-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 1px solid var(--market-border);
+}
+
+.biotech-metrics > div {
+  display: grid;
+  gap: 8px;
+  padding: 22px 22px 21px 0;
+}
+
+.biotech-metrics > div + div {
+  padding-left: 22px;
+  border-left: 1px solid var(--market-border);
+}
+
+.biotech-metrics strong {
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 24px;
+  font-weight: 450;
+}
+
+.biotech-warning {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: 24px;
+  margin-top: 22px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, #a76f21 42%, var(--market-border));
+  background: color-mix(in srgb, #a76f21 7%, transparent);
+  color: var(--market-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.biotech-warning strong { color: var(--market-text); }
+
+.biotech-lead {
+  position: relative;
+  max-width: 1180px;
+  margin: 58px 0 66px max(0px, 8vw);
+  padding-left: 30px;
+  border-left: 3px solid var(--market-blue);
+}
+
+.biotech-lead-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: var(--market-blue);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.biotech-lead h2 {
+  max-width: 1050px;
+  margin: 14px 0 13px;
+  font-size: clamp(28px, 3.4vw, 49px);
+  font-weight: 460;
+  letter-spacing: -.035em;
+  line-height: 1.06;
+}
+
+.biotech-lead > p {
+  color: var(--market-text-muted);
+  font-size: 14px;
+}
+
+.biotech-lead dl {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+  margin: 34px 0 26px;
+  padding-top: 21px;
+  border-top: 1px solid var(--market-border);
+}
+
+.biotech-lead dt {
+  margin-bottom: 8px;
+  color: var(--market-text-dim);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.biotech-lead dd {
+  color: var(--market-text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.biotech-lead footer,
+.biotech-catalyst-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 18px;
+}
+
+.biotech-lead footer a,
+.biotech-boundary a,
+.biotech-catalyst-links a {
+  color: var(--market-blue);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.biotech-lead footer a:hover,
+.biotech-boundary a:hover,
+.biotech-catalyst-links a:hover { text-decoration: underline; }
+
+.biotech-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(310px, .72fr);
+  border-top: 1px solid var(--market-border);
+}
+
+.biotech-stream {
+  padding: 34px 42px 0 0;
+}
+
+.biotech-stream > header,
+.biotech-movers > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 22px;
+  align-items: end;
+  padding-bottom: 22px;
+}
+
+.biotech-stream h2,
+.biotech-movers h2 {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 520;
+  letter-spacing: -.025em;
+}
+
+.biotech-stream > header > span {
+  color: var(--market-text-dim);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.biotech-catalyst-list { border-top: 1px solid var(--market-border); }
+
+.biotech-catalyst-row {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr);
+  gap: 19px;
+  padding: 25px 0;
+  border-bottom: 1px solid var(--market-border);
+}
+
+.biotech-catalyst-marker {
+  width: 3px;
+  min-height: 54px;
+  background: var(--market-border-strong);
+}
+
+.biotech-catalyst-marker[data-significance='urgent'] { background: #b24c42; }
+.biotech-catalyst-marker[data-significance='investigate'] { background: #a77831; }
+.biotech-catalyst-marker[data-significance='monitor'] { background: var(--market-blue); }
+
+.biotech-catalyst-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+
+.biotech-catalyst-meta time { margin-left: auto; }
+
+.biotech-catalyst-row h3 {
+  max-width: 900px;
+  margin: 10px 0 8px;
+  font-size: 17px;
+  font-weight: 540;
+  letter-spacing: -.015em;
+  line-height: 1.35;
+}
+
+.biotech-catalyst-row > div > p {
+  color: var(--market-text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.biotech-catalyst-links { margin-top: 13px; }
+
+.biotech-catalyst-row details { margin-top: 13px; }
+.biotech-catalyst-row summary { cursor: pointer; list-style: none; }
+.biotech-catalyst-row summary::-webkit-details-marker { display: none; }
+.biotech-catalyst-row summary::after { content: ' +'; }
+.biotech-catalyst-row details[open] summary::after { content: ' −'; }
+.biotech-catalyst-row ul { display: grid; gap: 8px; margin-top: 11px; }
+.biotech-catalyst-row li { display: flex; flex-wrap: wrap; gap: 7px 12px; color: var(--market-text-dim); font-size: 11px; }
+.biotech-catalyst-row li a { color: var(--market-text); }
+.biotech-catalyst-row li em { color: #a77831; font-style: normal; }
+
+.biotech-movers {
+  padding: 34px 0 0 34px;
+  border-left: 1px solid var(--market-border);
+}
+
+.biotech-movers > div { border-top: 1px solid var(--market-border); }
+.biotech-movers article { padding: 19px 0; border-bottom: 1px solid var(--market-border); }
+.biotech-movers article > header { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
+.biotech-movers article > header a { color: var(--market-text); font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 17px; font-weight: 550; text-decoration: none; }
+.biotech-movers article > header strong { font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 15px; font-weight: 500; }
+.biotech-movers article > header strong[data-direction='up'] { color: #3f7d5b; }
+.biotech-movers article > header strong[data-direction='down'] { color: #b24c42; }
+.biotech-movers article > p { margin-top: 4px; color: var(--market-text-muted); font-size: 12px; }
+.biotech-movers article dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
+.biotech-movers article dl div { display: grid; gap: 5px; }
+.biotech-movers dd { font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 11px; }
+.biotech-movers article footer { margin-top: 14px; color: var(--market-text-dim); font-size: 10px; }
+.biotech-movers article footer a { color: var(--market-blue); }
+
+.biotech-boundary {
+  margin-top: 36px;
+  padding: 20px 0;
+  border-top: 2px solid var(--market-text);
+  border-bottom: 1px solid var(--market-border);
+}
+.biotech-boundary h3 { font-size: 13px; font-weight: 600; }
+.biotech-boundary p { margin: 9px 0 13px; color: var(--market-text-muted); font-size: 12px; line-height: 1.55; }
+
+.biotech-empty,
+.biotech-inline-empty {
+  color: var(--market-text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.biotech-empty { margin: 58px 0; padding: 34px 0; border-block: 1px solid var(--market-border); }
+.biotech-empty h2 { margin-bottom: 8px; color: var(--market-text); font-size: 22px; }
+.biotech-inline-empty { padding: 26px 0; border-top: 1px solid var(--market-border); }
+
+@media (max-width: 980px) {
+  .biotech-grid { grid-template-columns: 1fr; }
+  .biotech-movers { padding-left: 0; border-left: 0; }
+  .biotech-stream { padding-right: 0; }
+  .biotech-lead { margin-left: 0; }
+}
+
+@media (max-width: 767px) {
+  .biotech-page { padding: 0 16px 52px; }
+  .biotech-hero { grid-template-columns: 1fr; gap: 20px; padding: 32px 0 24px; }
+  .biotech-hero h1 { font-size: 42px; }
+  .biotech-asof { justify-items: start; text-align: left; }
+  .biotech-metrics { grid-template-columns: repeat(2, 1fr); }
+  .biotech-metrics > div:nth-child(3) { border-left: 0; border-top: 1px solid var(--market-border); padding-left: 0; }
+  .biotech-metrics > div:nth-child(4) { border-top: 1px solid var(--market-border); }
+  .biotech-warning { grid-template-columns: 1fr; gap: 5px; }
+  .biotech-lead { margin: 40px 0 48px; padding-left: 19px; }
+  .biotech-lead dl { grid-template-columns: 1fr; gap: 18px; }
+  .biotech-catalyst-meta time { width: 100%; margin-left: 0; }
+  .biotech-movers { padding-top: 46px; }
+}
+
 /* World Thinker — durable world state, causal lineage, and research queue. */
 .world-page,
 .world-node-page,
