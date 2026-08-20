@@ -452,6 +452,8 @@ export async function materializeCandidateScout(
   })
   const ranked = rankCandidateUniverse(classified, groups, fundamentals, 200, trackingBySymbol)
   const tradingDate = options.tradingDate ?? snapshot.trading_date
+  const eventPrioritySymbols = (options.preferredSymbols ?? []).filter((symbol) =>
+    ranked.some((candidate) => candidate.stock.symbol === symbol && candidate.lanes.includes('event_catalyst')))
   const briefs = selectCandidateBriefs(ranked, {
     tradingDate,
     generatedAt: now.toISOString(),
@@ -459,6 +461,7 @@ export async function materializeCandidateScout(
     maximumPerSubIndustry: 2,
     suppressionTradingDays: 5,
     history,
+    prioritySymbols: eventPrioritySymbols,
   })
   if (briefs.length < 3) throw new Error(`Candidate Scout produced only ${briefs.length} eligible briefs`)
 

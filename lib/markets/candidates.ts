@@ -43,6 +43,7 @@ export interface CandidateScoutOptions {
   maximumPerSubIndustry?: number
   suppressionTradingDays?: number
   history?: CandidateHistory[]
+  prioritySymbols?: string[]
 }
 
 export interface RankedCandidate {
@@ -437,6 +438,16 @@ export function selectCandidateBriefs(
     selectedSymbols.add(candidate.stock.symbol)
     groupCounts.set(groupKey, (groupCounts.get(groupKey) ?? 0) + 1)
     return true
+  }
+
+  // A deterministic upstream event gate may ask Scout to reserve attention
+  // for a symbol. This does not bypass eligibility, history suppression,
+  // diversification, or the overall brief cap; it only prevents a validated
+  // event mover from being crowded out by unrelated higher-scoring names.
+  for (const symbol of options.prioritySymbols ?? []) {
+    const candidate = ranked.find((item) => item.stock.symbol === symbol && item.lanes.includes('event_catalyst'))
+    if (candidate) canSelect(candidate)
+    if (selected.length >= targetCount) break
   }
 
   for (const lane of LANE_ORDER) {

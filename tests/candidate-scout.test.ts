@@ -175,6 +175,29 @@ test('extraordinary price moves become event-driven investigations without becom
   assert.match(brief?.entryContext ?? '', /verify it against primary evidence/)
 })
 
+test('validated event movers reserve bounded Scout attention without bypassing eligibility', () => {
+  const target = { ...stock('MRNA', 'Biotechnology', 120), sector: 'Health Care', dayReturn: 22, relativeVolume: 2.4 }
+  const competitors = Array.from({ length: 8 }, (_, index) => ({
+    ...stock(`EVT${index}`, 'Software', 200 - index),
+    dayReturn: 30 + index,
+    relativeVolume: 4,
+  }))
+  const stocks = [target, ...competitors]
+  const ranked = rankCandidateUniverse(stocks, [], stocks.map((item) => ({
+    ...fundamentals(item.symbol),
+    sector: item.sector,
+    subIndustry: item.subIndustry,
+  })))
+  const briefs = selectCandidateBriefs(ranked, {
+    tradingDate: '2026-08-19',
+    targetCount: 2,
+    prioritySymbols: ['MRNA', 'NOT-ELIGIBLE'],
+  })
+  assert.equal(briefs.length, 2)
+  assert.ok(briefs.some((brief) => brief.symbol === 'MRNA' && brief.primaryLane === 'event_catalyst'))
+  assert.ok(briefs.every((brief) => brief.entryContext.includes('verify')))
+})
+
 test('Candidate Scout expands beyond the S&P 500 to watched and owned names', async () => {
   const source = await readFile(new URL('../lib/server/candidate-scout.ts', import.meta.url), 'utf8')
   assert.match(source, /market_watchlist_items/)
