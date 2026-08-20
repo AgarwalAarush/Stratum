@@ -334,6 +334,13 @@ test('discovery evidence retries never update immutable World documents', () => 
   assert.match(thinkerSource, /onConflict: 'content_hash', ignoreDuplicates: true/)
 })
 
+test('ENSO signal cleanup supersedes duplicates without deleting evidence', () => {
+  const migration = readFileSync(new URL('../supabase/migrations/202608200002_world_signal_enso_canonical.sql', import.meta.url), 'utf8')
+  assert.match(migration, /signal-4e0b1f2895ea150dd34172bc/)
+  assert.match(migration, /status = 'superseded'/)
+  assert.doesNotMatch(migration, /delete\s+from/i)
+})
+
 test('world node Markdown is deterministic and parseable', () => {
   const rendered = renderWorldNode(node())
   assert.equal(renderWorldNode(node()), rendered)
