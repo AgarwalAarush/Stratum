@@ -119,6 +119,10 @@ function worldEventLimit(trigger: WorldUpdateProposal['trigger']): number {
   return MAX_EVENTS
 }
 
+export function isCoverageOnlyWorldRun(options: Pick<WorldThinkerOptions, 'coverageFrontierIds' | 'eventClusterIds'>): boolean {
+  return Boolean(options.coverageFrontierIds?.length && !options.eventClusterIds?.length)
+}
+
 function requestedSpecialistLenses(events: EventClusterRow[]): WorldSpecialistLens[] {
   const requested = events.flatMap((event) => event.specialist_lenses ?? [])
   if (requested.length) return [...new Set(requested)]
@@ -578,7 +582,10 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
   let draftSchemaPath: string | null = null
   let claimedIds: string[] = []
   try {
-    const candidateIds = await selectPendingEventIds(options.eventClusterIds, options.trigger)
+    // An explicitly requested frontier review is a bounded breadth task, not a
+    // second route into the oldest general backlog. Mixing both caused the
+    // event batch to consume the prompt and left the named blind spot unchanged.
+    const candidateIds = isCoverageOnlyWorldRun(options) ? [] : await selectPendingEventIds(options.eventClusterIds, options.trigger)
     claimedIds = await claimPendingEvents(runId, candidateIds)
     context = await retrieveWorldThinkerContext({ eventClusterIds: claimedIds, root, branch, trigger: options.trigger, coverageFrontierIds: options.coverageFrontierIds, worldOpportunityLeadId: options.worldOpportunityLeadId, researchNoteId: options.researchNoteId, symbol: options.symbol, runId })
     await updateRun(runId, { checkpoint: context.events.at(-1)?.id ?? null, base_commit: context.baseCommit, context_manifest: context.manifest, retrieval_ledger: context.retrievalLedger, status: 'thinking' })

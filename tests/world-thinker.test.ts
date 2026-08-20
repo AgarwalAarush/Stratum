@@ -10,7 +10,7 @@ import { promisify } from 'node:util'
 import { buildCodexExecArgs } from '../lib/server/codex-exec.ts'
 import { clusterWorldEventSources, nextWorldEventProcessingState, partitionWorldEventCandidates, reconcileExtractedClusters, transitionWorldClaimState, worldEventExtractionPrompt, worldEventNeedsRefresh } from '../lib/server/world-events.ts'
 import { commitWorldUpdate, initializeWorldRepository, parseWorldNode, renderWorldNode, validateWorldProposalAgainstState } from '../lib/server/world-repository.ts'
-import { buildWorldUpdateDraftSchema, materializeWorldUpdateProposal, selectResearchableWorldLeads, validateWorldUpdateDraftWithHostSources } from '../lib/server/world-thinker.ts'
+import { buildWorldUpdateDraftSchema, isCoverageOnlyWorldRun, materializeWorldUpdateProposal, selectResearchableWorldLeads, validateWorldUpdateDraftWithHostSources } from '../lib/server/world-thinker.ts'
 import { type WorldNode, type WorldOpportunityLead, type WorldUpdateDraft, type WorldUpdateProposal, validateWorldUpdateDraft, validateWorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
 import { latestDistinctWorldJournals } from '../lib/server/world-projection.ts'
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
@@ -227,6 +227,12 @@ test('blind and thin coverage searches start with authoritative source targets',
     const frontier = WORLD_COVERAGE_FRONTIERS.find((item) => item.id === id)!
     assert.ok(frontier.queryTerms.some((term) => /site:/.test(term)), `${id} should include an authoritative source target`)
   }
+})
+
+test('explicit coverage reviews do not inherit the unrelated general event backlog', () => {
+  assert.equal(isCoverageOnlyWorldRun({ coverageFrontierIds: ['credit-liquidity-markets'] }), true)
+  assert.equal(isCoverageOnlyWorldRun({ coverageFrontierIds: ['china-taiwan'], eventClusterIds: ['event-1'] }), false)
+  assert.equal(isCoverageOnlyWorldRun({ eventClusterIds: ['event-1'] }), false)
 })
 
 test('equally thin coverage rotates toward the least recently searched frontier', () => {
