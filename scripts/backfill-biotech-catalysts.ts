@@ -1,4 +1,4 @@
-import { persistBiotechCatalystSources } from '../lib/server/biotech-catalysts.ts'
+import { linkBiotechCatalystsToEvent, persistBiotechCatalystSources } from '../lib/server/biotech-catalysts.ts'
 import { getSupabaseClient } from '../lib/server/supabase.ts'
 
 function daysArgument(): number {
@@ -35,6 +35,17 @@ async function main(): Promise<void> {
     })))
     detected += result.detected
     persisted += result.persisted
+    const sourceIds = page.map((row) => `feed:${row.id}`)
+    const { data: eventSources, error: eventSourceError } = sourceIds.length
+      ? await supabase.from('world_event_cluster_sources').select('cluster_id,source_id').in('source_id', sourceIds)
+      : { data: [], error: null }
+    if (eventSourceError) throw new Error(`Unable to load historical World event lineage: ${eventSourceError.message}`)
+    const sourcesByCluster = new Map<string, string[]>()
+    for (const source of eventSources ?? []) {
+      const clusterId = String(source.cluster_id)
+      sourcesByCluster.set(clusterId, [...(sourcesByCluster.get(clusterId) ?? []), String(source.source_id)])
+    }
+    for (const [clusterId, clusterSourceIds] of sourcesByCluster) await linkBiotechCatalystsToEvent(clusterId, clusterSourceIds)
     if (page.length < 1_000) break
   }
   console.info(JSON.stringify({ scanned, detected, persisted, since }, null, 2))

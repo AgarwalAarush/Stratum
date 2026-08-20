@@ -52,9 +52,9 @@ export interface ClinicalCatalyst {
 
 const CLINICAL_CONTEXT = /\b(?:phase\s*(?:1|2|3|i{1,3}|iv)|clinical trial|pivotal trial|late-stage trial|primary endpoint|secondary endpoint|overall survival|progression-free survival|recurrence-free survival|distant metastasis-free survival|clinical hold|safety signal|advisory committee|pdufa|complete response letter|breakthrough therapy|accelerated approval|fda approves?|fda rejects?|vaccine|oncology|biotech|biopharma)\b/i
 const MATERIAL_OUTCOME = /\b(?:met|missed|failed|succeeded|positive|negative|stopped|halted|paused|approved|rejected|accepted|cleared|superiority|noninferiority|survival|recurrence|metastasis|adverse event|toxicity|death)\b/i
-const TRIAL_START = /\b(?:initiates?|begins?|starts?|enrolls?|doses? first patient|fully enrolled)\b/i
+const TRIAL_START = /\b(?:(?:initiates?|begins?|starts?)\s+(?:a\s+|the\s+|first\s+)?(?:phase|clinical|human|pivotal|trial|study)|enrolls?\s+(?:a\s+|the\s+|first\s+)?(?:patient|subject|participant)|doses? first patient|fully enrolled)\b/i
 const MEDICAL_MEETING = /\b(?:asco|aacr|esmo|ash|aha|acc|ada|scientific meeting|medical meeting|late-breaking abstract|oral presentation)\b/i
-const POSITIVE = /\b(?:met (?:its |the )?(?:primary|key secondary|co-primary)?\s*endpoints?|positive (?:phase|trial|data|results?)|succeeded|statistically significant|superior|approved|cleared|accepted for (?:filing|review)|breakthrough therapy)\b/i
+const POSITIVE = /\b(?:met (?:its |the )?(?:primary|key secondary|co-primary)?\s*endpoints?|positive\b.{0,50}\b(?:phase|trial|data|results?)|succeeded|statistically significant|superior|approved|cleared|accepted for (?:filing|review)|breakthrough therapy)\b/i
 const NEGATIVE = /\b(?:missed|failed|did not meet|clinical hold|complete response letter|rejected|stopped for futility|halted|serious safety|excess deaths?|toxicity)\b/i
 const MIXED = /\b(?:mixed results?|met .* but (?:missed|failed)|primary endpoint .* secondary endpoint)\b/i
 
@@ -132,7 +132,9 @@ function trialIdentifier(title: string): string | null {
 
 function therapyName(title: string): string | null {
   const value = THERAPY_PATTERNS.map((pattern) => title.match(pattern)?.[0]).find((item): item is string => Boolean(item)) ?? null
-  return value && /^(?:intismeran autogene|intismeran|mRNA-4157|V940)$/i.test(value) ? 'intismeran' : value
+  if (value && /^(?:intismeran autogene|intismeran|mRNA-4157|V940)$/i.test(value)) return 'intismeran'
+  if (/\bmoderna\b/i.test(title) && /\b(?:melanoma|cancer vaccine)\b/i.test(title)) return 'intismeran'
+  return value
 }
 
 function indicationName(title: string): string | null {
@@ -147,13 +149,13 @@ export function isClinicalCatalystTitle(title: string): boolean {
 export function normalizeClinicalCatalyst(source: ClinicalCatalystSource): ClinicalCatalyst | null {
   const kind = catalystKind(source.title)
   if (!kind) return null
-  const phase = clinicalPhase(source.title)
+  const therapy = therapyName(source.title)
+  const indication = indicationName(source.title)
+  const phase = clinicalPhase(source.title) ?? (therapy === 'intismeran' && indication === 'melanoma' ? 'Phase 3' : null)
   const outcome = catalystOutcome(source.title)
   const score = materiality(kind, phase, outcome)
   const significance = significanceFor(score, kind)
   const trialId = trialIdentifier(source.title)
-  const therapy = therapyName(source.title)
-  const indication = indicationName(source.title)
   const symbols = sourceSymbol(source.metadata)
   const identity = therapy || indication
     ? [kind, therapy, indication, phase, outcome].filter(Boolean).map(String).map(normalized).join('|')

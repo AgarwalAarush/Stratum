@@ -36,6 +36,7 @@ test('clinical holds and FDA decisions are decisive while routine earnings are n
   assert.equal(hold?.outcome, 'negative')
   assert.equal(hold?.decisiveNewEvent, true)
   assert.equal(normalizeClinicalCatalyst({ ...modernaRelease, title: 'Moderna reports quarterly revenue and earnings' }), null)
+  assert.equal(normalizeClinicalCatalyst({ ...modernaRelease, title: '3 Biotech Stocks With Massive Upside to Buy Before August Starts' }), null)
 })
 
 test('clinical catalyst identity helps collapse corroborating versions of one readout', () => {
@@ -50,6 +51,12 @@ test('clinical catalyst identity helps collapse corroborating versions of one re
   }
   assert.equal(clinicalCatalystClusterKey(first.title), clinicalCatalystClusterKey(second.title))
   assert.equal(normalizeClinicalCatalyst(first)?.fingerprint, normalizeClinicalCatalyst(second)?.fingerprint)
+  const wireSummary = normalizeClinicalCatalyst({
+    ...modernaRelease,
+    id: 'feed:wire-summary',
+    title: 'An experimental mRNA-based cancer vaccine succeeded in preventing melanoma from coming back or spreading in a large study, partners Merck and Moderna said.',
+  })
+  assert.equal(normalizeClinicalCatalyst(first)?.fingerprint, wireSummary?.fingerprint)
   const clusters = clusterWorldEventSources([first, second], new Date('2026-08-19T15:00:00.000Z'))
   assert.equal(clusters.length, 1)
   assert.equal(clusters[0]?.sourceDiversity, 2)
