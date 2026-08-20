@@ -51,6 +51,10 @@ test('clinical catalyst identity helps collapse corroborating versions of one re
     publishedAt: '2026-08-19T14:05:00.000Z',
   }
   assert.equal(clinicalCatalystClusterKey(first.title), clinicalCatalystClusterKey(second.title))
+  assert.equal(
+    clinicalCatalystClusterKey(first.title),
+    clinicalCatalystClusterKey('Merck, Moderna personalized cancer vaccine slows recurrence in Phase 3, setting up approval push'),
+  )
   assert.equal(normalizeClinicalCatalyst(first)?.fingerprint, normalizeClinicalCatalyst(second)?.fingerprint)
   const wireSummary = normalizeClinicalCatalyst({
     ...modernaRelease,

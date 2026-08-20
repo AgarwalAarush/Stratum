@@ -157,10 +157,8 @@ export function clusterWorldEventSources(sources: WorldEventSourceInput[], now =
       const hours = Math.abs(Date.parse(source.publishedAt ?? source.fetchedAt) - Date.parse(prior.publishedAt ?? prior.fetchedAt)) / 3_600_000
       const catalystKey = clinicalCatalystClusterKey(source.title)
       const priorCatalystKey = clinicalCatalystClusterKey(prior.title)
-      return hours <= 96 && (
-        jaccard(sourceTokens, tokens(prior.title)) >= 0.34
-        || Boolean(catalystKey && priorCatalystKey && catalystKey === priorCatalystKey)
-      )
+      return (hours <= 96 && jaccard(sourceTokens, tokens(prior.title)) >= 0.34)
+        || (hours <= 36 && Boolean(catalystKey && priorCatalystKey && catalystKey === priorCatalystKey))
     })
     if (matched) matched.push(source)
     else groups.push([source])

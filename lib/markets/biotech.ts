@@ -54,7 +54,7 @@ const CLINICAL_CONTEXT = /\b(?:phase\s*(?:1|2|3|i{1,3}|iv)|clinical trial|pivota
 const MATERIAL_OUTCOME = /\b(?:met|missed|failed|succeeded|positive|negative|stopped|halted|paused|approved|rejected|accepted|cleared|superiority|noninferiority|survival|recurrence|metastasis|adverse event|toxicity|death)\b/i
 const TRIAL_START = /\b(?:(?:initiates?|begins?|starts?)\s+(?:a\s+|the\s+|first\s+)?(?:phase|clinical|human|pivotal|trial|study)|enrolls?\s+(?:a\s+|the\s+|first\s+)?(?:patient|subject|participant)|doses? first patient|fully enrolled)\b/i
 const MEDICAL_MEETING = /\b(?:asco|aacr|esmo|ash|aha|acc|ada|scientific meeting|medical meeting|late-breaking abstract|oral presentation)\b/i
-const POSITIVE = /\b(?:met (?:its |the )?(?:primary|key secondary|co-primary)?\s*endpoints?|positive\b.{0,50}\b(?:phase|trial|data|results?)|succeeded|statistically significant|superior|approved|cleared|accepted for (?:filing|review)|breakthrough therapy)\b/i
+const POSITIVE = /\b(?:met (?:its |the )?(?:primary|key secondary|co-primary)?\s*endpoints?|positive\b.{0,50}\b(?:phase|trial|data|results?)|succeeded|statistically significant|superior|slows? recurrence|reduced recurrence|approved|cleared|accepted for (?:filing|review)|breakthrough therapy)\b/i
 const NEGATIVE = /\b(?:missed|failed|did not meet|clinical hold|complete response letter|rejected|stopped for futility|halted|serious safety|excess deaths?|toxicity)\b/i
 const MIXED = /\b(?:mixed results?|met .* but (?:missed|failed)|primary endpoint .* secondary endpoint)\b/i
 
@@ -197,6 +197,6 @@ export function clinicalCatalystClusterKey(title: string): string | null {
   const source: ClinicalCatalystSource = { id: 'key', title, url: 'https://example.invalid', publisher: '', publishedAt: null, fetchedAt: new Date(0).toISOString() }
   const catalyst = normalizeClinicalCatalyst(source)
   if (!catalyst) return null
-  return [catalyst.kind, catalyst.therapy, catalyst.indication, catalyst.phase, catalyst.outcome]
+  return [catalyst.kind, catalyst.therapy, catalyst.therapy ? null : catalyst.indication, catalyst.phase, catalyst.outcome]
     .filter(Boolean).map(String).map(normalized).join('|')
 }

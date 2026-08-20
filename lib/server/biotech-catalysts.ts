@@ -1,5 +1,5 @@
 import { canonicalWorldSourceFamily, classifyWorldSourceLane } from '../markets/world-attention.ts'
-import { normalizeClinicalCatalyst, type ClinicalCatalyst, type ClinicalCatalystSource } from '../markets/biotech.ts'
+import { clinicalCatalystClusterKey, normalizeClinicalCatalyst, type ClinicalCatalyst, type ClinicalCatalystSource } from '../markets/biotech.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 export interface BiotechCatalystSourceView {
@@ -215,9 +215,10 @@ export function collapseCatalystViews(catalysts: BiotechCatalystView[]): Biotech
     })).filter((item): item is ClinicalCatalyst => Boolean(item))
       .sort((left, right) => right.materiality - left.materiality)[0]
     if (!current) continue
-    const prior = retainedByCurrentFingerprint.get(current.fingerprint)
+    const projectionKey = clinicalCatalystClusterKey(current.title) ?? current.fingerprint
+    const prior = retainedByCurrentFingerprint.get(projectionKey)
     if (!prior) {
-      retainedByCurrentFingerprint.set(current.fingerprint, {
+      retainedByCurrentFingerprint.set(projectionKey, {
         ...catalyst,
         ...current,
         symbols: catalyst.symbols,
@@ -230,7 +231,7 @@ export function collapseCatalystViews(catalysts: BiotechCatalystView[]): Biotech
       continue
     }
     const sources = [...new Map([...prior.sources, ...catalyst.sources].map((source) => [source.sourceId, source])).values()]
-    retainedByCurrentFingerprint.set(current.fingerprint, {
+    retainedByCurrentFingerprint.set(projectionKey, {
       ...prior,
       symbols: [...new Set([...prior.symbols, ...catalyst.symbols])],
       eventClusterIds: [...new Set([...prior.eventClusterIds, ...catalyst.eventClusterIds])],
