@@ -67,6 +67,42 @@ test('clinical catalyst identity helps collapse corroborating versions of one re
   assert.equal(clusters[0]?.sourceDiversity, 2)
 })
 
+test('unresolved products never collapse unrelated regulatory decisions', () => {
+  const rareDiseaseApproval = 'FDA approved first treatment for a rare metabolic storage disease'
+  const oncologyApproval = 'FDA approved first treatment for an aggressive solid tumor'
+  assert.equal(clinicalCatalystClusterKey(rareDiseaseApproval), null)
+  assert.equal(clinicalCatalystClusterKey(oncologyApproval), null)
+
+  const base = normalizeClinicalCatalyst({ ...modernaRelease, title: rareDiseaseApproval })!
+  const view = (fingerprint: string, title: string, symbol: string): BiotechCatalystView => ({
+    ...base,
+    fingerprint,
+    title,
+    symbols: [symbol],
+    sourceIds: [`feed:${symbol}`],
+    eventClusterIds: [],
+    status: 'observed',
+    nextReviewAt: '2026-08-21T13:45:00.000Z',
+    sources: [{
+      sourceId: `feed:${symbol}`,
+      title,
+      url: `https://example.com/${symbol}`,
+      publisher: 'Primary source',
+      publishedAt: '2026-08-19T13:45:00.000Z',
+      fetchedAt: '2026-08-19T13:47:00.000Z',
+      sourceLane: 'company_disclosure',
+      sourceFamily: `${symbol}.com`,
+      sourceTimeAnomaly: false,
+    }],
+  })
+  const collapsed = collapseCatalystViews([
+    view('rare-approval', rareDiseaseApproval, 'RARE'),
+    view('oncology-approval', oncologyApproval, 'ONC'),
+  ])
+  assert.equal(collapsed.length, 2)
+  assert.deepEqual(collapsed.map((item) => item.symbols).sort(), [['ONC'], ['RARE']])
+})
+
 test('workspace projection collapses legacy identities that share the same immutable source', () => {
   const canonical = normalizeClinicalCatalyst(modernaRelease)!
   const source = {

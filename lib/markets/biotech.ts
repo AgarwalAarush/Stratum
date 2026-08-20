@@ -197,6 +197,11 @@ export function clinicalCatalystClusterKey(title: string): string | null {
   const source: ClinicalCatalystSource = { id: 'key', title, url: 'https://example.invalid', publisher: '', publishedAt: null, fetchedAt: new Date(0).toISOString() }
   const catalyst = normalizeClinicalCatalyst(source)
   if (!catalyst) return null
-  return [catalyst.kind, catalyst.therapy, catalyst.therapy ? null : catalyst.indication, catalyst.phase, catalyst.outcome]
+  // A kind/phase/outcome tuple is not an event identity. In particular, many
+  // unrelated FDA decisions are positive, phase-less regulatory decisions.
+  // Only use the permissive cross-publisher key when we resolved a product or
+  // trial. Otherwise the ordinary title-similarity path must do the grouping.
+  if (!catalyst.therapy && !catalyst.trialId) return null
+  return [catalyst.kind, catalyst.therapy, catalyst.therapy ? null : catalyst.trialId, catalyst.therapy ? null : catalyst.indication, catalyst.phase, catalyst.outcome]
     .filter(Boolean).map(String).map(normalized).join('|')
 }
