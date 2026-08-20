@@ -1,3 +1,4 @@
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { WorldSpecialistLens } from '../markets/world-attention.ts'
 import type { WorldEventCluster, WorldSignal, WorldSpecialistAssessment, WorldUpdateProposal } from '../markets/world-thinker-types.ts'
@@ -38,20 +39,59 @@ ${JSON.stringify({ events: input.events, sources: input.sources, relatedWeakSign
 END_UNTRUSTED_SPECIALIST_CONTEXT`
 }
 
+function constrainedStringArray(ids: string[]): Record<string, unknown> {
+  const unique = [...new Set(ids)]
+  return {
+    type: 'array',
+    maxItems: unique.length === 0 ? 0 : 100,
+    items: unique.length === 0 ? { type: 'string' } : { type: 'string', enum: unique },
+  }
+}
+
+export function buildWorldSpecialistAssessmentSchema(
+  source: Record<string, unknown>,
+  lens: WorldSpecialistLens,
+  allowed: { eventClusterIds: string[]; sourceIds: string[]; signalIds: string[] },
+): Record<string, unknown> {
+  const schema = structuredClone(source) as {
+    properties: Record<string, Record<string, unknown>>
+  }
+  schema.properties.lens = { enum: [lens] }
+  schema.properties.eventClusterIds = constrainedStringArray(allowed.eventClusterIds)
+  schema.properties.sourceIds = constrainedStringArray(allowed.sourceIds)
+  schema.properties.relatedSignalIds = constrainedStringArray(allowed.signalIds)
+  const classifications = schema.properties.classifications as { items: { properties: Record<string, unknown> } }
+  classifications.items.properties.eventClusterId = { type: 'string', enum: [...new Set(allowed.eventClusterIds)] }
+  const causalChannels = schema.properties.causalChannels as { items: { properties: Record<string, unknown> } }
+  causalChannels.items.properties.sourceIds = constrainedStringArray(allowed.sourceIds)
+  return schema
+}
+
+async function writeWorldSpecialistSchema(input: WorldSpecialistInput, lens: WorldSpecialistLens): Promise<string> {
+  const source = JSON.parse(await readFile(join(process.cwd(), 'schemas/world-specialist-assessment.schema.json'), 'utf8')) as Record<string, unknown>
+  const directory = join(input.cwd, 'runtime', 'schemas')
+  await mkdir(directory, { recursive: true, mode: 0o700 })
+  const path = join(directory, `world-specialist-${input.runId}-${lens}.schema.json`)
+  const schema = buildWorldSpecialistAssessmentSchema(source, lens, {
+    eventClusterIds: input.events.map((event) => event.id),
+    sourceIds: input.sources.map((source) => source.source_id),
+    signalIds: input.signals.map((signal) => signal.id),
+  })
+  await writeFile(path, `${JSON.stringify(schema, null, 2)}\n`, { mode: 0o600 })
+  return path
+}
+
 export async function runWorldSpecialists(input: WorldSpecialistInput): Promise<Array<{ assessment: WorldSpecialistAssessment; metadata: Record<string, unknown> }>> {
   const lenses = boundWorldSpecialistLenses(input.requestedLenses, input.trigger)
   if (lenses.length === 0 || input.events.length === 0) return []
   const selection = selectMarketModel('world_specialist')
   const output = []
   for (const lens of lenses) {
+    const schemaPath = await writeWorldSpecialistSchema(input, lens)
     const result = await runCodexJson({
-      prompt: specialistPrompt(lens, input),
-      schemaPath: join(process.cwd(), 'schemas/world-specialist-assessment.schema.json'),
-      validate: validateWorldSpecialistAssessment,
-      model: selection.model,
-      cwd: input.cwd,
-      timeoutMs: 10 * 60_000,
-    })
+      prompt: specialistPrompt(lens, input), schemaPath, validate: validateWorldSpecialistAssessment,
+      model: selection.model, cwd: input.cwd, timeoutMs: 10 * 60_000,
+    }).finally(() => unlink(schemaPath).catch(() => undefined))
     if (result.data.lens !== lens) throw new Error(`World specialist returned the wrong lens: expected ${lens}`)
     const allowedEvents = new Set(input.events.map((event) => event.id))
     const allowedSources = new Set(input.sources.map((source) => source.source_id))

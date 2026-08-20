@@ -15,7 +15,7 @@ import {
 import { WORLD_BENCHMARK_FAMILIES, WORLD_BENCHMARK_TARGET, classifyWorldBenchmarkFamily, type PersistedWorldBenchmarkCase } from '../lib/markets/world-benchmark.ts'
 import { calculateWorldBenchmarkMetrics, selectBalancedWorldBenchmarkCandidates } from '../lib/server/world-benchmark.ts'
 import { NEWS_TOPIC_FEEDS, NEWS_TOPICS } from '../lib/data/rss.ts'
-import { boundWorldSpecialistLenses } from '../lib/server/world-specialists.ts'
+import { boundWorldSpecialistLenses, buildWorldSpecialistAssessmentSchema } from '../lib/server/world-specialists.ts'
 import { clusterWorldEventSources, mapWorldEventBatchesWithConcurrency } from '../lib/server/world-events.ts'
 import { selectWorldSignalRelations, shouldPersistWorldSignal, worldSignalActivationConditions, worldSignalActivationSatisfied, worldSignalConceptKey } from '../lib/server/world-signals.ts'
 
@@ -136,6 +136,18 @@ test('specialist routing enforces one urgent and at most two scheduled lenses', 
   const lenses = ['physical_economy', 'macro_finance', 'geopolitics_institutions'] as const
   assert.deepEqual(boundWorldSpecialistLenses([...lenses], 'urgent'), ['physical_economy'])
   assert.deepEqual(boundWorldSpecialistLenses([...lenses], 'scheduled'), ['physical_economy', 'macro_finance'])
+})
+
+test('specialist output schema enumerates exact host-owned lineage IDs', () => {
+  const sourceSchema = JSON.parse(readFileSync(new URL('../schemas/world-specialist-assessment.schema.json', import.meta.url), 'utf8')) as Record<string, unknown>
+  const schema = buildWorldSpecialistAssessmentSchema(sourceSchema, 'macro_finance', {
+    eventClusterIds: ['event-1', 'event-2'], sourceIds: ['feed:1', 'document:2'], signalIds: [],
+  }) as { properties: Record<string, { enum?: string[]; maxItems?: number; items?: { enum?: string[]; properties?: Record<string, { items?: { enum?: string[] } }> } }> }
+  assert.deepEqual(schema.properties.lens.enum, ['macro_finance'])
+  assert.deepEqual(schema.properties.eventClusterIds.items?.enum, ['event-1', 'event-2'])
+  assert.deepEqual(schema.properties.sourceIds.items?.enum, ['feed:1', 'document:2'])
+  assert.equal(schema.properties.relatedSignalIds.maxItems, 0)
+  assert.deepEqual(schema.properties.causalChannels.items?.properties?.sourceIds.items?.enum, ['feed:1', 'document:2'])
 })
 
 test('historical event chronology follows published time while retaining fetched provenance', () => {
