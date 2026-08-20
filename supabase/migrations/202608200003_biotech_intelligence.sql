@@ -1,3 +1,4 @@
+-- Durable clinical-catalyst memory and authenticated read projection.
 begin;
 
 create table if not exists public.biotech_clinical_catalysts (
