@@ -113,15 +113,26 @@ export function classifyWorldReplayBatchOutcome(input: { sourceCount: number; cl
   return input.usedDeterministicFallback ? 'fallback' : 'projected'
 }
 
-async function hasQueuedLiveThinkerWork(): Promise<boolean> {
+export function isWorldThinkerBusyError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /world_thinker_runs_one_active|duplicate key value violates unique constraint.*world_thinker_runs|Unable to create World Thinker run:.*duplicate key/i.test(message)
+}
+
+async function hasActiveLiveThinkerWork(): Promise<boolean> {
   const supabase = getSupabaseClient()
   if (!supabase) return false
-  const { data, error } = await supabase.from('agent_jobs').select('id,payload').eq('job_type', 'run-world-thinker').eq('status', 'queued').limit(20)
-  if (error) throw new Error(`Unable to inspect live World Thinker work: ${error.message}`)
-  return (data ?? []).some((job) => {
+  const [{ data: jobs, error: jobsError }, { data: runs, error: runsError }] = await Promise.all([
+    supabase.from('agent_jobs').select('id,payload,status').eq('job_type', 'run-world-thinker').in('status', ['queued', 'running']).limit(20),
+    supabase.from('world_thinker_runs').select('id,trigger,status').in('status', ['orienting', 'thinking', 'criticizing', 'revising']).order('created_at', { ascending: false }).limit(5),
+  ])
+  if (jobsError) throw new Error(`Unable to inspect live World Thinker jobs: ${jobsError.message}`)
+  if (runsError) throw new Error(`Unable to inspect active World Thinker runs: ${runsError.message}`)
+  const hasLiveJob = (jobs ?? []).some((job) => {
     const payload = job.payload && typeof job.payload === 'object' ? job.payload as Record<string, unknown> : {}
     return payload.trigger !== 'backfill'
   })
+  const hasLiveRun = (runs ?? []).some((run) => run.trigger !== 'backfill')
+  return hasLiveJob || hasLiveRun
 }
 
 async function recoverStaleReplayBatch(batch: ReplayBatchRow, now = new Date()): Promise<ReplayBatchRow> {
@@ -168,7 +179,10 @@ export async function processWorldReplayStep(replayRunId: string, options: { mod
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const replay = await loadReplayRun(replayRunId)
   if (replay.status === 'completed') return { replay, complete: true, deferred: false, batchId: null, nextStep: 'complete' }
-  if (await hasQueuedLiveThinkerWork()) return { replay, complete: false, deferred: true, batchId: null, nextStep: 'yield:live-thinker' }
+  if (await hasActiveLiveThinkerWork()) {
+    await supabase.from('world_replay_runs').update({ status: 'running', error: null, updated_at: new Date().toISOString() }).eq('id', replay.id)
+    return { replay: await loadReplayRun(replay.id), complete: false, deferred: true, batchId: null, nextStep: 'yield:live-thinker' }
+  }
   const weekStart = new Date(replay.cursorAt)
   const until = new Date(replay.untilAt)
   if (weekStart >= until) {
@@ -204,7 +218,7 @@ export async function processWorldReplayStep(replayRunId: string, options: { mod
       if (error || !updated) throw new Error(`Unable to checkpoint clustered replay batch: ${error?.message ?? 'unknown error'}`)
       batch = updated as ReplayBatchRow
     }
-    if (await hasQueuedLiveThinkerWork()) return { replay: await loadReplayRun(replay.id), complete: false, deferred: true, batchId: String(batch.id), nextStep: `yield:live-thinker:${batch.event_cursor}` }
+    if (await hasActiveLiveThinkerWork()) return { replay: await loadReplayRun(replay.id), complete: false, deferred: true, batchId: String(batch.id), nextStep: `yield:live-thinker:${batch.event_cursor}` }
     const thinkerRunIds = [...(batch.thinker_run_ids ?? [])]
     const resultCommits = [...(batch.result_commits ?? [])]
     const chunk = (batch.event_cluster_ids ?? []).slice(batch.event_cursor, batch.event_cursor + 12)
@@ -239,6 +253,20 @@ export async function processWorldReplayStep(replayRunId: string, options: { mod
     return { replay: await loadReplayRun(replay.id), complete, deferred: false, batchId: String(batch.id), nextStep: complete ? 'complete' : `cluster:${weekEnd.toISOString()}` }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    if (isWorldThinkerBusyError(error)) {
+      const now = new Date().toISOString()
+      await Promise.all([
+        supabase.from('world_replay_batches').update({
+          status: 'thinking', error: 'Deferred while live World Thinker owns the single-writer slot.',
+          finished_at: null, last_progress_at: now, updated_at: now,
+        }).eq('id', batch.id),
+        supabase.from('world_replay_runs').update({ status: 'running', error: null, updated_at: now }).eq('id', replay.id),
+      ])
+      return {
+        replay: await loadReplayRun(replay.id), complete: false, deferred: true, batchId: String(batch.id),
+        nextStep: `yield:live-thinker-race:${batch.event_cursor}`,
+      }
+    }
     await Promise.all([
       supabase.from('world_replay_batches').update({ status: 'failed', attempt_count: Number(batch.attempt_count ?? 0) + 1, error: message, finished_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', batch.id),
       supabase.from('world_replay_runs').update({ status: 'failed', error: message, updated_at: new Date().toISOString() }).eq('id', replay.id),

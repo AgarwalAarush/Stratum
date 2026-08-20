@@ -33,6 +33,15 @@ export interface WorldEventClusterCandidate extends WorldEventCluster {
   attention?: WorldAttentionDecision
 }
 
+interface ExistingWorldEventCluster {
+  fingerprint: string
+  source_ids: unknown
+  thesis_dependency: boolean
+  portfolio_dependency: boolean
+  enrichment_status: string | null
+  updated_at: string
+}
+
 const WORLD_SENSOR_TOPICS: NewsTopic[] = [
   'us-news', 'geopolitics', 'european-union', 'climate-environment', 'global-supply-chains', 'global-summits', 'global-health',
   'global-macro-finance', 'institutions-governance', 'energy-resources', 'demographics-migration',
@@ -313,6 +322,39 @@ async function enrichClusters(candidates: WorldEventClusterCandidate[], options:
   return mapWorldEventBatchesWithConcurrency(partitionWorldEventCandidates(candidates), enrichClusterBatch)
 }
 
+export function worldEventNeedsRefresh(
+  candidate: Pick<WorldEventClusterCandidate, 'sourceIds' | 'thesisDependency' | 'portfolioDependency'>,
+  prior: ExistingWorldEventCluster | null,
+  now = new Date(),
+): boolean {
+  if (!prior) return true
+  const priorSourceIds = new Set(Array.isArray(prior.source_ids) ? prior.source_ids.filter((value): value is string => typeof value === 'string') : [])
+  if (candidate.sourceIds.some((sourceId) => !priorSourceIds.has(sourceId))) return true
+  if (candidate.thesisDependency && !prior.thesis_dependency) return true
+  if (candidate.portfolioDependency && !prior.portfolio_dependency) return true
+  const lastAttempt = Date.parse(prior.updated_at)
+  return ['failed', 'fallback'].includes(prior.enrichment_status ?? '')
+    && Number.isFinite(lastAttempt)
+    && now.getTime() - lastAttempt >= 6 * 60 * 60_000
+}
+
+async function selectChangedWorldEventCandidates<T extends WorldEventClusterCandidate>(candidates: T[], now = new Date()): Promise<T[]> {
+  if (candidates.length === 0) return []
+  const supabase = getSupabaseClient()
+  if (!supabase) return candidates
+  const rows: ExistingWorldEventCluster[] = []
+  const fingerprints = candidates.map((candidate) => candidate.fingerprint)
+  for (let index = 0; index < fingerprints.length; index += 200) {
+    const { data, error } = await supabase.from('world_event_clusters')
+      .select('fingerprint,source_ids,thesis_dependency,portfolio_dependency,enrichment_status,updated_at')
+      .in('fingerprint', fingerprints.slice(index, index + 200))
+    if (error) throw new Error(`Unable to resolve changed World events: ${error.message}`)
+    rows.push(...(data ?? []) as ExistingWorldEventCluster[])
+  }
+  const byFingerprint = new Map(rows.map((row) => [row.fingerprint, row]))
+  return candidates.filter((candidate) => worldEventNeedsRefresh(candidate, byFingerprint.get(candidate.fingerprint) ?? null, now))
+}
+
 async function attachWorldEventDependencies(clusters: WorldEventClusterCandidate[]): Promise<WorldEventClusterCandidate[]> {
   if (clusters.length === 0) return clusters
   const supabase = getSupabaseClient()
@@ -472,7 +514,7 @@ export async function persistWorldEventClusters(clusters: WorldEventClusterCandi
   return { created, updated, urgent, clusterIds, clusterIdByFingerprint }
 }
 
-export async function refreshWorldEvents(options: { since?: Date; until?: Date; model?: boolean; autonomousFeeds?: boolean } = {}): Promise<{ scanned: number; clustered: number; created: number; updated: number; urgent: string[]; clusterIds: string[]; topicsSucceeded: string[]; topicsFailed: string[] }> {
+export async function refreshWorldEvents(options: { since?: Date; until?: Date; model?: boolean; autonomousFeeds?: boolean } = {}): Promise<{ scanned: number; clustered: number; unchanged: number; created: number; updated: number; urgent: string[]; clusterIds: string[]; topicsSucceeded: string[]; topicsFailed: string[] }> {
   const until = options.until ?? new Date()
   const since = options.since ?? new Date(until.getTime() - 30 * 60_000)
   const autonomous = options.autonomousFeeds === false ? { sources: [] as WorldEventSourceInput[], topicsSucceeded: [] as string[], topicsFailed: [] as string[] } : await ingestAutonomousWorldFeeds()
@@ -481,16 +523,20 @@ export async function refreshWorldEvents(options: { since?: Date; until?: Date; 
   const candidates = await attachWorldEventDependencies(clusterWorldEventSources(sources, until))
   const { active: activePolicy } = await loadWorldAttentionPolicySet()
   const routed = selectWorldModelCandidates(candidates, activePolicy, until)
-  const selected = routed.filter((candidate) => candidate.attention.selectedForEnrichment)
+  // The autonomous feeds intentionally overlap between cycles. Preserve their
+  // durable rows, but do not spend a model call or rewrite a signal unless the
+  // cluster gained evidence, a dependency, or is due for a bounded retry.
+  const changed = await selectChangedWorldEventCandidates(routed, until)
+  const selected = changed.filter((candidate) => candidate.attention.selectedForEnrichment)
   const enriched = await enrichClusters(selected, options)
   const enrichedByFingerprint = new Map(enriched.map((cluster) => [cluster.fingerprint, cluster]))
-  const clusters = routed.map((candidate) => {
+  const clusters = changed.map((candidate) => {
     const enrichedCandidate = enrichedByFingerprint.get(candidate.fingerprint) ?? candidate
     return { ...enrichedCandidate, attention: { ...routeWorldAttention(enrichedCandidate, activePolicy), selectedForEnrichment: candidate.attention.selectedForEnrichment } }
   })
   const persisted = await persistWorldEventClusters(clusters)
   await evaluateDueWorldPolicyExperiments(until)
-  return { scanned: sources.length, clustered: clusters.length, ...persisted, topicsSucceeded: autonomous.topicsSucceeded, topicsFailed: autonomous.topicsFailed }
+  return { scanned: sources.length, clustered: routed.length, unchanged: routed.length - changed.length, ...persisted, topicsSucceeded: autonomous.topicsSucceeded, topicsFailed: autonomous.topicsFailed }
 }
 
 export interface WorldEventWindowSummary {

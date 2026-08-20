@@ -27,9 +27,26 @@ const asStrings = (value: unknown): string[] => Array.isArray(value) ? value.fil
 const union = (...lists: string[][]): string[] => [...new Set(lists.flat().map((item) => item.trim()).filter(Boolean))]
 const normalizedTerms = (values: string[]): Set<string> => new Set(values.flatMap((value) => value.toLowerCase().split(/[^a-z0-9]+/)).filter((value) => value.length >= 4))
 
+function conceptText(cluster: Pick<WorldEventClusterCandidate, 'title' | 'summary' | 'actors' | 'geographies' | 'channels'>): string {
+  return [cluster.title, cluster.summary, ...(cluster.actors ?? []), ...(cluster.geographies ?? []), ...(cluster.channels ?? [])]
+    .join(' ')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+export function worldSignalConceptKey(cluster: Pick<WorldEventClusterCandidate, 'title' | 'summary' | 'actors' | 'geographies' | 'channels' | 'fingerprint'>): string {
+  const text = conceptText(cluster)
+  // Only collapse concepts whose identity is genuinely stable across headlines.
+  // Taiwan, credit, institutions, and AI/power each contain many distinct
+  // situations; over-merging them would preserve raw evidence but erase useful
+  // weak-signal granularity. ENSO is a single named physical indicator.
+  if (/\benso\b|\bel nino\b|\bla nina\b/.test(text)) return 'concept:enso'
+  return union(cluster.actors ?? [], cluster.geographies ?? [], cluster.channels ?? []).map((value) => value.toLowerCase()).sort().join('|') || cluster.fingerprint
+}
+
 function signalFingerprint(cluster: WorldEventClusterCandidate): string {
-  const signature = union(cluster.actors, cluster.geographies, cluster.channels).map((value) => value.toLowerCase()).sort().join('|') || cluster.fingerprint
-  return createHash('sha256').update(signature).digest('hex')
+  return createHash('sha256').update(worldSignalConceptKey(cluster)).digest('hex')
 }
 
 export function worldSignalActivationConditions(cluster: WorldEventClusterCandidate): string[] {
@@ -132,8 +149,16 @@ export async function persistWorldSignalForEvent(clusterId: string, cluster: Wor
   const since = new Date(Date.parse(cluster.lastSeenAt) - 180 * 24 * 60 * 60_000).toISOString()
   const { data: relatedRows, error: relatedError } = await supabase.from('world_signals').select('id,status,title,summary,event_cluster_ids,source_ids,entities,geographies,domains,economic_channels,activation_conditions,related_signal_ids,related_node_ids,first_observed_at,last_observed_at,search_text').gte('last_observed_at', since).neq('id', signalId).limit(500)
   if (relatedError) throw new Error(`Unable to retrieve weak signals: ${relatedError.message}`)
-  const rowsById = new Map(((relatedRows ?? []) as SignalRow[]).map((row) => [row.id, row]))
-  const related = selectWorldSignalRelations(cluster, ((relatedRows ?? []) as SignalRow[]).map((row) => ({
+  const candidateRows = (relatedRows ?? []) as SignalRow[]
+  const conceptKey = worldSignalConceptKey(cluster)
+  const duplicateConceptRows = conceptKey.startsWith('concept:')
+    ? candidateRows.filter((row) => worldSignalConceptKey({
+      title: row.title, summary: row.summary, actors: asStrings(row.entities), geographies: asStrings(row.geographies),
+      channels: union(asStrings(row.domains), asStrings(row.economic_channels)), fingerprint: row.id,
+    }) === conceptKey && row.status !== 'superseded')
+    : []
+  const rowsById = new Map(candidateRows.map((row) => [row.id, row]))
+  const related = selectWorldSignalRelations(cluster, candidateRows.map((row) => ({
     id: row.id, status: row.status, entities: asStrings(row.entities), geographies: asStrings(row.geographies),
     channels: union(asStrings(row.domains), asStrings(row.economic_channels)), activates: activationSatisfied(row, cluster),
   }))).map((relation) => ({ ...relation, row: rowsById.get(relation.id)! }))
@@ -141,7 +166,7 @@ export async function persistWorldSignalForEvent(clusterId: string, cluster: Wor
   if (priorError) throw new Error(`Unable to resolve weak signal: ${priorError.message}`)
   const priorRow = prior as SignalRow | null
   const firstObservedAt = priorRow?.first_observed_at ?? cluster.firstSeenAt
-  const relatedSignalIds = union(priorRow ? asStrings(priorRow.related_signal_ids) : [], related.map((item) => item.row.id))
+  const relatedSignalIds = union(priorRow ? asStrings(priorRow.related_signal_ids) : [], related.map((item) => item.row.id), duplicateConceptRows.map((item) => item.id))
   const row = {
     id: signalId,
     fingerprint,
@@ -166,6 +191,10 @@ export async function persistWorldSignalForEvent(clusterId: string, cluster: Wor
   }
   const { error: signalError } = await supabase.from('world_signals').upsert(row, { onConflict: 'fingerprint' })
   if (signalError) throw new Error(`Unable to persist weak signal: ${signalError.message}`)
+  if (duplicateConceptRows.length) {
+    const { error: duplicateError } = await supabase.from('world_signals').update({ status: 'superseded', updated_at: new Date().toISOString() }).in('id', duplicateConceptRows.map((item) => item.id))
+    if (duplicateError) throw new Error(`Unable to supersede duplicate weak signals: ${duplicateError.message}`)
+  }
   const linkRows = related.map((item) => ({
     source_signal_id: item.row.id,
     target_signal_id: signalId,

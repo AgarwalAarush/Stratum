@@ -63,7 +63,16 @@ export async function loadWorldCoverageFrontiers(): Promise<WorldCoverageFrontie
 export function selectDueWorldCoverageFrontiers(frontiers: WorldCoverageFrontier[], now = new Date(), limit = 3): WorldCoverageFrontier[] {
   const rank: Record<WorldCoverageFrontier['status'], number> = { blind_spot: 4, stale: 3, thin: 2, healthy: 1 }
   return frontiers.filter((frontier) => Date.parse(frontier.nextReviewAt) <= now.getTime() || frontier.status !== 'healthy')
-    .sort((a, b) => rank[b.status] - rank[a.status] || b.priority - a.priority || Date.parse(a.nextReviewAt) - Date.parse(b.nextReviewAt))
+    .sort((a, b) => {
+      const statusOrder = rank[b.status] - rank[a.status]
+      if (statusOrder) return statusOrder
+      // Within an equally weak tier, rotate toward the least-recently searched
+      // frontier so a permanently thin high-priority topic cannot monopolize
+      // every scheduled Thinker run.
+      const aSearched = a.lastSearchAt ? Date.parse(a.lastSearchAt) : Number.NEGATIVE_INFINITY
+      const bSearched = b.lastSearchAt ? Date.parse(b.lastSearchAt) : Number.NEGATIVE_INFINITY
+      return aSearched - bSearched || b.priority - a.priority || Date.parse(a.nextReviewAt) - Date.parse(b.nextReviewAt)
+    })
     .slice(0, Math.max(0, limit))
 }
 

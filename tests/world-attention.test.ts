@@ -17,7 +17,7 @@ import { calculateWorldBenchmarkMetrics, selectBalancedWorldBenchmarkCandidates 
 import { NEWS_TOPIC_FEEDS, NEWS_TOPICS } from '../lib/data/rss.ts'
 import { boundWorldSpecialistLenses } from '../lib/server/world-specialists.ts'
 import { clusterWorldEventSources, mapWorldEventBatchesWithConcurrency } from '../lib/server/world-events.ts'
-import { selectWorldSignalRelations, shouldPersistWorldSignal, worldSignalActivationConditions, worldSignalActivationSatisfied } from '../lib/server/world-signals.ts'
+import { selectWorldSignalRelations, shouldPersistWorldSignal, worldSignalActivationConditions, worldSignalActivationSatisfied, worldSignalConceptKey } from '../lib/server/world-signals.ts'
 
 function source(overrides: Partial<AttentionSource> = {}): AttentionSource {
   return { id: 's1', title: 'Routine quarterly earnings beat estimates', url: 'https://financialmodelingprep.com/news/1', publisher: 'FMP stock news', publishedAt: '2026-08-18T10:00:00.000Z', fetchedAt: '2026-08-18T10:05:00.000Z', ...overrides }
@@ -182,11 +182,36 @@ test('ENSO matching uses word boundaries and cannot be triggered by unrelated wo
   ])
 })
 
+test('weak-signal identity merges ENSO paraphrases but not substring lookalikes', () => {
+  const first = candidate({ fingerprint: 'enso-1', title: 'ENSO outlook shifts toward El Niño', summary: 'Pacific warming risk increased', channels: ['climate'], geographies: ['Pacific'] })
+  const second = candidate({ fingerprint: 'enso-2', title: 'El Nino conditions may return', summary: 'Forecasters monitor the tropical Pacific', channels: ['weather'], geographies: [] })
+  const unrelated = candidate({ fingerprint: 'sensor-1', title: 'New quantum sensors improve navigation', summary: 'The sensor technology avoids GPS', channels: ['technology'], geographies: [] })
+  assert.equal(worldSignalConceptKey(first as ReturnType<typeof clusterWorldEventSources>[number]), 'concept:enso')
+  assert.equal(worldSignalConceptKey(second as ReturnType<typeof clusterWorldEventSources>[number]), 'concept:enso')
+  assert.notEqual(worldSignalConceptKey(unrelated as ReturnType<typeof clusterWorldEventSources>[number]), 'concept:enso')
+})
+
+test('weak-signal compaction does not merge distinct Taiwan company and security developments', () => {
+  const company = candidate({ fingerprint: 'taiwan-company', title: 'TSMC reports quarterly revenue', summary: 'Company results in Taiwan', channels: ['company'], geographies: ['Taiwan'] })
+  const security = candidate({ fingerprint: 'taiwan-security', title: 'Military exercises cross the Taiwan Strait', summary: 'Security activity increased', channels: ['security'], geographies: ['Taiwan'] })
+  assert.notEqual(
+    worldSignalConceptKey(company as ReturnType<typeof clusterWorldEventSources>[number]),
+    worldSignalConceptKey(security as ReturnType<typeof clusterWorldEventSources>[number]),
+  )
+})
+
 test('signal hygiene migration demotes without deleting immutable weak-signal history', () => {
   const migration = readFileSync(new URL('../supabase/migrations/202608190002_world_signal_hygiene.sql', import.meta.url), 'utf8')
   assert.match(migration, /set status = 'dormant'/)
   assert.match(migration, /new corroborating evidence establishes a durable economic channel/)
   assert.doesNotMatch(migration, /delete\s+from\s+public\.world_signals/i)
+})
+
+test('concept consolidation supersedes ENSO duplicates without deleting evidence', () => {
+  const migration = readFileSync(new URL('../supabase/migrations/202608200001_world_signal_concepts.sql', import.meta.url), 'utf8')
+  assert.match(migration, /set status = 'superseded'/)
+  assert.match(migration, /keeper_id/)
+  assert.doesNotMatch(migration, /delete\s+from/i)
 })
 
 test('compact weak-signal memory excludes low-information awareness without deleting its event', () => {

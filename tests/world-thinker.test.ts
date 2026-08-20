@@ -8,15 +8,16 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 
 import { buildCodexExecArgs } from '../lib/server/codex-exec.ts'
-import { clusterWorldEventSources, nextWorldEventProcessingState, partitionWorldEventCandidates, reconcileExtractedClusters, transitionWorldClaimState, worldEventExtractionPrompt } from '../lib/server/world-events.ts'
+import { clusterWorldEventSources, nextWorldEventProcessingState, partitionWorldEventCandidates, reconcileExtractedClusters, transitionWorldClaimState, worldEventExtractionPrompt, worldEventNeedsRefresh } from '../lib/server/world-events.ts'
 import { commitWorldUpdate, initializeWorldRepository, parseWorldNode, renderWorldNode, validateWorldProposalAgainstState } from '../lib/server/world-repository.ts'
 import { buildWorldUpdateDraftSchema, materializeWorldUpdateProposal, selectResearchableWorldLeads, validateWorldUpdateDraftWithHostSources } from '../lib/server/world-thinker.ts'
 import { type WorldNode, type WorldOpportunityLead, type WorldUpdateDraft, type WorldUpdateProposal, validateWorldUpdateDraft, validateWorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
 import { latestDistinctWorldJournals } from '../lib/server/world-projection.ts'
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
+import { buildAgentJobDedupeKey } from '../lib/server/agent-jobs.ts'
 import { WORLD_COVERAGE_FRONTIERS, assessWorldCoverage, deriveWorldCoverageIndex, matchesWorldCoverageFrontier } from '../lib/markets/world-coverage.ts'
-import { worldCoverageUpsertIdentity } from '../lib/server/world-coverage.ts'
-import { classifyWorldReplayBatchOutcome } from '../lib/server/world-replay.ts'
+import { selectDueWorldCoverageFrontiers, worldCoverageUpsertIdentity } from '../lib/server/world-coverage.ts'
+import { classifyWorldReplayBatchOutcome, isWorldThinkerBusyError } from '../lib/server/world-replay.ts'
 
 const now = '2026-08-17T18:00:00.000Z'
 const execFile = promisify(execFileCallback)
@@ -124,6 +125,30 @@ test('event enrichment partitions model work into bounded microbatches', () => {
   assert.ok(batches.every((batch) => batch.reduce((sum, item) => sum + item.sourceIds.length, 0) <= 100))
 })
 
+test('live sensing enriches only new or materially changed event clusters', () => {
+  const candidate = clusterWorldEventSources([{ id: 'feed:1', feedItemId: '1', title: 'Central bank liquidity facility remains unchanged', url: 'https://example.com/1', publisher: 'Example', publishedAt: now, fetchedAt: now }])[0]
+  const prior = { fingerprint: candidate.fingerprint, source_ids: ['feed:1'], thesis_dependency: false, portfolio_dependency: false, enrichment_status: 'enriched', updated_at: now }
+  assert.equal(worldEventNeedsRefresh(candidate, prior), false)
+  assert.equal(worldEventNeedsRefresh({ ...candidate, sourceIds: ['feed:1', 'feed:2'] }, prior), true)
+  assert.equal(worldEventNeedsRefresh({ ...candidate, thesisDependency: true }, prior), true)
+  assert.equal(worldEventNeedsRefresh(candidate, { ...prior, enrichment_status: 'fallback', updated_at: '2026-08-17T00:00:00.000Z' }, new Date('2026-08-18T00:00:00.000Z')), true)
+})
+
+test('historical replay treats the single-writer race as a safe deferral', () => {
+  assert.equal(isWorldThinkerBusyError(new Error('duplicate key value violates unique constraint "world_thinker_runs_one_active"')), true)
+  assert.equal(isWorldThinkerBusyError(new Error('World replay Thinker run failed validation')), false)
+})
+
+test('deferred historical replay retries do not deduplicate against the running step', () => {
+  const base = { replayRunId: 'replay-1', cursorAt: '2025-09-16T00:00:00.000Z', step: 'yield:live-thinker' }
+  assert.notEqual(
+    buildAgentJobDedupeKey('run-world-replay', new Date(now), { ...base, resumeAttempt: 1 }),
+    buildAgentJobDedupeKey('run-world-replay', new Date(now), { ...base, resumeAttempt: 2 }),
+  )
+  const jobSource = readFileSync(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8')
+  assert.match(jobSource, /runAfter: new Date\(Date\.now\(\) \+ 2 \* 60_000\)/)
+})
+
 test('autonomous World sensing consumes persisted rows without a long URL re-query', () => {
   const source = readFileSync(new URL('../lib/server/world-events.ts', import.meta.url), 'utf8')
   assert.match(source, /const rows = await persistFeedItems/)
@@ -195,6 +220,26 @@ test('coverage refresh upserts include required immutable frontier identity', ()
   assert.equal(row.description, frontier.description)
   assert.deepEqual(row.query_terms, frontier.queryTerms)
   assert.equal(row.priority, frontier.priority)
+})
+
+test('blind and thin coverage searches start with authoritative source targets', () => {
+  for (const id of ['china-taiwan', 'political-institutions', 'energy-resources-climate', 'credit-liquidity-markets']) {
+    const frontier = WORLD_COVERAGE_FRONTIERS.find((item) => item.id === id)!
+    assert.ok(frontier.queryTerms.some((term) => /site:/.test(term)), `${id} should include an authoritative source target`)
+  }
+})
+
+test('equally thin coverage rotates toward the least recently searched frontier', () => {
+  const definition = WORLD_COVERAGE_FRONTIERS.find((item) => item.id === 'political-institutions')!
+  const frontier = (id: string, lastSearchAt: string | null, priority: number) => ({
+    ...definition, id, priority, status: 'thin' as const, sourceFamilyCount: 1, evidenceEventCount: 1, weakSignalCount: 1,
+    activeNodeIds: [], openQuestions: [], lastEvidenceAt: now, lastReviewedAt: now, lastSearchAt, nextReviewAt: '2026-08-17T00:00:00.000Z',
+  })
+  const selected = selectDueWorldCoverageFrontiers([
+    frontier('recent-high-priority', '2026-08-17T17:00:00.000Z', 100),
+    frontier('never-searched', null, 80),
+  ], new Date(now), 1)
+  assert.equal(selected[0]?.id, 'never-searched')
 })
 
 test('projection retry reconciles coverage and the originating Thinker run', () => {

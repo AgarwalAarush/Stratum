@@ -164,7 +164,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     return `${jobType}:${payload.trigger === 'urgent' ? 'urgent' : String(payload.trigger ?? 'scheduled')}:${bucket.toISOString()}`
   }
   if (jobType === 'run-world-replay') {
-    if (typeof payload.replayRunId === 'string') return `${jobType}:${payload.replayRunId}:${String(payload.cursorAt ?? 'next')}:${String(payload.step ?? 'start')}`
+    if (typeof payload.replayRunId === 'string') return `${jobType}:${payload.replayRunId}:${String(payload.cursorAt ?? 'next')}:${String(payload.step ?? 'start')}:${String(payload.resumeAttempt ?? 0)}`
     return `${jobType}:${now.toISOString().slice(0, 10)}`
   }
   if (jobType === 'project-world-repository' && typeof payload.commit === 'string') return `${jobType}:${payload.commit}`
@@ -559,6 +559,7 @@ export async function enqueueAgentJob(
   jobType: AgentJobType,
   payload: Record<string, unknown> = {},
   dedupeKey = buildAgentJobDedupeKey(jobType, new Date(), payload),
+  options: { runAfter?: Date } = {},
 ): Promise<{ id: string; deduplicated: boolean }> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
@@ -576,9 +577,16 @@ export async function enqueueAgentJob(
     if (pending) return { id: String(pending.id), deduplicated: true }
   }
 
+  const queuedJob = {
+    job_type: jobType,
+    payload,
+    dedupe_key: dedupeKey,
+    priority: agentJobPriority(jobType),
+    ...(options.runAfter ? { run_after: options.runAfter.toISOString() } : {}),
+  }
   const { data, error } = await supabase
     .from('agent_jobs')
-    .upsert({ job_type: jobType, payload, dedupe_key: dedupeKey, priority: agentJobPriority(jobType) }, { onConflict: 'dedupe_key', ignoreDuplicates: true })
+    .upsert(queuedJob, { onConflict: 'dedupe_key', ignoreDuplicates: true })
     .select('id')
     .maybeSingle()
   if (error && !isMissingDedupeConstraint(error.message)) {
@@ -597,7 +605,7 @@ export async function enqueueAgentJob(
   if (!error) throw new Error(`Unable to find deduplicated agent job: ${dedupeKey}`)
   const { data: inserted, error: insertError } = await supabase
     .from('agent_jobs')
-    .insert({ job_type: jobType, payload, dedupe_key: dedupeKey, priority: agentJobPriority(jobType) })
+    .insert(queuedJob)
     .select('id')
     .single()
   if (insertError || !inserted) {
@@ -744,7 +752,14 @@ async function executeJob(
         until: typeof job.payload.until === 'string' ? new Date(job.payload.until) : undefined,
       })
     const result = await processWorldReplayStep(replay.id, { model: job.payload.model !== false })
-    if (!result.complete) await enqueueAgentJob('run-world-replay', { replayRunId: replay.id, cursorAt: result.replay.cursorAt, step: result.nextStep, model: job.payload.model !== false })
+    if (!result.complete) {
+      const resumeAttempt = Number(job.payload.resumeAttempt ?? 0) + 1
+      const payload = { replayRunId: replay.id, cursorAt: result.replay.cursorAt, step: result.nextStep, resumeAttempt, model: job.payload.model !== false }
+      await enqueueAgentJob(
+        'run-world-replay', payload, buildAgentJobDedupeKey('run-world-replay', new Date(), payload),
+        result.deferred ? { runAfter: new Date(Date.now() + 2 * 60_000) } : {},
+      )
+    }
     return result
   }
 
