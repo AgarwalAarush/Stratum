@@ -10,6 +10,7 @@ import { useThemeStore } from '@/store/theme'
 const MARKET_NAV_ITEMS = [
   { href: '/markets', label: 'Overview' },
   { href: '/markets/world', label: 'World' },
+  { href: '/markets/review', label: 'Review' },
   { href: '/markets/biotech', label: 'Biotech' },
   { href: '/markets/candidates', label: 'Candidates' },
   { href: '/markets/explore', label: 'Explore' },

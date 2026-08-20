@@ -150,7 +150,7 @@ export async function refreshWorldCoverageState(nodes: WorldNode[], now = new Da
     const searchedEvidence = summarizeWorldSearchCoverage(matchingNodes.flatMap((node) => node.sourceIds), (worldSearchDocuments ?? []) as WorldSearchCoverageDocument[], sourceReferences)
     const lastEvidenceAt = [...matchingEvents.map((event) => String(event.last_seen_at)), ...(searchedEvidence.lastEvidenceAt ? [searchedEvidence.lastEvidenceAt] : [])].sort().at(-1) ?? null
     const sourceFamilyCount = new Set([...matchingEvents.flatMap((event) => [...(sourceFamilies.get(String(event.id)) ?? [])]), ...searchedEvidence.sourceFamilies]).size
-    const status = assessWorldCoverage({ lastEvidenceAt, sourceFamilyCount, activeNodeCount: matchingNodes.length }, now)
+    const status = assessWorldCoverage({ lastEvidenceAt, sourceFamilyCount, activeNodeCount: matchingNodes.length, evidenceEventCount: matchingEvents.length }, now)
     const nextReviewHours = status === 'healthy' ? 24 : status === 'thin' ? 8 : 6
     return {
       ...worldCoverageUpsertIdentity(frontier), status, source_family_count: sourceFamilyCount, evidence_event_count: matchingEvents.length, weak_signal_count: matchingSignals.length, active_node_ids: matchingNodes.map((node) => node.id),

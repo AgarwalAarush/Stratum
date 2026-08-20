@@ -76,10 +76,12 @@ export function deriveWorldCoverageIndex(nodes: WorldNode[]): Array<Pick<WorldCo
   })
 }
 
-export function assessWorldCoverage(input: { lastEvidenceAt: string | null; sourceFamilyCount: number; activeNodeCount: number }, now = new Date()): WorldCoverageStatus {
+export function assessWorldCoverage(input: { lastEvidenceAt: string | null; sourceFamilyCount: number; activeNodeCount: number; evidenceEventCount?: number }, now = new Date()): WorldCoverageStatus {
   if (!input.lastEvidenceAt) return 'blind_spot'
   const ageHours = (now.getTime() - Date.parse(input.lastEvidenceAt)) / 3_600_000
   if (!Number.isFinite(ageHours) || ageHours > 72) return 'stale'
-  if (ageHours > 24 || input.sourceFamilyCount < 2 || input.activeNodeCount === 0) return 'thin'
+  // Search-discovery documents and an old active node are useful awareness,
+  // but they do not establish current governed evidence for a frontier.
+  if ((input.evidenceEventCount ?? 0) === 0 || ageHours > 24 || input.sourceFamilyCount < 2 || input.activeNodeCount === 0) return 'thin'
   return 'healthy'
 }

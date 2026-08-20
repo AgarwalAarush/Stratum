@@ -597,6 +597,11 @@ export async function promoteEligibleMarketHypothesis(ownerId: string, hypothesi
     revision_diff: prior ? research.revisionDiff : ['Initial promotion after source-backed analyst and critic validation.'],
   }).select('*').single()
   if (error || !data) throw new Error(`Unable to promote market thesis: ${error?.message ?? 'unknown error'}`)
+  // Consumers read the same causal contract for legacy market theses and
+  // World nodes. This is a projection only: it does not alter the thesis or
+  // bypass the separate owner thesis/capital decision boundary.
+  const { projectMarketThesisCausalModel } = await import('./causal-model.ts')
+  await projectMarketThesisCausalModel(data as RecordValue, hypothesis as unknown as RecordValue)
   const predictions = researchContent.predictions.map((item) => ({
     prediction: item.prediction, expected_direction: `Confirm: ${item.confirmation}; disconfirm: ${item.disconfirmation}`,
     deadline: predictionDeadlineFromHorizon(item.horizon, new Date(now)), evidence_needed: item.leadingIndicator, result: 'pending',

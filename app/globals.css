@@ -1113,11 +1113,51 @@
 /* World Thinker — durable world state, causal lineage, and research queue. */
 .world-page,
 .world-node-page,
-.world-system-page {
+.world-system-page,
+.owner-review-page {
   margin: 0 auto;
   max-width: 1480px;
   padding: 0 32px 72px;
 }
+
+/* Owner review is intentionally a narrow work-in-progress surface, not a
+   second activity feed. Borders describe sequence; only the decision controls
+   receive visual emphasis. */
+.owner-review-header { align-items: end; border-bottom: 1px solid var(--market-border); display: grid; gap: 48px; grid-template-columns: minmax(0, 1.45fr) minmax(240px, .55fr); padding: 62px 0 30px; }
+.owner-review-header h1 { font-size: clamp(40px, 5vw, 64px); letter-spacing: -.055em; line-height: .95; margin-top: 12px; }
+.owner-review-header p { color: var(--market-text-muted); font-size: 15px; line-height: 1.6; margin-top: 18px; max-width: 720px; }
+.owner-review-header aside { border-left: 1px solid var(--market-border); padding: 4px 0 4px 22px; }
+.owner-review-header aside span, .owner-review-section-heading > span { color: var(--market-text-dim); display: block; font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.owner-review-header aside strong { display: block; font-size: 22px; font-weight: 400; letter-spacing: -.03em; margin: 8px 0; }
+.owner-review-header aside small { color: var(--market-text-muted); font-size: 10px; }
+.owner-review-queue { padding: 46px 0 54px; }
+.owner-review-section-heading { align-items: end; display: flex; justify-content: space-between; margin-bottom: 18px; }
+.owner-review-section-heading h2, .owner-review-context h2 { font-size: 24px; font-weight: 500; letter-spacing: -.035em; margin-top: 5px; }
+.owner-review-list { border-top: 1px solid var(--market-border); }
+.owner-review-item { border-bottom: 1px solid var(--market-border); padding: 15px 0 18px; }
+.owner-review-item-top { color: var(--market-text-dim); display: flex; font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 9px; justify-content: space-between; letter-spacing: .04em; text-transform: uppercase; }
+.owner-review-item-body { align-items: end; display: grid; gap: 28px; grid-template-columns: minmax(0, 1fr) 224px; margin-top: 14px; }
+.owner-review-item h3 { font-size: 16px; font-weight: 500; letter-spacing: -.02em; }
+.owner-review-item dl { display: grid; gap: 8px; margin-top: 13px; max-width: 900px; }
+.owner-review-item dl > div { display: grid; gap: 12px; grid-template-columns: 68px minmax(0, 1fr); }
+.owner-review-item dt { color: var(--market-text-dim); font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 8px; padding-top: 2px; text-transform: uppercase; }
+.owner-review-item dd { color: var(--market-text-muted); font-size: 11px; line-height: 1.45; }
+.owner-review-actions { align-items: stretch; display: grid; gap: 7px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.owner-review-actions button { background: transparent; border: 1px solid var(--market-border-strong); color: var(--market-text-muted); font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 8px; min-height: 31px; padding: 0 6px; text-transform: uppercase; transition: background .2s ease, color .2s ease, transform .2s ease; }
+.owner-review-actions button:first-child { background: var(--market-text); color: var(--market-bg); }
+.owner-review-actions button:hover:not(:disabled) { background: var(--market-surface-2); color: var(--market-text); }
+.owner-review-actions button:first-child:hover:not(:disabled) { background: var(--market-accent); }
+.owner-review-actions button:active:not(:disabled) { transform: translateY(1px); }
+.owner-review-actions button:disabled { cursor: wait; opacity: .55; }
+.owner-review-actions small { color: var(--market-danger, #a8483d); font-size: 9px; grid-column: 1 / -1; }
+.owner-review-empty { border-block: 1px solid var(--market-border); color: var(--market-text-muted); padding: 34px 0; }
+.owner-review-empty strong { color: var(--market-text); display: block; font-size: 15px; font-weight: 500; }
+.owner-review-empty p { font-size: 12px; line-height: 1.55; margin: 8px 0 15px; max-width: 640px; }
+.owner-review-empty a, .owner-review-context a { color: var(--market-text); font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 10px; text-decoration: none; }
+.owner-review-context { border-top: 1px solid var(--market-border); display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); }
+.owner-review-context > div { min-height: 200px; padding: 25px 28px 34px 0; }
+.owner-review-context > div + div { border-left: 1px solid var(--market-border); padding-left: 28px; }
+.owner-review-context p:not(.markets-eyebrow) { color: var(--market-text-muted); font-size: 12px; line-height: 1.55; margin: 11px 0 18px; max-width: 510px; }
 
 .world-hero {
   align-items: end;
@@ -3234,6 +3274,19 @@
   max-width: 590px;
 }
 
+.market-causal-brief { border-top: 1px solid var(--market-border); margin: 0 auto; max-width: 1480px; padding: 34px 32px 56px; }
+.market-causal-brief > header { align-items: end; display: flex; justify-content: space-between; margin-bottom: 18px; }
+.market-causal-brief h2 { font-size: 23px; font-weight: 500; letter-spacing: -.035em; margin-top: 5px; }
+.market-causal-brief > header > span, .market-causal-label { color: var(--market-text-dim); font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 9px; letter-spacing: .06em; text-transform: uppercase; }
+.market-causal-brief-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr); }
+.market-causal-brief-grid > div { border-top: 1px solid var(--market-border); padding: 13px 24px 15px 0; }
+.market-causal-brief-grid > div + div { border-left: 1px solid var(--market-border); padding-left: 24px; }
+.market-causal-brief-grid a { border-top: 1px solid var(--market-border); color: var(--market-text); display: grid; gap: 5px; margin-top: 11px; padding-top: 10px; text-decoration: none; }
+.market-causal-brief-grid a strong { font-size: 12px; font-weight: 500; }
+.market-causal-brief-grid a span, .market-causal-empty { color: var(--market-text-muted); font-size: 10px; line-height: 1.45; }
+.market-causal-brief > footer { align-items: center; border-top: 1px solid var(--market-border); color: var(--market-text-muted); display: flex; font-size: 10px; gap: 24px; justify-content: space-between; padding-top: 14px; }
+.market-causal-brief > footer a { color: var(--market-text); flex: 0 0 auto; font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 9px; text-decoration: none; }
+
 @media (max-width: 900px) {
   .market-brief-analysis {
     grid-template-columns: 1fr;
@@ -3297,6 +3350,12 @@
   .market-overview-title {
     font-size: 37px;
   }
+
+  .market-causal-brief { padding: 28px 16px 44px; }
+  .market-causal-brief > header { align-items: start; flex-direction: column; gap: 9px; }
+  .market-causal-brief-grid { grid-template-columns: 1fr; }
+  .market-causal-brief-grid > div + div { border-left: 0; padding-left: 0; }
+  .market-causal-brief > footer { align-items: start; flex-direction: column; gap: 10px; }
 
   .market-overview-deck {
     font-size: 14px;
@@ -14871,4 +14930,15 @@ body:has(.equity-research-note) {
   .market-overview-title {
     font-size: 37px;
   }
+
+  .owner-review-page { padding-inline: 16px; }
+  .owner-review-header { align-items: start; gap: 25px; grid-template-columns: 1fr; padding: 36px 0 23px; }
+  .owner-review-header h1 { font-size: 40px; }
+  .owner-review-header aside { border-left: 0; border-top: 1px solid var(--market-border); padding: 14px 0 0; width: 100%; }
+  .owner-review-queue { padding: 32px 0 40px; }
+  .owner-review-item-body { align-items: start; grid-template-columns: 1fr; }
+  .owner-review-actions { max-width: 300px; width: 100%; }
+  .owner-review-context { grid-template-columns: 1fr; }
+  .owner-review-context > div, .owner-review-context > div + div { border-left: 0; border-top: 1px solid var(--market-border); padding: 23px 0 28px; }
+  .owner-review-context > div:first-child { border-top: 0; }
 }

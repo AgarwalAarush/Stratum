@@ -192,7 +192,17 @@ test('coverage frontiers expose geopolitical and institutional blind spots expli
   assert.deepEqual(coverage.find((frontier) => frontier.id === 'china-taiwan')?.activeNodeIds, ['situation-taiwan-strait'])
   assert.deepEqual(coverage.find((frontier) => frontier.id === 'political-institutions')?.activeNodeIds, ['theme-democratic-backsliding'])
   assert.equal(assessWorldCoverage({ lastEvidenceAt: now, sourceFamilyCount: 1, activeNodeCount: 1 }, new Date(now)), 'thin')
-  assert.equal(assessWorldCoverage({ lastEvidenceAt: now, sourceFamilyCount: 2, activeNodeCount: 1 }, new Date(now)), 'healthy')
+  assert.equal(assessWorldCoverage({ lastEvidenceAt: now, sourceFamilyCount: 2, activeNodeCount: 1 }, new Date(now)), 'thin')
+  assert.equal(assessWorldCoverage({ lastEvidenceAt: now, sourceFamilyCount: 2, activeNodeCount: 1, evidenceEventCount: 1 }, new Date(now)), 'healthy')
+})
+
+test('causal decision loop preserves shadow separation and explicit no-op runs', () => {
+  const migration = readFileSync(join(process.cwd(), 'supabase/migrations/202608200004_causal_decision_loop.sql'), 'utf8')
+  assert.match(migration, /create table if not exists public\.world_change_sets/i)
+  assert.match(migration, /create table if not exists public\.causal_model_versions/i)
+  assert.match(migration, /create table if not exists public\.owner_review_items/i)
+  assert.match(migration, /'noop'/)
+  assert.match(migration, /one_open_subject/i)
 })
 
 test('coverage attribution rejects broad token collisions and preserves structured matches', () => {

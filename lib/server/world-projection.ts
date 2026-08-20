@@ -5,6 +5,7 @@ import type { WorldCoverageFrontier } from '../markets/world-coverage.ts'
 import { parseWorldNode, worldRepositoryBranch, worldRepositoryRoot } from './world-repository.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { loadWorldCoverageFrontiers, refreshWorldCoverageState } from './world-coverage.ts'
+import { projectWorldCausalModel } from './causal-model.ts'
 import type { WorldReplayBatch, WorldReplayRun } from './world-replay.ts'
 
 const execFile = promisify(execFileCallback)
@@ -86,6 +87,7 @@ export async function reconcileWorldRepositoryProjection(options: { root?: strin
   const result = await projectWorldRepository(options)
   const root = options.root ?? worldRepositoryRoot()
   const snapshot = await readWorldCommit(root, result.commit)
+  await projectWorldCausalModel({ commit: result.commit, canonical: Boolean(options.canonical), nodes: snapshot.nodes.map((entry) => entry.node) })
   await refreshWorldCoverageState(snapshot.nodes.map((entry) => entry.node), new Date(), snapshot.sources)
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
