@@ -69,6 +69,7 @@ interface EventSourceRow {
 
 interface ThinkerContext {
   baseCommit: string | null
+  priorSourceIds: string[]
   allNodes: WorldNode[]
   current: WorldNode | null
   journals: WorldNode[]
@@ -322,7 +323,7 @@ export async function retrieveWorldThinkerContext(options: Pick<WorldThinkerOpti
     { order: 7, companyResearchFeedback: companyResearchFeedback ? { leadId: companyResearchFeedback.lead.id, researchNoteId: companyResearchFeedback.note.id, sourceIds: companyResearchFeedback.sources.map((source) => source.id) } : null },
   ]
   return {
-    baseCommit, allNodes: snapshot.nodes.map((entry) => entry.node), current, journals, relevantNodes, events: pending.events, sources: pending.sources, evidenceExcerpts, assetRegistry,
+    baseCommit, priorSourceIds: snapshot.sources.map((source) => source.id), allNodes: snapshot.nodes.map((entry) => entry.node), current, journals, relevantNodes, events: pending.events, sources: pending.sources, evidenceExcerpts, assetRegistry,
     sanitizedPortfolioDependencies: portfolio, retrievalLedger, needsWebSearch, eventKeyMap, coverageFrontiers, explorationFrontiers, companyResearchFeedback, signals, specialistAssessments: [],
     manifest: { baseCommit, currentNodeId: current?.id ?? null, journalIds: journals.map((node) => node.id), relevantNodeIds: relevantNodes.map((node) => node.id), eventClusterIds: pending.events.map((event) => event.id), eventKeyMap, sourceIds: pending.sources.map((source) => source.source_id), weakSignalIds: signals.map((signal) => signal.id), evidenceExcerptCount: evidenceExcerpts.length, sanitizedPortfolioDependencyCount: portfolio.length, activeTradableAssetCount: assetRegistry.length, coverageFrontierIds: explorationFrontiers.map((frontier) => frontier.id), liveWebSearchEnabled: needsWebSearch, companyResearchFeedback: companyResearchFeedback ? { leadId: companyResearchFeedback.lead.id, researchNoteId: companyResearchFeedback.note.id } : null },
   }
@@ -624,7 +625,7 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
     let proposal = materializeWorldUpdateProposal(draftResult.data, context, options.trigger)
     await captureWorldSearchSources(proposal, context)
     validateEventClassifications(proposal, context)
-    validateWorldProposalAgainstState(proposal, context.allNodes)
+    validateWorldProposalAgainstState(proposal, context.allNodes, context.priorSourceIds)
     await validateLeadAssets(proposal.opportunityLeads)
     await updateRun(runId, { status: 'criticizing', model_metadata: { specialists: specialistResults.map((result) => result.metadata), thinker: draftResult.metadata, webSearch: context.needsWebSearch } })
     const criticSelection = selectMarketModel('world_critic')
@@ -642,7 +643,7 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
       proposal = materializeWorldUpdateProposal(revision.data, context, options.trigger)
       await captureWorldSearchSources(proposal, context)
       validateEventClassifications(proposal, context)
-      validateWorldProposalAgainstState(proposal, context.allNodes)
+      validateWorldProposalAgainstState(proposal, context.allNodes, context.priorSourceIds)
       await validateLeadAssets(proposal.opportunityLeads)
       // The strong-call budget permits one critic and one repair call. Host
       // validation remains the final publication gate after that repair.

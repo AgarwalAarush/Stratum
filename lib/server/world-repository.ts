@@ -335,16 +335,18 @@ export async function writeWorldIndexes(root = worldRepositoryRoot()): Promise<v
   ].join('\n'))
 }
 
-export function validateWorldProposalAgainstState(proposal: WorldUpdateProposal, existing: WorldNode[]): void {
-  const sourceIds = new Set(proposal.sources.map((source) => source.id))
+export function validateWorldProposalAgainstState(proposal: WorldUpdateProposal, existing: WorldNode[], priorSourceIds: Iterable<string> = []): void {
+  const proposedSourceIds = proposal.sources.map((source) => source.id)
+  const sourceIds = new Set([...priorSourceIds, ...proposedSourceIds])
   const nodeIds = new Set([...existing.map((node) => node.id), ...proposal.upserts.map((node) => node.id)])
-  if (sourceIds.size !== proposal.sources.length) throw new Error('Proposal contains duplicate source IDs')
+  if (new Set(proposedSourceIds).size !== proposedSourceIds.length) throw new Error('Proposal contains duplicate source IDs')
   const activeCanonical = new Map<string, string>()
   for (const node of [...existing.filter((item) => !proposal.upserts.some((next) => next.id === item.id)), ...proposal.upserts]) {
     for (const claim of node.claims) {
       if (!claim.assessment && claim.sourceIds.length === 0) throw new Error(`Factual claim in ${node.id} has no source`)
-      for (const sourceId of claim.sourceIds) if (!sourceIds.has(sourceId) && !node.sourceIds.includes(sourceId)) throw new Error(`Unknown source ${sourceId} in ${node.id}`)
+      for (const sourceId of claim.sourceIds) if (!sourceIds.has(sourceId)) throw new Error(`Unknown source ${sourceId} in ${node.id}`)
     }
+    for (const indicator of node.indicators) for (const sourceId of indicator.sourceIds) if (!sourceIds.has(sourceId)) throw new Error(`Unknown source ${sourceId} in ${node.id}`)
     for (const relationship of node.relationships) if (!nodeIds.has(relationship.targetId)) throw new Error(`Unknown relationship target ${relationship.targetId} in ${node.id}`)
     if ((node.status === 'active' || node.status === 'monitoring') && node.kind !== 'journal' && node.kind !== 'current') {
       for (const name of [node.title, ...node.aliases].map((value) => value.trim().toLowerCase())) {
@@ -414,7 +416,8 @@ export async function commitWorldUpdate(rawProposal: unknown, options: WorldRepo
     await initializeWorldRepository({ root, branch, remote: options.remote })
     await runGit(root, ['worktree', 'add', '--detach', worktree, branch])
     const existing = (await readWorldNodes(worktree)).map((entry) => entry.node)
-    validateWorldProposalAgainstState(proposal, existing)
+    const priorSources = await readIndexArray<WorldSourceReference>(worktree, 'world/index/sources.json')
+    validateWorldProposalAgainstState(proposal, existing, priorSources.map((source) => source.id))
     const byId = new Map(existing.map((node) => [node.id, node]))
     for (const archive of proposal.archives) {
       const current = byId.get(archive.nodeId)!
@@ -424,7 +427,6 @@ export async function commitWorldUpdate(rawProposal: unknown, options: WorldRepo
     for (const node of proposal.upserts) await atomicWrite(join(worktree, worldNodePath(node)), renderWorldNode(node))
     const journal = renderJournal(proposal)
     await atomicWrite(join(worktree, worldNodePath(journal)), renderWorldNode(journal))
-    const priorSources = await readIndexArray<WorldSourceReference>(worktree, 'world/index/sources.json')
     const priorLeads = await readIndexArray<WorldOpportunityLead>(worktree, 'world/index/opportunity-leads.json')
     const mergedSources = [...new Map([...priorSources, ...proposal.sources].map((source) => [source.id, source])).values()]
     const mergedLeads = [...new Map([...priorLeads, ...proposal.opportunityLeads].map((lead) => [lead.id, lead])).values()]
@@ -432,7 +434,7 @@ export async function commitWorldUpdate(rawProposal: unknown, options: WorldRepo
     await atomicWrite(join(worktree, 'world/index/opportunity-leads.json'), renderLeads(mergedLeads))
     await writeWorldIndexes(worktree)
     const reparsed = await readWorldNodes(worktree)
-    validateWorldProposalAgainstState({ ...proposal, upserts: reparsed.map((entry) => entry.node), archives: [] }, [])
+    validateWorldProposalAgainstState({ ...proposal, upserts: reparsed.map((entry) => entry.node), archives: [] }, [], mergedSources.map((source) => source.id))
     const status = await runGit(worktree, ['status', '--porcelain'])
     if (!status) return { commit: await runGit(worktree, ['rev-parse', 'HEAD']), branch, changedPaths: [], pushPending: false }
     await runGit(worktree, ['add', 'world'])

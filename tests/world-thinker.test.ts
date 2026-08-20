@@ -365,6 +365,27 @@ test('proposal validation rejects unsourced factual claims and accepts labeled a
   await assert.rejects(commitWorldUpdate(bad, { root, branch: 'shadow/world-thinker', push: false }), /has no source/)
 })
 
+test('subsequent World updates resolve claims against the committed source ledger', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'stratum-world-source-ledger-test-'))
+  await initializeWorldRepository({ root, branch: 'shadow/world-thinker' })
+  const current = node({ id: 'current', kind: 'current', title: 'Current world assessment', aliases: [], claims: [], sourceIds: [], body: 'A provisional assessment.', summary: 'A provisional assessment.' })
+  const first = proposal([current, node()])
+  first.baseCommit = (await initializeWorldRepository({ root, branch: 'shadow/world-thinker' })).commit
+  const committed = await commitWorldUpdate(first, { root, branch: 'shadow/world-thinker', push: false })
+  const revisedCurrent = node({ id: 'current', kind: 'current', title: 'Current world assessment', aliases: [], sourceIds: [], claims: [{ text: 'Prior reporting remains part of the assessment.', sourceIds: ['feed:1'] }], body: 'The prior sourced assessment remains active.', summary: 'The prior sourced assessment remains active.' })
+  const second = proposal([revisedCurrent])
+  second.baseCommit = committed.commit
+  second.sources = []
+  const updated = await commitWorldUpdate(second, { root, branch: 'shadow/world-thinker', push: false })
+  assert.notEqual(updated.commit, committed.commit)
+})
+
+test('a node source list cannot self-authorize an unknown factual source', () => {
+  const current = node({ id: 'current', kind: 'current', title: 'Current world assessment', aliases: [], sourceIds: ['invented:source'], claims: [{ text: 'Unsupported fact.', sourceIds: ['invented:source'] }], body: 'Unsupported.', summary: 'Unsupported.' })
+  const invalid = proposal([current])
+  assert.throws(() => validateWorldProposalAgainstState(invalid, []), /Unknown source invented:source/)
+})
+
 test('proposal graph validation fails before publication for unstated relationship targets', () => {
   const current = node({ id: 'current', kind: 'current', title: 'Current world assessment', aliases: [], claims: [], sourceIds: [], relationships: [], body: 'A provisional assessment.', summary: 'A provisional assessment.' })
   const invalid = proposal([current, node({ relationships: [{ type: 'depends_on', targetId: 'missing-situation', description: 'This node was never declared.' }] })])
