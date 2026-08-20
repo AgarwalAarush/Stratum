@@ -258,11 +258,13 @@ test('projection retry reconciles coverage and the originating Thinker run', () 
 
 test('host materializes exact event keys and rejects invented or omitted model IDs', async () => {
   const source = JSON.parse(await readFile(join(process.cwd(), 'schemas/world-update-proposal.schema.json'), 'utf8')) as Record<string, unknown>
-  const schema = buildWorldUpdateDraftSchema(source, ['E001', 'E002'])
+  const schema = buildWorldUpdateDraftSchema(source, ['E001', 'E002'], ['current', 'indicator-enso'])
   const classifications = (schema.properties as Record<string, { minItems: number; maxItems: number; items: { properties: Record<string, { enum?: string[] }> } }>).eventClassifications
   assert.equal(classifications.minItems, 2)
   assert.equal(classifications.maxItems, 2)
   assert.deepEqual(classifications.items.properties.eventKey.enum, ['E001', 'E002'])
+  const archives = (schema.properties as Record<string, { items: { properties: Record<string, { enum?: string[] }> } }>).archives
+  assert.deepEqual(archives.items.properties.nodeId.enum, ['current', 'indicator-enso'])
 
   const canonical = proposal()
   const draft = {
