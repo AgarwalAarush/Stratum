@@ -20,6 +20,32 @@ interface CoverageRow {
   next_review_at: string
 }
 
+interface WorldSearchCoverageDocument {
+  canonical_url: string
+  publisher: string | null
+  ingested_at: string
+  metadata: unknown
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+export function summarizeWorldSearchCoverage(sourceIds: string[], documents: WorldSearchCoverageDocument[]): { sourceFamilies: string[]; lastEvidenceAt: string | null } {
+  const ids = new Set(sourceIds)
+  const matching = documents.filter((document) => {
+    const sourceId = record(document.metadata).sourceId
+    return typeof sourceId === 'string' && ids.has(sourceId)
+  })
+  const sourceFamilies = [...new Set(matching.flatMap((document) => {
+    try { return [new URL(document.canonical_url).hostname.replace(/^www\./, '').toLowerCase()] } catch {
+      return document.publisher?.trim() ? [document.publisher.trim().toLowerCase()] : []
+    }
+  }))]
+  const lastEvidenceAt = matching.map((document) => document.ingested_at).filter(Boolean).sort().at(-1) ?? null
+  return { sourceFamilies, lastEvidenceAt }
+}
+
 function normalizeCoverageRow(row: CoverageRow): WorldCoverageFrontier {
   const definition = WORLD_COVERAGE_FRONTIERS.find((frontier) => frontier.id === row.id)
   return {
@@ -81,8 +107,12 @@ export async function refreshWorldCoverageState(nodes: WorldNode[], now = new Da
   if (!supabase) return loadWorldCoverageFrontiers()
   const frontiers = await loadWorldCoverageFrontiers()
   const since = new Date(now.getTime() - 30 * 24 * 60 * 60_000).toISOString()
-  const { data: events, error } = await supabase.from('world_event_clusters').select('id,title,summary,actors,geographies,channels,last_seen_at,source_ids').gte('last_seen_at', since)
+  const [{ data: events, error }, { data: worldSearchDocuments, error: worldSearchError }] = await Promise.all([
+    supabase.from('world_event_clusters').select('id,title,summary,actors,geographies,channels,last_seen_at,source_ids').gte('last_seen_at', since),
+    supabase.from('world_documents').select('canonical_url,publisher,ingested_at,metadata').contains('metadata', { worldSearch: true }).gte('ingested_at', since).limit(2_000),
+  ])
   if (error) throw new Error(`Unable to evaluate world coverage: ${error.message}`)
+  if (worldSearchError) throw new Error(`Unable to evaluate World search coverage: ${worldSearchError.message}`)
   const sourceFamilies = new Map<string, Set<string>>()
   const eventIds = (events ?? []).flatMap((event) => typeof event.id === 'string' ? [event.id] : [])
   for (let index = 0; index < eventIds.length; index += 200) {
@@ -109,8 +139,9 @@ export async function refreshWorldCoverageState(nodes: WorldNode[], now = new Da
     const matchingEventSourceIds = new Set(matchingEvents.flatMap((event) => Array.isArray(event.source_ids) ? event.source_ids.filter((id): id is string => typeof id === 'string') : []))
     const matchingNodes = activeNodes.filter((node) => node.sourceIds.some((sourceId) => matchingEventSourceIds.has(sourceId)) || matchesWorldCoverageFrontier(frontier, { title: `${node.id} ${node.title} ${node.aliases.join(' ')}`, summary: node.summary }))
     const matchingSignals = (signals ?? []).filter((signal) => matchesWorldCoverageFrontier(frontier, { title: signal.title, summary: signal.summary, actors: signal.entities ?? [], geographies: signal.geographies ?? [], channels: [...(signal.domains ?? []), ...(signal.economic_channels ?? [])] }))
-    const lastEvidenceAt = matchingEvents.map((event) => String(event.last_seen_at)).sort().at(-1) ?? null
-    const sourceFamilyCount = new Set(matchingEvents.flatMap((event) => [...(sourceFamilies.get(String(event.id)) ?? [])])).size
+    const searchedEvidence = summarizeWorldSearchCoverage(matchingNodes.flatMap((node) => node.sourceIds), (worldSearchDocuments ?? []) as WorldSearchCoverageDocument[])
+    const lastEvidenceAt = [...matchingEvents.map((event) => String(event.last_seen_at)), ...(searchedEvidence.lastEvidenceAt ? [searchedEvidence.lastEvidenceAt] : [])].sort().at(-1) ?? null
+    const sourceFamilyCount = new Set([...matchingEvents.flatMap((event) => [...(sourceFamilies.get(String(event.id)) ?? [])]), ...searchedEvidence.sourceFamilies]).size
     const status = assessWorldCoverage({ lastEvidenceAt, sourceFamilyCount, activeNodeCount: matchingNodes.length }, now)
     const nextReviewHours = status === 'healthy' ? 24 : status === 'thin' ? 8 : 6
     return {

@@ -16,7 +16,7 @@ import { latestDistinctWorldJournals } from '../lib/server/world-projection.ts'
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
 import { buildAgentJobDedupeKey } from '../lib/server/agent-jobs.ts'
 import { WORLD_COVERAGE_FRONTIERS, assessWorldCoverage, deriveWorldCoverageIndex, matchesWorldCoverageFrontier } from '../lib/markets/world-coverage.ts'
-import { selectDueWorldCoverageFrontiers, worldCoverageUpsertIdentity } from '../lib/server/world-coverage.ts'
+import { selectDueWorldCoverageFrontiers, summarizeWorldSearchCoverage, worldCoverageUpsertIdentity } from '../lib/server/world-coverage.ts'
 import { classifyWorldReplayBatchOutcome, isWorldThinkerBusyError } from '../lib/server/world-replay.ts'
 
 const now = '2026-08-17T18:00:00.000Z'
@@ -246,6 +246,16 @@ test('equally thin coverage rotates toward the least recently searched frontier'
     frontier('never-searched', null, 80),
   ], new Date(now), 1)
   assert.equal(selected[0]?.id, 'never-searched')
+})
+
+test('coverage health counts only live-search documents cited by durable nodes', () => {
+  const evidence = summarizeWorldSearchCoverage(['src-bis', 'src-fed'], [
+    { canonical_url: 'https://www.bis.org/statistics/a.htm', publisher: 'BIS', ingested_at: '2026-08-20T03:00:00.000Z', metadata: { worldSearch: true, sourceId: 'src-bis' } },
+    { canonical_url: 'https://www.federalreserve.gov/newsevents/b.htm', publisher: 'Federal Reserve', ingested_at: '2026-08-20T03:01:00.000Z', metadata: { worldSearch: true, sourceId: 'src-fed' } },
+    { canonical_url: 'https://example.com/unrelated', publisher: 'Example', ingested_at: '2026-08-20T03:02:00.000Z', metadata: { worldSearch: true, sourceId: 'src-other' } },
+  ])
+  assert.deepEqual(evidence.sourceFamilies, ['bis.org', 'federalreserve.gov'])
+  assert.equal(evidence.lastEvidenceAt, '2026-08-20T03:01:00.000Z')
 })
 
 test('projection retry reconciles coverage and the originating Thinker run', () => {
