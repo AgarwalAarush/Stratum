@@ -378,7 +378,7 @@ test('proposal validation rejects unsourced factual claims and accepts labeled a
   // The root worktree remains on main; publication moved the shadow ref atomically.
   assert.equal(index.length, 1)
   const coverage = JSON.parse(await readFile(join(root, 'world/index/coverage.json'), 'utf8')) as unknown[]
-  assert.equal(coverage.length, 10)
+  assert.equal(coverage.length, 11)
   assert.match(await readFile(join(root, 'world/coverage.md'), 'utf8'), /China and Taiwan/)
   const bad = proposal([current, node({ id: 'bad', title: 'Unsupported fact', aliases: [], claims: [{ text: 'Unsupported fact.', sourceIds: [] }] })])
   bad.baseCommit = committed.commit

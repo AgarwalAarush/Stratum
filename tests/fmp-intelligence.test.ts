@@ -7,6 +7,7 @@ import {
   normalizeFmpSecFilingRows,
 } from '../lib/data/fmp-intelligence.ts'
 import { readFile } from 'node:fs/promises'
+import { normalizeFeedPublishedAt } from '../lib/data/overview-persistence.ts'
 
 test('FMP news and press releases normalize without retaining provider credentials', () => {
   const items = normalizeFmpNewsRows([
@@ -90,4 +91,11 @@ test('feed persistence deduplicates an upsert batch by its database conflict key
   const source = await readFile(new URL('../lib/data/overview-persistence.ts', import.meta.url), 'utf8')
   assert.match(source, /new Map\(normalizedRows\.map/)
   assert.match(source, /row\.item_type.*row\.url/s)
+})
+
+test('feed chronology cannot claim publication after ingestion', () => {
+  const normalized = normalizeFeedPublishedAt('2026-08-19T13:45:00.000Z', '2026-08-19T11:04:50.000Z')
+  assert.equal(normalized.anomaly, true)
+  assert.equal(normalized.publishedAt, '2026-08-19T11:04:50.000Z')
+  assert.deepEqual(normalizeFeedPublishedAt('2026-08-19T10:45:00.000Z', '2026-08-19T11:04:50.000Z'), { publishedAt: '2026-08-19T10:45:00.000Z', anomaly: false })
 })

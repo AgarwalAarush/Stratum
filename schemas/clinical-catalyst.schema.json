@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stratum.local/schemas/clinical-catalyst.schema.json",
+  "title": "ClinicalCatalyst",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["fingerprint", "title", "sourceId", "kind", "outcome", "significance", "symbols", "materiality", "timeSensitivity", "economicChannels", "decisiveNewEvent"],
+  "properties": {
+    "fingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "sourceId": { "type": "string", "minLength": 1 },
+    "kind": { "enum": ["trial_result", "regulatory_decision", "clinical_hold", "safety_signal", "trial_start", "medical_meeting"] },
+    "outcome": { "enum": ["positive", "negative", "mixed", "pending", "unknown"] },
+    "significance": { "enum": ["urgent", "investigate", "monitor"] },
+    "phase": { "type": ["string", "null"] },
+    "trialId": { "type": ["string", "null"] },
+    "therapy": { "type": ["string", "null"] },
+    "indication": { "type": ["string", "null"] },
+    "symbols": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9.-]{0,11}$" } },
+    "materiality": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "timeSensitivity": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "economicChannels": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+    "decisiveNewEvent": { "type": "boolean" }
+  }
+}

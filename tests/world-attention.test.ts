@@ -99,7 +99,7 @@ test('policy auto-tuning cannot move numeric controls by more than ten percent',
 test('benchmark defines a 75-100 real-case target and every required family without synthetic prompt copies', () => {
   assert.deepEqual(WORLD_BENCHMARK_TARGET, { minimum: 75, maximum: 100 })
   const families = new Set(WORLD_BENCHMARK_FAMILIES.map((item) => item.id))
-  for (const family of ['iran', 'china_taiwan', 'authoritarianism', 'enso', 'sovereign_banking', 'export_controls', 'ai_power', 'routine_earnings', 'pr_syndication', 'contradictory_reporting']) assert.ok(families.has(family))
+  for (const family of ['iran', 'china_taiwan', 'authoritarianism', 'enso', 'sovereign_banking', 'export_controls', 'ai_power', 'biotech_clinical', 'routine_earnings', 'pr_syndication', 'contradictory_reporting']) assert.ok(families.has(family))
   assert.equal(classifyWorldBenchmarkFamily({ title: 'El Niño raises hydropower risk' }).family, 'enso')
   assert.equal(classifyWorldBenchmarkFamily({ title: 'Company announces product', sourceLane: 'pr_syndication' }).family, 'pr_syndication')
 })

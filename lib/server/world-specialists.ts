@@ -19,7 +19,7 @@ export interface WorldSpecialistInput {
 
 const LENS_GUIDANCE: Record<WorldSpecialistLens, string> = {
   geopolitics_institutions: 'Analyze state power, conflict, law, sanctions, alliances, authoritarianism, elections, and institutional capacity. Distinguish company domicile from geopolitical evidence.',
-  physical_economy: 'Analyze climate, weather, energy, resources, food, water, health, demographics, logistics, supply chains, physical capacity, and adaptation.',
+  physical_economy: 'Analyze climate, weather, energy, resources, food, water, health, demographics, logistics, supply chains, physical capacity, and adaptation. For biotech evidence, distinguish trial phase, population, comparator, prespecified endpoints, effect size, statistical support, safety, overall-survival maturity, regulatory pathway, addressable patients, manufacturing, reimbursement, partner economics, competing modalities, and what remains undisclosed. A press release or stock move is not clinical proof; a positive trial is not automatically durable economic capture.',
   macro_finance: 'Analyze sovereigns, banking, credit, liquidity, inflation, currencies, rates, market plumbing, and financial propagation.',
   technology_industrial_capacity: 'Analyze compute, semiconductors, software, cyber, manufacturing, export controls, industrial policy, capacity, substitution, and bottlenecks.',
 }

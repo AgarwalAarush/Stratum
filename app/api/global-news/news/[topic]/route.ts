@@ -12,6 +12,7 @@ type GlobalNewsTopic =
   | 'global-supply-chains'
   | 'global-summits'
   | 'global-health'
+  | 'biotech-clinical-regulatory'
   | 'global-macro-finance'
   | 'institutions-governance'
   | 'energy-resources'
@@ -25,6 +26,7 @@ const GLOBAL_NEWS_TOPICS: GlobalNewsTopic[] = [
   'global-supply-chains',
   'global-summits',
   'global-health',
+  'biotech-clinical-regulatory',
   'global-macro-finance',
   'institutions-governance',
   'energy-resources',
@@ -43,6 +45,7 @@ export const CACHE_TTL_SECONDS: Record<GlobalNewsTopic, number> = {
   'global-supply-chains': 3_600,
   'global-summits': 3_600,
   'global-health': 3_600,
+  'biotech-clinical-regulatory': 3600,
   'global-macro-finance': 3_600,
   'institutions-governance': 3_600,
   'energy-resources': 3_600,
@@ -57,6 +60,7 @@ const CACHE_TIER_BY_TOPIC: Record<GlobalNewsTopic, CacheTier> = {
   'global-supply-chains': 'medium',
   'global-summits': 'slow',
   'global-health': 'medium',
+  'biotech-clinical-regulatory': 'fast',
   'global-macro-finance': 'medium',
   'institutions-governance': 'medium',
   'energy-resources': 'medium',

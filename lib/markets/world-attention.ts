@@ -145,6 +145,7 @@ export function classifyWorldSourceLane(source: Pick<AttentionSource, 'url' | 'p
   const host = sourceHost(source.url)
   const text = `${source.publisher} ${source.title} ${host}`
   if (OFFICIAL_HOSTS.test(host) || COMPANY_DISCLOSURE.test(text) && /sec\.gov/.test(host)) return 'official_primary'
+  if (/^(?:investors?|ir)\./i.test(host) || /\/(?:investors?|news-releases?|press-releases?)\//i.test(new URL(source.url, 'https://invalid.local').pathname)) return 'company_disclosure'
   if (PR_PUBLISHERS.test(text)) return 'pr_syndication'
   if (COMPANY_DISCLOSURE.test(text)) return 'company_disclosure'
   if (GLOBAL_REPORTERS.test(text)) return 'global_reporting'
@@ -161,13 +162,14 @@ export function primaryWorldSourceLane(sources: AttentionSource[]): WorldSourceL
   return priority.find((lane) => lanes.has(lane)) ?? 'global_reporting'
 }
 
-const SYSTEM_SPILLOVER = /bankrupt|bankruptcy|chapter 11|merger|acquisition|shutdown|plant closure|capacity|shortage|sanction|export control|regulation|systemic|grid|supply chain|recall|default|nationali[sz]|strike|war|tariff/i
+const SYSTEM_SPILLOVER = /bankrupt|bankruptcy|chapter 11|merger|acquisition|shutdown|plant closure|capacity|shortage|sanction|export control|regulation|systemic|grid|supply chain|recall|default|nationali[sz]|strike|war|tariff|phase\s*3|pivotal trial|primary endpoint|clinical hold|fda approval|complete response letter|safety signal/i
 const ROUTINE_COMPANY = /earnings|eps|revenue|price target|upgrade|downgrade|beats estimates|misses estimates|stock rises|stock falls|shares (?:rise|fall)|dividend/i
 const PROPAGATION = /spillover|contagion|supply chain|shortage|constraint|export control|sanction|shipping|grid|credit|liquidity|food|insurance|migration|refugee/i
-const DURABLE = /structural|multi-year|long-term|persistent|drought|reservoir|demographic|authoritarian|industrial policy|capacity|infrastructure|el ni[nñ]o|la ni[nñ]a|enso/i
-const TIME_SENSITIVE = /attack|strike|invasion|emergency|default|bank failure|shutdown|outage|ceasefire|election|decision|deadline|warning|alert/i
+const DURABLE = /structural|multi-year|long-term|persistent|drought|reservoir|demographic|authoritarian|industrial policy|capacity|infrastructure|el ni[nñ]o|la ni[nñ]a|enso|platform validation|phase\s*3|pivotal trial/i
+const TIME_SENSITIVE = /attack|strike|invasion|emergency|default|bank failure|shutdown|outage|ceasefire|election|decision|deadline|warning|alert|primary endpoint|clinical hold|fda approval|complete response letter|trial halted/i
 const UNCERTAIN = /may|could|possible|forecast|rumor|reportedly|unconfirmed|risk|probability|outlook/i
-const TRANSMISSION = /price|inflation|yield|rate|capacity|production|supply|demand|cost|margin|trade|export|import|power|energy|crop|food|insurance|credit|liquidity/i
+const TRANSMISSION = /price|inflation|yield|rate|capacity|production|supply|demand|cost|margin|trade|export|import|power|energy|crop|food|insurance|credit|liquidity|clinical|endpoint|approval|reimbursement|patient|commercial|platform/i
+const DECISIVE_CLINICAL = /phase\s*3|pivotal trial|primary endpoint|met endpoints?|missed endpoints?|clinical hold|fda approval|complete response letter|trial halted|serious safety signal/i
 
 export function deriveWorldAttentionDimensions(candidate: AttentionCandidate): WorldAttentionDimensions {
   const text = `${candidate.title} ${candidate.summary} ${candidate.channels.join(' ')}`
@@ -201,6 +203,8 @@ export function routeWorldAttention(candidate: AttentionCandidate, policy = DEFA
   let route: WorldAttentionRoute
   if (candidate.claimState === 'officially_confirmed' && candidate.decisiveNewEvent) {
     route = 'urgent'; reasons.push('decisive officially confirmed event')
+  } else if (candidate.decisiveNewEvent && DECISIVE_CLINICAL.test(text) && dimensions.evidenceQuality >= 30) {
+    route = 'urgent'; reasons.push('decisive clinical or regulatory disclosure requiring immediate corroboration')
   } else if (dimensions.magnitude >= policy.thresholds.urgentMagnitude && dimensions.timeSensitivity >= policy.thresholds.urgentTimeSensitivity && dimensions.evidenceQuality >= policy.thresholds.minimumUrgentEvidence) {
     route = 'urgent'; reasons.push('high magnitude, time sensitivity, and evidence quality')
   } else if (dimensions.activeDependency > 0 && dimensions.transmissionClarity >= policy.thresholds.dependencyTransmission) {
@@ -230,7 +234,7 @@ export function selectWorldSpecialistLenses(candidate: AttentionCandidate, route
   const text = `${candidate.title} ${candidate.summary} ${candidate.channels.join(' ')}`
   const scores: Array<[WorldSpecialistLens, number]> = [
     ['geopolitics_institutions', /war|sanction|government|authoritarian|election|military|taiwan|iran|institution|policy/i.test(text) ? 3 : 0],
-    ['physical_economy', /climate|weather|el ni[nñ]o|enso|energy|power|food|crop|water|health|demograph|supply chain|shipping|resource/i.test(text) ? 3 : 0],
+    ['physical_economy', /climate|weather|el ni[nñ]o|enso|energy|power|food|crop|water|health|demograph|supply chain|shipping|resource|biotech|clinical|phase\s*[123]|fda|therapy|vaccine|oncology/i.test(text) ? 3 : 0],
     ['macro_finance', /inflation|rate|credit|liquidity|bank|sovereign|currency|market|yield|recession|default/i.test(text) ? 3 : 0],
     ['technology_industrial_capacity', /technology|semiconductor|chip|ai|data center|capacity|factory|automation|cyber|export control/i.test(text) ? 3 : 0],
   ]

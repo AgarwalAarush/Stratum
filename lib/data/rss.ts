@@ -24,6 +24,7 @@ export type NewsTopic =
   | 'global-supply-chains'
   | 'global-summits'
   | 'global-health'
+  | 'biotech-clinical-regulatory'
   | 'global-macro-finance'
   | 'institutions-governance'
   | 'energy-resources'
@@ -71,6 +72,7 @@ export const NEWS_TOPICS: NewsTopic[] = [
   'global-supply-chains',
   'global-summits',
   'global-health',
+  'biotech-clinical-regulatory',
   'global-macro-finance',
   'institutions-governance',
   'energy-resources',
@@ -93,6 +95,7 @@ const TOPIC_LABELS: Record<NewsTopic, string> = {
   'global-supply-chains': 'Global Supply Chains',
   'global-summits': 'Global Summits & Conferences',
   'global-health': 'Global Health',
+  'biotech-clinical-regulatory': 'Biotech & Clinical Catalysts',
   'global-macro-finance': 'Global Macro & Finance',
   'institutions-governance': 'Institutions & Governance',
   'energy-resources': 'Energy & Resources',
@@ -232,6 +235,14 @@ export const NEWS_TOPIC_FEEDS: Record<NewsTopic, ServerFeed[]> = {
     { name: 'Pandemic Watch', url: gn('(pandemic OR epidemic OR "disease outbreak" OR "public health emergency") when:7d') },
     { name: 'Global Health Policy', url: gn('("global health" policy OR "health crisis" OR "vaccine" OR "health equity") when:7d') },
     { name: 'Infectious Disease', url: gn('("infectious disease" OR "bird flu" OR mpox OR "drug resistant") when:7d') },
+  ],
+  'biotech-clinical-regulatory': [
+    { name: 'Late-stage trial results', url: gn('("Phase 3" OR pivotal OR "late-stage trial") ("primary endpoint" OR "overall survival" OR "progression-free survival" OR "clinical trial results") when:3d') },
+    { name: 'FDA decisions and safety', url: gn('(site:fda.gov OR FDA) (approval OR approved OR "complete response letter" OR "clinical hold" OR "safety signal" OR advisory committee OR PDUFA) when:7d') },
+    { name: 'Company clinical disclosures', url: gn('("investor relations" OR "company announces") ("Phase 2" OR "Phase 3" OR clinical trial) (met OR missed OR failed OR results) when:7d') },
+    { name: 'ClinicalTrials.gov changes', url: gn('site:clinicaltrials.gov/study ("Phase 3" OR "Phase 2") (results OR terminated OR suspended OR completed) when:7d') },
+    { name: 'Medical meetings', url: gn('(ASCO OR AACR OR ESMO OR ASH) ("late-breaking" OR "oral presentation" OR "clinical data" OR "trial results") when:14d') },
+    { name: 'Biotech reporting', url: gn('(site:reuters.com OR site:statnews.com OR site:endpts.com OR site:fiercebiotech.com) (biotech OR biopharma OR clinical trial OR FDA) when:3d') },
   ],
   'global-macro-finance': [
     { name: 'Global Central Banks', url: gn('(site:reuters.com OR site:ft.com OR site:bloomberg.com) (central bank OR monetary policy OR inflation OR currency) when:3d') },

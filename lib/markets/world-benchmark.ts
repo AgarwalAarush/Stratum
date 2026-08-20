@@ -20,6 +20,7 @@ export const WORLD_BENCHMARK_FAMILIES: WorldBenchmarkFamilyDefinition[] = [
   { id: 'contradictory_reporting', label: 'Contradictory reporting', pattern: /\b(?:disputed|contested|retracted|denied|unconfirmed|contradict)\b/i, hardCase: true },
   { id: 'climate_food_credit', label: 'Climate, food, and credit', pattern: /\b(?:food inflation|crop loss|agricultural credit|farm credit|reservoir stress)\b/i, hardCase: true },
   { id: 'health_labor', label: 'Health and labor capacity', pattern: /\b(?:outbreak|epidemic|pandemic|ebola)\b/i, hardCase: true },
+  { id: 'biotech_clinical', label: 'Biotech clinical and regulatory catalysts', pattern: /\b(?:phase\s*[123]|pivotal trial|primary endpoint|clinical hold|complete response letter|pdufa|fda approval|overall survival|progression-free survival)\b/i, hardCase: true },
   { id: 'cyber_physical', label: 'Cyber and physical systems', pattern: /\b(?:cyberattack|ransomware|cyber attack)\b/i, hardCase: true },
   { id: 'demographics_fiscal', label: 'Demographics and fiscal capacity', pattern: /\b(?:demographic|aging population|fertility decline)\b/i, hardCase: true },
   { id: 'commodity_substitution', label: 'Commodity constraint and substitution', pattern: /\b(?:critical mineral|commodity shortage|substitution|recycling capacity)\b/i, hardCase: true },

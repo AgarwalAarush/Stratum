@@ -13,6 +13,8 @@ import { fetchPortfolioResearchCoverage } from './portfolio-research-seeding.ts'
 import { persistWorldSignalForEvent } from './world-signals.ts'
 import { evaluateDueWorldPolicyExperiments, loadWorldAttentionPolicySet, recordShadowWorldAttentionDecisions } from './world-governance.ts'
 import { searchHistoricalWorldGap } from './world-historical-gap.ts'
+import { clinicalCatalystClusterKey, normalizeClinicalCatalyst } from '../markets/biotech.ts'
+import { linkBiotechCatalystsToEvent, persistBiotechCatalystSources } from './biotech-catalysts.ts'
 
 export interface WorldEventSourceInput {
   id: string
@@ -44,6 +46,7 @@ interface ExistingWorldEventCluster {
 
 const WORLD_SENSOR_TOPICS: NewsTopic[] = [
   'us-news', 'geopolitics', 'european-union', 'climate-environment', 'global-supply-chains', 'global-summits', 'global-health',
+  'biotech-clinical-regulatory',
   'global-macro-finance', 'institutions-governance', 'energy-resources', 'demographics-migration',
   'policy', 'cybersecurity', 'infra-hardware', 'new-technology',
 ]
@@ -73,6 +76,9 @@ const MATERIAL_TERMS: Array<[RegExp, number, string]> = [
   [/\b(shortage|constraint|outage|shutdown|disruption|scarcity|lead time)\b/i, 24, 'supply'],
   [/\b(semiconductor|chip|data center|electricity|power grid|oil|gas|shipping)\b/i, 18, 'economic_channel'],
   [/\b(regulation|law|court|antitrust|subsidy|appropriation)\b/i, 16, 'policy'],
+  [/\b(phase\s*3|pivotal trial|late-stage trial)\b.*\b(primary endpoint|overall survival|progression-free survival|recurrence-free survival|metastasis-free survival)\b|\b(primary endpoint|overall survival|progression-free survival|recurrence-free survival|metastasis-free survival)\b.*\b(phase\s*3|pivotal trial|late-stage trial)\b/i, 60, 'clinical_evidence'],
+  [/\b(fda approval|fda approves|complete response letter|clinical hold|advisory committee|pdufa|breakthrough therapy)\b/i, 60, 'clinical_regulatory'],
+  [/\b(serious safety signal|excess deaths|stopped for futility|trial halted|dose-limiting toxicity)\b/i, 60, 'clinical_safety'],
 ]
 const GEOGRAPHIES = ['Iran', 'Taiwan', 'China', 'Russia', 'Ukraine', 'Israel', 'United States', 'Europe', 'Japan', 'South Korea', 'India', 'Middle East']
 
@@ -102,6 +108,11 @@ function eventMateriality(source: WorldEventSourceInput): { score: number; chann
   for (const [pattern, points, channel] of MATERIAL_TERMS) if (pattern.test(content)) { score += points; channels.add(channel) }
   const metadataMateriality = Number(source.metadata?.materiality)
   if (Number.isFinite(metadataMateriality)) score = Math.max(score, metadataMateriality)
+  const clinicalCatalyst = normalizeClinicalCatalyst(source)
+  if (clinicalCatalyst) {
+    score = Math.max(score, clinicalCatalyst.materiality)
+    clinicalCatalyst.economicChannels.forEach((channel) => channels.add(channel))
+  }
   return { score: Math.min(100, score), channels: [...channels] }
 }
 
@@ -144,7 +155,12 @@ export function clusterWorldEventSources(sources: WorldEventSourceInput[], now =
     const matched = groups.find((group) => {
       const prior = group[group.length - 1]
       const hours = Math.abs(Date.parse(source.publishedAt ?? source.fetchedAt) - Date.parse(prior.publishedAt ?? prior.fetchedAt)) / 3_600_000
-      return hours <= 96 && jaccard(sourceTokens, tokens(prior.title)) >= 0.34
+      const catalystKey = clinicalCatalystClusterKey(source.title)
+      const priorCatalystKey = clinicalCatalystClusterKey(prior.title)
+      return hours <= 96 && (
+        jaccard(sourceTokens, tokens(prior.title)) >= 0.34
+        || Boolean(catalystKey && priorCatalystKey && catalystKey === priorCatalystKey)
+      )
     })
     if (matched) matched.push(source)
     else groups.push([source])
@@ -399,7 +415,7 @@ async function ingestAutonomousWorldFeeds(): Promise<{ sources: WorldEventSource
     // rate-limited and unnecessary on this latency-sensitive worker path.
     const items = await fetchNewsItemsByTopic(topic, 20, { resolveGoogleUrls: false })
     if (items.length === 0) throw new Error(`No items returned for ${topic}`)
-    const globalTopic = ['us-news', 'geopolitics', 'european-union', 'climate-environment', 'global-supply-chains', 'global-summits', 'global-health', 'global-macro-finance', 'institutions-governance', 'energy-resources', 'demographics-migration'].includes(topic)
+    const globalTopic = ['us-news', 'geopolitics', 'european-union', 'climate-environment', 'global-supply-chains', 'global-summits', 'global-health', 'biotech-clinical-regulatory', 'global-macro-finance', 'institutions-governance', 'energy-resources', 'demographics-migration'].includes(topic)
     const rows = await persistFeedItems(globalTopic ? 'global-news' : 'ai-research', globalTopic ? `news-${topic}` : topic, items, { strict: true })
     return { topic, rows }
   }))
@@ -508,6 +524,7 @@ export async function persistWorldEventClusters(clusters: WorldEventClusterCandi
     }, { onConflict: 'event_cluster_id,policy_version' })
     if (decisionError) throw new Error(`Unable to persist World attention decision: ${decisionError.message}`)
     await persistWorldSignalForEvent(String(data.id), cluster, attention)
+    await linkBiotechCatalystsToEvent(String(data.id), cluster.sourceIds)
     await recordShadowWorldAttentionDecisions(String(data.id), cluster, policies.shadow)
     if (attention.route === 'urgent') urgent.push(String(data.id))
   }
@@ -520,6 +537,7 @@ export async function refreshWorldEvents(options: { since?: Date; until?: Date; 
   const autonomous = options.autonomousFeeds === false ? { sources: [] as WorldEventSourceInput[], topicsSucceeded: [] as string[], topicsFailed: [] as string[] } : await ingestAutonomousWorldFeeds()
   const persistedSources = await fetchEventSources(since, until)
   const sources = [...new Map([...persistedSources, ...autonomous.sources].map((source) => [source.id, source])).values()]
+  await persistBiotechCatalystSources(sources)
   const candidates = await attachWorldEventDependencies(clusterWorldEventSources(sources, until))
   const { active: activePolicy } = await loadWorldAttentionPolicySet()
   const routed = selectWorldModelCandidates(candidates, activePolicy, until)

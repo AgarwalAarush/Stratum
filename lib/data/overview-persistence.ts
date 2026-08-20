@@ -210,25 +210,31 @@ export async function persistFeedItems(
   }
 
   try {
+    const observedAt = new Date().toISOString()
     const normalizedRows = items.map((item) => {
       const { type, title, url, ...rest } = item as unknown as Record<string, unknown>
-      const publishedAt =
+      const reportedPublishedAt =
         (rest.publishedAt as string | undefined) ??
         (rest.reportDate as string | undefined) ??
         null
+      const publication = normalizeFeedPublishedAt(reportedPublishedAt, observedAt)
       // Remove fields already stored as columns
       delete rest.publishedAt
       delete rest.reportDate
       delete rest.title
       delete rest.url
       delete rest.type
+      if (publication.anomaly && reportedPublishedAt) {
+        rest.reportedPublishedAt = reportedPublishedAt
+        rest.publishedAtAnomaly = 'publication_after_ingestion'
+      }
       return {
         item_type: type as string,
         scope,
         section,
         title: title as string,
         url: url as string,
-        published_at: publishedAt,
+        published_at: publication.publishedAt,
         metadata: rest,
       }
     })
@@ -248,6 +254,15 @@ export async function persistFeedItems(
     // fire-and-forget — don't break the request
     return []
   }
+}
+
+export function normalizeFeedPublishedAt(value: string | null, fetchedAt: string): { publishedAt: string | null; anomaly: boolean } {
+  if (!value) return { publishedAt: null, anomaly: false }
+  const published = Date.parse(value)
+  const fetched = Date.parse(fetchedAt)
+  if (!Number.isFinite(published)) return { publishedAt: null, anomaly: true }
+  if (Number.isFinite(fetched) && published > fetched + 5 * 60_000) return { publishedAt: fetchedAt, anomaly: true }
+  return { publishedAt: new Date(published).toISOString(), anomaly: false }
 }
 
 export interface FeedItemRow {
