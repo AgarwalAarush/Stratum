@@ -87,7 +87,8 @@ test('workspace projection collapses legacy identities that share the same immut
     sources: Array.from({ length: sourceCount }, () => source),
   })
   const collapsed = collapseCatalystViews([view('legacy', 1, 68), view('canonical', 3, 90)])
-  assert.deepEqual(collapsed.map((catalyst) => catalyst.fingerprint), ['canonical'])
+  assert.deepEqual(collapsed.map((catalyst) => catalyst.fingerprint), [canonical.fingerprint])
+  assert.equal(collapsed[0]?.sources.length, 1)
 })
 
 test('Phase 3 endpoint success routes urgent to the physical-economy specialist', () => {

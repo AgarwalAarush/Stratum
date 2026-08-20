@@ -203,14 +203,42 @@ export function collapseCatalystViews(catalysts: BiotechCatalystView[]): Biotech
       || rightStructure - leftStructure
       || Date.parse(right.fetchedAt) - Date.parse(left.fetchedAt)
   })
-  const claimedSources = new Set<string>()
-  const retained: BiotechCatalystView[] = []
+  const retainedByCurrentFingerprint = new Map<string, BiotechCatalystView>()
   for (const catalyst of ranked) {
-    if (catalyst.sourceIds.some((sourceId) => claimedSources.has(sourceId))) continue
-    retained.push(catalyst)
-    catalyst.sourceIds.forEach((sourceId) => claimedSources.add(sourceId))
+    const current = catalyst.sources.map((source) => normalizeClinicalCatalyst({
+      id: source.sourceId,
+      title: source.title,
+      url: source.url,
+      publisher: source.publisher,
+      publishedAt: source.publishedAt,
+      fetchedAt: source.fetchedAt,
+    })).filter((item): item is ClinicalCatalyst => Boolean(item))
+      .sort((left, right) => right.materiality - left.materiality)[0]
+    if (!current) continue
+    const prior = retainedByCurrentFingerprint.get(current.fingerprint)
+    if (!prior) {
+      retainedByCurrentFingerprint.set(current.fingerprint, {
+        ...catalyst,
+        ...current,
+        symbols: catalyst.symbols,
+        eventClusterIds: catalyst.eventClusterIds,
+        sourceIds: catalyst.sourceIds,
+        status: catalyst.status,
+        nextReviewAt: catalyst.nextReviewAt,
+        sources: catalyst.sources,
+      })
+      continue
+    }
+    const sources = [...new Map([...prior.sources, ...catalyst.sources].map((source) => [source.sourceId, source])).values()]
+    retainedByCurrentFingerprint.set(current.fingerprint, {
+      ...prior,
+      symbols: [...new Set([...prior.symbols, ...catalyst.symbols])],
+      eventClusterIds: [...new Set([...prior.eventClusterIds, ...catalyst.eventClusterIds])],
+      sourceIds: [...new Set([...prior.sourceIds, ...catalyst.sourceIds])],
+      sources,
+    })
   }
-  return retained.sort((left, right) => Date.parse(right.publishedAt ?? right.fetchedAt) - Date.parse(left.publishedAt ?? left.fetchedAt))
+  return [...retainedByCurrentFingerprint.values()].sort((left, right) => Date.parse(right.publishedAt ?? right.fetchedAt) - Date.parse(left.publishedAt ?? left.fetchedAt))
 }
 
 export async function fetchBiotechWorkspace(limit = 80): Promise<BiotechWorkspace> {
