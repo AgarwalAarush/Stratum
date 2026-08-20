@@ -1124,7 +1124,7 @@
    second activity feed. Borders describe sequence; only the decision controls
    receive visual emphasis. */
 .owner-review-header { align-items: end; border-bottom: 1px solid var(--market-border); display: grid; gap: 48px; grid-template-columns: minmax(0, 1.45fr) minmax(240px, .55fr); padding: 62px 0 30px; }
-.owner-review-header h1 { font-size: clamp(40px, 5vw, 64px); letter-spacing: -.055em; line-height: .95; margin-top: 12px; }
+.owner-review-title { font-family: var(--font-ibm-plex-sans), ui-sans-serif, sans-serif; font-size: clamp(38px, 4.5vw, 58px); font-weight: 500; letter-spacing: -.055em; line-height: .95; margin-top: 12px; }
 .owner-review-header p { color: var(--market-text-muted); font-size: 15px; line-height: 1.6; margin-top: 18px; max-width: 720px; }
 .owner-review-header aside { border-left: 1px solid var(--market-border); padding: 4px 0 4px 22px; }
 .owner-review-header aside span, .owner-review-section-heading > span { color: var(--market-text-dim); display: block; font-family: var(--font-ibm-plex-mono), ui-monospace, monospace; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
@@ -14933,7 +14933,7 @@ body:has(.equity-research-note) {
 
   .owner-review-page { padding-inline: 16px; }
   .owner-review-header { align-items: start; gap: 25px; grid-template-columns: 1fr; padding: 36px 0 23px; }
-  .owner-review-header h1 { font-size: 40px; }
+  .owner-review-title { font-size: 40px; }
   .owner-review-header aside { border-left: 0; border-top: 1px solid var(--market-border); padding: 14px 0 0; width: 100%; }
   .owner-review-queue { padding: 32px 0 40px; }
   .owner-review-item-body { align-items: start; grid-template-columns: 1fr; }

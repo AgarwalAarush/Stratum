@@ -15,7 +15,7 @@ export default async function MarketsReviewPage() {
   const queue = snapshot.pendingReviews.slice(0, 10)
   return <div className="owner-review-page">
     <header className="owner-review-header">
-      <div><p className="markets-eyebrow">Owner review</p><h1 className="markets-display">Decisions, not another feed.</h1><p>Only material deltas appear here. Evidence can keep accumulating behind one open item; it never replaces your unreviewed decision.</p></div>
+      <div><p className="markets-eyebrow">Owner review</p><h1 className="owner-review-title">Decisions, not another feed.</h1><p>Only material deltas appear here. Evidence can keep accumulating behind one open item; it never replaces your unreviewed decision.</p></div>
       <aside><span>Weekly capacity</span><strong>{queue.length} / 10 open</strong><small>Urgent falsifiers can still interrupt.</small></aside>
     </header>
 
