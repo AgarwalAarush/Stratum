@@ -86,7 +86,7 @@ export async function reconcileWorldRepositoryProjection(options: { root?: strin
   const result = await projectWorldRepository(options)
   const root = options.root ?? worldRepositoryRoot()
   const snapshot = await readWorldCommit(root, result.commit)
-  await refreshWorldCoverageState(snapshot.nodes.map((entry) => entry.node))
+  await refreshWorldCoverageState(snapshot.nodes.map((entry) => entry.node), new Date(), snapshot.sources)
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const { data: run, error: runError } = await supabase.from('world_thinker_runs').select('id,push_pending').eq('result_commit', result.commit).order('started_at', { ascending: false }).limit(1).maybeSingle()

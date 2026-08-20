@@ -258,6 +258,19 @@ test('coverage health counts only live-search documents cited by durable nodes',
   assert.equal(evidence.lastEvidenceAt, '2026-08-20T03:01:00.000Z')
 })
 
+test('coverage health also resolves cited families from the immutable Git source ledger', () => {
+  const coverage = summarizeWorldSearchCoverage(
+    ['src-bis', 'src-fed', 'src-imf'],
+    [{ canonical_url: 'https://www.bis.org/report', publisher: 'BIS', ingested_at: now, metadata: { sourceId: 'src-bis', worldSearch: true } }],
+    [
+      { id: 'src-bis', url: 'https://www.bis.org/report', publisher: 'BIS' },
+      { id: 'src-fed', url: 'https://www.federalreserve.gov/report', publisher: 'Federal Reserve' },
+      { id: 'src-imf', url: 'https://www.imf.org/report', publisher: 'IMF' },
+    ],
+  )
+  assert.deepEqual(coverage.sourceFamilies.sort(), ['bis.org', 'federalreserve.gov', 'imf.org'])
+})
+
 test('projection retry reconciles coverage and the originating Thinker run', () => {
   const projectionSource = readFileSync(new URL('../lib/server/world-projection.ts', import.meta.url), 'utf8')
   const jobSource = readFileSync(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8')
