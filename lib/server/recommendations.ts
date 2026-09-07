@@ -109,7 +109,7 @@ export async function assembleDecisionContext(
       optional('Research', rows('equity_research_notes', ownerId, cutoff)),
       optional(
         'Theses',
-        rows('investment_theses', ownerId, cutoff, 'created_at'),
+        rows('investment_theses', ownerId, cutoff, 'generated_at'),
       ),
       optional('Company packets', rows('company_packets', ownerId, cutoff)),
       optional(
@@ -318,17 +318,17 @@ export async function assembleDecisionContext(
             `thesis:${thesis.id}`,
             'thesis',
             thesis,
-            thesis.updated_at ?? thesis.created_at,
-            cutoff,
+            thesis.data_as_of,
+            thesis.reviewed_at ?? thesis.generated_at,
           ),
         )
       const quality = record(packetContent.evidenceQuality)
       const nameGaps: string[] = []
       if (
-        thesis?.updated_at &&
-        Date.parse(String(thesis.updated_at)) > Date.parse(cutoff)
+        thesis?.reviewed_at &&
+        Date.parse(String(thesis.reviewed_at)) > Date.parse(cutoff)
       )
-        nameGaps.push('Thesis changed after the decision cutoff')
+        nameGaps.push('Thesis review occurred after the decision cutoff')
       if (!asset?.alpaca_id)
         nameGaps.push('Stable security identity is unavailable')
       if (
