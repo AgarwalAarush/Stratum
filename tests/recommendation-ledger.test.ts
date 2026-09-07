@@ -22,6 +22,7 @@ test('Postgres atomically publishes immutable advice and safely leases newslette
       '202609070004_investment_reconstruction.sql',
       '202609070005_atomic_agent_completion.sql',
       '202609070006_atomic_asset_universe.sql',
+      '202609070007_gmail_newsletter.sql',
     ])
       await db.exec(
         await readFile(
@@ -120,6 +121,17 @@ test('Postgres atomically publishes immutable advice and safely leases newslette
       ).rows[0].claimed
     assert.equal(await claim(), true)
     assert.equal(await claim(), false)
+    const gmailOutbox = await db.query<{ id: string }>(
+      "insert into investment_newsletter_outbox(owner_id,edition_date,recipient,sender,subject,html,plain_text,content_hash,delivery_provider) values($1,current_date+1,'owner@example.com','owner@example.com','test','test','test','hash','gmail') returning id",
+      [owner],
+    )
+    const gid = gmailOutbox.rows[0].id
+    assert.equal((await db.query<{claimed:boolean}>('select claim_investment_newsletter($1) claimed', [gid])).rows[0].claimed, true)
+    // Crash after Gmail accepts but before local persistence: expired lease is
+    // not permission to send again, even within the Resend 24-hour window.
+    await db.query("update investment_newsletter_delivery set lease_until=now()-interval '1 minute' where outbox_id=$1", [gid])
+    assert.equal((await db.query<{claimed:boolean}>('select claim_investment_newsletter($1) claimed', [gid])).rows[0].claimed, false)
+    await assert.rejects(() => db.query("update investment_newsletter_outbox set delivery_provider='resend' where id=$1", [gid]), /append-only/)
     await db.query(
       "update investment_newsletter_delivery set lease_until=null,status='uncertain' where outbox_id=$1",
       [oid],
