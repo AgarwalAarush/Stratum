@@ -1,4 +1,4 @@
-import { forecastsAreApproved, FORECAST_REVIEW_POLICY } from '../markets/forecast-review.ts'
+import { forecastsAreApproved, forecastCategory, FORECAST_REVIEW_POLICY } from '../markets/forecast-review.ts'
 import { resolveNumericForecast } from '../markets/investment-learning.ts'
 import { getAlpacaClient } from './alpaca.ts'
 import { contentHash, investmentDb, record } from './recommendations.ts'
@@ -693,6 +693,7 @@ export async function reviewRecommendationCohort(
         ),
         r = recommendations.find((r) => r.id === f.recommendation_id)
       return {
+        category: forecastCategory({metric: String(record(f.content).metric ?? '')}),
         episodeId: String(r?.episode_id ?? f.recommendation_id),
         probability: Number(f.probability),
         outcome:
@@ -722,7 +723,8 @@ export async function reviewRecommendationCohort(
         'no_trade',
       ].map((a) => [a, recommendations.filter((r) => r.action === a).length]),
     ),
-    calibration: calibration(observations),
+    calibration: calibration(observations.filter(o => o.category === 'economic')),
+    marketReturnCalibration: calibration(observations.filter(o => o.category === 'market_return')),
     forecastReview: {policy: FORECAST_REVIEW_POLICY, total: forecasts.length, eligible: approved.length, excluded: forecasts.length - approved.length},
     learning: {
       status: 'observation_only',

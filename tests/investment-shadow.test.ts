@@ -122,6 +122,12 @@ test('shadow capture is prospective, retry safe and resolves only from dated eco
     assert.equal((scores[2].content as Record<string, unknown>).baselineBrier, null)
     assert.equal((scores[2].content as Record<string, unknown>).excludedForecasts, 1)
     assert.equal(((comparison.baseline as Record<string, unknown>).forecasts as unknown[]).length, 1)
+    ;(comparison.baseline as Record<string, unknown>).gateReasons = []
+    const baselineForecast = ((comparison.baseline as Record<string, unknown>).forecasts as Array<Record<string, unknown>>)[0]
+    baselineForecast.metric = 'Fund price return percentage'
+    await evaluateShadowPolicies('owner', new Date('2026-10-03'))
+    assert.equal((scores[3].content as Record<string, unknown>).baselineBrier, null)
+    assert.equal((scores[3].content as Record<string, unknown>).marketReturnForecasts, 1)
     runs.length = 0
     registrationTime = '2026-09-08'
     assert.deepEqual(

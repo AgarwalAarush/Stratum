@@ -1,4 +1,4 @@
-import { forecastsAreApproved, reviewedForecasts, FORECAST_REVIEW_POLICY } from '../markets/forecast-review.ts'
+import { forecastsAreApproved, reviewedForecasts, forecastCategory, FORECAST_REVIEW_POLICY } from '../markets/forecast-review.ts'
 import { investmentDb, record, contentHash } from './recommendations.ts'
 import {
   applyShadowPolicy,
@@ -147,6 +147,7 @@ export async function evaluateShadowPolicies(
     if (!ownRuns.length) continue
     const pairs: ShadowForecastPair[] = []
     let excludedForecasts = 0
+    let marketReturnForecasts = 0
     for (const run of ownRuns)
       for (const raw of (record(run.content).comparisons as unknown[]) ??
         []) {
@@ -163,6 +164,10 @@ export async function evaluateShadowPolicies(
           'recommendation_id',
         )
         baseline.forecasts.forEach((f, index) => {
+          if (forecastCategory(f) === 'market_return') {
+            marketReturnForecasts++
+            return
+          }
           const assessment = assessments
             .filter(
               (e) =>
@@ -200,6 +205,7 @@ export async function evaluateShadowPolicies(
       ...assessment,
       forecastReviewPolicy: FORECAST_REVIEW_POLICY,
       excludedForecasts,
+      marketReturnForecasts,
       runIds: ownRuns.map((r) => r.id).sort(),
       windowComplete:
         now.getTime() >=
