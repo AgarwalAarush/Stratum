@@ -6,7 +6,7 @@ This extends the existing Next.js / Supabase / private macserver worker. Recomme
 
 Existing source ingestion and CompanyPacket research → authoritative brokerage/ledger holdings and World dossier lineage → frozen `recommendation_input_manifests` → generator and independent critic → deterministic evidence/portfolio gates → atomic `recommendation_batches`, `recommendation_versions`, forecasts and due evaluation tasks → `/markets/recommendations` → immutable owner responses, prospective outcomes and cohort reviews → frozen newsletter outbox and delivery receipt.
 
-The initial daily capital-decision scope is all current holdings and owner watchlists, by portfolio. The manifest also retains the eligible screener denominator and unselected discovery names. Candidate Scout and World research discovery remain separate research inputs; a candidate does not automatically become a buy. An incomplete or stale context produces explicit no-trade decisions. It does not affirm that existing holdings are safe.
+The daily decision scope is all current holdings and owner watchlists, by portfolio, plus up to six fresh Candidate Scout admissions selected across discovery lanes. The manifest also retains the eligible screener denominator and unselected discovery names. Candidate Scout and World research discovery feed investigation; a screen does not automatically become a buy. Validated company or ETF research may support a system recommendation for owner review without rewriting an accepted owner thesis. An incomplete or stale context produces explicit no-trade decisions. It does not affirm that existing holdings are safe.
 
 Key implementation paths:
 
@@ -15,7 +15,10 @@ Key implementation paths:
 - `lib/server/company-research.ts`: originating World opportunity dossier, packet missingness, validated citations and source persistence before report completion.
 - `lib/server/recommendation-outcomes.ts`: 5/10/20 exchange-session and thesis-horizon evaluations; economic metric assessments; owner fill comparisons; immutable revised evaluations and descriptive cohorts.
 - `lib/markets/recommendation-evaluation.ts`: pure markout, entry expiry, selection/timing/sizing/risk attribution and confidence calibration calculations.
-- `lib/server/investment-learning.ts`: immutable prospective experiment registrations and owner review. Registration does not deploy or automatically run an alternative capital policy.
+- `lib/server/investment-learning.ts` and `investment-shadow.ts`: immutable prospective registrations, executable probability-calibration alternatives, dated economic assessments and owner review. Shadow probabilities do not alter published capital actions or deploy a different capital policy.
+- `lib/server/decision-inputs.ts`: private temporary files preserve every frozen input while supplying a bounded evidence index to generator and critic. Both still validate against the complete database manifest.
+- `lib/server/portfolio-confirmation.ts`: immutable, explicitly owner-confirmed manual account snapshots. A later ledger change invalidates current verification.
+- `lib/markets/company-market-basis.ts`: choose the newest valid dated price; never relabel old leadership technicals as current.
 - `lib/server/world-replay.ts`: isolated, captured-evidence reconstruction. It cannot run live World Thinker, edit current hypotheses or enqueue research leads. This is deliberately labeled reconstruction, not an investment backtest.
 - `lib/server/investment-newsletter.ts`: fixed recipient `aarushaga@gmail.com`, frozen HTML/text, delivery lease and stable retry key.
 - `app/api/webhooks/investment-newsletter/route.ts`: signed delivery/bounce/complaint receipts. Provider acceptance is distinct from delivery.
@@ -23,7 +26,7 @@ Key implementation paths:
 
 ## Database release order
 
-Apply the six `20260907000*.sql` migrations in order, after reconciling the existing remote migration history:
+Apply the eleven `2026090700*.sql` migrations in order, after reconciling the existing remote migration history:
 
 1. Append-only decision reviews.
 2. Recommendation, forecast, owner-event, evaluation, learning, price-vintage and newsletter ledger with atomic publication and delivery leases.
@@ -31,6 +34,11 @@ Apply the six `20260907000*.sql` migrations in order, after reconciling the exis
 4. First-captured FRED vintages and isolated reconstruction artifacts.
 5. Atomic agent job/run completion, guarded against stale attempts.
 6. Atomic complete Alpaca asset-universe replacement and retirement of absent securities, with minimum-coverage guards.
+7. Immutable newsletter provider selection and Gmail delivery-attempt safeguards.
+8. Immutable manual portfolio confirmations.
+9. Multiple immutable recommendation editions per day without rewriting prior inputs.
+10. ETF ownership references the established private Markets owner registry.
+11. Immutable prospective shadow captures and economic-outcome evaluations.
 
 Do not merge/deploy dependent application code around a failed migration. The new database functions are service-role only. Published evidence has mutation-rejecting triggers and RLS denies anonymous/authenticated direct access; owner access is enforced by authenticated server routes.
 
@@ -38,7 +46,9 @@ After migrations: deploy the verified web release and private worker, sync the f
 
 ## Newsletter setup and acceptance
 
-Worker-only secrets/configuration:
+Gmail is the configured provider; see the self-sender section below. The following configuration applies only if switching to Resend.
+
+Worker-only Resend secrets/configuration:
 
 - `RESEND_API_KEY`: server-owned email sending key.
 - `STRATUM_NEWSLETTER_FROM`: verified sender, supplied by the owner.
@@ -67,9 +77,9 @@ Required external setup: install restic on macserver and supply `RESTIC_REPOSITO
 - Adjusted return vintages are frozen. Owner fills use matching raw/adjusted series and are labeled owner reported, not broker-reconciled realized P&L. Taxes, individual fees and interest are not modeled.
 - Economic forecasts require the declared numeric metric, threshold, deadline and dated evidence. FRED values are first-captured current revisions, not ALFRED release-time history. Unsupported metrics remain unresolved or require an evidenced owner assessment; price changes do not resolve a company thesis.
 - Original probabilities and recommendations are immutable. Repeated versions count as one episode for confidence calibration; unresolved episodes stay in the denominator. Cohort reviews diagnose missing-evidence gates before suggesting threshold changes.
-- A policy comparison needs a future registered window, at least 30 independent episodes, overlap purge/embargo, predeclared effect and risk limits, multiple-testing control and owner review. Executing a candidate policy and promoting its code still requires a separately verified release; this is not autonomous self-modification.
+- A policy comparison needs a future registered window, at least 30 independent episodes, overlap purge/embargo, predeclared effect and risk limits, multiple-testing control and owner review. The implemented shadow policies shrink economic forecast probabilities 20% or 40% toward 0.5, capture only future eligible editions, and score the same dated economic outcomes. Overlapping horizons are purged with the registered embargo; unresolved forecasts remain visible. Scores remain descriptive and promotion is always disabled pending uncertainty/dependence/multiplicity review and a separately tested code release.
 
-## Verification and current release status
+## Historical rollout evidence
 
 Local verification: 638 tests total, 637 passing and one existing skip; full lint passes; production build passes. PGlite executes all six migrations and tests atomic publication rollback, immutability, access restrictions, newsletter duplicate/uncertainty handling, atomic job completion and full asset-universe preservation. Desktop/mobile sample Decisions and newsletter rendering, mobile dark mode and manual-record/learning controls were inspected in the browser. The temporary sample route was removed.
 
@@ -81,7 +91,7 @@ The first edition exposed a production-schema mismatch: investment theses have `
 
 Gmail setup and the first delivery were verified on September 7 UTC. Outbox `a45093d3-f0ad-4fbe-a1d9-9b2e71d2d73f` was accepted by Gmail, then independently found in INBOX by its exact Message-ID at `2026-09-07T02:40:55.269093Z` through a read-only mailbox connection. The immutable delivery event records that observation. The sender and recipient are both the authorized owner address. Daily delivery is enabled; the first actual 07:00 Pacific scheduled arrival still requires observation. No matured investment outcome, offsite backup, or database restore is claimed. Restic and an offsite repository remain unconfigured. A prior automatic approval rejection was resolved by the owner's explicit approval of the phased rollout; it is not a current blocker for the core release.
 
-Highest-leverage next milestone: complete the company evidence backfills and admit validated ETF research into the decision context, then produce the first reviewed affirmative recommendation. Observe the first 07:00 Pacific scheduled newsletter cycle; the sender and first manual delivery are verified. Matured prospective outcomes must follow real time, not retrospective reconstruction.
+At that earlier release, the next milestone was completing company backfills and admitting ETF research. The current rollout below supersedes that status. Observe the first 07:00 Pacific scheduled newsletter cycle; the sender and first manual delivery are verified. Matured prospective outcomes must follow real time, not retrospective reconstruction.
 
 ## Gmail self-sender setup
 
@@ -96,3 +106,34 @@ ssh -t macserver 'zsh ~/Projects/Stratum-production-current/scripts/connect-news
 The helper accepts the password with echo disabled, stores it in a worker-owned mode-0600 file, and verifies SMTP authentication without sending mail. It refuses to overwrite an existing credential. Never paste the password into chat, command arguments, or environment files. Google requires 2-Step Verification for app passwords; if unavailable, configure a dedicated worker-owned Google OAuth client instead of weakening account security. See [Google's app-password instructions](https://support.google.com/mail/answer/185833?hl=en).
 
 Initial connection, real-edition delivery, read-only inbox verification, and `STRATUM_NEWSLETTER_ENABLED=true` activation are complete. For future credential changes, verify the new connection and reconcile delivery before enabling it. The schedule remains 07:00 America/Los_Angeles daily, with a shorter weekend edition. The provider is frozen in each immutable outbox row. Gmail permits one send attempt per edition: expired leases, crashes, and ambiguous responses require mailbox reconciliation; a stable Message-ID is not a deduplication guarantee. SMTP acceptance is recorded as accepted, never delivered. Resend remains available with its distinct idempotency-window and signed-webhook semantics.
+
+
+## Current implementation and verification (September 7 UTC)
+
+PRs #6–#13 add owner-confirmed manual holdings, supported ETF evidence, fresh discovery admissions, immutable owner-requested editions, prospective shadow execution, bounded model inputs, bounded leadership history reads, and fresh company price selection. Product code release: `c2e4ffced068d0344df46218b0c324cbc6d0f3a7`. All eleven migrations applied before the dependent release. The full suite passed 665 tests with one existing skip; production build and focused lint passed.
+
+Live source-path verification:
+
+- Full market refresh `6ebde02b-13e0-4a2f-9861-021df24d887a` succeeded.
+- All six supported ETF research backfills completed: GRID, URA, PAVE, MLPX, XLK and XLU. Holdings retain their September 3/4 issuer dates and full holdings coverage checks. NLR and RACK adapters were subsequently verified against complete official September 3 holdings: 28 and 52 rows, reconciling to 99.98% and 99.95% weight. UTES remains unsupported. Worker jobs `6a0fe396-19d0-4d04-b580-fddf6f66ed41` (NLR) and `2e63f9b3-0a15-4ff0-af10-d70bc1a154ff` (RACK) subsequently completed research publication.
+- The prior whole-universe leadership query timed out. The corrected read retrieved 147,771 bars across 503 symbols in 27.6 seconds. Worker job `27420442-a4d1-425f-a19b-06eb5666240e` then succeeded and atomically published leadership snapshot `0b96cabf-3bf4-4da5-9d84-6c32577155cd` for September 4. Downstream Candidate Scout job `05941908-2ee4-4400-9b16-9bb72a2e2bed` succeeded and produced new September 7 candidate briefs.
+- Company research previously preferred August 18 leadership prices despite fresh quotes. A live read of AMD confirms the new selector chooses September 4 and withholds older technical metrics. Reports generated before this repair remain immutable; corrected backfills must be verified by `evidenceQuality.priceAsOf`, not their generation time.
+- The verified frozen context was 5,797,914 bytes. The new model-facing index is 170,440 bytes, while exact complete inputs remain in private temporary files and the durable manifest. Cleanup is tested for success and failure.
+- Prospective experiment `5d9acdf4-5a58-4035-a8fb-0b033238550a` registers the 20% probability shrinkage trial before its September 7 05:45:06 UTC start, for 60 days plus a 20-day embargo and at least 30 independent episodes. It cannot retroactively capture the older abstention editions or alter active capital actions.
+
+The first 45-name generation attempt rejected a missing/short exit contract before publication. The repair converts only malformed name-level contracts to explicit abstentions and retains rejected output in immutable metadata. Missing, duplicate, or unknown coverage still fails the entire batch; the critic and joint portfolio constraints remain mandatory. Input assembly and actual generation releases are tracked separately for retries after a deployment.
+
+Remaining acceptance limits: Dad & Aarush requires real owner-confirmed cash and holdings; PIKA has no resolved stable security identity; unsupported funds and ETF look-through overlap remain explicit gaps. A functioning prospective ledger does not demonstrate investment efficacy before outcomes mature. The first scheduled 07:00 Pacific inbox arrival, independent worker-failure alerting, encrypted offsite backup destination and an actual restore drill remain unverified or unconfigured. Current weekday/world schedules still need a full dependency/deadline acceptance run under backlog; scheduled due times alone do not prove a fresh morning edition.
+
+
+### First usable prospective edition
+
+Batch `3cf7b146-6ded-4d0a-a38d-2d6ce261a715` published at `2026-09-07T06:38:09.539977Z` from frozen manifest `48884e00-2681-4b52-b5a0-6903a6da4abe`. All 45 required portfolio/name records were published: 17 hold, 14 research, 5 watch and 9 no-trade, with 21 dated economic forecasts. No buy/add/trim/sell exposure change was recommended in this edition. One proposal was blocked by evidence/portfolio checks; the successful generation had no contract failures. The original v1.1 abstention batches remain unchanged. Authenticated production Decisions and its economic forecasts/shadow section were inspected.
+
+The first failed attempt was never published. The successful retry used its original frozen inputs, with input assembly release `7cbde576d366fee10e85c40ad35d1e68ad57e383` and generation release `758bbc8751c823352d2d38dc62f894317d8729fd` separately recorded. NLR/RACK reports completed after this cutoff; they belong to a subsequent edition, not a rewrite of this one.
+
+Shadow capture `edc6c6aa-bf47-4ca4-a967-a6a2102e4dbf` belongs to that exact batch and preregistration. Outcome job `1c184141-3a37-4ccb-98b3-56ad0c648a53` and cohort job `dfa8ee69-1ccd-46b8-a114-77a48c535c48` succeeded. Shadow evaluation `dcf9dca0-9827-4c9e-855b-be83c28c2a26` retains 21 captured forecasts, one repeated question, 20 independent unresolved questions, zero resolved episodes and null Brier scores. Promotion remains ineligible. Current forecasts use one-year deadlines, and several company/qualitative metrics require evidenced owner adjudication; this is an important limit on near-term automatic economic calibration. Price markouts remain separate.
+
+The worker previously waited for the slowest job in a batch, leaving completed sibling slots idle. The deployed bounded pool now reuses those slots while preserving atomic claims, errors and the existing concurrency cap. The recommendation repair was verified through a single existing-queue handler process, not an additional daemon. The system worker reports healthy on `c2e4ffc`; Vercel delivery is checked separately.
+
+The core owner-review loop is now implemented and verified through publication and prospective outcome bookkeeping. Investment efficacy remains unproven. The next substantive learning milestone is typed, source-resolvable company metrics with useful quarterly resolution windows and ETF look-through exposure, followed by real prospective outcomes. Manual account confirmation, unresolved PIKA, unsupported UTES and offsite recovery configuration remain explicit limits rather than invented data or completed capabilities.
