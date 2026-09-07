@@ -1,3 +1,5 @@
+import { shadowPolicy } from '../markets/shadow-policy.ts'
+import { RECOMMENDATION_POLICY } from '../markets/recommendations.ts'
 import { investmentDb, record, contentHash } from './recommendations.ts'
 import {
   validateLearningRegistration,
@@ -9,6 +11,8 @@ export async function registerInvestmentExperiment(
   now = new Date(),
 ) {
   const db = investmentDb()
+  shadowPolicy(String(input.candidatePolicy))
+  if (input.baselinePolicy !== RECOMMENDATION_POLICY || input.primaryMetric !== 'brier') throw new Error('Implemented shadow trials compare Brier calibration against the current recommendation policy')
   const prior = await db
     .from('recommendation_policy_experiments')
     .select('id', { count: 'exact', head: true })

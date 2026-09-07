@@ -7,6 +7,8 @@ import { getSupabaseClient } from './supabase.ts'
 // never copied into this export. Operational leases are reconstructed on restore.
 export const INVESTMENT_BACKUP_TABLES = [
   'portfolio_confirmations',
+  'recommendation_shadow_runs',
+  'recommendation_shadow_evaluations',
   'recommendation_input_manifests',
   'recommendation_batches',
   'recommendation_versions',

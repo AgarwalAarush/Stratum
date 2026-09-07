@@ -229,6 +229,19 @@ export function RecommendationsWorkspace({
             ))}
           </div>
           <LearningRegistrationForm />
+          <section className="mt-6 border border-[var(--border)] p-5 text-sm" aria-label="Shadow calibration">
+            <h3 className="font-medium">Prospective shadow comparisons</h3>
+            <p className="mt-2 text-[var(--text-muted)]">{data?.shadowRuns.length ?? 0} captured editions in the latest 100 runs. These alternatives change forecast probabilities only; your published capital actions stay unchanged.</p>
+            {data?.shadowEvaluations.length ? data.shadowEvaluations.slice(0,5).map(e => {
+              const result=record(e.content)
+              return <div key={e.id} className="mt-4 border-t border-[var(--border)] pt-3">
+                <p>{String(result.resolvedEpisodes ?? 0)} resolved, {String(result.unresolvedEpisodes ?? 0)} unresolved after repeated and overlapping forecasts are removed.</p>
+                <p className="mt-1">Baseline Brier: {result.baselineBrier == null ? 'Awaiting outcomes' : Number(result.baselineBrier).toFixed(3)} · Shadow Brier: {result.candidateBrier == null ? 'Awaiting outcomes' : Number(result.candidateBrier).toFixed(3)}</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">Lower is better. No automatic promotion; uncertainty and repeated experiments require review.</p>
+              </div>
+            }) : <p className="mt-3">No scored shadow cohort yet. Registration must precede the evidence cutoff; economic forecasts must resolve before scoring.</p>}
+          </section>
+
           <div className="mt-8 border-t border-[var(--border)] pt-6 text-sm">
             <h3 className="font-medium">Controlled learning</h3>
             <p className="mt-2 max-w-3xl leading-6 text-[var(--text-muted)]">

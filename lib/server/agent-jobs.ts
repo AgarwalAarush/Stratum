@@ -1,3 +1,5 @@
+import { captureShadowPolicies, evaluateShadowPolicies } from './investment-shadow.ts'
+import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { captureInvestmentMacro } from './investment-macro.ts'
 import { assembleDecisionContext, generateDailyRecommendations } from './recommendations.ts'
 import { evaluateRecommendationOutcomes, reviewRecommendationCohort } from './recommendation-outcomes.ts'
@@ -751,9 +753,14 @@ async function executeJob(
       await enqueueAgentJob(name.instrumentType === 'etf' ? 'generate-etf-research' : 'generate-company-research', {ownerId:context.ownerId,symbol:name.symbol,reason:'Daily decision evidence gap'}, `investment-research:${context.ownerId}:${name.symbol}:${context.date}`)
     }
     const result = await generateDailyRecommendations(ownerId, now, editionKey)
+    await captureShadowPolicies(result.batchId)
     return result
   }
-  if (job.job_type === 'evaluate-recommendation-outcomes') return evaluateRecommendationOutcomes()
+  if (job.job_type === 'evaluate-recommendation-outcomes') {
+    const outcomes = await evaluateRecommendationOutcomes()
+    const shadow = await evaluateShadowPolicies(MARKETS_OWNER_ID)
+    return {outcomes, shadow}
+  }
   if (job.job_type === 'review-recommendation-cohort') return reviewRecommendationCohort()
   if (job.job_type === 'send-investment-newsletter') return sendInvestmentNewsletter()
 

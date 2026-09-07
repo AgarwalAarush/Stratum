@@ -33,6 +33,8 @@ export function validateLearningRegistration(
   )
     throw new Error('Register a future prospective window of at least 30 days')
   if (
+    [input.minimumEpisodes,input.minimumImprovement,input.maximumDrawdownWorsening,input.embargoDays,input.trialNumber].some(n => !Number.isFinite(n)) ||
+    !Number.isInteger(input.embargoDays) ||
     !['brier', 'excess_return', 'drawdown'].includes(input.primaryMetric) ||
     !Number.isInteger(input.minimumEpisodes) ||
     input.minimumEpisodes < 30 ||
