@@ -3,6 +3,8 @@ import { createHash, randomUUID } from 'node:crypto'
 import { getSupabaseClient } from './supabase.ts'
 import { fetchAuthoritativePortfolios } from './portfolio.ts'
 import { runCodexJson } from './codex-exec.ts'
+import { withDecisionInputs } from './decision-inputs.ts'
+import { resolve } from 'node:path'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import {
   RECOMMENDATION_POLICY,
@@ -551,7 +553,7 @@ export async function generateDailyRecommendations(
     .maybeSingle()
   if (prior.error) throw new Error(prior.error.message)
   if (prior.data) return { batchId: prior.data.id, reused: true }
-  let recommendations: Recommendation[],
+  let recommendations: Recommendation[] = [],
     metadata: unknown = {
       provider: 'deterministic',
       reason: 'insufficient evidence',
@@ -568,63 +570,68 @@ export async function generateDailyRecommendations(
       ),
     )
   } else {
-    const generated = await runCodexJson({
-      schemaPath: 'schemas/daily-recommendations.schema.json',
-      webSearch: false,
-      timeoutMs: 15 * 60 * 1000,
-      prompt: `Generate owner-facing investment recommendations using only the frozen context below. Do not fetch data, inspect external files, or execute orders. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires a validated system thesis (systemThesisValidated) or an accepted owner thesis plus fresh evidence. System recommendations are published for owner review; never rewrite the accepted owner thesis. A candidate screen is only a research lead. State evidence limitations, and never invent consensus or transcripts when they are absent. ETF evidence must be interpreted as fund exposure, never corporate earnings. Risk reductions may follow invalidation without a new bullish thesis. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers; narrative confidence is not a calibrated probability. Maximum new position is 10%; do not invent prices or sizing. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Respond with summary and recommendations.\n${JSON.stringify(context)}`,
-      validate: (value) => {
-        const v = record(value)
-        return {
-          summary: String(v.summary ?? ''),
-          recommendations: validateBatch(v.recommendations, context),
-        }
-      },
-    })
-    const critic = await runCodexJson({
-      schemaPath: 'schemas/recommendation-critic.schema.json',
-      webSearch: false,
-      timeoutMs: 8 * 60 * 1000,
-      prompt: `Independently criticize these proposed decisions against the frozen evidence. Flag any unsupported economic link, overlooked contrary evidence, misleading timestamp, stale data, invalid sizing or invented factual claim. Identify blocking problems by portfolioId and symbol. Do not change the original thesis or fetch new information.\nCONTEXT ${JSON.stringify(context)}\nDECISIONS ${JSON.stringify(generated.data)}`,
-      validate: (value) => {
-        const v = record(value)
-        if (!Array.isArray(v.blocks)) throw new Error('Invalid critic')
-        return v.blocks.map((b) => {
-          const x = record(b)
-          if (
-            !context.names.some(
-              (n) => n.symbol === x.symbol && n.portfolioId === x.portfolioId,
-            ) ||
-            !String(x.reason ?? '').trim()
-          )
-            throw new Error('Invalid critic target')
-          return x
-        })
-      },
-    })
-    recommendations = generated.data.recommendations.map((r) => {
-      const block = critic.data.find(
-        (b) => b.symbol === r.symbol && b.portfolioId === r.portfolioId,
-      )
-      return block
-        ? {
-            ...r,
-            proposedAction: r.action,
-            action: 'no_trade' as const,
-            entry: { ...r.entry, targetWeightPct: null },
-            reason: `Independent review blocked action: ${block.reason}`,
-            gateReasons: [...r.gateReasons, String(block.reason)],
+    await withDecisionInputs(context, async (input) => {
+      const generated = await runCodexJson({
+        schemaPath: resolve('schemas/daily-recommendations.schema.json'),
+        cwd: input.directory,
+        webSearch: false,
+        timeoutMs: 15 * 60 * 1000,
+        prompt: `Generate owner-facing investment recommendations using only the frozen context below. Do not fetch live data or execute orders. Inspect only the frozen files supplied below. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires a validated system thesis (systemThesisValidated) or an accepted owner thesis plus fresh evidence. System recommendations are published for owner review; never rewrite the accepted owner thesis. A candidate screen is only a research lead. State evidence limitations, and never invent consensus or transcripts when they are absent. ETF evidence must be interpreted as fund exposure, never corporate earnings. Risk reductions may follow invalidation without a new bullish thesis. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers; narrative confidence is not a calibrated probability. Maximum new position is 10%; do not invent prices or sizing. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Respond with summary and recommendations.\n${input.prompt}`,
+        validate: (value) => {
+          const v = record(value)
+          return {
+            summary: String(v.summary ?? ''),
+            recommendations: validateBatch(v.recommendations, context),
           }
-        : r
+        },
+      })
+      const critic = await runCodexJson({
+        schemaPath: resolve('schemas/recommendation-critic.schema.json'),
+        cwd: input.directory,
+        webSearch: false,
+        timeoutMs: 8 * 60 * 1000,
+        prompt: `Independently criticize these proposed decisions against the frozen evidence. Flag any unsupported economic link, overlooked contrary evidence, misleading timestamp, stale data, invalid sizing or invented factual claim. Identify blocking problems by portfolioId and symbol. Do not change the original thesis or fetch new information.\nCONTEXT ${input.prompt}\nDECISIONS ${JSON.stringify(generated.data)}`,
+        validate: (value) => {
+          const v = record(value)
+          if (!Array.isArray(v.blocks)) throw new Error('Invalid critic')
+          return v.blocks.map((b) => {
+            const x = record(b)
+            if (
+              !context.names.some(
+                (n) => n.symbol === x.symbol && n.portfolioId === x.portfolioId,
+              ) ||
+              !String(x.reason ?? '').trim()
+            )
+              throw new Error('Invalid critic target')
+            return x
+          })
+        },
+      })
+      recommendations = generated.data.recommendations.map((r) => {
+        const block = critic.data.find(
+          (b) => b.symbol === r.symbol && b.portfolioId === r.portfolioId,
+        )
+        return block
+          ? {
+              ...r,
+              proposedAction: r.action,
+              action: 'no_trade' as const,
+              entry: { ...r.entry, targetWeightPct: null },
+              reason: `Independent review blocked action: ${block.reason}`,
+              gateReasons: [...r.gateReasons, String(block.reason)],
+            }
+          : r
+      })
+      metadata = {
+        input: {projection: 'frozen-files-v1', manifestHash: input.manifestHash, indexBytes: input.indexBytes},
+        generator: generated.metadata,
+        critic: critic.metadata,
+        criticBlocks: critic.data,
+      }
+      summary = recommendations.some((r) => r.gateReasons.length)
+        ? `${recommendations.filter((r) => r.gateReasons.length).length} proposed decisions were blocked by evidence or portfolio checks. Review each final action and its reasons before changing capital.`
+        : generated.data.summary
     })
-    metadata = {
-      generator: generated.metadata,
-      critic: critic.metadata,
-      criticBlocks: critic.data,
-    }
-    summary = recommendations.some((r) => r.gateReasons.length)
-      ? `${recommendations.filter((r) => r.gateReasons.length).length} proposed decisions were blocked by evidence or portfolio checks. Review each final action and its reasons before changing capital.`
-      : generated.data.summary
   }
   const result = await db.rpc('publish_recommendation_batch', {
     p_manifest_id: context.id,
