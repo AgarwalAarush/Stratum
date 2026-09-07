@@ -1,3 +1,4 @@
+import { forecastsAreApproved, reviewedForecasts, FORECAST_REVIEW_POLICY } from '../markets/forecast-review.ts'
 import { investmentDb, record, contentHash } from './recommendations.ts'
 import {
   applyShadowPolicy,
@@ -49,7 +50,7 @@ export async function captureShadowPolicies(
   ])
   if (manifest.error) throw new Error(manifest.error.message)
   const context = manifest.data.content as DecisionContext
-  const recs = versions.map((r) => r.content as Recommendation)
+  const recs = versions.map((r) => reviewedForecasts(r.content as Recommendation))
   let captured = 0
   for (const experiment of experiments.filter(
     (e) => e.event_type === 'registered',
@@ -145,12 +146,17 @@ export async function evaluateShadowPolicies(
       ownRuns = runs.filter((r) => r.experiment_id === experiment.id)
     if (!ownRuns.length) continue
     const pairs: ShadowForecastPair[] = []
+    let excludedForecasts = 0
     for (const run of ownRuns)
       for (const raw of (record(run.content).comparisons as unknown[]) ??
         []) {
         const comparison = record(raw),
           baseline = comparison.baseline as Recommendation,
           candidate = comparison.candidate as Recommendation
+        if (!forecastsAreApproved(baseline) || !forecastsAreApproved(candidate)) {
+          excludedForecasts += baseline.forecasts.length
+          continue
+        }
         const assessments = await allRows(
           'recommendation_evaluations',
           String(comparison.recommendationId),
@@ -192,6 +198,8 @@ export async function evaluateShadowPolicies(
     )
     const content = {
       ...assessment,
+      forecastReviewPolicy: FORECAST_REVIEW_POLICY,
+      excludedForecasts,
       runIds: ownRuns.map((r) => r.id).sort(),
       windowComplete:
         now.getTime() >=
@@ -209,7 +217,7 @@ export async function evaluateShadowPolicies(
       .insert({
         owner_id: ownerId,
         experiment_id: experiment.id,
-        evaluator_version: 'shadow-calibration-v1',
+        evaluator_version: `shadow-calibration-${FORECAST_REVIEW_POLICY}`,
         content,
         content_hash: contentHash(content),
       })

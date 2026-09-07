@@ -114,6 +114,14 @@ test('shadow capture is prospective, retry safe and resolves only from dated eco
       (scores[1].content as Record<string, unknown>).promotionEligible,
       false,
     )
+    // A legacy shadow run can already contain a rejected probability. Retain
+    // that run verbatim, but exclude it even when a later outcome is known.
+    const comparison = ((runs[0].content as Record<string, unknown>).comparisons as Array<Record<string, unknown>>)[0]
+    ;(comparison.baseline as Record<string, unknown>).gateReasons = ['Critic rejected forecast']
+    await evaluateShadowPolicies('owner', new Date('2026-10-03'))
+    assert.equal((scores[2].content as Record<string, unknown>).baselineBrier, null)
+    assert.equal((scores[2].content as Record<string, unknown>).excludedForecasts, 1)
+    assert.equal(((comparison.baseline as Record<string, unknown>).forecasts as unknown[]).length, 1)
     runs.length = 0
     registrationTime = '2026-09-08'
     assert.deepEqual(

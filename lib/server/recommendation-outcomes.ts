@@ -1,3 +1,4 @@
+import { forecastsAreApproved, FORECAST_REVIEW_POLICY } from '../markets/forecast-review.ts'
 import { resolveNumericForecast } from '../markets/investment-learning.ts'
 import { getAlpacaClient } from './alpaca.ts'
 import { contentHash, investmentDb, record } from './recommendations.ts'
@@ -17,7 +18,7 @@ import type {
   Recommendation,
 } from '../markets/recommendations.ts'
 
-const EVALUATOR = 'prospective-v1'
+const EVALUATOR = FORECAST_REVIEW_POLICY
 async function appendEvaluation(
   ownerId: string,
   recommendationId: string,
@@ -102,6 +103,16 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
       const name = context.names.find(
         (n) => n.symbol === rec.symbol && n.portfolioId === rec.portfolioId,
       )!
+      if (task.kind === 'thesis' && !forecastsAreApproved(rec)) {
+        await appendEvaluation(row.data.owner_id, row.data.id, 'thesis', String(task.horizon), {
+          status: 'excluded', outcome: null, reason: 'Original decision failed evidence or portfolio review; its forecasts are not approved for calibration.',
+          reviewPolicy: FORECAST_REVIEW_POLICY,
+        }, now)
+        const update = await db.from('recommendation_evaluation_tasks').update({status: 'complete', last_checked_at: now.toISOString(), error: null}).eq('id', task.id)
+        if (update.error) throw new Error(update.error.message)
+        complete++
+        continue
+      }
       if (task.kind === 'thesis') {
         const forecast = await db
           .from('recommendation_forecasts')
@@ -561,11 +572,13 @@ export async function adjudicateRecommendationForecast(
     )
   const forecast = await db
     .from('recommendation_forecasts')
-    .select('*')
+    .select('*,recommendation_versions!inner(content)')
     .eq('id', id)
     .eq('owner_id', ownerId)
     .single()
   if (forecast.error) throw new Error('Forecast not found for owner')
+  if (!forecastsAreApproved(record(forecast.data.recommendation_versions).content))
+    throw new Error('This forecast was withheld by decision review and cannot be resolved or scored')
   if (Date.parse(forecast.data.deadline) > now.getTime())
     throw new Error(
       'Forecast deadline has not arrived; record monitoring evidence without resolving it early',
@@ -661,7 +674,8 @@ export async function reviewRecommendationCohort(
       !latest.has(`${e.recommendation_id}:${e.horizon}`)
     )
       latest.set(`${e.recommendation_id}:${e.horizon}`, e)
-  const observations = forecasts
+  const approved = forecasts.filter(f => forecastsAreApproved(recommendations.find(r => r.id === f.recommendation_id)?.content))
+  const observations = approved
     .sort(
       (a, b) =>
         String(
@@ -709,6 +723,7 @@ export async function reviewRecommendationCohort(
       ].map((a) => [a, recommendations.filter((r) => r.action === a).length]),
     ),
     calibration: calibration(observations),
+    forecastReview: {policy: FORECAST_REVIEW_POLICY, total: forecasts.length, eligible: approved.length, excluded: forecasts.length - approved.length},
     learning: {
       status: 'observation_only',
       mostFrequentGate,
