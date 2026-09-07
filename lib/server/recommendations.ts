@@ -9,7 +9,7 @@ import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import {
   RECOMMENDATION_POLICY,
   abstention,
-  validateBatch,
+  validateGeneratedBatch,
   type DecisionContext,
   type DecisionName,
   type EvidenceRef,
@@ -576,12 +576,12 @@ export async function generateDailyRecommendations(
         cwd: input.directory,
         webSearch: false,
         timeoutMs: 15 * 60 * 1000,
-        prompt: `Generate owner-facing investment recommendations using only the frozen context below. Do not fetch live data or execute orders. Inspect only the frozen files supplied below. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires a validated system thesis (systemThesisValidated) or an accepted owner thesis plus fresh evidence. System recommendations are published for owner review; never rewrite the accepted owner thesis. A candidate screen is only a research lead. State evidence limitations, and never invent consensus or transcripts when they are absent. ETF evidence must be interpreted as fund exposure, never corporate earnings. Risk reductions may follow invalidation without a new bullish thesis. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers; narrative confidence is not a calibrated probability. Maximum new position is 10%; do not invent prices or sizing. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Respond with summary and recommendations.\n${input.prompt}`,
+        prompt: `Generate owner-facing investment recommendations using only the frozen context below. Do not fetch live data or execute orders. Inspect only the frozen files supplied below. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires a validated system thesis (systemThesisValidated) or an accepted owner thesis plus fresh evidence. System recommendations are published for owner review; never rewrite the accepted owner thesis. A candidate screen is only a research lead. State evidence limitations, and never invent consensus or transcripts when they are absent. ETF evidence must be interpreted as fund exposure, never corporate earnings. Risk reductions may follow invalidation without a new bullish thesis. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers; narrative confidence is not a calibrated probability. Maximum new position is 10%; do not invent prices or sizing. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Every narrative field, entry condition, and decision dimension must contain at least eight characters; risks and invalidation must be nonempty arrays. Provide a substantive exit and reassessment rule even for watch, research, and no-trade. Expiry must be after the cutoff and within seven days; horizons are 1 to 1825 integer days, confidence is 0 to 100, and forecast probabilities are strictly between zero and one. Respond with summary and recommendations.\n${input.prompt}`,
         validate: (value) => {
           const v = record(value)
           return {
             summary: String(v.summary ?? ''),
-            recommendations: validateBatch(v.recommendations, context),
+            ...validateGeneratedBatch(v.recommendations, context),
           }
         },
       })
@@ -590,7 +590,7 @@ export async function generateDailyRecommendations(
         cwd: input.directory,
         webSearch: false,
         timeoutMs: 8 * 60 * 1000,
-        prompt: `Independently criticize these proposed decisions against the frozen evidence. Flag any unsupported economic link, overlooked contrary evidence, misleading timestamp, stale data, invalid sizing or invented factual claim. Identify blocking problems by portfolioId and symbol. Do not change the original thesis or fetch new information.\nCONTEXT ${input.prompt}\nDECISIONS ${JSON.stringify(generated.data)}`,
+        prompt: `Independently criticize these proposed decisions against the frozen evidence. Flag any unsupported economic link, overlooked contrary evidence, misleading timestamp, stale data, invalid sizing or invented factual claim. Identify blocking problems by portfolioId and symbol. Do not change the original thesis or fetch new information.\nCONTEXT ${input.prompt}\nDECISIONS ${JSON.stringify({summary: generated.data.summary, recommendations: generated.data.recommendations})}`,
         validate: (value) => {
           const v = record(value)
           if (!Array.isArray(v.blocks)) throw new Error('Invalid critic')
@@ -625,6 +625,7 @@ export async function generateDailyRecommendations(
       metadata = {
         input: {projection: 'frozen-files-v1', manifestHash: input.manifestHash, indexBytes: input.indexBytes},
         generator: generated.metadata,
+        contractFailures: generated.data.failures,
         critic: critic.metadata,
         criticBlocks: critic.data,
       }
@@ -636,7 +637,8 @@ export async function generateDailyRecommendations(
   const result = await db.rpc('publish_recommendation_batch', {
     p_manifest_id: context.id,
     p_recommendations: recommendations,
-    p_metadata: metadata,
+    p_metadata: {...record(metadata), inputAssemblyRelease: context.codeVersion,
+      generationRelease: process.env.STRATUM_RELEASE_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? 'unreported'},
     p_summary: summary,
   })
   if (result.error) throw new Error(result.error.message)

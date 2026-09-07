@@ -493,3 +493,30 @@ export function validateBatch(
   }
   return rows
 }
+
+/** Preserve complete coverage and joint portfolio gates, but isolate a model's
+ * malformed contract to the affected name. Never repair it into a capital action. */
+export function validateGeneratedBatch(values: unknown, context: DecisionContext) {
+  if (!Array.isArray(values) || values.length !== context.names.length) throw new Error('Daily batch must cover every required name/account')
+  const seen = new Set<string>()
+  const failures: Array<{symbol: string; portfolioId: string; error: string; rejected: unknown}> = []
+  const blocked = new Map<string, Recommendation>()
+  const prepared = values.map(value => {
+    const raw = obj(value), symbol = str(raw.symbol), portfolioId = str(raw.portfolioId)
+    const key = `${portfolioId}:${symbol}`
+    const name = context.names.find(n => n.symbol === symbol && n.portfolioId === portfolioId)
+    if (!name || seen.has(key)) throw new Error('Generated coverage contains an unknown or duplicate name/account')
+    seen.add(key)
+    try {
+      return validateRecommendation(value, context)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid generated recommendation'
+      const replacement = abstention(name, context, `Generated decision failed contract validation: ${message}. No action was approved for this name.`)
+      failures.push({symbol, portfolioId, error: message, rejected: value})
+      blocked.set(key, replacement)
+      return replacement
+    }
+  })
+  const recommendations = validateBatch(prepared, context).map(r => blocked.get(`${r.portfolioId}:${r.symbol}`) ?? r)
+  return { recommendations, failures }
+}

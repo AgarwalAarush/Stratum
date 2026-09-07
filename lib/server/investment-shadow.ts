@@ -96,6 +96,7 @@ export async function captureShadowPolicies(
     const content = {
       decisionCutoff: context.cutoff,
       codeVersion: context.codeVersion,
+      baselineGenerationRelease: record(batch.data.model_metadata).generationRelease ?? 'legacy-unreported',
       registration,
       baselinePolicy: context.policy,
       comparisons: versions.map((v, i) => ({
