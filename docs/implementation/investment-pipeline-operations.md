@@ -160,3 +160,16 @@ Observed limits during this release: one newly tracked fund required a 318-bar h
 
 
 PR #19 repairs another observed generation failure: ETF reports had substantial narrative fields outside `sections`, so the model-facing index could exceed its 300 KB input limit even though raw packets were already in private files. Research and accepted-thesis bodies now remain complete in the frozen name files, with explicit references in the index. No evidence is truncated and the immutable manifest hash is unchanged. The actual 49-name edition projects to 150,907 bytes. A regression exercises 50 large reports plus accepted theses and confirms every full body remains readable. Validation: 670 tests passed, one skipped; focused ESLint and production build passed. Vercel and the healthy private worker run release `b8081f0e434bcf7ebed6988135a7516e27870886`.
+
+
+## Reviewed forecast learning (September 7)
+
+PR #21 fixes a publication-versus-approval boundary: changing a proposal to no-trade did not remove its rejected forecasts from calibration, owner adjudication, or existing shadow runs. New publications retain withheld forecasts in generation metadata and exclude them from approved recommendation forecasts. Legacy immutable records remain unchanged; the `reviewed-forecasts-v2` evaluator excludes review-blocked forecasts, rejects their adjudication, and appends new summaries. All actions and abstentions remain in the recommendation denominator. Old summaries stay durable but are not presented as current-policy calibration.
+
+Explicit security-price return forecasts are scored separately from economic outcomes and excluded from economic shadow comparisons. Legacy classification uses the recorded metric text; a typed, source-resolvable economic metric registry remains a substantive next milestone. This repair does not make free-text company metrics automatically resolvable.
+
+The daily brief gives blocked decisions a concise explanation and Review incomplete label, retaining their draft reasoning behind disclosure. Future newsletters keep every name but reserve full trade details for approved capital actions. Existing outbox editions are not rewritten or resent.
+
+Validation: 675 tests passed, one existing skip; focused ESLint and production build passed. Desktop, mobile, dark mode, draft expansion, forecast labels, and browser error checks passed with illustrative previews removed before delivery. A scoped production read classified 70 stored forecasts as 15 review-blocked, 45 eligible economic, and 10 eligible market-return forecasts. These counts describe current records, not investment efficacy.
+
+Production verification: Vercel and the healthy worker run `d7a1fc975020658efb0ef2e3a2f95fafd6b60eda`. Cohort job `ec7fbdf2-dcd9-42bd-ae25-9c5118fb95ef` and outcome/shadow job `bffc0b47-fdc1-40d8-b171-4a541ca24e16` succeeded. Appended cohort `1db32cb6-1302-482d-9b59-cb1835cc7c91` retains 209 recommendation versions and excludes 15 blocked forecasts. Shadow evaluation `050a172b-0397-4a23-a999-d8b404157dd3` excludes those 15 plus 10 market-return forecasts from economic comparisons. No resolved episodes exist, and Brier scores remain null. The authenticated live brief shows concise Wait / Review incomplete rows and the original edition remains unchanged.
