@@ -316,7 +316,7 @@ export function PortfolioWorkspace({
           {activePortfolio ? <>
             <section className="portfolio-owned-overview" aria-label={`${activePortfolio.account.name} overview`}>
               <div className="portfolio-value-summary">
-                <div><span>Portfolio value</span><strong>{formatMoney(activePortfolio.totalValue)}</strong></div>
+                <div><span>{activePortfolio.allocationBudget ? 'Investment budget' : 'Portfolio value'}</span><strong>{formatMoney(activePortfolio.allocationBudget?.total ?? activePortfolio.totalValue)}</strong></div>
                 <div><span>Equities</span><strong>{formatMoney(activePortfolio.marketValue)}</strong></div>
                 <div><span>{activePortfolio.allocationBudget ? 'Available budget' : 'Cash'}</span><strong>{formatMoney(activePortfolio.cashBalance)}</strong></div>
                 <div><span>Unrealized P&amp;L</span><strong className={(activePortfolio.unrealizedPnl ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{formatMoney(activePortfolio.unrealizedPnl)}</strong></div>
