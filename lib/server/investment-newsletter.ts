@@ -1,3 +1,4 @@
+import { gmailMessage, gmailTransport, newsletterProvider, newsletterSender, NEWSLETTER_OWNER } from './newsletter-transport.ts'
 import { renderInvestmentNewsletter } from '../markets/investment-newsletter.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import {
@@ -28,11 +29,7 @@ export async function prepareInvestmentNewsletter(
     .maybeSingle()
   if (existing.error) throw new Error(existing.error.message)
   if (existing.data) return existing.data
-  const sender = process.env.STRATUM_NEWSLETTER_FROM?.trim()
-  if (!sender)
-    throw new Error(
-      'STRATUM_NEWSLETTER_FROM must identify a verified email sender',
-    )
+  const provider = newsletterProvider(), sender = newsletterSender(provider)
   const workspace = await fetchRecommendationWorkspace(ownerId)
   const latest =
     workspace.latest?.decision_date === date ? workspace.latest : null
@@ -74,7 +71,8 @@ export async function prepareInvestmentNewsletter(
       owner_id: ownerId,
       edition_date: date,
       batch_id: latest?.id ?? null,
-      recipient: 'aarushaga@gmail.com',
+      recipient: NEWSLETTER_OWNER,
+      delivery_provider: provider,
       sender,
       subject: rendered.subject,
       html: rendered.html,
@@ -93,24 +91,49 @@ function weekendLimit(date: string) {
 }
 
 export async function sendInvestmentNewsletter(now = new Date()) {
+  const db = investmentDb(), outbox = await prepareInvestmentNewsletter(now)
+  const provider = outbox.delivery_provider
+  if (provider !== 'gmail' && provider !== 'resend') throw new Error('Unknown frozen newsletter provider')
   const apiKey = process.env.RESEND_API_KEY?.trim()
-  if (!apiKey)
-    throw new Error(
-      'RESEND_API_KEY is required on the private worker for newsletter delivery',
-    )
-  const db = investmentDb(),
-    outbox = await prepareInvestmentNewsletter(now)
+  if (provider === 'resend' && !apiKey) throw new Error('RESEND_API_KEY is required on the private worker')
+  // Validate credentials and destination before consuming the one-attempt lease.
+  const gmail = provider === 'gmail' ? await gmailTransport() : null
+  const message = gmail ? gmailMessage(outbox) : null
   const claim = await db.rpc('claim_investment_newsletter', {
     p_outbox_id: outbox.id,
   })
   if (claim.error) throw new Error(claim.error.message)
-  if (!claim.data)
+  if (!claim.data) {
+    gmail?.close()
     return {
       outboxId: outbox.id,
       sent: false,
       reason:
         'Already delivered, leased, suppressed or requires reconciliation',
     }
+  }
+  if (gmail && message) {
+    try {
+      const result = await gmail.sendMail(message)
+      if (!result.accepted.some(address => String(address).toLowerCase() === NEWSLETTER_OWNER))
+        throw new Error('Gmail did not acknowledge the authorized recipient')
+      const updated = await db.from('investment_newsletter_delivery').update({
+        status: 'accepted', provider_id: result.messageId, lease_until: null,
+        error: null, updated_at: new Date().toISOString(),
+      }).eq('outbox_id', outbox.id)
+      if (updated.error) throw new Error('Unable to record Gmail acceptance')
+      return { outboxId: outbox.id, providerId: result.messageId, status: 'accepted', recipient: outbox.recipient }
+    } catch {
+      // Never copy SMTP errors or credentials into job logs or database artifacts.
+      const updated = await db.from('investment_newsletter_delivery').update({
+        status: 'uncertain', lease_until: null,
+        error: 'Gmail attempt requires mailbox reconciliation; automatic resend disabled',
+        updated_at: new Date().toISOString(),
+      }).eq('outbox_id', outbox.id)
+      if (updated.error) throw new Error('Gmail may have accepted the edition; local status unavailable. Do not resend.')
+      throw new Error('Gmail delivery unconfirmed. Check the owner mailbox before any manual retry.')
+    } finally { gmail.close() }
+  }
   let response: Response
   try {
     response = await fetch('https://api.resend.com/emails', {
