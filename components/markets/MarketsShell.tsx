@@ -2,28 +2,23 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { ArrowClockwise, List, Moon, Sun, X } from '@phosphor-icons/react'
+import { ArrowClockwise, Moon, Sun } from '@phosphor-icons/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StockSearch } from './StockSearch'
 import { useThemeStore } from '@/store/theme'
 
 const MARKET_NAV_ITEMS = [
-  { href: '/markets', label: 'Overview' },
-  { href: '/markets/world', label: 'World' },
-  { href: '/markets/review', label: 'Review' },
-  { href: '/markets/biotech', label: 'Biotech' },
-  { href: '/markets/candidates', label: 'Candidates' },
-  { href: '/markets/explore', label: 'Explore' },
+  { href: '/markets', label: 'Today' },
   { href: '/markets/portfolio', label: 'Portfolio' },
-  { href: '/markets/recommendations', label: 'Decisions' },
-  { href: '/markets/theses', label: 'Theses' },
   { href: '/markets/research', label: 'Research' },
-  { href: '/markets/events', label: 'Events' },
+  { href: '/markets/world', label: 'World' },
 ] as const
 
 function isActivePath(pathname: string, href: string): boolean {
-  if (href === '/markets') return pathname === href
-  return pathname.startsWith(href)
+  if (href === '/markets') return pathname === href || pathname === '/markets/recommendations'
+  if (href === '/markets/portfolio') return pathname.startsWith(href) || pathname.startsWith('/markets/watchlists')
+  if (href === '/markets/world') return ['/markets/world', '/markets/overview', '/markets/macro', '/markets/news', '/markets/events'].some(p => pathname.startsWith(p))
+  return ['/markets/research', '/markets/stocks', '/markets/theses', '/markets/review', '/markets/candidates', '/markets/explore', '/markets/screener', '/markets/biotech'].some(p => pathname.startsWith(p))
 }
 
 function formatMarketTime(value?: string): string {
@@ -44,7 +39,6 @@ export function MarketsShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [refreshing, setRefreshing] = useState(false)
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [dataAsOf, setDataAsOf] = useState<string>()
   const prefetchedRoutes = useRef(new Set<string>())
   const { theme, setTheme, toggle: toggleTheme } = useThemeStore()
@@ -142,23 +136,14 @@ export function MarketsShell({ children }: { children: React.ReactNode }) {
           >
             {dataAsOf ? `Updated ${formatMarketTime(dataAsOf)}` : 'Loading market status…'}
           </Link>
-          <button
-            type="button"
-            className="markets-mobile-menu-button"
-            onClick={() => setMobileNavOpen((value) => !value)}
-            aria-expanded={mobileNavOpen}
-            aria-controls="markets-navigation"
-            aria-label={mobileNavOpen ? 'Close Markets navigation' : 'Open Markets navigation'}
-          >
-            {mobileNavOpen ? <X size={18} /> : <List size={19} />}
-          </button>
+
         </div>
       </header>
 
       <nav
         id="markets-navigation"
         aria-label="Markets"
-        className={`markets-subnav ${mobileNavOpen ? 'markets-subnav-open' : ''}`}
+        className="markets-subnav markets-primary-nav"
       >
         {MARKET_NAV_ITEMS.map((item) => {
           const active = isActivePath(pathname, item.href)
@@ -171,7 +156,6 @@ export function MarketsShell({ children }: { children: React.ReactNode }) {
               className={`markets-subnav-link ${active ? 'markets-subnav-link-active' : ''}`}
               onMouseEnter={() => prefetchRoute(item.href)}
               onFocus={() => prefetchRoute(item.href)}
-              onClick={() => setMobileNavOpen(false)}
             >
               {item.label}
             </Link>

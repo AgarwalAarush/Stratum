@@ -3,6 +3,7 @@ import { getSupabaseClient } from './supabase.ts'
 import {
   parsePositionCsv,
   validatePortfolioConfirmation,
+  budgetPortfolioConfirmation,
 } from '../markets/portfolio-confirmation.ts'
 
 export async function confirmManualPortfolio(
@@ -19,11 +20,15 @@ export async function confirmManualPortfolio(
     )
   )
     throw new Error('Confirmation request ID required')
-  if (typeof input.cash !== 'number')
+  if (input.totalBudget === undefined && typeof input.cash !== 'number')
     throw new Error('Cash must be provided explicitly')
-  const snapshot = validatePortfolioConfirmation({
+  const snapshot = input.totalBudget !== undefined ? budgetPortfolioConfirmation({
+    asOf: String(input.asOf), total: input.totalBudget as number,
+    holdingsValue: input.holdingsValue as number,
+    positions: parsePositionCsv(String(input.csv ?? '')),
+  }) : validatePortfolioConfirmation({
     asOf: String(input.asOf),
-    cash: input.cash,
+    cash: input.cash as number,
     positions: parsePositionCsv(String(input.csv ?? '')),
   })
   const account = await db

@@ -7,12 +7,12 @@ function source(path: string): string {
   return readFileSync(join(process.cwd(), path), 'utf8')
 }
 
-test('Markets navigation exposes workflow destinations and removes the old taxonomy', () => {
+test('Markets navigation exposes four primary destinations and keeps research tools secondary', () => {
   const shell = source('components/markets/MarketsShell.tsx')
-  for (const label of ['Overview', 'Explore', 'Portfolio', 'Research', 'Events']) {
+  for (const label of ['Today', 'Portfolio', 'Research', 'World']) {
     assert.match(shell, new RegExp(`label: '${label}'`))
   }
-  for (const label of ['Screener', 'Macro', 'News', 'Watchlists']) {
+  for (const label of ['Overview', 'Explore', 'Events', 'Review', 'Biotech', 'Candidates', 'Theses']) {
     assert.equal(shell.includes(`label: '${label}'`), false)
   }
 })
@@ -31,7 +31,7 @@ test('Markets prefetches expensive destinations on intent instead of at first pa
 test('legacy routes preserve compatibility through explicit redirects', () => {
   assert.match(source('app/markets/screener/page.tsx'), /redirect\('\/markets\/explore\?view=stocks'\)/)
   assert.match(source('app/markets/news/page.tsx'), /redirect\('\/markets\/events'\)/)
-  assert.match(source('app/markets/macro/page.tsx'), /redirect\('\/markets#macro-pulse'\)/)
+  assert.match(source('app/markets/macro/page.tsx'), /redirect\('\/markets\/overview#macro-pulse'\)/)
 })
 
 test('ticker surfaces converge on the canonical Stock Viewer route', () => {

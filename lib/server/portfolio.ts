@@ -352,7 +352,7 @@ export function confirmedPortfolioSummary(account: PortfolioAccount, snapshot: P
   })
   const investedCost = holdings.reduce((sum, h) => sum + h.totalCost, 0)
   const marketValue = holdings.every(h => h.currentValue !== null) ? holdings.reduce((sum,h) => sum + h.currentValue!, 0) : null
-  return {account, holdings, cashBalance: snapshot.cash, investedCost, marketValue, totalValue: marketValue === null ? null : snapshot.cash + marketValue, unrealizedPnl: marketValue === null ? null : marketValue - investedCost, dataSource: 'manual_snapshot', dataAsOf: asOf, confirmedAt}
+  return {account, holdings, cashBalance: snapshot.cash, ...(snapshot.allocationBudget ? {allocationBudget: snapshot.allocationBudget} : {}), investedCost, marketValue, totalValue: marketValue === null ? null : snapshot.cash + marketValue, unrealizedPnl: marketValue === null ? null : marketValue - investedCost, dataSource: 'manual_snapshot', dataAsOf: asOf, confirmedAt}
 }
 
 /**
@@ -368,7 +368,7 @@ export function applyPortfolioQuotes(
   return {
     ...workspace,
     portfolios: workspace.portfolios.map((portfolio) => {
-      if (portfolio.dataSource === 'manual_snapshot') return confirmedPortfolioSummary(portfolio.account, {cash: portfolio.cashBalance, asOf: portfolio.dataAsOf ?? '', positions: portfolio.holdings}, portfolio.dataAsOf, portfolio.confirmedAt!, quotes)
+      if (portfolio.dataSource === 'manual_snapshot') return confirmedPortfolioSummary(portfolio.account, {cash: portfolio.cashBalance, asOf: portfolio.dataAsOf ?? '', positions: portfolio.holdings, allocationBudget: portfolio.allocationBudget}, portfolio.dataAsOf, portfolio.confirmedAt!, quotes)
       if (portfolio.dataSource === 'ledger') {
         return calculatePortfolioSummary(
           portfolio.account,

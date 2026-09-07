@@ -318,7 +318,7 @@ export function PortfolioWorkspace({
               <div className="portfolio-value-summary">
                 <div><span>Portfolio value</span><strong>{formatMoney(activePortfolio.totalValue)}</strong></div>
                 <div><span>Equities</span><strong>{formatMoney(activePortfolio.marketValue)}</strong></div>
-                <div><span>Cash</span><strong>{formatMoney(activePortfolio.cashBalance)}</strong></div>
+                <div><span>{activePortfolio.allocationBudget ? 'Available budget' : 'Cash'}</span><strong>{formatMoney(activePortfolio.cashBalance)}</strong></div>
                 <div><span>Unrealized P&amp;L</span><strong className={(activePortfolio.unrealizedPnl ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{formatMoney(activePortfolio.unrealizedPnl)}</strong></div>
               </div>
               <div className="portfolio-performance-grid" aria-label="Market performance by holding weight">
@@ -327,7 +327,7 @@ export function PortfolioWorkspace({
               <p>{activePortfolio.dataSource === 'robinhood'
                 ? `Robinhood private account snapshot · captured ${asOf(activePortfolio.dataAsOf ?? universe.dataAsOf)}`
                 : activePortfolio.dataSource === 'manual_snapshot'
-                  ? activePortfolio.dataAsOf ? `Owner-confirmed account · captured ${asOf(activePortfolio.dataAsOf)}` : 'Account changed since confirmation · reconfirm holdings and cash in Decisions'
+                  ? activePortfolio.allocationBudget ? `Owner-set investment budget ${formatMoney(activePortfolio.allocationBudget.total)} · holdings captured ${asOf(activePortfolio.dataAsOf ?? undefined)}` : activePortfolio.dataAsOf ? `Owner-confirmed account · captured ${asOf(activePortfolio.dataAsOf)}` : 'Account changed since confirmation · reconfirm holdings and cash in Decisions'
                 : `Weighted from the current market snapshot · ${universe.feed === 'illustrative' ? 'Illustrative' : 'Market'} data as of ${asOf(universe.dataAsOf)}`}</p>
             </section>
             <section className="portfolio-holdings-table-section">

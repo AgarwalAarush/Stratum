@@ -39,7 +39,7 @@ test('Markets Overview rehydrates post-close action data and republishes it afte
 })
 
 test('Markets Overview does not block its durable snapshot on live-feed collection', () => {
-  const page = source('app/markets/page.tsx')
+  const page = source('app/markets/overview/page.tsx')
   const overview = source('components/markets/MarketsOverview.tsx')
   const liveContext = source('components/markets/MarketBriefNews.tsx')
   const route = source('app/api/markets/brief-news/route.ts')
@@ -54,7 +54,7 @@ test('Markets Overview does not block its durable snapshot on live-feed collecti
 })
 
 test('Markets Overview defers owner-specific thesis reads until after the snapshot paints', () => {
-  const page = source('app/markets/page.tsx')
+  const page = source('app/markets/overview/page.tsx')
   const overview = source('components/markets/MarketsOverview.tsx')
   const thesisBrief = source('components/markets/MarketThesisBrief.tsx')
   const route = source('app/api/markets/thesis-brief/route.ts')

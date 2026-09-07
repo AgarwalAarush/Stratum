@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   parsePositionCsv,
+  budgetPortfolioConfirmation,
   validatePortfolioConfirmation,
 } from '../lib/markets/portfolio-confirmation.ts'
 
@@ -69,4 +70,18 @@ test('manual holdings import preserves fractional shares, cash and explicit empt
     () => parsePositionCsv('symbol,quantity,cost_basis_per_share\n"AMD,1,1'),
     /quote/,
   )
+})
+
+
+test('allocation budget includes existing holdings and never counts a treasury fund twice as cash', () => {
+  const now = new Date('2026-09-07T07:00:00Z')
+  const positions = parsePositionCsv('symbol,quantity,cost_basis_per_share\nABC,10,50\nTBILL,20,90')
+  const input = {asOf: now.toISOString(), total:10000, holdingsValue:2300, positions}
+  const snapshot = budgetPortfolioConfirmation(input, now)
+  assert.equal(snapshot.cash,7700)
+  assert.equal(snapshot.allocationBudget?.total,10000)
+  assert.equal(snapshot.positions.find(p => p.symbol === 'TBILL')?.quantity,20)
+  assert.throws(() => budgetPortfolioConfirmation({...input,total:2000},now), /budget/)
+  assert.throws(() => budgetPortfolioConfirmation({...input,total:NaN},now), /budget/)
+  assert.throws(() => validatePortfolioConfirmation({...snapshot,cash:100000},now), /reconcile/)
 })

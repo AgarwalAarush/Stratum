@@ -7,6 +7,22 @@ export type PortfolioConfirmation = {
   asOf: string
   cash: number
   positions: ConfirmedPosition[]
+  allocationBudget?: { total: number; holdingsValue: number }
+}
+
+/** Owner-authorized allocation capacity, distinct from settled broker cash. */
+export function budgetPortfolioConfirmation(input: {
+  asOf: string; total: number; holdingsValue: number; positions: ConfirmedPosition[]
+}, now = new Date()): PortfolioConfirmation {
+  if (!Number.isFinite(input.total) || input.total <= 0 ||
+      !Number.isFinite(input.holdingsValue) || input.holdingsValue < 0 || input.holdingsValue > input.total ||
+      (input.positions.length === 0 && input.holdingsValue !== 0))
+    throw new Error('Investment budget must cover the stated holdings value')
+  return validatePortfolioConfirmation({
+    asOf: input.asOf, positions: input.positions,
+    cash: Math.round((input.total - input.holdingsValue) * 100) / 100,
+    allocationBudget: { total: input.total, holdingsValue: input.holdingsValue },
+  }, now)
 }
 
 /** Deliberately small interchange format. Quoted CSV fields and CRLF work;
@@ -83,6 +99,11 @@ export function validatePortfolioConfirmation(
     )
   if (!Number.isFinite(input.cash) || input.cash < 0)
     throw new Error('Confirmed cash must be non-negative')
+  if (input.allocationBudget) {
+    const {total, holdingsValue} = input.allocationBudget
+    if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(holdingsValue) || holdingsValue < 0 || holdingsValue > total || Math.abs(input.cash - (total - holdingsValue)) > 0.011)
+      throw new Error('Available allocation must reconcile to the investment budget')
+  }
   if (!Array.isArray(input.positions) || input.positions.length > 750)
     throw new Error('Expected at most 750 positions')
   const seen = new Set<string>()
