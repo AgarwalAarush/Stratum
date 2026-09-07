@@ -9,6 +9,7 @@ import {
 } from './RecommendationLearningControls'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { decisionHeadline, decisionIsBlocked, readableDecisionText } from '@/lib/markets/recommendation-display'
 import type { fetchRecommendationWorkspace } from '@/lib/server/recommendations'
 import type {
   DecisionContext,
@@ -188,7 +189,8 @@ export function RecommendationsWorkspace({
             </p>
           )}
           <div className="mt-8">
-            <h3 className="font-medium">Economic forecasts</h3>
+            <h3 className="font-medium">Forecast review</h3>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">Only forecasts that passed review are eligible. Operating outcomes and market returns are assessed separately.</p>
             {data?.forecasts.map((f) => (
               <ForecastReview key={f.id} forecast={f} />
             ))}
@@ -307,11 +309,11 @@ function DecisionCard({
             {rec.symbol}
           </Link>
           <span className="border border-[var(--border)] px-2 py-1 text-[11px] uppercase tracking-wider">
-            {actionLabel(rec.action)}
+            {rec.action === 'no_trade' ? 'Wait' : actionLabel(rec.action)}
           </span>
         </div>
         <span className="text-xs text-[var(--text-muted)]">
-          {rec.horizonDays}-day horizon · {rec.confidence}% confidence
+          {decisionIsBlocked(rec) ? 'Review incomplete' : `${rec.horizonDays}-day horizon · ${rec.confidence}% confidence`}
         </span>
       </div>
       {expired ? (
@@ -323,9 +325,14 @@ function DecisionCard({
           acting.
         </p>
       ) : null}
-      <p className="mt-4 max-w-4xl text-base leading-7">{rec.reason}</p>
+      <p className="mt-4 max-w-4xl text-base leading-7">{decisionHeadline(rec)}</p>
       <details className="mt-4">
         <summary className="cursor-pointer text-sm underline underline-offset-4">Reasoning & next steps</summary>
+      {decisionIsBlocked(rec) && <div className="mt-5 border-l-2 border-[var(--border)] pl-4 text-sm leading-6">
+        <p className="font-medium">Draft reasoning — not approved</p>
+        <p className="mt-2">{readableDecisionText(rec.reason)}</p>
+        <p className="mt-2 text-[var(--text-muted)]">The original proposal remains available for review. Its forecasts are excluded from learning scores.</p>
+      </div>}
       <div className="mt-5 grid gap-5 text-sm leading-6 md:grid-cols-2">
         <div>
           <h3 className="text-xs uppercase tracking-wide text-[var(--text-muted)]">

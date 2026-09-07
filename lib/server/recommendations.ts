@@ -5,6 +5,7 @@ import { getSupabaseClient } from './supabase.ts'
 import { fetchAuthoritativePortfolios } from './portfolio.ts'
 import { runCodexJson } from './codex-exec.ts'
 import { withDecisionInputs } from './decision-inputs.ts'
+import { forecastsAreApproved, reviewedForecasts, FORECAST_REVIEW_POLICY } from '../markets/forecast-review.ts'
 import { resolve } from 'node:path'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import {
@@ -601,7 +602,7 @@ export async function generateDailyRecommendations(
         cwd: input.directory,
         webSearch: false,
         timeoutMs: 15 * 60 * 1000,
-        prompt: `Generate owner-facing investment recommendations using only the frozen context below. Do not fetch live data or execute orders. Inspect only the frozen files supplied below. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires a validated system thesis (systemThesisValidated) or an accepted owner thesis plus fresh evidence. System recommendations are published for owner review; never rewrite the accepted owner thesis. A candidate screen is only a research lead. State evidence limitations, and never invent consensus or transcripts when they are absent. ETF evidence must be interpreted as fund exposure, never corporate earnings. Risk reductions may follow invalidation without a new bullish thesis. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers; narrative confidence is not a calibrated probability. Maximum new position is 10%; do not invent prices or sizing. For capitalBasis owner_budget, cash means owner-authorized remaining allocation budget, not broker buying power. Use this budget for recommendations without requesting funding or transfer confirmation; never claim it is settled broker cash. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Every narrative field, entry condition, and decision dimension must contain at least eight characters; risks and invalidation must be nonempty arrays. Provide a substantive exit and reassessment rule even for watch, research, and no-trade. Expiry must be after the cutoff and within seven days; horizons are 1 to 1825 integer days, confidence is 0 to 100, and forecast probabilities are strictly between zero and one. Respond with summary and recommendations.\n${input.prompt}`,
+        prompt: `Generate owner-facing investment recommendations using only the frozen context below. Do not fetch live data or execute orders. Inspect only the frozen files supplied below. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires a validated system thesis (systemThesisValidated) or an accepted owner thesis plus fresh evidence. System recommendations are published for owner review; never rewrite the accepted owner thesis. A candidate screen is only a research lead. State evidence limitations, and never invent consensus or transcripts when they are absent. ETF evidence must be interpreted as fund exposure, never corporate earnings. Risk reductions may follow invalidation without a new bullish thesis. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers only when the evidence supports them. Do not use security-price returns as economic mechanism forecasts; market returns are evaluated separately. Use an empty forecasts array for unresolved identity, missing research or unsupported claims; never encode uncertainty as a directional price forecast. Narrative confidence is not a calibrated probability. Maximum new position is 10%; do not invent prices or sizing. A trim requires an explicit positive targetWeightPct below currentWeightPct; a sell requires targetWeightPct zero. If no justified reduction size can be determined, abstain. For capitalBasis owner_budget, cash means owner-authorized remaining allocation budget, not broker buying power. Use this budget for recommendations without requesting funding or transfer confirmation; never claim it is settled broker cash. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Every narrative field, entry condition, and decision dimension must contain at least eight characters; risks and invalidation must be nonempty arrays. Provide a substantive exit and reassessment rule even for watch, research, and no-trade. Expiry must be after the cutoff and within seven days; horizons are 1 to 1825 integer days, confidence is 0 to 100, and forecast probabilities are strictly between zero and one. Respond with summary and recommendations.\n${input.prompt}`,
         validate: (value) => {
           const v = record(value)
           return {
@@ -648,12 +649,17 @@ export async function generateDailyRecommendations(
           : r
       })
       metadata = {
+        forecastReviewPolicy: FORECAST_REVIEW_POLICY,
+        withheldForecasts: recommendations.filter(r => !forecastsAreApproved(r) && r.forecasts.length).map(r => ({
+          portfolioId: r.portfolioId, symbol: r.symbol, reasons: r.gateReasons, forecasts: r.forecasts,
+        })),
         input: {projection: 'frozen-files-v1', manifestHash: input.manifestHash, indexBytes: input.indexBytes},
         generator: generated.metadata,
         contractFailures: generated.data.failures,
         critic: critic.metadata,
         criticBlocks: critic.data,
       }
+      recommendations = recommendations.map(reviewedForecasts)
       summary = recommendations.some((r) => r.gateReasons.length)
         ? `${recommendations.filter((r) => r.gateReasons.length).length} proposed decisions were blocked by evidence or portfolio checks. Review each final action and its reasons before changing capital.`
         : generated.data.summary
@@ -743,12 +749,13 @@ export async function fetchRecommendationWorkspace(ownerId: string) {
     db
       .from('recommendation_cohort_reviews')
       .select('*')
+      .eq('policy_version', FORECAST_REVIEW_POLICY)
       .eq('owner_id', ownerId)
       .order('created_at', { ascending: false })
       .limit(4).abortSignal(readDeadline),
     db
       .from('recommendation_forecasts')
-      .select('*')
+      .select('*,recommendation_versions!inner(content)')
       .eq('owner_id', ownerId)
       .order('deadline')
       .limit(100).abortSignal(readDeadline),
@@ -759,7 +766,7 @@ export async function fetchRecommendationWorkspace(ownerId: string) {
       .order('created_at', { ascending: false })
       .limit(30).abortSignal(readDeadline),
     db.from('recommendation_shadow_runs').select('id,experiment_id,policy_key,batch_id,created_at').eq('owner_id',ownerId).order('created_at',{ascending:false}).limit(100).abortSignal(readDeadline),
-    db.from('recommendation_shadow_evaluations').select('*').eq('owner_id',ownerId).order('created_at',{ascending:false}).limit(30).abortSignal(readDeadline),
+    db.from('recommendation_shadow_evaluations').select('*').eq('evaluator_version', `shadow-calibration-${FORECAST_REVIEW_POLICY}`).eq('owner_id',ownerId).order('created_at',{ascending:false}).limit(30).abortSignal(readDeadline),
   ])
   for (const r of responses) if (r.error) throw new Error(r.error.message)
   return {
@@ -773,7 +780,7 @@ export async function fetchRecommendationWorkspace(ownerId: string) {
     context: recommendationDisplayContext(responses[3].data),
     delivery: responses[4].data,
     cohorts: responses[5].data ?? [],
-    forecasts: responses[6].data ?? [],
+    forecasts: (responses[6].data ?? []).filter(f => forecastsAreApproved(record(f.recommendation_versions).content)).map(f => { const copy = {...f}; delete copy.recommendation_versions; return copy }),
     experiments: responses[7].data ?? [],
     shadowRuns: responses[8].data ?? [],
     shadowEvaluations: responses[9].data ?? [],

@@ -1,6 +1,7 @@
 'use client'
 import { SHADOW_POLICIES } from '@/lib/markets/shadow-policy'
 import { RECOMMENDATION_POLICY } from '@/lib/markets/recommendations'
+import { forecastCategory } from '@/lib/markets/forecast-review'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 const row = (v: unknown): Record<string, unknown> =>
@@ -49,6 +50,7 @@ export function ForecastReview({
         {Math.round(Number(forecast.probability) * 100)}% · due{' '}
         {String(forecast.deadline).slice(0, 10)}
       </summary>
+      <p className="mt-3 text-xs text-[var(--text-muted)]">{forecastCategory({metric: String(content.metric ?? '')}) === 'market_return' ? 'Market return · scored separately from economic thesis outcomes' : 'Economic outcome'}</p>
       <p className="mt-3">Confirm: {String(content.confirmation)}</p>
       <p>Invalidate: {String(content.invalidation)}</p>
       <div className="mt-4 grid gap-3 md:grid-cols-3">
