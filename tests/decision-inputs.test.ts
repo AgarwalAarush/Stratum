@@ -38,7 +38,8 @@ test('bounded prompt preserves the complete frozen manifest, source values and n
     assert.equal(index.evidence[0].availableAt, '2026-09-05')
     assert.equal(index.evidence[0].hash, 'original-hash')
     assert.equal(index.evidence[0].id, '../untrusted-source')
-    assert.equal(index.names[0].research.content.fastestKillSignal, 'Margins reverse')
+    assert.equal(index.names[0].research.file, index.names[0].file)
+    assert.equal(index.names[0].research.field, 'research')
     for (const file of await readdir(directory)) {
       assert.match(file, /^(manifest|name-\d+|evidence-\d+)\.json$/)
       assert.equal((await stat(join(directory, file))).mode & 0o777, 0o600)
@@ -47,6 +48,29 @@ test('bounded prompt preserves the complete frozen manifest, source values and n
   })
   assert.equal(JSON.stringify(context), before)
   await assert.rejects(stat(directory), {code: 'ENOENT'})
+})
+
+test('large ETF narrative fields and accepted theses stay readable without inflating the index', async () => {
+  const large = structuredClone(context)
+  large.names = Array.from({length: 50}, (_, i) => ({
+    ...structuredClone(context.names[0]), symbol: `ETF${i}`, instrumentType: 'etf',
+    thesis: {affirmativeBelief: 'Accepted thesis evidence. '.repeat(10000)},
+    research: {id: `report-${i}`, status: 'complete', content: {
+      investmentThesis: 'Long affirmative evidence. '.repeat(10000),
+      counterThesis: 'Long contrary evidence. '.repeat(10000),
+    }},
+  }))
+  await withDecisionInputs(large, async input => {
+    assert.ok(input.indexBytes < 100000)
+    const index = JSON.parse(input.prompt.split('\n')[1])
+    assert.equal(index.names.length, 50)
+    for (const [i, name] of index.names.entries()) {
+      const frozen = JSON.parse(await readFile(join(input.directory, name.file), 'utf8'))
+      assert.deepEqual(frozen.research, large.names[i].research)
+      assert.deepEqual(frozen.thesis, large.names[i].thesis)
+      assert.equal(name.thesis.field, 'thesis')
+    }
+  })
 })
 
 test('failed generator/critic also removes the temporary private evidence', async () => {
