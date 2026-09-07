@@ -54,7 +54,7 @@ export async function backupMarketCorpus(): Promise<{ configured: boolean; outpu
     const root = corpusRoot()
     const disk = await inspectCorpusDisk()
     await exportInvestmentLedger(root)
-    const output = await runRestic(['backup', '--tag', 'stratum-market-corpus', '--exclude', '.env*', '--exclude', '*oauth*', root])
+    const output = await runRestic(['backup', '--tag', 'stratum-market-corpus', '--exclude', '.env*', '--exclude', '*oauth*', '--exclude', 'secrets', '--exclude', '*password*', root])
     // Only a successful current backup is allowed to prune older snapshots.
     const retention = await runRestic([
       'forget', '--tag', 'stratum-market-corpus', '--keep-daily', '30', '--keep-weekly', '12', '--keep-monthly', '12', '--prune',
