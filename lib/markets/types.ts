@@ -485,6 +485,7 @@ export interface EtfHolding {
 }
 
 export interface EtfResearchPacket {
+  evidenceQuality?: { checkedAt: string; missing: string[]; coveredWeight: number; priceAsOf: string; holdingsAsOf: string }
   id: string
   symbol: string
   version: number
@@ -1054,7 +1055,8 @@ export interface PortfolioAccountSummary {
   totalValue: number | null
   unrealizedPnl: number | null
   holdings: PortfolioHolding[]
-  dataSource: 'ledger' | 'robinhood'
+  dataSource: 'ledger' | 'robinhood' | 'manual_snapshot'
+  confirmedAt?: string
   dataAsOf: string | null
 }
 

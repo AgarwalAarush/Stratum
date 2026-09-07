@@ -1,5 +1,5 @@
 import { captureInvestmentMacro } from './investment-macro.ts'
-import { generateDailyRecommendations } from './recommendations.ts'
+import { assembleDecisionContext, generateDailyRecommendations } from './recommendations.ts'
 import { evaluateRecommendationOutcomes, reviewRecommendationCohort } from './recommendation-outcomes.ts'
 import { sendInvestmentNewsletter } from './investment-newsletter.ts'
 import { generateMorningBrief } from '../data/morning-brief.ts'
@@ -411,6 +411,9 @@ export function shouldRefreshClosedMarket(
  * behind a backlog of routine market-refresh work, while it remains only
  * operational telemetry—not admission authority. */
 export function agentJobPriority(jobType: AgentJobType): number {
+  if (jobType === 'send-investment-newsletter') return 5
+  if (jobType === 'generate-daily-recommendations') return 10
+  if (jobType === 'evaluate-recommendation-outcomes' || jobType === 'review-recommendation-cohort') return 15
   if (jobType === 'run-world-thinker') return 25
   if (jobType === 'run-world-replay') return 70
   if (jobType === 'refresh-world-benchmark') return 80
@@ -739,7 +742,16 @@ async function executeJob(
 ): Promise<unknown> {
   if (job.job_type === 'generate-daily-recommendations') {
     await captureInvestmentMacro().catch(error => console.warn(JSON.stringify({ event: 'investment_macro_capture_failed', error: error instanceof Error ? error.message : String(error) })))
-    return generateDailyRecommendations()
+    const now = new Date(), ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : undefined, editionKey = typeof job.payload.editionKey === 'string' ? job.payload.editionKey : 'daily'
+    const context = await assembleDecisionContext(ownerId, now, editionKey)
+    const requested = new Set<string>()
+    for (const name of context.names) {
+      if (requested.has(name.symbol) || name.securityId.startsWith('unresolved:') || !name.gaps.some(g => /Research missing|Research predates/.test(g))) continue
+      requested.add(name.symbol)
+      await enqueueAgentJob(name.instrumentType === 'etf' ? 'generate-etf-research' : 'generate-company-research', {ownerId:context.ownerId,symbol:name.symbol,reason:'Daily decision evidence gap'}, `investment-research:${context.ownerId}:${name.symbol}:${context.date}`)
+    }
+    const result = await generateDailyRecommendations(ownerId, now, editionKey)
+    return result
   }
   if (job.job_type === 'evaluate-recommendation-outcomes') return evaluateRecommendationOutcomes()
   if (job.job_type === 'review-recommendation-cohort') return reviewRecommendationCohort()

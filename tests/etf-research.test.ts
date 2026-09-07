@@ -60,3 +60,22 @@ test('ETF routing rejects corporate research and uses the dedicated job type', a
   assert.match(report, /What the fund owns/)
   assert.match(report, /Corporate financial statements and earnings are excluded/)
 })
+
+test('holdings dates and coverage never manufacture decision readiness', async () => {
+  const { extractAsOf, etfEvidenceQuality } = await import('../lib/server/etf-research.ts')
+  const now = new Date('2026-09-07T00:00:00Z')
+  assert.equal(extractAsOf('Fund Holdings Data as of 09/04/2026',now),'2026-09-04T00:00:00.000Z')
+  assert.throws(()=>extractAsOf('No holdings date',now),/date/)
+  assert.throws(()=>extractAsOf('Fund Holdings Data as of 09/08/2026',now),/date/)
+  const parsed = parseFirstTrust(summary,holdings)
+  const quality=etfEvidenceQuality({...parsed,dataAsOf:'2026-09-04'},'2026-09-04',now)
+  assert.ok(quality.missing.includes('Complete issuer holdings coverage'))
+  assert.equal(parsed.holdings[0]?.symbol,'ETN')
+})
+
+test('ETF research rejects invented source IDs before publication', async () => {
+  const { validateEtfResearch } = await import('../lib/server/etf-research.ts')
+  const packet = {sources:[{id:'issuer-holdings'}]} as Parameters<typeof validateEtfResearch>[1]
+  assert.throws(()=>validateEtfResearch({sourceIds:['made-up']},packet),/citation/)
+  assert.throws(()=>validateEtfResearch({sourceIds:['issuer-holdings'],sections:[{sourceIds:['made-up']}]},packet),/citation/)
+})

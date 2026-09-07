@@ -1,3 +1,4 @@
+import type { PortfolioConfirmation } from '../markets/portfolio-confirmation.ts'
 import {
   createDefaultWatchlistState,
   parseWatchlistState,
@@ -343,6 +344,17 @@ function calculateBrokeragePortfolioSummary(
   }
 }
 
+export function confirmedPortfolioSummary(account: PortfolioAccount, snapshot: PortfolioConfirmation, asOf: string | null, confirmedAt: string, quotes: Map<string, number>): PortfolioAccountSummary {
+  const holdings = snapshot.positions.map(p => {
+    const currentPrice = quotes.get(p.symbol) ?? null, totalCost = p.quantity * p.costBasisPerShare
+    const currentValue = currentPrice === null ? null : p.quantity * currentPrice
+    return {...p, totalCost, currentPrice, currentValue, unrealizedPnl: currentValue === null ? null : currentValue - totalCost}
+  })
+  const investedCost = holdings.reduce((sum, h) => sum + h.totalCost, 0)
+  const marketValue = holdings.every(h => h.currentValue !== null) ? holdings.reduce((sum,h) => sum + h.currentValue!, 0) : null
+  return {account, holdings, cashBalance: snapshot.cash, investedCost, marketValue, totalValue: marketValue === null ? null : snapshot.cash + marketValue, unrealizedPnl: marketValue === null ? null : marketValue - investedCost, dataSource: 'manual_snapshot', dataAsOf: asOf, confirmedAt}
+}
+
 /**
  * Reprices an already-loaded workspace without re-reading its portfolio,
  * decision, inbox, and ledger records. Brokerage account totals remain the
@@ -356,6 +368,7 @@ export function applyPortfolioQuotes(
   return {
     ...workspace,
     portfolios: workspace.portfolios.map((portfolio) => {
+      if (portfolio.dataSource === 'manual_snapshot') return confirmedPortfolioSummary(portfolio.account, {cash: portfolio.cashBalance, asOf: portfolio.dataAsOf ?? '', positions: portfolio.holdings}, portfolio.dataAsOf, portfolio.confirmedAt!, quotes)
       if (portfolio.dataSource === 'ledger') {
         return calculatePortfolioSummary(
           portfolio.account,
@@ -434,10 +447,11 @@ export async function fetchAuthoritativePortfolios(ownerId: string): Promise<Por
       if (page.length < 500) return result
     }
   }
-  const [accounts, transactions, captures] = await Promise.all([
+  const [accounts, transactions, captures, confirmations] = await Promise.all([
     rows('portfolios', '*', 'created_at'),
     rows('portfolio_transactions', '*', 'occurred_at'),
     rows('brokerage_sync_runs', 'id,portfolio_id,captured_at,brokerage_account_snapshots(cash_balance,equity_value,total_value),brokerage_position_snapshots(symbol,quantity,cost_basis_per_share,current_price,quote_as_of)', 'captured_at', true),
+    rows('portfolio_confirmations', '*', 'confirmed_at'),
   ])
   const ledger = transactions.map(normalizePortfolioTransaction).filter(t => t.voidedAt === null)
     .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.createdAt.localeCompare(b.createdAt))
@@ -446,6 +460,11 @@ export async function fetchAuthoritativePortfolios(ownerId: string): Promise<Por
     const snapshot = capture ? normalizeBrokerageSnapshot(capture) : null
     if (account.kind === 'brokerage' && capture && !snapshot) throw new Error('Invalid successful brokerage capture')
     if (account.kind === 'brokerage' && snapshot) return calculateBrokeragePortfolioSummary(account, snapshot, new Map())
+    const confirmation = confirmations.find(c => c.portfolio_id === account.id)
+    if (account.kind === 'manual' && confirmation) {
+      const changed = transactions.some(t => t.portfolio_id === account.id && [t.created_at, t.voided_at].some(time => typeof time === 'string' && Date.parse(time) > Date.parse(String(confirmation.confirmed_at))))
+      return confirmedPortfolioSummary(account, confirmation.content as PortfolioConfirmation, changed ? null : String(confirmation.as_of), String(confirmation.confirmed_at), new Map())
+    }
     return calculatePortfolioSummary(account, ledger.filter(t => t.portfolioId === account.id), new Map())
   })
 }

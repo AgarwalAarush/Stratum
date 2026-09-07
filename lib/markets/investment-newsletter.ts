@@ -12,6 +12,7 @@ export function renderInvestmentNewsletter(input: {
   publishedAt: string | null
   summary: string
   recommendations: Recommendation[]
+  portfolioNames?: Record<string,string>
   worldHighlights: string[]
   outcomes: string[]
   gaps: string[]
@@ -31,7 +32,7 @@ export function renderInvestmentNewsletter(input: {
     'TODAY’S DECISIONS',
     ...input.recommendations.map(
       (r) =>
-        `${r.symbol} · ${r.action.replaceAll('_', ' ').toUpperCase()}\n${r.reason}\nThesis: ${r.thesis}\nCounter-thesis: ${r.counterThesis}\nEntry: ${r.entry.condition}\nInvalidation: ${r.invalidation.join('; ')}\nReassess: ${r.reassessWhen}${r.gateReasons.length ? `\nBlocked: ${r.gateReasons.join('; ')}` : ''}`,
+        `${input.portfolioNames?.[r.portfolioId] ?? r.portfolioId} · ${r.symbol} · ${r.action.replaceAll('_', ' ').toUpperCase()}\n${r.reason}\nThesis: ${r.thesis}\nCounter-thesis: ${r.counterThesis}\nEntry: ${r.entry.condition}\nInvalidation: ${r.invalidation.join('; ')}\nReassess: ${r.reassessWhen}${r.gateReasons.length ? `\nBlocked: ${r.gateReasons.join('; ')}` : ''}`,
     ),
     'WHAT WE ARE LEARNING',
     ...(input.outcomes.length
@@ -47,7 +48,7 @@ export function renderInvestmentNewsletter(input: {
   const cards = input.recommendations
     .map(
       (r) =>
-        `<tr><td style="padding:20px 0;border-top:1px solid #dededb"><p style="font-size:12px;letter-spacing:1px;color:#666">${escape(r.symbol)} &nbsp; / &nbsp; ${escape(r.action.replaceAll('_', ' ').toUpperCase())}</p><p style="font-size:17px;font-weight:600">${escape(r.reason)}</p><p><b>Thesis</b> ${escape(r.thesis)}</p><p><b>Counter-thesis</b> ${escape(r.counterThesis)}</p><p><b>Entry</b> ${escape(r.entry.condition)}</p><p><b>Invalidation</b> ${escape(r.invalidation.join('; '))}</p><p style="color:#666">${escape(r.horizonDays + '-day horizon · ' + r.confidence + '% narrative confidence; not calibrated')}</p></td></tr>`,
+        `<tr><td style="padding:20px 0;border-top:1px solid #dededb"><p style="font-size:12px;letter-spacing:1px;color:#666">${escape(input.portfolioNames?.[r.portfolioId] ?? r.portfolioId)} &nbsp; / &nbsp; ${escape(r.symbol)} &nbsp; / &nbsp; ${escape(r.action.replaceAll('_', ' ').toUpperCase())}</p><p style="font-size:17px;font-weight:600">${escape(r.reason)}</p><p><b>Thesis</b> ${escape(r.thesis)}</p><p><b>Counter-thesis</b> ${escape(r.counterThesis)}</p><p><b>Entry</b> ${escape(r.entry.condition)}</p><p><b>Invalidation</b> ${escape(r.invalidation.join('; '))}</p><p style="color:#666">${escape(r.horizonDays + '-day horizon · ' + r.confidence + '% narrative confidence; not calibrated')}</p></td></tr>`,
     )
     .join('')
   const paragraphs = (xs: string[]) =>

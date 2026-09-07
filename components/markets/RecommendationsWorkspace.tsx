@@ -1,5 +1,7 @@
 'use client'
 import Link from 'next/link'
+import { RecommendationRefresh } from './RecommendationRefresh'
+import { ManualPortfolioConfirmation } from './ManualPortfolioConfirmation'
 import {
   ForecastReview,
   LearningRegistrationForm,
@@ -55,19 +57,22 @@ export function RecommendationsWorkspace({
             Decisions, with a memory.
           </h1>
           <p className="mt-4 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
-            A daily view of what deserves capital, what needs research, and what
-            should wait. Every decision keeps its evidence and becomes part of
-            the learning record.
+            A daily view of what deserves capital, what needs research, and
+            what should wait. Every decision keeps its evidence and becomes
+            part of the learning record.
           </p>
         </div>
         <div className="text-sm md:text-right">
           <p>Morning edition · 7:00 AM Pacific</p>
           <p className="mt-2 text-xs text-[var(--text-muted)]">
-            {latest ? stamp(latest.published_at) : 'Awaiting first publication'}
+            {latest
+              ? stamp(latest.published_at)
+              : 'Awaiting first publication'}
           </p>
           <p className="mt-2 text-xs text-[var(--text-muted)]">
             For your review and manual action
           </p>
+          <RecommendationRefresh />
         </div>
       </header>
       <section
@@ -75,7 +80,7 @@ export function RecommendationsWorkspace({
         className="grid grid-cols-3 border-b border-[var(--border)] py-6"
       >
         {[
-          ['Names covered', latest ? count : '—'],
+          ['Account decisions', latest ? count : '—'],
           ['Capital changes', latest ? actionable : '—'],
           [
             'Explicit abstentions',
@@ -106,6 +111,11 @@ export function RecommendationsWorkspace({
           </button>
         ))}
       </nav>
+      {data?.accounts
+        .filter((a) => a.kind === 'manual')
+        .map((a) => (
+          <ManualPortfolioConfirmation key={a.id} account={a} />
+        ))}
       {!latest ? (
         <section className="my-10 max-w-2xl">
           <h2 className="text-xl">
@@ -126,8 +136,9 @@ export function RecommendationsWorkspace({
               role="status"
               className="mt-6 border border-[var(--border)] p-5 text-sm"
             >
-              This is an earlier recorded edition. A current daily evaluation is
-              unavailable; check each recommendation’s expiry before acting.
+              This is an earlier recorded edition. A current daily evaluation
+              is unavailable; check each recommendation’s expiry before
+              acting.
             </p>
           ) : null}
           <section className="grid gap-8 py-8 lg:grid-cols-[1fr_300px]">
@@ -179,9 +190,9 @@ export function RecommendationsWorkspace({
         <section className="py-8">
           <h2 className="text-xl">Did the recommendation work—and why?</h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
-            5, 10 and 20 trading-session markouts diagnose selection and timing.
-            Economic forecasts are assessed separately from price. Unfilled
-            entries, missing data and owner overrides remain visible.
+            5, 10 and 20 trading-session markouts diagnose selection and
+            timing. Economic forecasts are assessed separately from price.
+            Unfilled entries, missing data and owner overrides remain visible.
           </p>
           {data?.evaluations.length ? (
             <div className="mt-6 space-y-4">
@@ -207,8 +218,8 @@ export function RecommendationsWorkspace({
             </div>
           ) : (
             <p className="mt-8 border-t border-[var(--border)] pt-6 text-sm">
-              No matured outcome cohort yet. The first results appear only after
-              the required market sessions have elapsed.
+              No matured outcome cohort yet. The first results appear only
+              after the required market sessions have elapsed.
             </p>
           )}
           <div className="mt-8">
@@ -299,6 +310,12 @@ function DecisionCard({
   }
   return (
     <article className="border border-[var(--border)] p-5 md:p-7">
+      <p className="mb-3 text-xs text-[var(--text-muted)]">
+        {context?.names.find(
+          (n) => n.portfolioId === rec.portfolioId && n.symbol === rec.symbol,
+        )?.portfolioName ?? 'Portfolio recorded in evidence'}{' '}
+        · System recommendation for your review
+      </p>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div className="flex items-baseline gap-4">
           <Link
@@ -417,23 +434,25 @@ function DecisionCard({
           />
         </label>
         <div className="mt-3 flex flex-wrap gap-2">
-          {['acknowledged', 'accepted', 'delayed', 'rejected'].map((event) => (
-            <button
-              disabled={pending || rationale.trim().length < 3}
-              onClick={() => respond(event)}
-              key={event}
-              className="border border-[var(--border)] px-3 py-2 text-xs capitalize disabled:opacity-40"
-            >
-              {
+          {['acknowledged', 'accepted', 'delayed', 'rejected'].map(
+            (event) => (
+              <button
+                disabled={pending || rationale.trim().length < 3}
+                onClick={() => respond(event)}
+                key={event}
+                className="border border-[var(--border)] px-3 py-2 text-xs capitalize disabled:opacity-40"
+              >
                 {
-                  acknowledged: 'Reviewed',
-                  accepted: 'Accept',
-                  delayed: 'Wait',
-                  rejected: 'Reject',
-                }[event]
-              }
-            </button>
-          ))}
+                  {
+                    acknowledged: 'Reviewed',
+                    accepted: 'Accept',
+                    delayed: 'Wait',
+                    rejected: 'Reject',
+                  }[event]
+                }
+              </button>
+            ),
+          )}
         </div>
         <p role="status" className="mt-3 text-xs">
           {status}

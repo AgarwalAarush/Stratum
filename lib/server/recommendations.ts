@@ -1,3 +1,4 @@
+import { admitDiscoveryCandidates, hasValidatedSystemThesis } from '../markets/decision-admission.ts'
 import { createHash, randomUUID } from 'node:crypto'
 import { getSupabaseClient } from './supabase.ts'
 import { fetchAuthoritativePortfolios } from './portfolio.ts'
@@ -77,6 +78,7 @@ async function rows(
 export async function assembleDecisionContext(
   ownerId = MARKETS_OWNER_ID,
   now = new Date(),
+  editionKey = 'daily',
 ): Promise<DecisionContext> {
   const db = investmentDb(),
     date = investmentDate(now)
@@ -86,6 +88,7 @@ export async function assembleDecisionContext(
     .eq('owner_id', ownerId)
     .eq('decision_date', date)
     .eq('policy_version', RECOMMENDATION_POLICY)
+    .eq('edition_key', editionKey)
     .maybeSingle()
   if (existing.error) throw new Error(existing.error.message)
   if (existing.data) return existing.data.content as DecisionContext
@@ -104,7 +107,7 @@ export async function assembleDecisionContext(
       )
       return []
     })
-  const [research, theses, packets, world, market, candidates, watches, macro] =
+  const [research, theses, packets, world, market, candidates, watches, macro, fundResearch, fundPackets] =
     await Promise.all([
       optional('Research', rows('equity_research_notes', ownerId, cutoff)),
       optional(
@@ -139,6 +142,8 @@ export async function assembleDecisionContext(
         'Macro vintages',
         rows('investment_macro_vintages', undefined, cutoff, 'observed_at', 60),
       ),
+      optional('ETF research', rows('etf_research_notes', ownerId, cutoff)),
+      optional('ETF packets', rows('etf_research_packets', ownerId, cutoff)),
     ])
   const snapshot = market.find((m) => m.status === 'complete')
   const watched = new Set(
@@ -153,6 +158,8 @@ export async function assembleDecisionContext(
     portfolio.flatMap((p) => p.holdings.map((h) => h.symbol)),
   )
   const selected = new Set([...owned, ...watched])
+  const admitted = admitDiscoveryCandidates(candidates.filter(c => !c.owner_id || c.owner_id === ownerId), selected, cutoff)
+  for (const c of admitted) selected.add(String(c.symbol))
   const universe = [
     ...new Set([...selected, ...candidates.map((c) => String(c.symbol))]),
   ].map((symbol) => ({
@@ -162,7 +169,7 @@ export async function assembleDecisionContext(
       ? 'Current authoritative holding'
       : watched.has(symbol)
         ? 'Owner watchlist'
-        : 'Discovery candidate; not selected for current portfolio batch',
+        : selected.has(symbol) ? 'Scout discovery admitted for investigation; screening is not a buy signal' : 'Discovery candidate outside the bounded daily admission',
   }))
   const addEvidence = (
     id: string,
@@ -242,7 +249,7 @@ export async function assembleDecisionContext(
   for (const p of portfolio) {
     const portfolioId = p.account.id
     addEvidence(`portfolio:${portfolioId}`, 'portfolio', p, p.dataAsOf, cutoff)
-    const symbols = new Set([...p.holdings.map((h) => h.symbol), ...watched])
+    const symbols = new Set([...p.holdings.map((h) => h.symbol), ...watched, ...admitted.map(c => String(c.symbol))])
     const valuation = p.holdings.map(
       (h) =>
         h.currentValue ??
@@ -261,9 +268,10 @@ export async function assembleDecisionContext(
         q = quotes.get(symbol),
         asset = assets.get(symbol)
       const note =
-        research.find((r) => r.symbol === symbol && r.status === 'complete') ??
+        [...research, ...fundResearch].filter(r => r.symbol === symbol && r.status === 'complete').sort((a,b) => String(b.generated_at).localeCompare(String(a.generated_at)))[0] ??
         null
-      const packet = packets.find((r) => r.id === note?.company_packet_id),
+      const isFund = Boolean(note?.etf_research_packet_id) || /\b(?:ETF|exchange[- ]traded fund)\b/i.test(String(asset?.name ?? ''))
+      const packet = [...packets, ...fundPackets].find((r) => r.id === (note?.company_packet_id ?? note?.etf_research_packet_id)),
         packetContent = record(packet?.packet)
       const thesis =
         theses.find(
@@ -306,7 +314,7 @@ export async function assembleDecisionContext(
         sourceIds.push(
           addEvidence(
             `packet:${packet.id}`,
-            'company_packet',
+            isFund ? 'etf_packet' : 'company_packet',
             packet,
             packet.data_as_of,
             packet.generated_at,
@@ -340,12 +348,13 @@ export async function assembleDecisionContext(
         nameGaps.push('Research missing or older than 35 days')
       if (!quality.checkedAt)
         nameGaps.push('Research predates evidence-quality validation')
-      if (Array.isArray(quality.missing))
-        nameGaps.push(
-          ...quality.missing.map((g) => `Missing company evidence: ${g}`),
-        )
+      const limitations = Array.isArray(quality.missing) ? quality.missing.map(String) : []
+      nameGaps.push(...limitations.filter(g => !['earnings transcripts','consensus estimates'].includes(g)).map(g => `Missing ${isFund ? 'fund' : 'company'} evidence: ${g}`))
+      if (isFund && (!Number.isFinite(Date.parse(String(packet?.data_as_of))) || Date.parse(cutoff) - Date.parse(String(packet?.data_as_of)) > 7 * 86400000)) nameGaps.push('ETF holdings are older than seven days or undated')
+      const systemThesisValidated = thesis?.status !== 'invalidated' && hasValidatedSystemThesis(note, quality, cutoff)
       if (
-        p.dataSource !== 'robinhood' ||
+        !['robinhood', 'manual_snapshot'].includes(p.dataSource) ||
+        (p.confirmedAt !== undefined && Date.parse(p.confirmedAt) > Date.parse(cutoff)) ||
         !p.dataAsOf ||
         !Number.isFinite(Date.parse(p.dataAsOf)) ||
         Date.parse(p.dataAsOf) > Date.parse(cutoff) ||
@@ -371,7 +380,7 @@ export async function assembleDecisionContext(
             ) / 20
           : null
       const sector =
-        typeof record(packetContent.company).sector === 'string'
+        isFund ? (symbol === 'XLU' || symbol === 'UTES' ? 'Utilities' : symbol === 'XLK' ? 'Technology' : null) : typeof record(packetContent.company).sector === 'string'
           ? String(record(packetContent.company).sector)
           : null
       const peers = Array.isArray(packetContent.peers)
@@ -406,16 +415,21 @@ export async function assembleDecisionContext(
         sector,
         averageDollarVolume,
         evaluationPolicy: {
-          benchmark: 'SPY',
+          benchmark: isFund && symbol === 'UTES' ? 'XLU' : 'SPY',
           peers,
           peerSelection:
-            'CompanyPacket peers fixed at issuance; sector/company comparables, not a factor-matched portfolio',
+            isFund ? 'Broad equity benchmark; no verified fund peer cohort is available. Not a factor-matched attribution.' : 'CompanyPacket peers fixed at issuance; sector/company comparables, not a factor-matched portfolio',
           costBps: 20,
           baselineWeight: 0.05,
           execution: 'next_session_open',
         },
         securityId: String(asset?.alpaca_id ?? `unresolved:${symbol}`),
         portfolioId,
+        portfolioName: p.account.name,
+        instrumentType: isFund ? 'etf' : 'equity',
+        systemThesisValidated,
+        limitations,
+        entryGaps: !Number.isFinite(Date.parse(String(quality.priceAsOf))) || Date.parse(cutoff) - Date.parse(String(quality.priceAsOf)) > 96 * 3600000 ? ['Research entry assumptions use stale price evidence; refresh research'] : [],
         owned: Boolean(h && h.quantity > 0),
         quantity: h?.quantity ?? 0,
         currentWeightPct:
@@ -434,7 +448,7 @@ export async function assembleDecisionContext(
         causalLinks,
         selectionReason: h
           ? 'Owned: required daily coverage'
-          : 'Owner watchlist',
+          : watched.has(symbol) ? 'Owner watchlist' : 'Scout discovery: investigate before allocating capital',
       })
     }
   }
@@ -493,6 +507,7 @@ export async function assembleDecisionContext(
     date,
     cutoff,
     policy: RECOMMENDATION_POLICY,
+    editionKey,
     codeVersion:
       process.env.VERCEL_GIT_COMMIT_SHA ??
       process.env.STRATUM_RELEASE_SHA ??
@@ -512,11 +527,12 @@ export async function assembleDecisionContext(
     decision_date: date,
     decision_cutoff: cutoff,
     policy_version: context.policy,
+    edition_key: editionKey,
     content_hash: contentHash(context),
     content: context,
   })
   if (insert.error?.code === '23505')
-    return assembleDecisionContext(ownerId, now)
+    return assembleDecisionContext(ownerId, now, editionKey)
   if (insert.error) throw new Error(insert.error.message)
   return context
 }
@@ -524,9 +540,10 @@ export async function assembleDecisionContext(
 export async function generateDailyRecommendations(
   ownerId = MARKETS_OWNER_ID,
   now = new Date(),
+  editionKey = 'daily',
 ) {
   const db = investmentDb(),
-    context = await assembleDecisionContext(ownerId, now)
+    context = await assembleDecisionContext(ownerId, now, editionKey)
   const prior = await db
     .from('recommendation_batches')
     .select('id')
@@ -555,7 +572,7 @@ export async function generateDailyRecommendations(
       schemaPath: 'schemas/daily-recommendations.schema.json',
       webSearch: false,
       timeoutMs: 15 * 60 * 1000,
-      prompt: `Generate owner-facing investment recommendations using only the frozen context below. Do not fetch data, inspect external files, or execute orders. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires accepted thesis and fresh evidence. Risk reductions may follow invalidation without a new bullish thesis. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers; narrative confidence is not a calibrated probability. Maximum new position is 10%; do not invent prices or sizing. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Respond with summary and recommendations.\n${JSON.stringify(context)}`,
+      prompt: `Generate owner-facing investment recommendations using only the frozen context below. Do not fetch data, inspect external files, or execute orders. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires a validated system thesis (systemThesisValidated) or an accepted owner thesis plus fresh evidence. System recommendations are published for owner review; never rewrite the accepted owner thesis. A candidate screen is only a research lead. State evidence limitations, and never invent consensus or transcripts when they are absent. ETF evidence must be interpreted as fund exposure, never corporate earnings. Risk reductions may follow invalidation without a new bullish thesis. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers; narrative confidence is not a calibrated probability. Maximum new position is 10%; do not invent prices or sizing. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Respond with summary and recommendations.\n${JSON.stringify(context)}`,
       validate: (value) => {
         const v = record(value)
         return {
@@ -626,6 +643,9 @@ export async function generateDailyRecommendations(
 export async function fetchRecommendationWorkspace(ownerId: string) {
   const db = investmentDb()
   const viewedAt = new Date().toISOString()
+  const accountsResult = await db.from('portfolios').select('id,name,kind').eq('owner_id', ownerId)
+  if (accountsResult.error) throw new Error(accountsResult.error.message)
+  const accounts = accountsResult.data ?? []
   const batches = await db
     .from('recommendation_batches')
     .select('*')
@@ -637,6 +657,7 @@ export async function fetchRecommendationWorkspace(ownerId: string) {
   if (!latest)
     return {
       viewedAt,
+      accounts,
       batches: [],
       latest: null,
       recommendations: [],
@@ -704,6 +725,7 @@ export async function fetchRecommendationWorkspace(ownerId: string) {
   for (const r of responses) if (r.error) throw new Error(r.error.message)
   return {
     viewedAt,
+    accounts,
     batches: batches.data,
     latest,
     recommendations: responses[0].data ?? [],
