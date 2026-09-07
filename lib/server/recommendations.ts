@@ -281,8 +281,10 @@ export async function assembleDecisionContext(
           ? Number(quotes.get(h.symbol)!.price) * h.quantity
           : null),
     )
+    // An owner allocation budget is the sizing denominator even when a held
+    // instrument has no current quote. That instrument still fails its own price gate.
     const total =
-      p.totalValue ??
+      p.allocationBudget?.total ?? p.totalValue ??
       (valuation.every((v) => v !== null)
         ? p.cashBalance +
           valuation.reduce<number>((sum, v) => sum + (v ?? 0), 0)
