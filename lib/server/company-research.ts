@@ -10,6 +10,7 @@ import type {
   EquityResearchSectionId,
 } from '../markets/types.ts'
 import { normalizeCompanySegmentPeriods } from '../markets/company-segments.ts'
+import { selectCompanyMarketBasis } from '../markets/company-market-basis.ts'
 import { reconcileFinancials } from '../markets/financial-reconciliation.ts'
 import { forwardPriceToEarnings, selectForwardAnnualEstimate } from '../markets/valuation.ts'
 import { fetchFmpStableJson } from './fmp.ts'
@@ -316,16 +317,7 @@ export async function materializeCompanyPacket(
   ])
   const leadershipStock = leadership?.stocks.find((item) => item.symbol === symbol)
   if (!leadershipStock && !stockViewer) throw new Error(`${symbol} is not in the current materialized market universe`)
-  const stock = leadershipStock ?? {
-    price: stockViewer!.price,
-    return30d: null,
-    return1y: null,
-    vs50DayAverage: null,
-    vs200DayAverage: null,
-    sector: stockViewer!.sector,
-    subIndustry: stockViewer!.subIndustry,
-    asOf: stockViewer!.dataAsOf,
-  }
+  const stock = selectCompanyMarketBasis(leadershipStock ?? null, stockViewer, now)
   const group = leadershipStock
     ? leadership?.subIndustries.find((item) =>
         item.label === leadershipStock.subIndustry && item.sector === leadershipStock.sector)
@@ -417,6 +409,7 @@ export async function materializeCompanyPacket(
   ])
   const sources: CompanyPacketSource[] = [
     { id: 'alpaca-price-history', label: 'Alpaca price history', url: 'https://alpaca.markets/data', source: 'Alpaca', asOf: stock.asOf },
+    ...(stock.technicalAsOf ? [{ id: 'leadership-technicals', label: 'Materialized leadership technical metrics', url: 'https://alpaca.markets/data', source: 'Alpaca', asOf: stock.technicalAsOf }] : []),
     { id: 'fmp-profile', label: 'FMP company profile', url: `https://financialmodelingprep.com/stable/profile?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
     { id: 'fmp-financials', label: 'FMP financial statements', url: `https://financialmodelingprep.com/stable/income-statement?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },
     { id: 'fmp-ratios', label: 'FMP trailing ratios', url: `https://financialmodelingprep.com/stable/ratios-ttm?symbol=${symbol}`, source: 'FMP', asOf: now.toISOString() },

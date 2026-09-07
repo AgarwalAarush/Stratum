@@ -1,4 +1,7 @@
 type Row = Record<string, unknown>
+export function needsDecisionResearchRefresh(name: { gaps: string[]; entryGaps?: string[] }) {
+  return name.gaps.some(g => /Research missing|Research predates/.test(g)) || Boolean(name.entryGaps?.length)
+}
 const obj = (value: unknown): Row =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Row)
