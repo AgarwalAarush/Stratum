@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { MarketsFeedPage } from '@/components/markets/MarketsFeedPage'
 import { MarketsIntentLink } from '@/components/markets/MarketsIntentLink'
 import { ResearchQueue } from '@/components/markets/ResearchQueue'
@@ -30,6 +31,12 @@ export default async function MarketsResearchPage() {
         <div><p className="markets-eyebrow">Immutable research versions</p><h1 className="markets-display">Research</h1></div>
         <span>{notes.length} generated artifacts</span>
       </header>
+      <details className="mb-6 text-sm">
+        <summary className="cursor-pointer text-[var(--text-muted)]">Research tools</summary>
+        <nav aria-label="Research tools" className="mt-3 flex flex-wrap gap-x-6 gap-y-3">
+          {[["candidates", "Candidate scout"], ["explore", "Explore"], ["screener", "Screener"], ["theses", "Theses"], ["review", "Review queue"], ["biotech", "Biotech"]].map(([path,label]) => <Link key={path} href={`/markets/${path}`} className="underline underline-offset-4">{label}</Link>)}
+        </nav>
+      </details>
       <ResearchQueue initialJobs={jobs} />
       {coverage && coverage.ownedSymbols.length > 0 ? <section className="research-artifact-grid" aria-labelledby="portfolio-research-title">
         <div className="markets-intent-link">

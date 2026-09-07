@@ -26,13 +26,15 @@ const stamp = (v: unknown) =>
         timeStyle: 'short',
       })
     : 'Unavailable'
-const actionLabel = (s: string) => s.replaceAll('_', ' ')
+const actionLabel = (s: string) => s === 'no_trade' ? 'Wait — evidence incomplete' : s.replaceAll('_', ' ')
+const money = (v: number) => new Intl.NumberFormat('en-US', {style:'currency', currency:'USD', maximumFractionDigits:2}).format(v)
 export function RecommendationsWorkspace({
   initialData,
 }: {
   initialData: Data | null
 }) {
   const [tab, setTab] = useState<'decisions' | 'learning'>('decisions')
+  const [portfolioId, setPortfolioId] = useState('all')
   const data = initialData,
     context = record(data?.context).content as DecisionContext | undefined
   const latest = data?.latest
@@ -41,61 +43,39 @@ export function RecommendationsWorkspace({
     new Date(data?.viewedAt ?? '1970-01-01').toLocaleDateString('en-CA', {
       timeZone: 'America/Los_Angeles',
     })
-  const count = data?.recommendations.length ?? 0
+  const visible = data?.recommendations.filter(r => portfolioId === 'all' || (r.content as Recommendation).portfolioId === portfolioId) ?? []
+  const actionRows = visible.filter(r => ['buy','add','trim','sell'].includes(r.action))
+  const heldRows = visible.filter(r => !['buy','add','trim','sell'].includes(r.action) && context?.names.some(n => n.owned && n.symbol === r.symbol && n.portfolioId === (r.content as Recommendation).portfolioId))
+  const otherRows = visible.filter(r => !actionRows.includes(r) && !heldRows.includes(r))
   const actionable =
     data?.recommendations.filter((r) =>
       ['buy', 'add', 'trim', 'sell'].includes(r.action),
     ).length ?? 0
+  function renderDecision(row: NonNullable<Data>['recommendations'][number]) {
+    return <DecisionCard key={row.id} row={row} context={context} viewedAt={data!.viewedAt} events={data!.events.filter(e => e.recommendation_id === row.id)} />
+  }
   return (
-    <main className="mx-auto max-w-[1440px] px-5 py-8 md:px-10 md:py-12">
-      <header className="grid gap-6 border-b border-[var(--border)] pb-8 md:grid-cols-[1fr_auto]">
+    <div className="mx-auto max-w-[1200px] px-5 py-7 md:px-10 md:py-10">
+      <header className="grid gap-4 border-b border-[var(--border)] pb-5 md:grid-cols-[1fr_auto]">
         <div>
           <p className="mb-3 text-[11px] uppercase tracking-[.18em] text-[var(--text-muted)]">
-            Your investment process
+            Your daily investment brief
           </p>
           <h1 className="text-3xl font-medium tracking-tight md:text-4xl">
-            Decisions, with a memory.
+            What matters today.
           </h1>
-          <p className="mt-4 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
-            A daily view of what deserves capital, what needs research, and
-            what should wait. Every decision keeps its evidence and becomes
-            part of the learning record.
-          </p>
+
         </div>
         <div className="text-sm md:text-right">
-          <p>Morning edition · 7:00 AM Pacific</p>
+          <p>Daily · 7:00 AM Pacific</p>
           <p className="mt-2 text-xs text-[var(--text-muted)]">
             {latest
               ? stamp(latest.published_at)
               : 'Awaiting first publication'}
           </p>
-          <p className="mt-2 text-xs text-[var(--text-muted)]">
-            For your review and manual action
-          </p>
           <RecommendationRefresh />
         </div>
       </header>
-      <section
-        aria-label="Daily coverage"
-        className="grid grid-cols-3 border-b border-[var(--border)] py-6"
-      >
-        {[
-          ['Account decisions', latest ? count : '—'],
-          ['Capital changes', latest ? actionable : '—'],
-          [
-            'Explicit abstentions',
-            latest
-              ? (data?.recommendations.filter((r) => r.action === 'no_trade')
-                  .length ?? 0)
-              : '—',
-          ],
-        ].map(([label, value]) => (
-          <div key={label} className="pr-3">
-            <p className="text-xs text-[var(--text-muted)]">{label}</p>
-            <p className="mt-2 font-mono text-2xl">{value}</p>
-          </div>
-        ))}
-      </section>
       <nav
         aria-label="Recommendation views"
         className="flex gap-7 border-b border-[var(--border)]"
@@ -107,15 +87,10 @@ export function RecommendationsWorkspace({
             aria-current={tab === t ? 'page' : undefined}
             className={`py-4 text-sm capitalize ${tab === t ? 'border-b-2 border-current' : 'text-[var(--text-muted)]'}`}
           >
-            {t === 'decisions' ? 'Today’s decisions' : 'Outcomes & learning'}
+            {t === 'decisions' ? 'Insights' : 'Track record'}
           </button>
         ))}
       </nav>
-      {data?.accounts
-        .filter((a) => a.kind === 'manual')
-        .map((a) => (
-          <ManualPortfolioConfirmation key={a.id} account={a} />
-        ))}
       {!latest ? (
         <section className="my-10 max-w-2xl">
           <h2 className="text-xl">
@@ -141,27 +116,17 @@ export function RecommendationsWorkspace({
               acting.
             </p>
           ) : null}
-          <section className="grid gap-8 py-8 lg:grid-cols-[1fr_300px]">
-            <div>
-              <p className="text-[11px] uppercase tracking-widest text-[var(--text-muted)]">
-                The daily view
-              </p>
-              <p className="mt-3 max-w-3xl text-lg leading-8">
-                {latest.summary}
-              </p>
-            </div>
-            <aside className="border-l border-[var(--border)] pl-5 text-xs leading-6">
-              <p>Evidence frozen {stamp(context?.cutoff)}</p>
-              <p>Policy {context?.policy ?? 'Unavailable'}</p>
-              <p>
-                {context?.universe.length ?? 0} names retained in selection
-                record
-              </p>
-              <p className="mt-2 text-[var(--text-muted)]">
-                A fresh publication does not make stale inputs current.
-              </p>
-            </aside>
+          <section className="py-7">
+            <p className="max-w-4xl text-base leading-7 md:text-lg md:leading-8">{latest.summary}</p>
+            <details className="mt-4 text-xs text-[var(--text-muted)]">
+              <summary className="cursor-pointer">Edition details</summary>
+              <p className="mt-2">Evidence as of {stamp(context?.cutoff)} · {context?.policy} · {data?.recommendations.length} account decisions</p>
+            </details>
           </section>
+          <nav aria-label="Portfolio filter" className="mb-6 flex flex-wrap gap-2">
+            {[{id:'all',name:'All portfolios'}, ...(data?.accounts ?? [])].map(a => <button key={a.id} onClick={() => setPortfolioId(a.id)} aria-pressed={portfolioId === a.id} className={`rounded-full border border-[var(--border)] px-4 py-2 text-sm ${portfolioId === a.id ? 'bg-[var(--text)] text-[var(--bg)]' : 'text-[var(--text-muted)]'}`}>{a.name}</button>)}
+          </nav>
+          {Array.isArray(context?.portfolio) && context.portfolio.filter(p => (portfolioId === 'all' || p.account.id === portfolioId) && p.allocationBudget).map(p => <p key={p.account.id} className="mb-5 text-sm text-[var(--text-muted)]">{p.account.name}: {money(p.allocationBudget.total)} investment budget · {money(p.cashBalance)} available to allocate</p>)}
           {(context?.gaps.length ?? 0) > 0 && (
             <div className="mb-6 border border-[var(--border)] p-5 text-sm">
               <p className="font-medium">Evidence limits</p>
@@ -172,19 +137,19 @@ export function RecommendationsWorkspace({
               </ul>
             </div>
           )}
-          <div className="space-y-5">
-            {data!.recommendations.map((row) => (
-              <DecisionCard
-                key={row.id}
-                row={row}
-                context={context}
-                viewedAt={data!.viewedAt}
-                events={data!.events.filter(
-                  (e) => e.recommendation_id === row.id,
-                )}
-              />
-            ))}
-          </div>
+          <section aria-label="Capital actions">
+            <h2 className="text-lg font-medium">{actionRows.length ? 'Actions to consider' : 'No portfolio changes proposed'}</h2>
+            {!actionRows.length && <p className="mt-2 text-sm text-[var(--text-muted)]">{actionable ? 'No capital changes for this portfolio in this edition.' : 'No buy, add, trim or sell passed this edition’s review. Holds and evidence gaps are listed below.'}</p>}
+            {actionRows.map(renderDecision)}
+          </section>
+          {heldRows.length > 0 && <section aria-label="Your holdings" className="mt-8">
+            <h2 className="mb-2 text-lg font-medium">Your holdings <span className="text-sm font-normal text-[var(--text-muted)]">{heldRows.length}</span></h2>
+            {heldRows.map(renderDecision)}
+          </section>}
+          {otherRows.length > 0 && <details className="mt-8 border-t border-[var(--border)] py-5">
+            <summary className="cursor-pointer text-sm font-medium">Watchlist & research · {otherRows.length}</summary>
+            {otherRows.map(renderDecision)}
+          </details>}
         </>
       ) : (
         <section className="py-8">
@@ -266,6 +231,10 @@ export function RecommendationsWorkspace({
           </div>
         </section>
       )}
+      <details className="mt-8 border-t border-[var(--border)] pt-5 text-sm">
+        <summary className="cursor-pointer text-[var(--text-muted)]">Update portfolio inputs</summary>
+        {data?.accounts.filter(a => a.kind === 'manual').map(a => <ManualPortfolioConfirmation key={a.id} account={a} />)}
+      </details>
       <footer className="mt-12 border-t border-[var(--border)] pt-5 text-xs text-[var(--text-muted)]">
         Newsletter delivery:{' '}
         {String(
@@ -274,7 +243,7 @@ export function RecommendationsWorkspace({
         )}{' '}
         · Recommendations never place orders.
       </footer>
-    </main>
+    </div>
   )
 }
 function DecisionCard({
@@ -322,12 +291,12 @@ function DecisionCard({
     }
   }
   return (
-    <article className="border border-[var(--border)] p-5 md:p-7">
+    <article className="border-b border-[var(--border)] py-6">
       <p className="mb-3 text-xs text-[var(--text-muted)]">
         {context?.names.find(
           (n) => n.portfolioId === rec.portfolioId && n.symbol === rec.symbol,
         )?.portfolioName ?? 'Portfolio recorded in evidence'}{' '}
-        · System recommendation for your review
+
       </p>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div className="flex items-baseline gap-4">
@@ -342,7 +311,7 @@ function DecisionCard({
           </span>
         </div>
         <span className="text-xs text-[var(--text-muted)]">
-          Version {String(row.version)} · {rec.horizonDays}-day thesis horizon
+          {rec.horizonDays}-day horizon · {rec.confidence}% confidence
         </span>
       </div>
       {expired ? (
@@ -355,6 +324,8 @@ function DecisionCard({
         </p>
       ) : null}
       <p className="mt-4 max-w-4xl text-base leading-7">{rec.reason}</p>
+      <details className="mt-4">
+        <summary className="cursor-pointer text-sm underline underline-offset-4">Reasoning & next steps</summary>
       <div className="mt-5 grid gap-5 text-sm leading-6 md:grid-cols-2">
         <div>
           <h3 className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
@@ -476,6 +447,7 @@ function DecisionCard({
             {stamp(e.recorded_at)}
           </p>
         ))}
+      </details>
       </details>
     </article>
   )

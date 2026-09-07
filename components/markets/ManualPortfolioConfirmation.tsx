@@ -15,6 +15,8 @@ export function ManualPortfolioConfirmation({
     requestId.current = null
   }
   const [csv, setCsv] = useState('symbol,quantity,cost_basis_per_share\n')
+  const [budgetMode, setBudgetMode] = useState(false)
+  const [holdingsValue, setHoldingsValue] = useState('')
   const [cash, setCash] = useState(''),
     [asOf, setAsOf] = useState('')
   const [confirmed, setConfirmed] = useState(false),
@@ -34,7 +36,7 @@ export function ManualPortfolioConfirmation({
     setPending(true)
     setStatus('')
     try {
-      if (!cash.trim() || !asOf)
+      if (!cash.trim() || !asOf || (budgetMode && !holdingsValue.trim()))
         throw new Error('Provide cash and capture time explicitly')
       const response = await fetch('/api/markets/recommendations', {
         method: 'POST',
@@ -43,7 +45,7 @@ export function ManualPortfolioConfirmation({
           action: 'confirm-portfolio',
           portfolioId: account.id,
           csv,
-          cash: Number(cash),
+          ...(budgetMode ? {totalBudget: Number(cash), holdingsValue: Number(holdingsValue)} : {cash: Number(cash)}),
           asOf: new Date(asOf).toISOString(),
           confirmed,
           requestId:
@@ -67,16 +69,17 @@ export function ManualPortfolioConfirmation({
   return (
     <details className="my-6 border border-[var(--border)] p-5 text-sm">
       <summary className="cursor-pointer font-medium">
-        Confirm {account.name} holdings and cash
+        Update {account.name}
       </summary>
       <p className="mt-3 max-w-3xl leading-6 text-[var(--text-muted)]">
-        Record the complete account as of a known time. This creates a dated
-        owner-confirmed snapshot; it does not place trades or add
-        transactions. Confirm again after changing holdings or cash.
+        Record your holdings with either cash or a total investment budget.
       </p>
       <form onSubmit={save} className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="flex gap-2 md:col-span-2">
+          {[false,true].map(mode => <button type="button" key={String(mode)} aria-pressed={budgetMode === mode} onClick={() => {setBudgetMode(mode); setCash(''); changed()}} className={`rounded-full border border-[var(--border)] px-4 py-2 ${budgetMode === mode ? 'font-medium' : 'text-[var(--text-muted)]'}`}>{mode ? 'Investment budget' : 'Account cash'}</button>)}
+        </div>
         <label className="grid gap-2">
-          Cash balance (USD)
+          {budgetMode ? 'Total budget including holdings (USD)' : 'Cash balance (USD)'}
           <input
             required
             type="number"
@@ -90,8 +93,11 @@ export function ManualPortfolioConfirmation({
             className="border border-[var(--border)] bg-transparent p-2"
           />
         </label>
+        {budgetMode && <label className="grid gap-2">Current holdings value (USD)
+          <input required type="number" min="0" step="0.01" value={holdingsValue} onChange={e => {setHoldingsValue(e.target.value); changed()}} className="border border-[var(--border)] bg-transparent p-2" />
+        </label>}
         <label className="grid gap-2">
-          Account capture time
+          Holdings as of
           <input
             required
             type="datetime-local"
@@ -139,8 +145,7 @@ export function ManualPortfolioConfirmation({
             checked={confirmed}
             onChange={(e) => setConfirmed(e.target.checked)}
           />
-          I confirm these are all holdings and the full cash balance at the
-          stated time.
+          {budgetMode ? 'These are all holdings, and this is the total budget I want allocated.' : 'These are all holdings and the full cash balance at the stated time.'}
         </label>
         <button
           disabled={pending || !confirmed || !valid}

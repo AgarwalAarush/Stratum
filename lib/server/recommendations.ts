@@ -1,3 +1,4 @@
+import { recommendationDisplayContext } from '../markets/recommendation-display.ts'
 import { admitDiscoveryCandidates, hasValidatedSystemThesis } from '../markets/decision-admission.ts'
 import { createHash, randomUUID } from 'node:crypto'
 import { getSupabaseClient } from './supabase.ts'
@@ -442,6 +443,7 @@ export async function assembleDecisionContext(
             : null,
         portfolioValue: total,
         cash: p.cashBalance,
+        capitalBasis: p.allocationBudget ? 'owner_budget' : 'broker_cash',
         quote: price,
         research: note,
         thesis,
@@ -576,7 +578,7 @@ export async function generateDailyRecommendations(
         cwd: input.directory,
         webSearch: false,
         timeoutMs: 15 * 60 * 1000,
-        prompt: `Generate owner-facing investment recommendations using only the frozen context below. Do not fetch live data or execute orders. Inspect only the frozen files supplied below. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires a validated system thesis (systemThesisValidated) or an accepted owner thesis plus fresh evidence. System recommendations are published for owner review; never rewrite the accepted owner thesis. A candidate screen is only a research lead. State evidence limitations, and never invent consensus or transcripts when they are absent. ETF evidence must be interpreted as fund exposure, never corporate earnings. Risk reductions may follow invalidation without a new bullish thesis. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers; narrative confidence is not a calibrated probability. Maximum new position is 10%; do not invent prices or sizing. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Every narrative field, entry condition, and decision dimension must contain at least eight characters; risks and invalidation must be nonempty arrays. Provide a substantive exit and reassessment rule even for watch, research, and no-trade. Expiry must be after the cutoff and within seven days; horizons are 1 to 1825 integer days, confidence is 0 to 100, and forecast probabilities are strictly between zero and one. Respond with summary and recommendations.\n${input.prompt}`,
+        prompt: `Generate owner-facing investment recommendations using only the frozen context below. Do not fetch live data or execute orders. Inspect only the frozen files supplied below. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires a validated system thesis (systemThesisValidated) or an accepted owner thesis plus fresh evidence. System recommendations are published for owner review; never rewrite the accepted owner thesis. A candidate screen is only a research lead. State evidence limitations, and never invent consensus or transcripts when they are absent. ETF evidence must be interpreted as fund exposure, never corporate earnings. Risk reductions may follow invalidation without a new bullish thesis. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers; narrative confidence is not a calibrated probability. Maximum new position is 10%; do not invent prices or sizing. For capitalBasis owner_budget, cash means owner-authorized remaining allocation budget, not broker buying power. Use this budget for recommendations without requesting funding or transfer confirmation; never claim it is settled broker cash. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Every narrative field, entry condition, and decision dimension must contain at least eight characters; risks and invalidation must be nonempty arrays. Provide a substantive exit and reassessment rule even for watch, research, and no-trade. Expiry must be after the cutoff and within seven days; horizons are 1 to 1825 integer days, confidence is 0 to 100, and forecast probabilities are strictly between zero and one. Respond with summary and recommendations.\n${input.prompt}`,
         validate: (value) => {
           const v = record(value)
           return {
@@ -651,16 +653,17 @@ export async function generateDailyRecommendations(
 
 export async function fetchRecommendationWorkspace(ownerId: string) {
   const db = investmentDb()
+  const readDeadline = AbortSignal.timeout(15_000)
   const viewedAt = new Date().toISOString()
-  const accountsResult = await db.from('portfolios').select('id,name,kind').eq('owner_id', ownerId)
+  const accountsResult = await db.from('portfolios').select('id,name,kind').eq('owner_id', ownerId).abortSignal(readDeadline)
   if (accountsResult.error) throw new Error(accountsResult.error.message)
   const accounts = accountsResult.data ?? []
   const batches = await db
     .from('recommendation_batches')
-    .select('*')
+    .select('id,manifest_id,decision_date,published_at,summary')
     .eq('owner_id', ownerId)
     .order('published_at', { ascending: false })
-    .limit(14)
+    .limit(14).abortSignal(readDeadline)
   if (batches.error) throw new Error(batches.error.message)
   const latest = batches.data?.[0] ?? null
   if (!latest)
@@ -686,25 +689,25 @@ export async function fetchRecommendationWorkspace(ownerId: string) {
       .select('*')
       .eq('owner_id', ownerId)
       .eq('batch_id', latest.id)
-      .order('symbol'),
+      .order('symbol').abortSignal(readDeadline),
     db
       .from('recommendation_owner_events')
       .select('*')
       .eq('owner_id', ownerId)
       .order('recorded_at', { ascending: false })
-      .limit(100),
+      .limit(100).abortSignal(readDeadline),
     db
       .from('recommendation_evaluations')
       .select('*')
       .eq('owner_id', ownerId)
       .order('created_at', { ascending: false })
-      .limit(100),
+      .limit(100).abortSignal(readDeadline),
     db
       .from('recommendation_input_manifests')
       .select('content,content_hash')
       .eq('id', latest.manifest_id)
       .eq('owner_id', ownerId)
-      .single(),
+      .abortSignal(readDeadline).single(),
     db
       .from('investment_newsletter_outbox')
       .select(
@@ -712,28 +715,28 @@ export async function fetchRecommendationWorkspace(ownerId: string) {
       )
       .eq('owner_id', ownerId)
       .order('edition_date', { ascending: false })
-      .limit(1)
+      .limit(1).abortSignal(readDeadline)
       .maybeSingle(),
     db
       .from('recommendation_cohort_reviews')
       .select('*')
       .eq('owner_id', ownerId)
       .order('created_at', { ascending: false })
-      .limit(4),
+      .limit(4).abortSignal(readDeadline),
     db
       .from('recommendation_forecasts')
       .select('*')
       .eq('owner_id', ownerId)
       .order('deadline')
-      .limit(100),
+      .limit(100).abortSignal(readDeadline),
     db
       .from('recommendation_policy_experiments')
       .select('*')
       .eq('owner_id', ownerId)
       .order('created_at', { ascending: false })
-      .limit(30),
-    db.from('recommendation_shadow_runs').select('id,experiment_id,policy_key,batch_id,created_at').eq('owner_id',ownerId).order('created_at',{ascending:false}).limit(100),
-    db.from('recommendation_shadow_evaluations').select('*').eq('owner_id',ownerId).order('created_at',{ascending:false}).limit(30),
+      .limit(30).abortSignal(readDeadline),
+    db.from('recommendation_shadow_runs').select('id,experiment_id,policy_key,batch_id,created_at').eq('owner_id',ownerId).order('created_at',{ascending:false}).limit(100).abortSignal(readDeadline),
+    db.from('recommendation_shadow_evaluations').select('*').eq('owner_id',ownerId).order('created_at',{ascending:false}).limit(30).abortSignal(readDeadline),
   ])
   for (const r of responses) if (r.error) throw new Error(r.error.message)
   return {
@@ -744,7 +747,7 @@ export async function fetchRecommendationWorkspace(ownerId: string) {
     recommendations: responses[0].data ?? [],
     events: responses[1].data ?? [],
     evaluations: responses[2].data ?? [],
-    context: responses[3].data,
+    context: recommendationDisplayContext(responses[3].data),
     delivery: responses[4].data,
     cohorts: responses[5].data ?? [],
     forecasts: responses[6].data ?? [],

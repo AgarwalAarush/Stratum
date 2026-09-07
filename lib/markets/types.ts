@@ -1049,6 +1049,7 @@ export interface PortfolioHolding {
 
 export interface PortfolioAccountSummary {
   account: PortfolioAccount
+  allocationBudget?: { total: number; holdingsValue: number }
   cashBalance: number
   investedCost: number
   marketValue: number | null

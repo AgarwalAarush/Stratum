@@ -9576,29 +9576,26 @@ body:has(.markets-shell) {
   .markets-subnav {
     align-items: stretch;
     background: var(--market-bg);
-    display: none;
-    height: auto;
-    padding: 8px 16px 14px;
-    position: absolute;
+    display: flex;
+    gap: 0;
+    height: 48px;
+    padding: 0 12px;
+    position: static;
     width: 100%;
-    z-index: 20;
-  }
-
-  .markets-subnav-open {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .markets-subnav-link {
-    border-bottom: 1px solid var(--market-border);
+    flex: 1;
+    justify-content: center;
     min-height: 44px;
+    min-width: 0;
     padding: 0 4px;
   }
 
   .markets-subnav-link-active::after {
     bottom: -1px;
-    right: auto;
-    width: 42px;
+    right: 0;
+    width: auto;
   }
 
   .markets-main {

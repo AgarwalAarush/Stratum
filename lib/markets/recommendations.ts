@@ -39,6 +39,7 @@ export type DecisionName = {
   currentWeightPct: number | null
   portfolioValue: number | null
   cash: number
+  capitalBasis?: 'broker_cash' | 'owner_budget'
   quote: { price: number; asOf: string; feed: string } | null
   research: Record<string, unknown> | null
   thesis: Record<string, unknown> | null

@@ -70,6 +70,8 @@ export default async function MarketsWorldPage() {
         </div>
         <div className="world-header-actions">
           <WorldRefreshAction />
+          <Link href="/markets/overview" className="world-system-link">Market overview</Link>
+          <Link href="/markets/events" className="world-system-link">Events</Link>
           <Link href="/markets/world/system" className="world-system-link">System health</Link>
           <span className={`world-operating-state${needsAttention ? ' world-operating-state--attention' : ''}`} data-freshness={world.freshness}>{operatingState}</span>
         </div>
