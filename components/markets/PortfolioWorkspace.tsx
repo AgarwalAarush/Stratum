@@ -326,6 +326,8 @@ export function PortfolioWorkspace({
               </div>
               <p>{activePortfolio.dataSource === 'robinhood'
                 ? `Robinhood private account snapshot · captured ${asOf(activePortfolio.dataAsOf ?? universe.dataAsOf)}`
+                : activePortfolio.dataSource === 'manual_snapshot'
+                  ? activePortfolio.dataAsOf ? `Owner-confirmed account · captured ${asOf(activePortfolio.dataAsOf)}` : 'Account changed since confirmation · reconfirm holdings and cash in Decisions'
                 : `Weighted from the current market snapshot · ${universe.feed === 'illustrative' ? 'Illustrative' : 'Market'} data as of ${asOf(universe.dataAsOf)}`}</p>
             </section>
             <section className="portfolio-holdings-table-section">

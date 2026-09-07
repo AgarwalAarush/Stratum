@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import { parseStateStreetHoldings } from './etf-workbook.ts'
 import { parseHTML } from 'linkedom'
 import type {
   EtfHolding,
@@ -25,7 +27,7 @@ interface IssuerSource {
   parse: (summaryHtml: string, holdingsHtml: string, now: Date) => Omit<EtfResearchPacket, 'id' | 'symbol' | 'version' | 'generatedAt' | 'dataAsOf' | 'priceHistory' | 'sources'> & { dataAsOf: string }
 }
 
-const ETF_SOURCES: Record<string, IssuerSource> = {
+export const ETF_SOURCES: Record<string, IssuerSource> = {
   GRID: {
     issuer: 'First Trust',
     summaryUrl: 'https://www.ftportfolios.com/retail/etf/etfsummary.aspx?ticker=grid',
@@ -46,6 +48,16 @@ const ETF_SOURCES: Record<string, IssuerSource> = {
   },
 }
 
+for (const symbol of ['PAVE', 'MLPX']) ETF_SOURCES[symbol] = {
+  ...ETF_SOURCES.URA!, summaryUrl: `https://www.globalxetfs.com/funds/${symbol.toLowerCase()}`,
+  holdingsUrl: `https://www.globalxetfs.com/funds/${symbol.toLowerCase()}`,
+}
+for (const symbol of ['XLK', 'XLU']) ETF_SOURCES[symbol] = {
+  issuer: 'State Street', summaryUrl: `https://www.ssga.com/mainfund/${symbol}`,
+  holdingsUrl: `https://www.ssga.com/library-content/products/fund-data/etfs/us/holdings-daily-us-en-${symbol.toLowerCase()}.xlsx`,
+  parse: () => { throw new Error('State Street requires the complete issuer workbook') },
+}
+
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
@@ -60,6 +72,7 @@ function validOwnerId(ownerId: string): boolean {
 }
 
 function parseDecimal(value: string): number | null {
+  if (!value.trim() || value.trim() === '-') return null
   const normalized = value.replace(/[$,%\s]/g, '').replaceAll(',', '')
   const parsed = Number(normalized)
   return Number.isFinite(parsed) ? parsed : null
@@ -80,11 +93,22 @@ function firstMatch(text: string, expression: RegExp): string | null {
   return text.match(expression)?.[1]?.trim() ?? null
 }
 
-function extractAsOf(html: string, now: Date): string {
-  const text = pageText(html)
-  const value = firstMatch(text, /(?:Holdings(?: of the Fund)?|Current Fund Data|Top Holdings|Key Information|Fund Holdings Data)\s*(?:\([^)]*)?(?:as of|As of)\s*([A-Z][a-z]{2}\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{4})/i)
-  const parsed = value ? Date.parse(value) : Number.NaN
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : now.toISOString()
+export function extractAsOf(content: string, now: Date): string {
+  const text = /<[^>]+>/.test(content) ? pageText(content) : content
+  const value = firstMatch(text, /(?:Holdings(?: of the Fund)?|Current Fund Data|Top Holdings|Key Information|Fund Holdings Data)\s*(?:\([^)]*\))?\s*(?:as of)\s*([A-Z][a-z]{2,8}\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{4})/i)
+  const parsed = value ? Date.parse(`${value} UTC`) : Number.NaN
+  if (!Number.isFinite(parsed) || parsed > now.getTime()) throw new Error('Issuer holdings date is missing, invalid or future-dated')
+  return new Date(parsed).toISOString()
+}
+
+export function etfEvidenceQuality(packet: {holdings: EtfHolding[]; holdingsCount: number; dataAsOf: string}, priceAsOf: string, now: Date) {
+  const coveredWeight = packet.holdings.reduce((sum,h) => sum + h.weight, 0)
+  const missing: string[] = []
+  if (packet.holdings.length < 5 || coveredWeight < 0.95 || coveredWeight > 1.02 || packet.holdings.length < packet.holdingsCount) missing.push('Complete issuer holdings coverage')
+  const time = Date.parse(packet.dataAsOf)
+  if (!Number.isFinite(time) || time > now.getTime() || now.getTime() - time > 7 * 86400000) missing.push('Current issuer holdings date')
+  if (!Number.isFinite(Date.parse(priceAsOf)) || Date.parse(priceAsOf) > now.getTime()) missing.push('Valid market price timestamp')
+  return {checkedAt: now.toISOString(), missing, coveredWeight, priceAsOf, holdingsAsOf: packet.dataAsOf}
 }
 
 function tableHoldings(html: string): EtfHolding[] {
@@ -103,7 +127,7 @@ function tableHoldings(html: string): EtfHolding[] {
     seen.add(name)
     const identifier = cells[1] && /^[A-Z0-9./-]{2,18}$/i.test(cells[1]) ? cells[1] : null
     const symbols = cells.filter((cell) => /^[A-Z]{1,6}(?:[./-][A-Z]{1,4})?$/.test(cell))
-    const symbol = symbols.find((cell) => cell !== identifier) ?? null
+    const symbol = symbols[0] ?? null
     const money = cells.find((cell) => /^\$[\d,.]+$/.test(cell))
     const shares = cells.find((cell) => /^\d[\d,]*$/.test(cell))
     holdings.push({
@@ -307,9 +331,17 @@ export async function materializeEtfResearchPacket(symbolInput: string, ownerId:
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const [summaryHtml, stock] = await Promise.all([loadHtml(source.summaryUrl), fetchStockViewerData(symbol, ownerId)])
   const holdingsUrl = source.issuer === 'Global X' ? globalXHoldingsUrl(summaryHtml) : source.holdingsUrl
-  const holdingsHtml = holdingsUrl === source.summaryUrl ? summaryHtml : await loadHtml(holdingsUrl)
+  const holdingsHtml = source.issuer === 'State Street' ? '' : holdingsUrl === source.summaryUrl ? summaryHtml : await loadHtml(holdingsUrl)
   if (!stock) throw new Error(`${symbol} is not in the current materialized market universe`)
-  const parsed = source.parse(summaryHtml, holdingsHtml, now)
+  let parsed: ReturnType<IssuerSource['parse']>
+  if (source.issuer === 'State Street') {
+    const response = await fetch(holdingsUrl, {signal: AbortSignal.timeout(20_000)})
+    if (!response.ok) throw new Error(`Issuer workbook request failed (${response.status})`)
+    const data = parseStateStreetHoldings(new Uint8Array(await response.arrayBuffer()), symbol)
+    parsed = {...basePacket({issuer: source.issuer, fundName: data.fundName, holdings: data.holdings, holdingsCount: data.holdings.length, topTenWeight: 0,
+      benchmark: symbol === 'XLK' ? 'Technology Select Sector Index' : 'Utilities Select Sector Index', strategy: null,
+      expenseRatio: extractPercent(pageText(summaryHtml), 'Gross Expense Ratio'), assetsUnderManagement: extractMoney(pageText(summaryHtml), 'Assets Under Management'), rebalanceFrequency: null}), dataAsOf: data.dataAsOf}
+  } else parsed = source.parse(summaryHtml, holdingsHtml, now)
   if (parsed.holdings.length < 5) throw new Error(`${symbol} issuer source did not provide enough holdings for ETF research`)
   const version = await nextVersion('etf_research_packets', ownerId, symbol)
   const generatedAt = now.toISOString()
@@ -319,7 +351,8 @@ export async function materializeEtfResearchPacket(symbolInput: string, ownerId:
   ]
   const packet: EtfResearchPacket = {
     ...parsed,
-    id: '', symbol, version, generatedAt,
+    id: randomUUID(), symbol, version, generatedAt,
+    evidenceQuality: etfEvidenceQuality(parsed, stock.dataAsOf, now),
     priceHistory: {
       latestPrice: stock.price,
       return30d: stock.return30d,
@@ -330,12 +363,10 @@ export async function materializeEtfResearchPacket(symbolInput: string, ownerId:
     sources,
   }
   const { data: inserted, error } = await supabase.from('etf_research_packets').insert({
-    symbol, owner_id: ownerId, version, status: 'complete', packet,
+    id: packet.id, symbol, owner_id: ownerId, version, status: 'complete', packet,
     source_ids: sources.map((item) => item.id), data_as_of: packet.dataAsOf, generated_at: generatedAt,
   }).select('id').single()
   if (error || !inserted) throw new Error(`Unable to persist ETF research packet: ${error?.message ?? 'unknown error'}`)
-  packet.id = inserted.id
-  await supabase.from('etf_research_packets').update({ packet }).eq('id', inserted.id)
   return packet
 }
 
@@ -351,9 +382,15 @@ interface EtfResearchGeneration {
   sourceIds: string[]
 }
 
-export function validateEtfResearch(value: unknown): EtfResearchGeneration {
+export function validateEtfResearch(value: unknown, packet?: EtfResearchPacket): EtfResearchGeneration {
   const output = record(value)
   const sections = Array.isArray(output.sections) ? output.sections.map(record) : []
+  if (packet) {
+    const allowed = new Set(packet.sources.map(s => s.id))
+    const cited = Array.isArray(output.sourceIds) ? output.sourceIds : []
+    if (!cited.length || cited.some(id => !allowed.has(String(id)))) throw new Error('ETF citation is absent from the source packet')
+    for (const section of sections) if (!Array.isArray(section.sourceIds) || section.sourceIds.some(id => !allowed.has(String(id)) || !cited.includes(id))) throw new Error('ETF section citation is absent from the source ledger')
+  }
   const ids = sections.map((section) => String(section.id))
   if (sections.length !== ETF_SECTION_IDS.length || ETF_SECTION_IDS.some((id) => !ids.includes(id))) {
     throw new Error('ETF research must contain each of the 12 required sections exactly once')
@@ -471,21 +508,21 @@ export async function generateEtfResearch(
   try {
     await onProgress?.(55, 'Synthesizing ETF analysis')
     const result = await runCodexJson({
-      prompt: etfResearchPrompt(packet, prior, reason), schemaPath: 'schemas/etf-research.schema.json', validate: validateEtfResearch,
+      prompt: etfResearchPrompt(packet, prior, reason), schemaPath: 'schemas/etf-research.schema.json', validate: value => validateEtfResearch(value, packet),
       timeoutMs: 20 * 60 * 1_000,
     })
     await onProgress?.(90, 'Validating and publishing ETF research')
     const generatedAt = new Date().toISOString()
     const content = { ...result.data, reason }
+    const used = new Set(result.data.sourceIds)
+    const { error: sourceError } = await supabase.from('etf_research_sources').insert(packet.sources
+      .filter((source) => used.has(source.id)).map((source) => ({ research_note_id: note.id, source_id: source.id, label: source.label, url: source.url, source: source.source, source_as_of: source.asOf })))
+    if (sourceError) throw new Error(`Unable to persist ETF research sources: ${sourceError.message}`)
     const { error } = await supabase.from('etf_research_notes').update({
       status: 'complete', formal_rating: result.data.formalRating, entry_action: result.data.entryAction, content,
       provider: result.metadata.provider, model: result.metadata.model, generated_at: generatedAt, error: null,
     }).eq('id', note.id).eq('status', 'running')
     if (error) throw new Error(`Unable to publish ETF research version: ${error.message}`)
-    const used = new Set(result.data.sourceIds)
-    const { error: sourceError } = await supabase.from('etf_research_sources').insert(packet.sources
-      .filter((source) => used.has(source.id)).map((source) => ({ research_note_id: note.id, source_id: source.id, label: source.label, url: source.url, source: source.source, source_as_of: source.asOf })))
-    if (sourceError) throw new Error(`Unable to persist ETF research sources: ${sourceError.message}`)
     await onProgress?.(100, 'ETF research complete')
     return { id: note.id, symbol, version, status: 'complete', ...result.data, provider: result.metadata.provider, model: result.metadata.model, dataAsOf: packet.dataAsOf, generatedAt, error: null }
   } catch (error) {

@@ -1,3 +1,5 @@
+import { enqueueAgentJob } from '@/lib/server/agent-jobs'
+import { confirmManualPortfolio } from '@/lib/server/portfolio-confirmation'
 import {
   registerInvestmentExperiment,
   reviewInvestmentExperiment,
@@ -38,20 +40,36 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid origin' }, { status: 403 })
   try {
     const input = record(await request.json())
+    if (input.action === 'refresh-edition') {
+      const requestId = String(input.requestId ?? '')
+      if (!/^[a-f0-9-]{36}$/i.test(requestId))
+        throw new Error('Refresh request ID required')
+      return NextResponse.json(
+        await enqueueAgentJob(
+          'generate-daily-recommendations',
+          { ownerId: user.id, editionKey: `owner:${requestId}` },
+          `generate-daily-recommendations:${user.id}:${requestId}`,
+        ),
+      )
+    }
     const result =
-      input.action === 'register-experiment'
-        ? await registerInvestmentExperiment(user.id, input)
-        : input.action === 'review-experiment'
-          ? await reviewInvestmentExperiment(user.id, input)
-          : input.action === 'adjudicate-forecast'
-            ? await adjudicateRecommendationForecast(user.id, input)
-            : await recordRecommendationOwnerEvent(user.id, input)
+      input.action === 'confirm-portfolio'
+        ? await confirmManualPortfolio(user.id, input)
+        : input.action === 'register-experiment'
+          ? await registerInvestmentExperiment(user.id, input)
+          : input.action === 'review-experiment'
+            ? await reviewInvestmentExperiment(user.id, input)
+            : input.action === 'adjudicate-forecast'
+              ? await adjudicateRecommendationForecast(user.id, input)
+              : await recordRecommendationOwnerEvent(user.id, input)
     return NextResponse.json(result)
   } catch (error) {
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : 'Unable to record response',
+          error instanceof Error
+            ? error.message
+            : 'Unable to record response',
       },
       { status: 400 },
     )

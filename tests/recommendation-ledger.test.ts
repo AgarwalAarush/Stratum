@@ -7,6 +7,7 @@ test('Postgres atomically publishes immutable advice and safely leases newslette
   const db = new PGlite()
   try {
     await db.exec(`create role anon;create role authenticated;create role service_role;
+    create table portfolios(id uuid primary key);
     create table agent_jobs(id uuid primary key,status text,claimed_by text,claimed_at timestamptz,attempts integer,max_attempts integer,last_error text,run_after timestamptz,updated_at timestamptz);
     create table agent_runs(id uuid primary key,job_id uuid,worker_id text,status text,output jsonb,error text,finished_at timestamptz,started_at timestamptz default now(),duration_ms integer);
     create table decision_reviews(id uuid primary key default gen_random_uuid(),owner_id uuid,decision_id uuid,reviewed_at timestamptz default now(),unique(owner_id,decision_id));
@@ -23,6 +24,8 @@ test('Postgres atomically publishes immutable advice and safely leases newslette
       '202609070005_atomic_agent_completion.sql',
       '202609070006_atomic_asset_universe.sql',
       '202609070007_gmail_newsletter.sql',
+      '202609070008_manual_portfolio_confirmation.sql',
+      '202609070009_recommendation_editions.sql',
     ])
       await db.exec(
         await readFile(
@@ -33,6 +36,10 @@ test('Postgres atomically publishes immutable advice and safely leases newslette
     const owner = '00000000-0000-4000-8000-000000000001',
       portfolio = '00000000-0000-4000-8000-000000000002',
       manifest = '00000000-0000-4000-8000-000000000003'
+    await db.query('insert into portfolios(id) values($1)', [portfolio])
+    await db.query('insert into portfolio_confirmations(owner_id,portfolio_id,request_id,as_of,content,content_hash) values($1,$2,$3,now(),$4,$5)', [owner,portfolio,manifest,{cash:0,positions:[]},'hash'])
+    await assert.rejects(() => db.query('update portfolio_confirmations set content_hash=$1', ['changed']), /append-only/i)
+    await assert.rejects(() => db.query('delete from portfolio_confirmations'), /append-only/i)
     const context = {
       names: [
         {

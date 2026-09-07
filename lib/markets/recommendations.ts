@@ -13,7 +13,7 @@ export const RECOMMENDATION_ACTIONS = [
 export type RecommendationAction = (typeof RECOMMENDATION_ACTIONS)[number]
 // v1.1 corrects thesis schema/provenance. New manifests retain the original
 // abstention edition rather than rewriting its frozen inputs after repair.
-export const RECOMMENDATION_POLICY = 'prospective-v1.1'
+export const RECOMMENDATION_POLICY = 'prospective-v1.2'
 export type EvidenceRef = {
   id: string
   kind: string
@@ -29,6 +29,11 @@ export type DecisionName = {
   symbol: string
   securityId: string
   portfolioId: string
+  portfolioName?: string
+  instrumentType?: 'equity' | 'etf'
+  systemThesisValidated?: boolean
+  limitations?: string[]
+  entryGaps?: string[]
   owned: boolean
   quantity: number
   currentWeightPct: number | null
@@ -59,6 +64,7 @@ export type DecisionContext = {
   date: string
   cutoff: string
   policy: string
+  editionKey?: string
   codeVersion: string
   portfolio: unknown
   names: DecisionName[]
@@ -296,13 +302,14 @@ export function gateRecommendation(
     if (!rec.sourceIds.length || !rec.forecasts.length)
       reasons.push('No evidence-backed, measurable forecast')
     if (!name.research)
-      reasons.push('Completed company research is unavailable')
+      reasons.push('Completed instrument research is unavailable')
   }
   if (['add', 'hold', 'trim', 'sell'].includes(rec.action) && !name.owned)
     reasons.push('Action requires an existing holding')
   if (rec.action === 'buy' && name.owned)
     reasons.push('Existing exposure requires add rather than buy')
   if (increase) {
+    reasons.push(...(name.entryGaps ?? []))
     if (!name.sector)
       reasons.push('Sector exposure classification is unavailable')
     if (
@@ -315,8 +322,9 @@ export function gateRecommendation(
       reasons.push(
         'Target exposure lacks verified 20-session liquidity within 10% of average dollar volume',
       )
-    if (name.thesis?.status !== 'accepted')
-      reasons.push('New risk requires an accepted thesis')
+    if (name.thesis?.status === 'invalidated') reasons.push('Owner thesis is invalidated; new risk requires explicit reassessment')
+    if (name.thesis?.status !== 'accepted' && name.systemThesisValidated !== true)
+      reasons.push('New risk requires a validated system thesis or an owner-accepted thesis')
     if (
       rec.entry.maxPrice === null ||
       !name.quote ||

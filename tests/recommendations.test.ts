@@ -521,3 +521,10 @@ test('ticker reuse and retired peers remain outcome data gaps', async () => {
   )
   assert.equal(matchEvaluationIdentities(['ABC'], {}, {}).gaps.length, 1)
 })
+
+
+test('validated system advice does not require another owner click or override invalidation', () => {
+ const system={...name,thesis:null,systemThesisValidated:true}
+ assert.equal(gateRecommendation(recommendation(),{...context,names:[system]}).action,'buy')
+ assert.equal(gateRecommendation(recommendation(),{...context,names:[{...system,thesis:{status:'invalidated'}}]}).action,'no_trade')
+})

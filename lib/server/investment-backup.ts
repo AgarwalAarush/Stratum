@@ -6,6 +6,7 @@ import { getSupabaseClient } from './supabase.ts'
 // Immutable financial artifacts only. Credentials and private OAuth stores are
 // never copied into this export. Operational leases are reconstructed on restore.
 export const INVESTMENT_BACKUP_TABLES = [
+  'portfolio_confirmations',
   'recommendation_input_manifests',
   'recommendation_batches',
   'recommendation_versions',

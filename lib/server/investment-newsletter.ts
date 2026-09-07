@@ -46,6 +46,7 @@ export async function prepareInvestmentNewsletter(
       latest?.summary ??
       'Stratum could not publish today’s investment evaluation. Existing holdings have not been declared safe; consult your standing risk controls.',
     recommendations,
+    portfolioNames: Object.fromEntries(workspace.accounts.map(a => [a.id, a.name])),
     worldHighlights:
       latest && Array.isArray(context?.world)
         ? context.world
