@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { parseStateStreetHoldings } from './etf-workbook.ts'
+import { fetchVanEckFund } from './vaneck-holdings.ts'
 import { parseHTML } from 'linkedom'
 import type {
   EtfHolding,
@@ -56,6 +57,11 @@ for (const symbol of ['XLK', 'XLU']) ETF_SOURCES[symbol] = {
   issuer: 'State Street', summaryUrl: `https://www.ssga.com/mainfund/${symbol}`,
   holdingsUrl: `https://www.ssga.com/library-content/products/fund-data/etfs/us/holdings-daily-us-en-${symbol.toLowerCase()}.xlsx`,
   parse: () => { throw new Error('State Street requires the complete issuer workbook') },
+}
+for (const [symbol, slug] of [['NLR','uranium-nuclear-energy-etf-nlr'], ['RACK','data-center-supply-chain-etf-rack']]) ETF_SOURCES[symbol] = {
+  issuer: 'VanEck', summaryUrl: `https://www.vaneck.com/us/en/investments/${slug}/`,
+  holdingsUrl: `https://www.vaneck.com/us/en/investments/${slug}/`,
+  parse: () => { throw new Error('VanEck requires its complete dated holdings component') },
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -329,12 +335,18 @@ export async function materializeEtfResearchPacket(symbolInput: string, ownerId:
   if (!source) throw new Error(`${symbol} is an ETF, but no official issuer adapter is configured yet`)
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const [summaryHtml, stock] = await Promise.all([loadHtml(source.summaryUrl), fetchStockViewerData(symbol, ownerId)])
-  const holdingsUrl = source.issuer === 'Global X' ? globalXHoldingsUrl(summaryHtml) : source.holdingsUrl
-  const holdingsHtml = source.issuer === 'State Street' ? '' : holdingsUrl === source.summaryUrl ? summaryHtml : await loadHtml(holdingsUrl)
+  const [issuer, stock] = await Promise.all([source.issuer === 'VanEck' ? fetchVanEckFund(source.summaryUrl, symbol, now) : loadHtml(source.summaryUrl), fetchStockViewerData(symbol, ownerId)])
+  const vanEck = typeof issuer === 'string' ? null : issuer
+  const summaryHtml = typeof issuer === 'string' ? issuer : issuer.summaryHtml
+  const holdingsUrl = vanEck?.holdingsUrl ?? (source.issuer === 'Global X' ? globalXHoldingsUrl(summaryHtml) : source.holdingsUrl)
+  const holdingsHtml = source.issuer === 'State Street' || vanEck ? '' : holdingsUrl === source.summaryUrl ? summaryHtml : await loadHtml(holdingsUrl)
   if (!stock) throw new Error(`${symbol} is not in the current materialized market universe`)
   let parsed: ReturnType<IssuerSource['parse']>
-  if (source.issuer === 'State Street') {
+  if (vanEck) {
+    parsed = {...basePacket({issuer: 'VanEck', fundName: vanEck.fundName, holdings: vanEck.holdings, holdingsCount: vanEck.holdingsCount,
+      strategy: vanEck.strategy, benchmark: null, rebalanceFrequency: null, topTenWeight: 0,
+      expenseRatio: vanEck.expenseRatio, assetsUnderManagement: vanEck.assetsUnderManagement}), dataAsOf: vanEck.dataAsOf}
+  } else if (source.issuer === 'State Street') {
     const response = await fetch(holdingsUrl, {signal: AbortSignal.timeout(20_000)})
     if (!response.ok) throw new Error(`Issuer workbook request failed (${response.status})`)
     const data = parseStateStreetHoldings(new Uint8Array(await response.arrayBuffer()), symbol)
@@ -346,7 +358,7 @@ export async function materializeEtfResearchPacket(symbolInput: string, ownerId:
   const version = await nextVersion('etf_research_packets', ownerId, symbol)
   const generatedAt = now.toISOString()
   const sources = [
-    { id: 'issuer-summary', label: `${source.issuer} fund summary`, url: source.summaryUrl, source: source.issuer, asOf: parsed.dataAsOf },
+    { id: 'issuer-summary', label: `${source.issuer} fund summary`, url: source.summaryUrl, source: source.issuer, asOf: vanEck?.summaryAsOf ?? parsed.dataAsOf },
     { id: 'issuer-holdings', label: `${source.issuer} holdings`, url: holdingsUrl, source: source.issuer, asOf: parsed.dataAsOf },
   ]
   const packet: EtfResearchPacket = {
