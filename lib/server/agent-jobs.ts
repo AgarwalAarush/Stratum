@@ -943,6 +943,7 @@ async function executeJob(
       String(job.payload.reason ?? 'manual'),
       reportProgress,
       {
+        worldOpportunityLeadId: typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : undefined,
         marketThesisVersionId: typeof job.payload.marketThesisVersionId === 'string'
           ? job.payload.marketThesisVersionId
           : undefined,
@@ -1332,7 +1333,7 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
       fmpUsageBefore,
       getFmpUsageSnapshot(),
     )
-    await Promise.all([
+    const transitions = await Promise.all([
       supabase.from('agent_runs').update({
         status: 'succeeded', output, finished_at: new Date().toISOString(), duration_ms: Date.now() - startedAt,
       }).eq('id', run.id),
@@ -1340,11 +1341,12 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
       // prior attempt's failure forward as though the latest run still failed.
       supabase.from('agent_jobs').update({ status: 'succeeded', last_error: null, updated_at: new Date().toISOString() }).eq('id', job.id),
     ])
+    for (const transition of transitions) if (transition.error) throw new Error(`Unable to persist job transition: ${transition.error.message}`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     const retry = job.attempts < job.max_attempts
     const runAfter = new Date(Date.now() + Math.min(30, 2 ** job.attempts) * 60_000).toISOString()
-    await Promise.all([
+    const transitions = await Promise.all([
       supabase.from('agent_runs').update({
         status: 'failed', error: message, finished_at: new Date().toISOString(), duration_ms: Date.now() - startedAt,
       }).eq('id', run.id),
@@ -1352,6 +1354,7 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
         status: retry ? 'queued' : 'failed', last_error: message, run_after: runAfter, updated_at: new Date().toISOString(),
       }).eq('id', job.id),
     ])
+    for (const transition of transitions) if (transition.error) throw new Error(`Unable to persist job transition: ${transition.error.message}`)
   }
 
   return true

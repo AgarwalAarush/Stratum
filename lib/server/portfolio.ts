@@ -417,6 +417,56 @@ function normalizeInbox(row: Record<string, unknown>): DecisionInboxItem {
   }
 }
 
+/** Fail closed and page durable inputs. A successful broker capture replaces the
+ * ledger for that account, including an explicitly empty brokerage account. */
+export async function fetchAuthoritativePortfolios(ownerId: string): Promise<PortfolioWorkspaceData['portfolios']> {
+  const db = getSupabaseClient()
+  if (!db || !validOwnerId(ownerId)) throw new Error('Persisted portfolio owner required')
+  const rows = async (table: string, select: string, order: string, succeeded = false) => {
+    const result: Record<string, unknown>[] = []
+    for (let offset = 0; ; offset += 500) {
+      let query = db.from(table).select(select).eq('owner_id', ownerId).order(order, { ascending: false }).order('id').range(offset, offset + 499)
+      if (succeeded) query = query.eq('status', 'succeeded')
+      const { data, error } = await query
+      if (error) throw new Error(`Unable to read authoritative ${table}: ${error.message}`)
+      const page = (data ?? []) as unknown as Record<string, unknown>[]
+      result.push(...page)
+      if (page.length < 500) return result
+    }
+  }
+  const [accounts, transactions, captures] = await Promise.all([
+    rows('portfolios', '*', 'created_at'),
+    rows('portfolio_transactions', '*', 'occurred_at'),
+    rows('brokerage_sync_runs', 'id,portfolio_id,captured_at,brokerage_account_snapshots(cash_balance,equity_value,total_value),brokerage_position_snapshots(symbol,quantity,cost_basis_per_share,current_price,quote_as_of)', 'captured_at', true),
+  ])
+  const ledger = transactions.map(normalizePortfolioTransaction).filter(t => t.voidedAt === null)
+    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.createdAt.localeCompare(b.createdAt))
+  return accounts.map(normalizePortfolioAccount).map(account => {
+    const capture = captures.find(c => c.portfolio_id === account.id)
+    const snapshot = capture ? normalizeBrokerageSnapshot(capture) : null
+    if (account.kind === 'brokerage' && capture && !snapshot) throw new Error('Invalid successful brokerage capture')
+    if (account.kind === 'brokerage' && snapshot) return calculateBrokeragePortfolioSummary(account, snapshot, new Map())
+    return calculatePortfolioSummary(account, ledger.filter(t => t.portfolioId === account.id), new Map())
+  })
+}
+
+export async function fetchAllAuthoritativeHoldings(): Promise<Array<{ ownerId: string; portfolioId: string; symbol: string; quantity: number }>> {
+  const db = getSupabaseClient()
+  if (!db) throw new Error('Supabase unavailable')
+  const owners = new Set<string>()
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await db.from('portfolios').select('id,owner_id').order('id').range(offset, offset + 499)
+    if (error) throw new Error(error.message)
+    for (const row of data ?? []) owners.add(row.owner_id)
+    if ((data?.length ?? 0) < 500) break
+  }
+  const holdings = []
+  for (const ownerId of owners) for (const p of await fetchAuthoritativePortfolios(ownerId)) {
+    for (const h of p.holdings) if (h.quantity > 0) holdings.push({ ownerId, portfolioId: p.account.id, symbol: h.symbol, quantity: h.quantity })
+  }
+  return holdings
+}
+
 export async function fetchPortfolioWorkspace(
   ownerId: string,
   availableQuotes: PortfolioQuote[] = [],
@@ -443,9 +493,7 @@ export async function fetchPortfolioWorkspace(
     { data: decisionRows },
     { data: reviewRows },
     { data: inboxRows },
-    { data: portfolioRows },
     { data: portfolioTransactionRows },
-    { data: brokerageRows },
     { data: constraintRows },
   ] = await Promise.all([
     supabase.from('market_watchlists').select('id,client_id,name,market_watchlist_items(symbol)').eq('owner_id', ownerId).order('created_at'),
@@ -453,13 +501,7 @@ export async function fetchPortfolioWorkspace(
     supabase.from('thesis_decisions').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
     supabase.from('decision_reviews').select('*').eq('owner_id', ownerId).order('reviewed_at', { ascending: false }),
     supabase.from('decision_inbox_items').select('*').eq('owner_id', ownerId).eq('status', 'open').not('portfolio_id', 'is', null).order('occurred_at', { ascending: false }),
-    supabase.from('portfolios').select('*').eq('owner_id', ownerId).order('created_at'),
     supabase.from('portfolio_transactions').select('*').eq('owner_id', ownerId).order('occurred_at', { ascending: true }).order('created_at', { ascending: true }),
-    supabase.from('brokerage_sync_runs')
-      .select('portfolio_id,captured_at,brokerage_account_snapshots(cash_balance,equity_value,total_value),brokerage_position_snapshots(symbol,quantity,cost_basis_per_share,current_price,quote_as_of)')
-      .eq('owner_id', ownerId)
-      .eq('status', 'succeeded')
-      .order('captured_at', { ascending: false }),
     supabase.from('capital_decision_constraint_checks').select('*').eq('owner_id', ownerId).order('evaluated_at', { ascending: false }),
   ])
   const lists = (listRows ?? []).map((row) => ({
@@ -477,23 +519,8 @@ export async function fetchPortfolioWorkspace(
     if (!latestDecisionBySymbol.has(key)) latestDecisionBySymbol.set(key, decision)
   }
   const portfolioTransactions = (portfolioTransactionRows ?? []).map((row) => normalizePortfolioTransaction(row))
-  const quotes = new Map(availableQuotes.map((quote) => [quote.symbol, quote.price]))
-  const latestBrokerageSnapshotByPortfolio = new Map<string, BrokerageSnapshot>()
-  for (const row of brokerageRows ?? []) {
-    const portfolioId = typeof row.portfolio_id === 'string' ? row.portfolio_id : ''
-    if (!portfolioId || latestBrokerageSnapshotByPortfolio.has(portfolioId)) continue
-    const snapshot = normalizeBrokerageSnapshot(row)
-    if (snapshot) latestBrokerageSnapshotByPortfolio.set(portfolioId, snapshot)
-  }
-  const portfolios = (portfolioRows ?? []).map((row) => normalizePortfolioAccount(row)).map((account) => {
-    const brokerageSnapshot = account.kind === 'brokerage' ? latestBrokerageSnapshotByPortfolio.get(account.id) : null
-    if (brokerageSnapshot) return calculateBrokeragePortfolioSummary(account, brokerageSnapshot, quotes)
-    return calculatePortfolioSummary(
-      account,
-      portfolioTransactions.filter((transaction) => transaction.portfolioId === account.id && transaction.voidedAt === null),
-      quotes,
-    )
-  })
+  const authoritative = await fetchAuthoritativePortfolios(ownerId)
+  const portfolios = applyPortfolioQuotes({ portfolios: authoritative, portfolioTransactions } as PortfolioWorkspaceData, availableQuotes).portfolios
   return {
     watchlists,
     watchlistsPersisted: lists.length > 0,
@@ -803,7 +830,7 @@ export async function saveDecisionReview(
   const { data: decision } = await supabase.from('thesis_decisions').select('symbol')
     .eq('id', input.decisionId).eq('owner_id', ownerId).maybeSingle()
   if (!decision) throw new Error('The decision version does not belong to this workspace')
-  const { data, error } = await supabase.from('decision_reviews').upsert({
+  const { data, error } = await supabase.from('decision_reviews').insert({
     owner_id: ownerId,
     decision_id: input.decisionId,
     symbol: decision.symbol,
@@ -812,7 +839,7 @@ export async function saveDecisionReview(
     lessons: input.lessons,
     postmortem: input.postmortem,
     reviewed_at: new Date().toISOString(),
-  }, { onConflict: 'owner_id,decision_id' }).select('*').single()
+  }).select('*').single()
   if (error || !data) throw new Error(`Unable to save decision review: ${error?.message ?? 'unknown error'}`)
   return normalizeReview(data)
 }

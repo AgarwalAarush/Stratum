@@ -620,6 +620,9 @@ export interface CompanyFinancialReconciliation {
 }
 
 export interface CompanyPacket {
+  worldOrigin?: Record<string, unknown> | null
+  evidenceQuality?: { checkedAt: string; missing: string[]; sourceDates: Array<{ id: string; asOf: string }>; priceAsOf: string }
+
   id: string
   symbol: string
   version: number

@@ -1,3 +1,4 @@
+import { fetchAuthoritativePortfolios } from './portfolio.ts'
 import type { ResearchJobStatus } from '../markets/types.ts'
 import { getSupabaseClient } from './supabase.ts'
 
@@ -17,13 +18,6 @@ export interface PortfolioResearchCoverage {
   coveredSymbols: string[]
   queuedSymbols: string[]
   targets: PortfolioResearchTarget[]
-}
-
-interface TransactionRow {
-  owner_id: string
-  symbol: string | null
-  action: string
-  quantity: number | string | null
 }
 
 interface WatchlistRow {
@@ -125,22 +119,17 @@ export function buildPortfolioResearchCoverage(input: {
 export async function fetchPortfolioResearchCoverage(ownerId: string, options: { now?: Date; maxTargets?: number } = {}): Promise<PortfolioResearchCoverage> {
   const supabase = getSupabaseClient()
   if (!supabase) return { ownedSymbols: [], watchlistedSymbols: [], adjacentSymbols: [], coveredSymbols: [], queuedSymbols: [], targets: [] }
-  const [transactionsResult, watchlistsResult, researchResult, packetsResult] = await Promise.all([
-    supabase.from('portfolio_transactions').select('owner_id,symbol,action,quantity').eq('owner_id', ownerId).not('symbol', 'is', null),
+  const [portfolios, watchlistsResult, researchResult, packetsResult] = await Promise.all([
+    fetchAuthoritativePortfolios(ownerId),
     supabase.from('market_watchlist_items').select('symbol,market_watchlists!inner(owner_id)').eq('market_watchlists.owner_id', ownerId),
     supabase.from('equity_research_notes').select('symbol,status,generated_at').eq('owner_id', ownerId).order('generated_at', { ascending: false }).limit(500),
     supabase.from('company_packets').select('symbol,packet').eq('owner_id', ownerId).eq('status', 'complete').order('generated_at', { ascending: false }).limit(500),
   ])
-  const error = transactionsResult.error ?? watchlistsResult.error ?? researchResult.error ?? packetsResult.error
+  const error = watchlistsResult.error ?? researchResult.error ?? packetsResult.error
   if (error) throw new Error(`Unable to build portfolio research coverage: ${error.message}`)
   const shares = new Map<string, number>()
-  for (const row of (transactionsResult.data ?? []) as TransactionRow[]) {
-    if (!row.symbol) continue
-    const quantity = Number(row.quantity ?? 0)
-    const change = row.action === 'sell' ? -quantity : row.action === 'buy' || row.action === 'position_import' ? quantity : 0
-    shares.set(row.symbol, (shares.get(row.symbol) ?? 0) + change)
-  }
-  const ownedSymbols = [...shares.entries()].flatMap(([symbol, quantity]) => quantity > 0.00000001 ? [symbol] : [])
+  for (const portfolio of portfolios) for (const holding of portfolio.holdings) shares.set(holding.symbol, (shares.get(holding.symbol) ?? 0) + holding.quantity)
+  const ownedSymbols = [...shares].flatMap(([symbol, quantity]) => quantity > 0 ? [symbol] : [])
   const watchlistedSymbols = (watchlistsResult.data ?? []).flatMap((row) => {
     const item = row as WatchlistRow
     return watchlistOwner(item) === ownerId ? [item.symbol] : []

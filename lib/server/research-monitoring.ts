@@ -1,3 +1,4 @@
+import { fetchAllAuthoritativeHoldings } from './portfolio.ts'
 import { enqueueAgentJob } from './agent-jobs.ts'
 import {
   evaluateDecisionAlerts,
@@ -37,14 +38,14 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const [
-    { data: transactions },
+    holdings,
     { data: decisions },
     { data: latestSnapshot },
     { data: acceptedTheses },
     { data: activeMonitors },
     { data: decisionReviews },
   ] = await Promise.all([
-    supabase.from('portfolio_transactions').select('owner_id,portfolio_id,symbol,action,quantity'),
+    fetchAllAuthoritativeHoldings(),
     supabase.from('thesis_decisions').select('*').order('created_at', { ascending: false }),
     supabase.from('market_snapshots').select('id').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
     supabase.from('investment_theses').select('id,owner_id,symbol,entity_key')
@@ -64,25 +65,10 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
       entityKey: thesis.entity_key,
     })
   }
-  const quantities = new Map<string, number>()
-  for (const transaction of transactions ?? []) {
-    if (!transaction.symbol || !transaction.portfolio_id || !transaction.owner_id) continue
-    const key = `${transaction.owner_id}:${transaction.portfolio_id}:${transaction.symbol}`
-    const quantity = Number(transaction.quantity ?? 0)
-    const direction = transaction.action === 'sell' ? -1 : transaction.action === 'buy' || transaction.action === 'position_import' ? 1 : 0
-    quantities.set(key, (quantities.get(key) ?? 0) + direction * quantity)
-  }
   const tracked = new Map<string, TrackedName>()
-  for (const [key, quantity] of quantities) {
-    if (quantity <= 0.00000001) continue
-    const [ownerId, portfolioId, symbol] = key.split(':')
-    if (ownerId && portfolioId && symbol) tracked.set(key, {
-      ownerId,
-      portfolioId,
-      symbol,
-      ...thesisByOwnerSymbol.get(`${ownerId}:${symbol}`),
-    })
-  }
+  for (const h of holdings) tracked.set(`${h.ownerId}:${h.portfolioId}:${h.symbol}`, {
+    ...h, ...thesisByOwnerSymbol.get(`${h.ownerId}:${h.symbol}`),
+  })
   if (tracked.size === 0) return { eventAlerts: 0, decisionAlerts: 0, researchJobs: 0, touchedMonitorIds: [] }
 
   const since = new Date(now.getTime() - 36 * 60 * 60 * 1_000).toISOString()
@@ -189,7 +175,7 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
           thesis_monitor_id: trackedName.monitorId ?? null,
           entity_key: trackedName.entityKey ?? null,
           severity: 'attention',
-          dedupe_key: `decision-review:${decision.id}:90d`,
+          dedupe_key: `decision-review:${decision.id}:${latestReviewByDecision.get(decision.id) ?? "initial"}`,
           occurred_at: now.toISOString(),
         }, { onConflict: 'owner_id,dedupe_key', ignoreDuplicates: true }).select('id').maybeSingle()
         if (!error && insertedReviewAlert) decisionAlerts += 1

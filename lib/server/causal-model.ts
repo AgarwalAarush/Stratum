@@ -114,19 +114,19 @@ export async function projectMarketThesisCausalModel(version: Row, hypothesis: R
   const supabase = getSupabaseClient()
   if (!supabase) return
   const content = record(version.content)
-  const economics = record(content.economics)
+  const economics = { ...record(content.economics), ...record(content.economicCapture) }
   const state = String(version.state ?? 'active')
   const row = {
     causal_key: `market-thesis:${String(version.hypothesis_id)}`, source_kind: 'market_thesis', source_id: String(version.hypothesis_id), source_version: String(version.id),
     source_commit: null, state: state === 'active' ? 'active' : state, title: String(version.title ?? hypothesis.title ?? 'Market thesis'),
     summary: String(content.summary ?? content.headline ?? hypothesis.statement ?? 'Source-backed market thesis.'),
-    mechanism: typeof economics.scarcityRentCapture === 'string' ? economics.scarcityRentCapture : null,
+    mechanism: typeof content.economics === 'string' ? content.economics : typeof economics.scarcityRentCapture === 'string' ? economics.scarcityRentCapture : null,
     economic_variable: typeof economics.economicVariable === 'string' ? economics.economicVariable : null,
     constrained_layer: typeof economics.valueChain === 'string' ? economics.valueChain : null,
     rent_recipient: typeof economics.rentRecipient === 'string' ? economics.rentRecipient : null,
     expectations_question: typeof economics.expectationsQuestion === 'string' ? economics.expectationsQuestion : null,
     confidence: Math.round(number(version.confidence, 0)), importance: Math.round(number(hypothesis.priority ?? hypothesis.materiality, 50)),
-    source_ids: strings(content.sourceIds), relationships: [], freshness: { dataAsOf: version.data_as_of, generatedAt: version.generated_at },
+    source_ids: [...new Set([...strings(content.sourceIds), ...(Array.isArray(content.sourceLedger) ? content.sourceLedger.flatMap(s => { const row = record(s); return typeof row.documentId === 'string' ? [row.documentId] : typeof row.sourceId === 'string' ? [row.sourceId] : [] }) : [])])], relationships: [], freshness: { dataAsOf: version.data_as_of, generatedAt: version.generated_at },
     structured_content: { hypothesis, version }, as_of: String(version.data_as_of ?? version.generated_at),
   }
   const { error } = await supabase.from('causal_model_versions').upsert(row, { onConflict: 'source_kind,source_id,source_version' })

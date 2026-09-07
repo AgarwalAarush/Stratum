@@ -302,6 +302,7 @@ export async function materializeCompanyPacket(
   symbolInput: string,
   ownerId: string,
   now = new Date(),
+  worldOrigin?: Record<string, unknown> | null,
 ): Promise<CompanyPacket> {
   const symbol = symbolInput.trim().toUpperCase()
   const apiKey = process.env.FMP_API_KEY?.trim()
@@ -479,6 +480,12 @@ export async function materializeCompanyPacket(
   const version = await nextVersion('company_packets', ownerId, symbol)
   const generatedAt = now.toISOString()
   const packet: CompanyPacket = {
+    worldOrigin: worldOrigin ?? null,
+    evidenceQuality: {
+      checkedAt: generatedAt, priceAsOf: stock.asOf,
+      sourceDates: sources.map(source => ({ id: source.id, asOf: source.asOf })),
+      missing: [incomeAnnual.length ? null : 'annual income', balanceAnnual.length ? null : 'balance sheet', cashFlowAnnual.length ? null : 'cash flow', secFilings.length ? null : 'SEC filings', transcripts.length ? null : 'earnings transcripts', estimates.length ? null : 'consensus estimates'].filter((s): s is string => s !== null),
+    },
     id: '',
     symbol,
     version,
@@ -579,10 +586,18 @@ interface ResearchGeneration {
   sourceIds: string[]
 }
 
-export function validateEquityResearch(value: unknown): ResearchGeneration {
+export function validateEquityResearch(value: unknown, allowedSourceIds?: readonly string[]): ResearchGeneration {
   const output = record(value)
   const sections = Array.isArray(output.sections) ? output.sections.map(record) : []
   const ids = sections.map((section) => section.id)
+  if (allowedSourceIds) {
+    const allowed = new Set(allowedSourceIds)
+    const cited = Array.isArray(output.sourceIds) ? output.sourceIds : []
+    if (!cited.length || cited.some(id => typeof id !== 'string' || !allowed.has(id))) throw new Error('Research cites missing or unknown packet sources')
+    for (const section of sections) {
+      if (!Array.isArray(section.sourceIds) || section.sourceIds.some(id => !allowed.has(String(id)) || !cited.includes(id))) throw new Error('Section citation is absent from packet or report source ledger')
+    }
+  }
   if (sections.length !== 15 || RESEARCH_SECTION_IDS.some((id) => !ids.includes(id))) {
     throw new Error('Equity research must contain each of the 15 required sections exactly once')
   }
@@ -697,6 +712,8 @@ function researchPrompt(
   return [
     'Act as a senior company and market research analyst. Create an institutional-quality equity research note for a 12-month decision and 1-2 year ownership lens. The supplied CompanyMarketModel is the required causal foundation for the report: begin with what the company actually sells, who needs it, the market/value-chain bottleneck it serves, and the change that can expand or erode its opportunity. Financial statements are one important proof and risk input, not the report’s organizing principle.',
     'Use only facts and source IDs present in the CompanyPacket. Never invent a current price, estimate, event, source, or citation.',
+    'CompanyPacket.evidenceQuality lists missing components; retrieval time is not publication time. Explain how gaps restrict action readiness. A formal opinion alone never authorizes a portfolio recommendation.',
+    'If worldOrigin is present, it is the originating investigation dossier, not independently verified company evidence. Explicitly answer every decisive_question and test transmission_mechanism, capture_mechanism, capture_conditions, falsifiers and expectations_question. State confirmed, rejected or unresolved for each link. Do not cite dossier source IDs unless also present in packet.sources.',
     'Use the CompanyMarketModel as an analytical scaffold, not as a new source. Its factual claims remain supported only by the underlying CompanyPacket source IDs attached to them. Preserve its evidence-status distinctions and explicitly identify unsupported inference or unresolved evidence gaps.',
     'The report must explain the model’s causal chain from external change through the binding constraint or enabling capability, customer behavior, company volume/pricing/mix, monetization, and shareholder outcome. If a link is weak or unverified, make that weakness decision-relevant rather than silently closing the gap.',
     'CompanyPacket.researchEvidence is a bounded company-and-industry research pack. It is useful for framing product, AI, market, competition, and moat—but a discovery item is only a lead, independent reporting needs attribution, and primary or regulatory evidence is preferred for company claims and numbers. Do not elevate an article excerpt into an unsupported fact.',
@@ -741,7 +758,7 @@ export async function generateFullEquityResearch(
   ownerId: string,
   reason = 'manual',
   onProgress?: (progress: number, phase: string) => Promise<void>,
-  context?: { marketThesisVersionId?: string },
+  context?: { marketThesisVersionId?: string; worldOpportunityLeadId?: string },
 ): Promise<EquityResearchNote> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required for research ownership')
   if (await isEtfInstrument(symbol)) {
@@ -751,7 +768,13 @@ export async function generateFullEquityResearch(
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const priorResearch = await fetchLatestCompletedEquityResearch(ownerId, symbol)
   await onProgress?.(15, priorResearch ? `Refreshing version ${priorResearch.version} evidence` : 'Collecting company evidence')
-  const packet = await materializeCompanyPacket(symbol, ownerId)
+  let worldOrigin: Record<string, unknown> | null = null
+  if (context?.worldOpportunityLeadId) {
+    const { data, error } = await supabase.from('world_opportunity_leads').select('*').eq('id', context.worldOpportunityLeadId).eq('symbol', symbol).single()
+    if (error || !data) throw new Error('Originating World dossier is unavailable or mismatched')
+    worldOrigin = data
+  }
+  const packet = await materializeCompanyPacket(symbol, ownerId, new Date(), worldOrigin)
   await onProgress?.(45, 'Company packet assembled')
   await onProgress?.(50, 'Building company market model')
   const marketModel = await materializeCompanyMarketModel(packet, ownerId, reason)
@@ -780,23 +803,12 @@ export async function generateFullEquityResearch(
     const result = await runCodexJson({
       prompt: researchPrompt(packet, marketModel, priorResearch, reason),
       schemaPath: 'schemas/equity-research.schema.json',
-      validate: validateEquityResearch,
+      validate: value => validateEquityResearch(value, packet.sources.map(s => s.id)),
       timeoutMs: 20 * 60 * 1_000,
     })
     await onProgress?.(90, 'Validating and publishing research')
     const generatedAt = new Date().toISOString()
     const content = { ...result.data, reason }
-    const { error } = await supabase.from('equity_research_notes').update({
-      status: 'complete',
-      formal_rating: result.data.formalRating,
-      entry_action: result.data.entryAction,
-      content,
-      provider: result.metadata.provider,
-      model: result.metadata.model,
-      generated_at: generatedAt,
-      error: null,
-    }).eq('id', noteRecord.id).eq('status', 'running')
-    if (error) throw new Error(`Unable to publish research version: ${error.message}`)
     if (packet.sources.length > 0) {
       const used = new Set(result.data.sourceIds)
       const { error: sourceError } = await supabase.from('equity_research_sources').insert(
@@ -811,6 +823,17 @@ export async function generateFullEquityResearch(
       )
       if (sourceError) throw new Error(`Unable to persist research sources: ${sourceError.message}`)
     }
+    const { error } = await supabase.from('equity_research_notes').update({
+      status: 'complete',
+      formal_rating: result.data.formalRating,
+      entry_action: result.data.entryAction,
+      content,
+      provider: result.metadata.provider,
+      model: result.metadata.model,
+      generated_at: generatedAt,
+      error: null,
+    }).eq('id', noteRecord.id).eq('status', 'running')
+    if (error) throw new Error(`Unable to publish research version: ${error.message}`)
     await onProgress?.(100, 'Research complete')
     const note: EquityResearchNote = {
       id: noteRecord.id,
