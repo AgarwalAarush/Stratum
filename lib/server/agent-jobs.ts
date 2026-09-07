@@ -1,3 +1,7 @@
+import { captureInvestmentMacro } from './investment-macro.ts'
+import { generateDailyRecommendations } from './recommendations.ts'
+import { evaluateRecommendationOutcomes, reviewRecommendationCohort } from './recommendation-outcomes.ts'
+import { sendInvestmentNewsletter } from './investment-newsletter.ts'
 import { generateMorningBrief } from '../data/morning-brief.ts'
 import { generateMonthlyOverview, generateWeeklyOverview } from '../data/overview-generators.ts'
 import { saveMorningBrief } from '../data/overview-persistence.ts'
@@ -52,6 +56,10 @@ import { reconcileWorldRepositoryProjection } from './world-projection.ts'
 import { findExtraordinaryBiotechMovers } from './biotech-catalysts.ts'
 
 export const AGENT_JOB_TYPES = [
+  'generate-daily-recommendations',
+  'evaluate-recommendation-outcomes',
+  'review-recommendation-cohort',
+  'send-investment-newsletter',
   'sync-market-assets',
   'sync-robinhood-portfolio',
   'refresh-market-screener',
@@ -152,6 +160,7 @@ export function parseAgentJobType(value: unknown): AgentJobType {
 }
 
 export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), payload: Record<string, unknown> = {}): string {
+  if (['generate-daily-recommendations','evaluate-recommendation-outcomes','review-recommendation-cohort','send-investment-newsletter'].includes(jobType)) return `${jobType}:${now.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })}`
   if (jobType === 'refresh-world-events') {
     const bucket = new Date(now)
     bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
@@ -320,6 +329,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
 }
 
 export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
+  if (['evaluate-recommendation-outcomes','review-recommendation-cohort','send-investment-newsletter'].includes(jobType)) return 'market-data'
   if (jobType === 'sync-robinhood-portfolio') return 'robinhood'
   if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
   if (jobType === 'refresh-fmp-intelligence' || jobType === 'fetch-stock-price-history' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
@@ -727,6 +737,14 @@ async function executeJob(
   job: AgentJobRecord,
   reportProgress: (progress: number, phase: string) => Promise<void> = async () => {},
 ): Promise<unknown> {
+  if (job.job_type === 'generate-daily-recommendations') {
+    await captureInvestmentMacro().catch(error => console.warn(JSON.stringify({ event: 'investment_macro_capture_failed', error: error instanceof Error ? error.message : String(error) })))
+    return generateDailyRecommendations()
+  }
+  if (job.job_type === 'evaluate-recommendation-outcomes') return evaluateRecommendationOutcomes()
+  if (job.job_type === 'review-recommendation-cohort') return reviewRecommendationCohort()
+  if (job.job_type === 'send-investment-newsletter') return sendInvestmentNewsletter()
+
   if (job.job_type === 'refresh-world-events') {
     const result = await refreshWorldEvents()
     if (job.payload.runThinkerAfter === true) {
@@ -772,6 +790,7 @@ async function executeJob(
       ? job.payload.coverageFrontierIds.filter((value): value is string => typeof value === 'string')
       : typeof job.payload.coverageFrontierId === 'string' ? [job.payload.coverageFrontierId] : undefined
     return runWorldThinker({
+      ownerReviewItemId: typeof job.payload.ownerReviewItemId === 'string' ? job.payload.ownerReviewItemId : undefined,
       trigger, eventClusterIds, coverageFrontierIds, agentJobId: job.id, canonicalProjection: process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true',
       worldOpportunityLeadId: typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : undefined,
       researchNoteId: typeof job.payload.researchNoteId === 'string' ? job.payload.researchNoteId : undefined,
@@ -943,6 +962,7 @@ async function executeJob(
       String(job.payload.reason ?? 'manual'),
       reportProgress,
       {
+        worldOpportunityLeadId: typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : undefined,
         marketThesisVersionId: typeof job.payload.marketThesisVersionId === 'string'
           ? job.payload.marketThesisVersionId
           : undefined,
@@ -1332,26 +1352,20 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
       fmpUsageBefore,
       getFmpUsageSnapshot(),
     )
-    await Promise.all([
-      supabase.from('agent_runs').update({
-        status: 'succeeded', output, finished_at: new Date().toISOString(), duration_ms: Date.now() - startedAt,
-      }).eq('id', run.id),
-      // A retried job can recover. Its current terminal state must not carry a
-      // prior attempt's failure forward as though the latest run still failed.
-      supabase.from('agent_jobs').update({ status: 'succeeded', last_error: null, updated_at: new Date().toISOString() }).eq('id', job.id),
-    ])
+    const transition = await supabase.rpc('finish_agent_attempt', {
+      p_job_id:job.id,p_run_id:run.id,p_worker_id:workerId,p_success:true,p_output:output,
+      p_error:null,p_duration_ms:Date.now()-startedAt,p_run_after:null,
+    })
+    if(transition.error) throw new Error(`Unable to persist job transition: ${transition.error.message}`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    const retry = job.attempts < job.max_attempts
-    const runAfter = new Date(Date.now() + Math.min(30, 2 ** job.attempts) * 60_000).toISOString()
-    await Promise.all([
-      supabase.from('agent_runs').update({
-        status: 'failed', error: message, finished_at: new Date().toISOString(), duration_ms: Date.now() - startedAt,
-      }).eq('id', run.id),
-      supabase.from('agent_jobs').update({
-        status: retry ? 'queued' : 'failed', last_error: message, run_after: runAfter, updated_at: new Date().toISOString(),
-      }).eq('id', job.id),
-    ])
+    const transition = await supabase.rpc('finish_agent_attempt', {
+      p_job_id:job.id,p_run_id:run.id,p_worker_id:workerId,p_success:false,p_output:null,
+      p_error:message.includes('<!DOCTYPE')?'Database gateway unavailable':message.slice(0,2000),
+      p_duration_ms:Date.now()-startedAt,
+      p_run_after:new Date(Date.now()+Math.min(30,2**job.attempts)*60_000).toISOString(),
+    })
+    if(transition.error) throw new Error(`Unable to persist job transition: ${transition.error.message}`)
   }
 
   return true

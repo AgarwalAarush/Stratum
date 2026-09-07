@@ -182,6 +182,6 @@ export function decisionReviewDue(decision: Pick<ThesisDecision, 'createdAt'>, l
   const decisionAt = Date.parse(decision.createdAt)
   if (!Number.isFinite(decisionAt)) return false
   const reviewAt = latestReviewAt ? Date.parse(latestReviewAt) : Number.NaN
-  if (Number.isFinite(reviewAt) && reviewAt >= decisionAt) return false
-  return now.getTime() - decisionAt >= cadenceDays * 86_400_000
+  const lastReview = Number.isFinite(reviewAt) ? Math.max(decisionAt, reviewAt) : decisionAt
+  return now.getTime() - lastReview >= cadenceDays * 86_400_000
 }

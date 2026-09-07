@@ -46,6 +46,7 @@ export interface WorldObservationInput {
   materiality?: number
   novelty?: number
   decayHours?: number | null
+  evidenceRole?: 'reference_context' | 'release_observation'
   supersedesId?: string | null
 }
 
@@ -162,6 +163,7 @@ export async function ingestWorldObservation(input: WorldObservationInput): Prom
     domain: input.domain.trim(),
     mechanism: input.mechanism.trim(),
     geography: input.geography?.trim() || null,
+    metadata: { evidenceRole: input.evidenceRole ?? 'release_observation' },
     numeric_value: input.numericValue ?? null,
     numeric_unit: input.numericUnit?.trim() || null,
     valid_from: iso(input.validFrom),

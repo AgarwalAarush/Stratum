@@ -177,3 +177,10 @@ test('research revision migration links each refresh to its prior immutable vers
     assert.match(sql, /references public\.equity_research_notes\(id\)/i)
   }
 })
+
+test('publication rejects unknown and orphaned section citations', () => {
+  assert.throws(() => validateEquityResearch(validResearch(), ['other']), /unknown/)
+  const report = validResearch(); report.sections[0].sourceIds = ['orphan']
+  assert.throws(() => validateEquityResearch(report, ['source-1', 'orphan']), /Section citation/)
+  assert.equal(validateEquityResearch(validResearch(), ['source-1']).sourceIds.length, 1)
+})

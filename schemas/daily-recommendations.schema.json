@@ -1,0 +1,227 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "portfolioId": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "research",
+              "watch",
+              "buy",
+              "add",
+              "hold",
+              "trim",
+              "sell",
+              "no_trade"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "thesis": {
+            "type": "string"
+          },
+          "counterThesis": {
+            "type": "string"
+          },
+          "mechanism": {
+            "type": "string"
+          },
+          "expectations": {
+            "type": "string"
+          },
+          "horizonDays": {
+            "type": "integer"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "invalidation": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "entry": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "condition": {
+                "type": "string"
+              },
+              "maxPrice": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "targetWeightPct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "next_session_open",
+                  "next_open_below_ceiling",
+                  "manual_condition"
+                ]
+              }
+            },
+            "required": [
+              "condition",
+              "maxPrice",
+              "targetWeightPct",
+              "trigger"
+            ]
+          },
+          "exit": {
+            "type": "string"
+          },
+          "reassessWhen": {
+            "type": "string"
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "forecasts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "proposition": {
+                  "type": "string"
+                },
+                "metric": {
+                  "type": "string"
+                },
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "gt",
+                    "lt"
+                  ]
+                },
+                "threshold": {
+                  "type": "number"
+                },
+                "probability": {
+                  "type": "number"
+                },
+                "deadline": {
+                  "type": "string"
+                },
+                "confirmation": {
+                  "type": "string"
+                },
+                "invalidation": {
+                  "type": "string"
+                },
+                "sourceIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "proposition",
+                "metric",
+                "operator",
+                "threshold",
+                "probability",
+                "deadline",
+                "confirmation",
+                "invalidation",
+                "sourceIds"
+              ]
+            }
+          },
+          "dimensions": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "thesisQuality": {
+                "type": "string"
+              },
+              "valuation": {
+                "type": "string"
+              },
+              "timing": {
+                "type": "string"
+              },
+              "portfolioFit": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "thesisQuality",
+              "valuation",
+              "timing",
+              "portfolioFit"
+            ]
+          },
+          "alternative": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "portfolioId",
+          "action",
+          "reason",
+          "thesis",
+          "counterThesis",
+          "mechanism",
+          "expectations",
+          "horizonDays",
+          "expiresAt",
+          "risks",
+          "invalidation",
+          "confidence",
+          "entry",
+          "exit",
+          "reassessWhen",
+          "sourceIds",
+          "forecasts",
+          "dimensions",
+          "alternative"
+        ]
+      }
+    }
+  },
+  "required": [
+    "summary",
+    "recommendations"
+  ]
+}

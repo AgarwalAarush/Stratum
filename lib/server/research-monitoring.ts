@@ -1,3 +1,4 @@
+import { fetchAllAuthoritativeHoldings } from './portfolio.ts'
 import { enqueueAgentJob } from './agent-jobs.ts'
 import {
   evaluateDecisionAlerts,
@@ -37,14 +38,14 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const [
-    { data: transactions },
-    { data: decisions },
-    { data: latestSnapshot },
-    { data: acceptedTheses },
-    { data: activeMonitors },
-    { data: decisionReviews },
+    holdings,
+    { data: decisions, error: decisionsError },
+    { data: latestSnapshot, error: latestSnapshotError },
+    { data: acceptedTheses, error: acceptedThesesError },
+    { data: activeMonitors, error: activeMonitorsError },
+    { data: decisionReviews, error: decisionReviewsError },
   ] = await Promise.all([
-    supabase.from('portfolio_transactions').select('owner_id,portfolio_id,symbol,action,quantity'),
+    fetchAllAuthoritativeHoldings(),
     supabase.from('thesis_decisions').select('*').order('created_at', { ascending: false }),
     supabase.from('market_snapshots').select('id').eq('status', 'complete').eq('is_latest', true).maybeSingle(),
     supabase.from('investment_theses').select('id,owner_id,symbol,entity_key')
@@ -52,6 +53,7 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
     supabase.from('thesis_monitors').select('id,thesis_id,entity_key').eq('status', 'active'),
     supabase.from('decision_reviews').select('decision_id,reviewed_at').order('reviewed_at', { ascending: false }),
   ])
+  for(const error of [decisionsError,latestSnapshotError,acceptedThesesError,activeMonitorsError,decisionReviewsError]) if(error)throw new Error(`Research monitoring evidence unavailable: ${error.message}`)
   const monitorByThesis = new Map((activeMonitors ?? []).map((monitor) => [monitor.thesis_id, monitor]))
   const thesisByOwnerSymbol = new Map<string, Omit<TrackedName, 'portfolioId' | 'symbol'>>()
   for (const thesis of acceptedTheses ?? []) {
@@ -64,30 +66,16 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
       entityKey: thesis.entity_key,
     })
   }
-  const quantities = new Map<string, number>()
-  for (const transaction of transactions ?? []) {
-    if (!transaction.symbol || !transaction.portfolio_id || !transaction.owner_id) continue
-    const key = `${transaction.owner_id}:${transaction.portfolio_id}:${transaction.symbol}`
-    const quantity = Number(transaction.quantity ?? 0)
-    const direction = transaction.action === 'sell' ? -1 : transaction.action === 'buy' || transaction.action === 'position_import' ? 1 : 0
-    quantities.set(key, (quantities.get(key) ?? 0) + direction * quantity)
-  }
   const tracked = new Map<string, TrackedName>()
-  for (const [key, quantity] of quantities) {
-    if (quantity <= 0.00000001) continue
-    const [ownerId, portfolioId, symbol] = key.split(':')
-    if (ownerId && portfolioId && symbol) tracked.set(key, {
-      ownerId,
-      portfolioId,
-      symbol,
-      ...thesisByOwnerSymbol.get(`${ownerId}:${symbol}`),
-    })
-  }
+  for (const h of holdings) tracked.set(`${h.ownerId}:${h.portfolioId}:${h.symbol}`, {
+    ...h, ...thesisByOwnerSymbol.get(`${h.ownerId}:${h.symbol}`),
+  })
   if (tracked.size === 0) return { eventAlerts: 0, decisionAlerts: 0, researchJobs: 0, touchedMonitorIds: [] }
 
   const since = new Date(now.getTime() - 36 * 60 * 60 * 1_000).toISOString()
-  const { data: feedRows } = await supabase.from('feed_items').select('id,title,url,published_at,metadata,section')
+  const { data: feedRows, error: feedError } = await supabase.from('feed_items').select('id,title,url,published_at,metadata,section')
     .eq('scope', 'markets').gte('published_at', since).order('published_at', { ascending: false }).limit(500)
+  if(feedError)throw new Error(`Research monitoring events unavailable: ${feedError.message}`)
   let eventAlerts = 0
   let researchJobs = 0
   const touchedMonitorIds = new Set<string>()
@@ -189,7 +177,7 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
           thesis_monitor_id: trackedName.monitorId ?? null,
           entity_key: trackedName.entityKey ?? null,
           severity: 'attention',
-          dedupe_key: `decision-review:${decision.id}:90d`,
+          dedupe_key: `decision-review:${decision.id}:${latestReviewByDecision.get(decision.id) ?? "initial"}`,
           occurred_at: now.toISOString(),
         }, { onConflict: 'owner_id,dedupe_key', ignoreDuplicates: true }).select('id').maybeSingle()
         if (!error && insertedReviewAlert) decisionAlerts += 1

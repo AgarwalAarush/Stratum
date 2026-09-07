@@ -10,6 +10,7 @@ const SNAPSHOT_BATCH_CONCURRENCY = 4
 type AlpacaFeed = Exclude<MarketFeed, 'illustrative'>
 
 interface AlpacaAssetPayload {
+  id?: string
   symbol?: string
   name?: string
   exchange?: string
@@ -54,6 +55,7 @@ interface AlpacaClockResponse {
 function normalizeAsset(asset: AlpacaAssetPayload): MarketAsset | null {
   if (!asset.symbol || !asset.name || !asset.exchange || asset.class !== 'us_equity') return null
   return {
+    ...(asset.id ? { securityId: asset.id } : {}),
     symbol: asset.symbol,
     name: asset.name,
     exchange: asset.exchange,
@@ -244,6 +246,12 @@ export class AlpacaClient {
     }
   }
 
+  async fetchCalendar(start: string, end: string): Promise<Array<{ date: string; open: string; close: string }>> {
+    const result = await this.requestJson<Array<{ date: string; open: string; close: string }>>(this.tradingUrl, '/v2/calendar', new URLSearchParams({ start, end }))
+    if (!Array.isArray(result) || result.some(r => !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || !r.open || !r.close)) throw new Error('Invalid exchange calendar')
+    return result
+  }
+
   async fetchClock(): Promise<AlpacaMarketClock> {
     const clock = await this.requestJson<AlpacaClockResponse>(this.tradingUrl, '/v2/clock')
     if (!clock.timestamp || typeof clock.is_open !== 'boolean' || !clock.next_open || !clock.next_close) {
@@ -306,6 +314,7 @@ export class AlpacaClient {
     start: string,
     end: string,
     requestedFeed = this.preferredFeed,
+    adjustment: 'all' | 'raw' = 'all',
   ): Promise<AlpacaResult<MarketDailyBar[]>> {
     if (symbols.length === 0) return { data: [], feed: requestedFeed }
 
@@ -320,7 +329,7 @@ export class AlpacaClient {
             timeframe: '1Day',
             start,
             end,
-            adjustment: 'all',
+            adjustment,
             feed: historicalFeed,
             limit: '10000',
           })

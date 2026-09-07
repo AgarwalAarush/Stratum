@@ -89,7 +89,7 @@ test('portfolio alert migration excludes ideation and scopes retained alerts to 
 
 test('portfolio monitoring derives alerts from open position lots, not watchlists or candidates', async () => {
   const monitoring = await readFile(new URL('../lib/server/research-monitoring.ts', import.meta.url), 'utf8')
-  assert.match(monitoring, /portfolio_transactions/)
+  assert.match(monitoring, /fetchAllAuthoritativeHoldings/)
   assert.match(monitoring, /portfolio_id: item\.portfolioId/)
   assert.match(monitoring, /portfolio_id: trackedName\.portfolioId/)
   assert.doesNotMatch(monitoring, /market_watchlist_items/)

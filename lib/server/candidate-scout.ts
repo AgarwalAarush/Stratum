@@ -1,3 +1,4 @@
+import { fetchAllAuthoritativeHoldings } from './portfolio.ts'
 import {
   rankCandidateUniverse,
   selectCandidateBriefs,
@@ -312,15 +313,15 @@ function mergeScreenerMetrics(
 async function loadCandidateTracking(): Promise<Map<string, CandidateTrackingContext>> {
   const supabase = getSupabaseClient()
   if (!supabase) return new Map()
-  const [{ data: watchlists, error: watchlistError }, { data: positions, error: positionError }, { data: portfolioTransactions, error: portfolioTransactionError }, { data: theses, error: thesisError }] = await Promise.all([
+  const [{ data: watchlists, error: watchlistError }, { data: positions, error: positionError }, portfolioHoldings, { data: theses, error: thesisError }] = await Promise.all([
     supabase.from('market_watchlist_items').select('symbol'),
     supabase.from('manual_positions').select('symbol'),
-    supabase.from('portfolio_transactions').select('symbol,action,quantity').not('symbol', 'is', null),
+    fetchAllAuthoritativeHoldings(),
     supabase.from('investment_theses').select('symbol')
       .eq('entity_type', 'stock').eq('status', 'accepted').not('symbol', 'is', null),
   ])
-  if (watchlistError || positionError || portfolioTransactionError || thesisError) {
-    throw new Error(`Unable to load candidate tracking context: ${watchlistError?.message ?? positionError?.message ?? portfolioTransactionError?.message ?? thesisError?.message}`)
+  if (watchlistError || positionError || thesisError) {
+    throw new Error(`Unable to load candidate tracking context: ${watchlistError?.message ?? positionError?.message ?? thesisError?.message}`)
   }
   const result = new Map<string, CandidateTrackingContext>()
   const update = (symbol: string, patch: Partial<CandidateTrackingContext>) => {
@@ -334,15 +335,9 @@ async function loadCandidateTracking(): Promise<Map<string, CandidateTrackingCon
     })
   }
   for (const row of watchlists ?? []) update(row.symbol, { watched: true })
-  for (const row of positions ?? []) update(row.symbol, { owned: true })
-  const portfolioShares = new Map<string, number>()
-  for (const row of portfolioTransactions ?? []) {
-    if (typeof row.symbol !== 'string') continue
-    const quantity = Number(row.quantity ?? 0)
-    const delta = row.action === 'sell' ? -quantity : row.action === 'buy' || row.action === 'position_import' ? quantity : 0
-    portfolioShares.set(row.symbol, (portfolioShares.get(row.symbol) ?? 0) + delta)
-  }
-  for (const [symbol, shares] of portfolioShares) if (shares > 0.00000001) update(symbol, { owned: true })
+  // Legacy manual_positions are annotations, not account ownership.
+  void positions
+  for (const holding of portfolioHoldings) update(holding.symbol, { owned: true })
   for (const row of theses ?? []) if (typeof row.symbol === 'string') update(row.symbol, { acceptedThesis: true })
   // Market theses are an additional discovery lane, not a capital decision.
   // We only attach a security after an explicit value-chain exposure record

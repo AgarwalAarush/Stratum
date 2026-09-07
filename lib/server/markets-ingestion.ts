@@ -391,22 +391,11 @@ export async function syncAlpacaAssets(client: AlpacaClient = getAlpacaClient()!
   const assets = (await client.fetchAssets()).filter((asset) => asset.active && asset.tradable)
   if (assets.length === 0) throw new Error('Alpaca returned no eligible US equity assets')
 
-  for (const batch of batches(assets)) {
-    const { error } = await supabase.from('market_assets').upsert(batch.map((asset) => ({
-      symbol: asset.symbol,
-      name: asset.name,
-      exchange: asset.exchange,
-      asset_class: asset.assetClass,
-      status: asset.active ? 'active' : 'inactive',
-      tradable: asset.tradable,
-      active: asset.active,
-      source: 'alpaca',
-      source_as_of: now.toISOString(),
-      raw: {},
-      updated_at: now.toISOString(),
-    })), { onConflict: 'symbol' })
-    if (error) throw new Error(`Unable to persist market assets: ${error.message}`)
-  }
+  const {error}=await supabase.rpc('replace_alpaca_asset_universe',{
+    p_assets:assets.map(asset=>({symbol:asset.symbol,alpaca_id:asset.securityId??null,name:asset.name,exchange:asset.exchange,asset_class:asset.assetClass})),
+    p_as_of:now.toISOString(),
+  })
+  if(error)throw new Error(`Unable to atomically persist asset universe: ${error.message}`)
   return assets
 }
 

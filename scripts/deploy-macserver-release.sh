@@ -44,8 +44,13 @@ fi
 set -a
 source "$release_dir/.env.worker"
 set +a
+export STRATUM_RELEASE_SHA="$revision"
 node --experimental-strip-types scripts/init-world-repository.ts
 
+# Record release identity without copying provider credentials into an artifact.
+# The environment file already exists with owner-only permissions.
+sed -i '' '/^STRATUM_RELEASE_SHA=/d' "$release_dir/.env.worker"
+printf '\nSTRATUM_RELEASE_SHA=%s\n' "$revision" >> "$release_dir/.env.worker"
 next_link="${active_link}.next"
 rm -f "$next_link"
 ln -s "$release_dir" "$next_link"

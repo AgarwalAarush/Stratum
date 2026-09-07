@@ -43,3 +43,7 @@ test('decision versions retain an explicit structured change summary', () => {
   assert.ok(changes.some((item) => item.includes('Disposition changed')))
   assert.ok(changes.some((item) => item.includes('sizing inputs changed')))
 })
+
+test('a review postpones rather than permanently disables subsequent reviews', () => {
+  assert.equal(decisionReviewDue({ createdAt: '2026-01-01T00:00:00Z' }, '2026-04-01T00:00:00Z', new Date('2026-08-01T00:00:00Z')), true)
+})
