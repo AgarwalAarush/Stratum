@@ -39,11 +39,11 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const [
     holdings,
-    { data: decisions },
-    { data: latestSnapshot },
-    { data: acceptedTheses },
-    { data: activeMonitors },
-    { data: decisionReviews },
+    { data: decisions, error: decisionsError },
+    { data: latestSnapshot, error: latestSnapshotError },
+    { data: acceptedTheses, error: acceptedThesesError },
+    { data: activeMonitors, error: activeMonitorsError },
+    { data: decisionReviews, error: decisionReviewsError },
   ] = await Promise.all([
     fetchAllAuthoritativeHoldings(),
     supabase.from('thesis_decisions').select('*').order('created_at', { ascending: false }),
@@ -53,6 +53,7 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
     supabase.from('thesis_monitors').select('id,thesis_id,entity_key').eq('status', 'active'),
     supabase.from('decision_reviews').select('decision_id,reviewed_at').order('reviewed_at', { ascending: false }),
   ])
+  for(const error of [decisionsError,latestSnapshotError,acceptedThesesError,activeMonitorsError,decisionReviewsError]) if(error)throw new Error(`Research monitoring evidence unavailable: ${error.message}`)
   const monitorByThesis = new Map((activeMonitors ?? []).map((monitor) => [monitor.thesis_id, monitor]))
   const thesisByOwnerSymbol = new Map<string, Omit<TrackedName, 'portfolioId' | 'symbol'>>()
   for (const thesis of acceptedTheses ?? []) {
@@ -72,8 +73,9 @@ export async function scanResearchRefreshes(now = new Date()): Promise<{
   if (tracked.size === 0) return { eventAlerts: 0, decisionAlerts: 0, researchJobs: 0, touchedMonitorIds: [] }
 
   const since = new Date(now.getTime() - 36 * 60 * 60 * 1_000).toISOString()
-  const { data: feedRows } = await supabase.from('feed_items').select('id,title,url,published_at,metadata,section')
+  const { data: feedRows, error: feedError } = await supabase.from('feed_items').select('id,title,url,published_at,metadata,section')
     .eq('scope', 'markets').gte('published_at', since).order('published_at', { ascending: false }).limit(500)
+  if(feedError)throw new Error(`Research monitoring events unavailable: ${feedError.message}`)
   let eventAlerts = 0
   let researchJobs = 0
   const touchedMonitorIds = new Set<string>()

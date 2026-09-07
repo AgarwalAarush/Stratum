@@ -1,3 +1,4 @@
+import { writeWorkerLocalHealth, safeWorkerError } from '../lib/server/worker-local-health.ts'
 import { hostname } from 'node:os'
 import { enqueueAgentJob, processAgentJobs, recoverInterruptedAgentJobs, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
 import { enqueueDueAgentJobs } from '../lib/server/agent-schedule.ts'
@@ -21,6 +22,7 @@ const robinhoodEnabled = isRobinhoodPortfolioSyncConfigured()
 const workerId = process.env.WORKER_ID ?? `${hostname()}:${process.pid}`
 const runOnce = process.argv.includes('--once')
 const lastScheduledKeys = new Map<AgentJobType, string>()
+let consecutiveFailures = 0
 let stopping = false
 let nextScheduleAt = 0
 let nextHeartbeatAt = 0
@@ -50,14 +52,45 @@ async function heartbeat(): Promise<void> {
   nextHeartbeatAt = Date.now() + HEARTBEAT_INTERVAL_MS
   try {
     await recordWorkerHeartbeat({ workerId, schedulerEnabled, fmpEnabled, codexEnabled })
+    await writeWorkerLocalHealth({workerId,status:consecutiveFailures?'degraded':'healthy',consecutiveFailures})
   } catch (error) {
+    await writeWorkerLocalHealth({workerId,status:'degraded',consecutiveFailures,error:safeWorkerError(error)})
     console.warn(JSON.stringify({
       level: 'warn',
       workerId,
       event: 'heartbeat_failed',
-      error: error instanceof Error ? error.message : String(error),
+      error: safeWorkerError(error),
     }))
   }
+}
+
+let maintenanceRunning=false
+async function maintenance(){
+  if(maintenanceRunning||stopping)return
+  maintenanceRunning=true
+  try{
+    await heartbeat()
+      if (schedulerEnabled && Date.now() >= nextScheduleAt) {
+        const scheduled = await enqueueDueAgentJobs(new Date(), lastScheduledKeys, {
+          includeFmp: fmpEnabled,
+          includeCodex: codexEnabled,
+          includeNewsletter: process.env.STRATUM_NEWSLETTER_ENABLED === 'true',
+          includeRobinhood: robinhoodEnabled,
+          includeWorldThinker: worldThinkerEnabled,
+        })
+        nextScheduleAt = Date.now() + SCHEDULER_INTERVAL_MS
+        for (const job of scheduled) {
+          console.info(JSON.stringify({
+            level: 'info',
+            workerId,
+            event: job.deduplicated ? 'job_already_scheduled' : 'job_scheduled',
+            jobType: job.jobType,
+            jobId: job.id,
+            dedupeKey: job.dedupeKey,
+          }))
+        }
+      }
+  } finally {maintenanceRunning=false}
 }
 
 async function main() {
@@ -120,9 +153,13 @@ async function main() {
   const supersededJobs = await supersedeQueuedRoutineAgentJobs()
   if (supersededJobs > 0) console.info(JSON.stringify({ level: 'info', workerId, event: 'routine_queue_superseded', count: supersededJobs }))
 
-  do {
+  // Keep heartbeat and daily scheduling independent of a long research job.
+  const maintenanceTimer=runOnce?null:setInterval(()=>{
+    void maintenance().catch(error=>console.warn(JSON.stringify({event:'worker_maintenance_failed',error:safeWorkerError(error)})))
+  },Math.min(HEARTBEAT_INTERVAL_MS,SCHEDULER_INTERVAL_MS))
+  try { do {
     try {
-      await heartbeat()
+      await maintenance()
       if (Date.now() >= nextRecoveryAt) {
         const recovered = await recoverStaleAgentJobs()
         if (recovered > 0) console.info(JSON.stringify({ level: 'info', workerId, event: 'stale_jobs_recovered', count: recovered }))
@@ -133,35 +170,26 @@ async function main() {
         if (superseded > 0) console.info(JSON.stringify({ level: 'info', workerId, event: 'routine_queue_superseded', count: superseded }))
         nextQueueReconcileAt = Date.now() + 60_000
       }
-      if (schedulerEnabled && Date.now() >= nextScheduleAt) {
-        const scheduled = await enqueueDueAgentJobs(new Date(), lastScheduledKeys, {
-          includeFmp: fmpEnabled,
-          includeCodex: codexEnabled,
-          includeRobinhood: robinhoodEnabled,
-          includeWorldThinker: worldThinkerEnabled,
-        })
-        nextScheduleAt = Date.now() + SCHEDULER_INTERVAL_MS
-        for (const job of scheduled) {
-          console.info(JSON.stringify({
-            level: 'info',
-            workerId,
-            event: job.deduplicated ? 'job_already_scheduled' : 'job_scheduled',
-            jobType: job.jobType,
-            jobId: job.id,
-            dedupeKey: job.dedupeKey,
-          }))
-        }
-      }
       const processed = await processAgentJobs(workerId, runOnce ? 1 : WORKER_CONCURRENCY)
+      consecutiveFailures = 0
+      await writeWorkerLocalHealth({workerId,status:'healthy',consecutiveFailures})
       if (runOnce) return
-      if (!processed) await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
+      if (!processed) await new Promise((resolve) => setTimeout(resolve, Math.min(60000, POLL_INTERVAL_MS * 2 ** Math.min(consecutiveFailures,4))))
     } catch (error) {
-      console.error(JSON.stringify({ level: 'error', workerId, error: error instanceof Error ? error.message : String(error) }))
+      consecutiveFailures += 1
+      const message = safeWorkerError(error)
+      await writeWorkerLocalHealth({workerId,status:'degraded',consecutiveFailures,error:message})
+      console.error(JSON.stringify({ level: 'error', workerId, error: message.includes('<!DOCTYPE') ? 'Database gateway returned HTML; service unavailable' : message.slice(0,1000), consecutiveFailures }))
       if (runOnce) throw error
-      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
+      await new Promise((resolve) => setTimeout(resolve, Math.min(60000, POLL_INTERVAL_MS * 2 ** Math.min(consecutiveFailures,4))))
     }
-  } while (!stopping)
+  } while (!stopping) } finally { if(maintenanceTimer)clearInterval(maintenanceTimer) }
   if (shutdownTimer) clearTimeout(shutdownTimer)
 }
 
-await main()
+await writeWorkerLocalHealth({workerId,status:'starting',consecutiveFailures})
+try { await main() } catch(error) {
+  await writeWorkerLocalHealth({workerId,status:'degraded',consecutiveFailures:consecutiveFailures+1,error:safeWorkerError(error)})
+  console.error(JSON.stringify({event:'worker_startup_failed',error:safeWorkerError(error)}))
+  process.exitCode=1
+}

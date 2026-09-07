@@ -20,6 +20,7 @@ export interface ScheduledAgentJob {
 export interface AgentScheduleOptions {
   includeFmp?: boolean
   includeCodex?: boolean
+  includeNewsletter?: boolean
   includeRobinhood?: boolean
   includeWorldThinker?: boolean
   /** Resolved by the worker from durable active-domain state before ingestion. */
@@ -59,6 +60,17 @@ export function buildDueAgentJobs(
   options: AgentScheduleOptions = {},
 ): ScheduledAgentJob[] {
   const jobs = [scheduledJob('sync-market-assets', now)]
+  const pacific = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now).map(p => [p.type,p.value]))
+  const pacificMinutes = Number(pacific.hour) * 60 + Number(pacific.minute)
+  // All-day catch-up after each due time; durable job keys prevent duplicates.
+  // A late restart publishes with its actual time, never an invented morning cutoff.
+  if (options.includeCodex !== false && pacificMinutes >= 6 * 60 + 30) jobs.push(scheduledJob('generate-daily-recommendations', now))
+  if (options.includeNewsletter === true && pacificMinutes >= 7 * 60) jobs.push(scheduledJob('send-investment-newsletter', now))
+  if (pacificMinutes >= 17 * 60) {
+    jobs.push(scheduledJob('evaluate-recommendation-outcomes', now))
+    jobs.push(scheduledJob('review-recommendation-cohort', now))
+  }
+
   if (options.includeRobinhood === true) {
     const slot = robinhoodSyncSlot(now)
     if (slot) jobs.push(scheduledJob('sync-robinhood-portfolio', now, {

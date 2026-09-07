@@ -15,6 +15,7 @@ const MARKET_NAV_ITEMS = [
   { href: '/markets/candidates', label: 'Candidates' },
   { href: '/markets/explore', label: 'Explore' },
   { href: '/markets/portfolio', label: 'Portfolio' },
+  { href: '/markets/recommendations', label: 'Decisions' },
   { href: '/markets/theses', label: 'Theses' },
   { href: '/markets/research', label: 'Research' },
   { href: '/markets/events', label: 'Events' },

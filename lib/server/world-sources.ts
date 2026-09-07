@@ -150,7 +150,8 @@ async function fetchWorldSourceSpec(spec: WorldDocumentSourceSpec, fetchImpl: ty
     body: text, rawBody: raw, mimeType: type, sourceExtension: extension(type), publishedAt: spec.publishedAt ?? null,
     assertion: spec.assertion, kind: spec.kind, domain: spec.domain, mechanism: spec.mechanism, entities: spec.entities,
     geography: spec.geography ?? 'United States', numericValue: spec.numericValue ?? null, numericUnit: spec.numericUnit ?? null,
-    observedAt: spec.publishedAt ?? new Date().toISOString(), confidence: spec.confidence, materiality: spec.materiality, novelty: spec.novelty,
+    observedAt: spec.publishedAt ?? null, confidence: spec.confidence, materiality: spec.materiality, novelty: 0,
+    evidenceRole: 'reference_context',
   }
 }
 

@@ -78,7 +78,7 @@ interface EvaluationContext {
   priorVersion: number
 }
 
-async function loadContext(predictionId: string): Promise<EvaluationContext> {
+async function loadContext(predictionId: string, cutoff = new Date().toISOString()): Promise<EvaluationContext> {
   const supabase = getSupabaseClient()!
   const { data: predictionRow, error: predictionError } = await supabase
     .from('market_thesis_predictions')
@@ -95,7 +95,9 @@ async function loadContext(predictionId: string): Promise<EvaluationContext> {
     .select('observation_id,world_observations!inner(assertion,mechanism,ingested_at,world_documents(id,title,publisher,canonical_url,source_tier,extracted_key))')
     .eq('hypothesis_id', hypothesisId)
     .gt('world_observations.ingested_at', after)
-    .limit(20)
+    .lte('world_observations.ingested_at', cutoff)
+    .order('ingested_at', { referencedTable: 'world_observations', ascending: false })
+    .limit(50)
   if (evidenceError) throw new Error(`Unable to load post-prediction evidence: ${evidenceError.message}`)
   const sources = (evidenceRows ?? []).flatMap((row) => {
     const observation = record(row.world_observations)

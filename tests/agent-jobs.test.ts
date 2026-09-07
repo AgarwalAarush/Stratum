@@ -286,7 +286,7 @@ test('a recovered job clears stale failure text when its latest attempt succeeds
     readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/202608040014_clear_stale_succeeded_job_errors.sql', import.meta.url), 'utf8'),
   ])
-  assert.match(source, /status: 'succeeded', last_error: null, updated_at:/)
+  assert.match(source, /rpc\('finish_agent_attempt'/)
   assert.match(migration, /where status = 'succeeded'[\s\S]*last_error is not null/)
 })
 

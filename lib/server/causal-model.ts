@@ -167,6 +167,12 @@ export async function fetchCausalModelSnapshot(ownerId = MARKETS_OWNER_ID): Prom
 export async function decideOwnerReviewItem(options: { id: string; ownerId: string; status: 'in_review' | 'investigate' | 'accepted' | 'rejected' | 'no_trade' | 'revised' | 'deferred'; rationale?: string }): Promise<Row> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
+  if (options.status === 'investigate') {
+    const item = await supabase.from('owner_review_items').select('id,subject_type,subject_id,causal_model_version_id').eq('id',options.id).eq('owner_id',options.ownerId).single()
+    if(item.error)throw new Error('Owner investigation target not found')
+    const { enqueueAgentJob } = await import('./agent-jobs.ts')
+    await enqueueAgentJob('run-world-thinker', { trigger:'manual', ownerReviewItemId:options.id }, `owner-investigation:${options.ownerId}:${options.id}`)
+  }
   const terminal = ['investigate', 'accepted', 'rejected', 'no_trade', 'revised'].includes(options.status)
   const { data, error } = await supabase.from('owner_review_items').update({
     status: options.status, owner_rationale: options.rationale?.trim().slice(0, 2_000) || null,

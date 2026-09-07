@@ -9,6 +9,7 @@ export type CrossAssetInstrumentType =
   | 'crypto'
 
 export interface MarketAsset {
+  securityId?: string
   symbol: string
   name: string
   exchange: string
