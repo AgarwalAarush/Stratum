@@ -1,4 +1,5 @@
 import { captureShadowPolicies, evaluateShadowPolicies } from './investment-shadow.ts'
+import { needsDecisionResearchRefresh } from '../markets/decision-admission.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { captureInvestmentMacro } from './investment-macro.ts'
 import { assembleDecisionContext, generateDailyRecommendations } from './recommendations.ts'
@@ -748,7 +749,7 @@ async function executeJob(
     const context = await assembleDecisionContext(ownerId, now, editionKey)
     const requested = new Set<string>()
     for (const name of context.names) {
-      if (requested.has(name.symbol) || name.securityId.startsWith('unresolved:') || !name.gaps.some(g => /Research missing|Research predates/.test(g))) continue
+      if (requested.has(name.symbol) || name.securityId.startsWith('unresolved:') || !needsDecisionResearchRefresh(name)) continue
       requested.add(name.symbol)
       await enqueueAgentJob(name.instrumentType === 'etf' ? 'generate-etf-research' : 'generate-company-research', {ownerId:context.ownerId,symbol:name.symbol,reason:'Daily decision evidence gap'}, `investment-research:${context.ownerId}:${name.symbol}:${context.date}`)
     }
