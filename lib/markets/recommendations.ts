@@ -38,6 +38,7 @@ export type DecisionName = {
   sector?: string | null
   averageDollarVolume?: number | null
   evaluationPolicy?: {
+    securityIds?: Record<string, string>
     benchmark: string
     peers: string[]
     peerSelection: string

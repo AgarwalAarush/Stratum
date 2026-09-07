@@ -458,6 +458,35 @@ export async function assembleDecisionContext(
       if ((eligible.data?.length ?? 0) < 500) break
     }
   }
+  const comparisonSymbols = [
+    ...new Set(
+      names.flatMap((n) => [
+        n.symbol,
+        n.evaluationPolicy!.benchmark,
+        ...n.evaluationPolicy!.peers,
+      ]),
+    ),
+  ]
+  const securityIds: Record<string, string> = {}
+  for (let offset = 0; offset < comparisonSymbols.length; offset += 100) {
+    const identities = await db
+      .from('market_assets')
+      .select('symbol,alpaca_id,source_as_of')
+      .in('symbol', comparisonSymbols.slice(offset, offset + 100))
+    if (identities.error) throw new Error(identities.error.message)
+    for (const asset of identities.data ?? [])
+      if (asset.alpaca_id) securityIds[asset.symbol] = String(asset.alpaca_id)
+  }
+  for (const name of names)
+    name.evaluationPolicy!.securityIds = Object.fromEntries(
+      [
+        name.symbol,
+        name.evaluationPolicy!.benchmark,
+        ...name.evaluationPolicy!.peers,
+      ]
+        .filter((symbol) => securityIds[symbol])
+        .map((symbol) => [symbol, securityIds[symbol]]),
+    )
   const context: DecisionContext = {
     id: randomUUID(),
     ownerId,

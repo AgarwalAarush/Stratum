@@ -9,6 +9,7 @@ import {
   exchangeOpeningTimestamp,
   riskReductionAttribution,
   evaluateOwnerFills,
+  matchEvaluationIdentities,
 } from '../markets/recommendation-evaluation.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import type {
@@ -73,6 +74,11 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
     .order('not_before')
     .limit(100)
   if (tasks.error) throw new Error(tasks.error.message)
+  const currentIdentities = Object.fromEntries(
+    (await alpaca.fetchAssets())
+      .filter((a) => a.securityId)
+      .map((a) => [a.symbol, a.securityId!]),
+  )
   let complete = 0,
     needsData = 0
   for (const task of tasks.data ?? []) {
@@ -249,8 +255,16 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
       const symbols = [
         ...new Set([rec.symbol, policy.benchmark, ...policy.peers]),
       ]
-      const result = await alpaca.fetchDailyBars(
+      const identities = matchEvaluationIdentities(
         symbols,
+        {
+          ...name.evaluationPolicy?.securityIds,
+          [rec.symbol]: name.securityId,
+        },
+        currentIdentities,
+      )
+      const result = await alpaca.fetchDailyBars(
+        identities.verified,
         `${issuedDate}T00:00:00Z`,
         `${endpoint}T23:59:59Z`,
       )
@@ -261,7 +275,8 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
           security_id:
             bar.symbol === rec.symbol
               ? name.securityId
-              : `unresolved-symbol:${bar.symbol}`,
+              : (name.evaluationPolicy?.securityIds?.[bar.symbol] ??
+                `unresolved-symbol:${bar.symbol}`),
           session_date: bar.tradingDate,
           feed: result.feed,
           adjustment: 'all',
@@ -430,6 +445,7 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
           feed: result.feed,
           evaluator: EVALUATOR,
         },
+        identityGaps: identities.gaps,
         priceVintage: vintage,
         priceHash: contentHash(result.data),
         securityId: name.securityId,
@@ -711,15 +727,13 @@ export async function reviewRecommendationCohort(
     },
   }
   const key = now.toISOString().slice(0, 10)
-  const saved = await db
-    .from('recommendation_cohort_reviews')
-    .insert({
-      owner_id: ownerId,
-      cohort_key: key,
-      policy_version: EVALUATOR,
-      content,
-      content_hash: contentHash(content),
-    })
+  const saved = await db.from('recommendation_cohort_reviews').insert({
+    owner_id: ownerId,
+    cohort_key: key,
+    policy_version: EVALUATOR,
+    content,
+    content_hash: contentHash(content),
+  })
   if (saved.error && saved.error.code !== '23505')
     throw new Error(saved.error.message)
   return content

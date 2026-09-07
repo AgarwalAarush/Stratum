@@ -389,3 +389,25 @@ export function evaluateOwnerFills(input: {
       'Owner-reported incremental trades versus unchanged holdings/cash, in fill-day share units using one raw/adjusted provider vintage. Buy measures wealth gained; sell measures gain/loss avoided. Not broker-reconciled realized P&L; fees, tax and cash interest excluded.',
   }
 }
+
+/** Fail closed on ticker reuse. A missing/delisted asset is a retained data gap,
+ * never a reason to remove that name from the recommendation cohort. */
+export function matchEvaluationIdentities(
+  symbols: string[],
+  frozen: Record<string, string>,
+  current: Record<string, string>,
+) {
+  const verified = symbols.filter(
+    (symbol) => Boolean(frozen[symbol]) && frozen[symbol] === current[symbol],
+  )
+  return {
+    verified,
+    gaps: symbols
+      .filter((symbol) => !verified.includes(symbol))
+      .map((symbol) => ({
+        symbol,
+        reason:
+          'Security identity is missing, retired or changed since issuance',
+      })),
+  }
+}

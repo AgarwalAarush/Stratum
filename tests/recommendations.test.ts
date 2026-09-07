@@ -506,3 +506,18 @@ test('owner fills compare unchanged exposure and normalize splits without invent
   })
   assert.equal(missing.dollarEffect, null)
 })
+
+test('ticker reuse and retired peers remain outcome data gaps', async () => {
+  const { matchEvaluationIdentities } = await import(
+    '../lib/markets/recommendation-evaluation.ts'
+  )
+  assert.deepEqual(
+    matchEvaluationIdentities(
+      ['ABC', 'PEER', 'SPY'],
+      { ABC: 'old', PEER: 'retired', SPY: 'stable' },
+      { ABC: 'replacement', SPY: 'stable' },
+    ).verified,
+    ['SPY'],
+  )
+  assert.equal(matchEvaluationIdentities(['ABC'], {}, {}).gaps.length, 1)
+})
