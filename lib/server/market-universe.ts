@@ -9,6 +9,7 @@ import {
 import type { MarketAsset } from '../markets/types.ts'
 import type { AlpacaClient } from './alpaca.ts'
 import { getSupabaseClient } from './supabase.ts'
+import { fetchAuthoritativePortfolios } from './portfolio.ts'
 
 export const SPY_HOLDINGS_URL = 'https://www.ssga.com/library-content/products/fund-data/etfs/us/holdings-daily-us-en-spy.xlsx'
 export const IWM_HOLDINGS_URL = 'https://www.ishares.com/us/products/239710/ishares-russell-2000-etf/latest-holdings.csv'
@@ -283,6 +284,7 @@ async function loadTrackedSymbols(supabase: SupabaseServiceClient): Promise<stri
     { data: portfolioTransactionRows, error: portfolioTransactionError },
     { data: thesisRows, error: thesisError },
     { data: coverageRows, error: coverageError },
+    authoritativeSymbols,
   ] = await Promise.all([
     supabase.from('market_watchlist_items').select('symbol'),
     supabase.from('manual_positions').select('symbol'),
@@ -291,17 +293,40 @@ async function loadTrackedSymbols(supabase: SupabaseServiceClient): Promise<stri
       .eq('entity_type', 'stock').eq('status', 'accepted').not('symbol', 'is', null),
     supabase.from('market_universe_members').select('symbol')
       .eq('universe', SEARCH_COVERAGE_UNIVERSE_NAME).eq('active', true),
+    loadAuthoritativeHoldingSymbols(supabase),
   ])
   if (watchlistError || positionError || portfolioTransactionError || thesisError || coverageError) {
     throw new Error(`Unable to load tracked symbols: ${watchlistError?.message ?? positionError?.message ?? portfolioTransactionError?.message ?? thesisError?.message ?? coverageError?.message}`)
   }
   return [...new Set([
+    ...authoritativeSymbols,
     ...(watchlistRows ?? []).map((row) => row.symbol),
     ...(positionRows ?? []).map((row) => row.symbol),
     ...(portfolioTransactionRows ?? []).flatMap((row) => typeof row.symbol === 'string' && (row.action === 'buy' || row.action === 'position_import') ? [row.symbol] : []),
     ...(thesisRows ?? []).flatMap((row) => typeof row.symbol === 'string' ? [row.symbol] : []),
     ...(coverageRows ?? []).map((row) => row.symbol),
   ])]
+}
+
+/** Portfolio confirmations and successful broker captures are authoritative;
+ * their holdings need quotes even when no transaction or watchlist exists. */
+export async function loadAuthoritativeHoldingSymbols(
+  supabase: SupabaseServiceClient,
+  loadPortfolios = fetchAuthoritativePortfolios,
+): Promise<string[]> {
+  const owners = new Set<string>()
+  for (let offset = 0; ; offset += DATABASE_PAGE_SIZE) {
+    const {data,error} = await supabase.from('portfolios').select('id,owner_id').order('id').range(offset,offset+DATABASE_PAGE_SIZE-1)
+    if (error) throw new Error(`Unable to load portfolio coverage: ${error.message}`)
+    for (const row of data ?? []) owners.add(String(row.owner_id))
+    if ((data?.length ?? 0) < DATABASE_PAGE_SIZE) break
+  }
+  const symbols = new Set<string>()
+  for (const owner of owners) {
+    const portfolios = await loadPortfolios(owner)
+    for (const p of portfolios) for (const h of p.holdings) if (h.quantity > 0) symbols.add(h.symbol)
+  }
+  return [...symbols].sort()
 }
 
 /** Records an eligible stock as durable priority coverage without changing a user's watchlist. */

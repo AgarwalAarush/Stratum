@@ -76,6 +76,20 @@ async function rows(
   return accumulated
 }
 
+/** Load exact immutable versions referenced by the selected notes, not every
+ * historical packet (which can be hundreds of megabytes of source evidence). */
+export async function loadDecisionPackets(table: 'company_packets' | 'etf_research_packets', ownerId: string, cutoff: string, packetIds: string[]): Promise<Row[]> {
+  const ids = [...new Set(packetIds)], result: Row[] = []
+  for (let i = 0; i < ids.length; i += 5) {
+    const response = await investmentDb().from(table).select('*')
+      .eq('owner_id', ownerId).in('id', ids.slice(i,i+5)).lte('generated_at', cutoff)
+      .abortSignal(AbortSignal.timeout(20_000))
+    if (response.error) throw new Error(`${table}: ${response.error.message}`)
+    result.push(...response.data)
+  }
+  return result
+}
+
 /** Freeze once, then reuse on every retry. Retrieval time is never relabeled as
  * the publisher's timestamp. Unknown availability explicitly restricts action. */
 export async function assembleDecisionContext(
@@ -110,14 +124,13 @@ export async function assembleDecisionContext(
       )
       return []
     })
-  const [research, theses, packets, world, market, candidates, watches, macro, fundResearch, fundPackets] =
+  const [research, theses, world, market, candidates, watches, macro, fundResearch] =
     await Promise.all([
       optional('Research', rows('equity_research_notes', ownerId, cutoff)),
       optional(
         'Theses',
         rows('investment_theses', ownerId, cutoff, 'generated_at'),
       ),
-      optional('Company packets', rows('company_packets', ownerId, cutoff)),
       optional(
         'World causal model',
         rows('causal_model_versions', undefined, cutoff, 'as_of', 80),
@@ -146,7 +159,6 @@ export async function assembleDecisionContext(
         rows('investment_macro_vintages', undefined, cutoff, 'observed_at', 60),
       ),
       optional('ETF research', rows('etf_research_notes', ownerId, cutoff)),
-      optional('ETF packets', rows('etf_research_packets', ownerId, cutoff)),
     ])
   const snapshot = market.find((m) => m.status === 'complete')
   const watched = new Set(
@@ -163,6 +175,15 @@ export async function assembleDecisionContext(
   const selected = new Set([...owned, ...watched])
   const admitted = admitDiscoveryCandidates(candidates.filter(c => !c.owner_id || c.owner_id === ownerId), selected, cutoff)
   for (const c of admitted) selected.add(String(c.symbol))
+  const selectedNotes = [...selected].flatMap(symbol => {
+    const note = [...research,...fundResearch].filter(r => r.symbol === symbol && r.status === 'complete')
+      .sort((a,b) => String(b.generated_at).localeCompare(String(a.generated_at)))[0]
+    return note ? [note] : []
+  })
+  const [packets,fundPackets] = await Promise.all([
+    optional('Company packets', loadDecisionPackets('company_packets',ownerId,cutoff,selectedNotes.flatMap(n => typeof n.company_packet_id === 'string' ? [n.company_packet_id] : []))),
+    optional('ETF packets', loadDecisionPackets('etf_research_packets',ownerId,cutoff,selectedNotes.flatMap(n => typeof n.etf_research_packet_id === 'string' ? [n.etf_research_packet_id] : []))),
+  ])
   const universe = [
     ...new Set([...selected, ...candidates.map((c) => String(c.symbol))]),
   ].map((symbol) => ({
