@@ -1,5 +1,6 @@
 import { captureShadowPolicies, evaluateShadowPolicies } from './investment-shadow.ts'
 import { needsDecisionResearchRefresh } from '../markets/decision-admission.ts'
+import { AgentJobPool } from './agent-job-pool.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { captureInvestmentMacro } from './investment-macro.ts'
 import { assembleDecisionContext, generateDailyRecommendations } from './recommendations.ts'
@@ -1391,11 +1392,14 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
   return true
 }
 
-/** Drain up to `concurrency` jobs in parallel. Used by the macserver worker so
- * cheap/standard orchestration children can progress together without opening
- * an unbounded multi-process farm. */
+const workerPools = new Map<string, AgentJobPool>()
+/** Yield after the first completed slot. Pending jobs remain in the same
+ * bounded pool; the next worker tick refills only the released capacity. */
 export async function processAgentJobs(workerId: string, concurrency = 1): Promise<number> {
-  const slots = Math.max(1, Math.min(4, Math.floor(concurrency)))
-  const results = await Promise.all(Array.from({ length: slots }, () => processOneAgentJob(workerId)))
-  return results.filter(Boolean).length
+  let pool = workerPools.get(workerId)
+  if (!pool) {
+    pool = new AgentJobPool(() => processOneAgentJob(workerId))
+    workerPools.set(workerId, pool)
+  }
+  return pool.next(concurrency)
 }
