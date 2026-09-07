@@ -1,3 +1,6 @@
+import { exportInvestmentLedger, verifyRestoredLedgerArchives } from './investment-backup.ts'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { DEFAULT_MARKET_DATA_ROOT, inspectCorpusDisk } from './world-corpus.ts'
@@ -45,12 +48,13 @@ async function record(kind: 'backup' | 'verify' | 'restore_drill', status: 'runn
 }
 
 export async function backupMarketCorpus(): Promise<{ configured: boolean; output?: string }> {
-  if (!process.env.RESTIC_REPOSITORY || !process.env.RESTIC_PASSWORD_FILE) return { configured: false }
+  if (!process.env.RESTIC_REPOSITORY || !process.env.RESTIC_PASSWORD_FILE) throw new Error('Offsite corpus backup is not configured')
   const runId = await record('backup', 'running')
   try {
     const root = corpusRoot()
     const disk = await inspectCorpusDisk()
-    const output = await runRestic(['backup', '--tag', 'stratum-market-corpus', root])
+    await exportInvestmentLedger(root)
+    const output = await runRestic(['backup', '--tag', 'stratum-market-corpus', '--exclude', '.env*', '--exclude', '*oauth*', root])
     // Only a successful current backup is allowed to prune older snapshots.
     const retention = await runRestic([
       'forget', '--tag', 'stratum-market-corpus', '--keep-daily', '30', '--keep-weekly', '12', '--keep-monthly', '12', '--prune',
@@ -65,11 +69,19 @@ export async function backupMarketCorpus(): Promise<{ configured: boolean; outpu
 }
 
 export async function verifyMarketCorpusBackup(): Promise<{ configured: boolean; output?: string }> {
-  if (!process.env.RESTIC_REPOSITORY || !process.env.RESTIC_PASSWORD_FILE) return { configured: false }
+  if (!process.env.RESTIC_REPOSITORY || !process.env.RESTIC_PASSWORD_FILE) throw new Error('Offsite corpus backup is not configured')
   const runId = await record('verify', 'running')
   try {
     const output = await runRestic(['check', '--read-data-subset=2.5%'])
-    await record('verify', 'succeeded', { runId, output: { text: output } })
+    // Read actual bytes from the repository into a new scratch directory. Never
+    // restore over the live worker. This verifies files, not a Postgres recovery.
+    const scratch=await mkdtemp(join(tmpdir(),'stratum-restore-drill-'))
+    let restored
+    try {
+      await runRestic(['restore','latest','--tag','stratum-market-corpus','--target',scratch,'--include',`${corpusRoot()}/artifacts/investment-ledger/**`])
+      restored=await verifyRestoredLedgerArchives(join(scratch,corpusRoot()))
+    } finally { await rm(scratch,{recursive:true,force:true}) }
+    await record('verify', 'succeeded', { runId, output: { text: output,restoreDrill:restored } })
     return { configured: true, output }
   } catch (error) {
     await record('verify', 'failed', { runId, error: error instanceof Error ? error.message : String(error) })
