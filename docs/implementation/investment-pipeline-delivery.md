@@ -10,6 +10,6 @@ Delivery sequence:
 5. Morning newsletter at 07:00 America/Los_Angeles daily to aarushaga@gmail.com, weekend edition, frozen outbox and bounded safe retries.
 6. Operational hardening, historical isolation, migrations, complete tests/build, production deployment and evidence.
 
-Acceptance distinguishes local implementation, deployed capability and matured prospective evidence. Never fabricate historical evaluations or call current-context replay a backtest. Deployment remains blocked until Supabase can accept migrations and email delivery remains unverified until a server-owned sender is configured and an actual delivery succeeds.
+Acceptance distinguishes local implementation, deployed capability and matured prospective evidence. Never fabricate historical evaluations or call current-context replay a backtest. Core code and migrations are deployed and the first complete-coverage abstention edition is verified. Affirmative decision readiness remains limited by research evidence; email delivery remains disabled until the owner Gmail connection and actual inbox delivery are verified.
 
 Implementation and verification details, release prerequisites, and remaining operational gates are recorded in [investment-pipeline-operations.md](investment-pipeline-operations.md).
