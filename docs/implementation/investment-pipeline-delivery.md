@@ -11,3 +11,5 @@ Delivery sequence:
 6. Operational hardening, historical isolation, migrations, complete tests/build, production deployment and evidence.
 
 Acceptance distinguishes local implementation, deployed capability and matured prospective evidence. Never fabricate historical evaluations or call current-context replay a backtest. Deployment remains blocked until Supabase can accept migrations and email delivery remains unverified until a server-owned sender is configured and an actual delivery succeeds.
+
+Implementation and verification details, release prerequisites, and remaining operational gates are recorded in [investment-pipeline-operations.md](investment-pipeline-operations.md).
