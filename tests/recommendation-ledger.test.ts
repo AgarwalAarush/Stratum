@@ -26,6 +26,7 @@ test('Postgres atomically publishes immutable advice and safely leases newslette
       '202609070007_gmail_newsletter.sql',
       '202609070008_manual_portfolio_confirmation.sql',
       '202609070009_recommendation_editions.sql',
+      '202609070011_shadow_calibration.sql',
     ])
       await db.exec(
         await readFile(
@@ -100,6 +101,12 @@ test('Postgres atomically publishes immutable advice and safely leases newslette
       )
     const id = (await publish()).rows[0].id
     assert.equal((await publish()).rows[0].id, id)
+    const experiment = '00000000-0000-4000-8000-000000000099'
+    await db.query('insert into recommendation_policy_experiments(id,owner_id,event_type,policy_key,content) values($1,$2,$3,$4,$5)',[experiment,owner,'registered','forecast-shrink-20-v1',{}])
+    await db.query('insert into recommendation_shadow_runs(owner_id,experiment_id,batch_id,manifest_id,policy_key,content,content_hash) values($1,$2,$3,$4,$5,$6,$7)',[owner,experiment,id,manifest,'forecast-shrink-20-v1',{},'hash'])
+    await assert.rejects(()=>db.query('update recommendation_shadow_runs set content=$1',[{}]),/append-only/)
+    await assert.rejects(()=>db.query('delete from recommendation_shadow_runs'),/append-only/)
+
     assert.equal(
       (
         await db.query<{ count: number }>(

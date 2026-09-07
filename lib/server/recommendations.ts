@@ -668,6 +668,8 @@ export async function fetchRecommendationWorkspace(ownerId: string) {
       cohorts: [],
       forecasts: [],
       experiments: [],
+      shadowRuns: [],
+      shadowEvaluations: [],
     }
   const responses = await Promise.all([
     db
@@ -721,6 +723,8 @@ export async function fetchRecommendationWorkspace(ownerId: string) {
       .eq('owner_id', ownerId)
       .order('created_at', { ascending: false })
       .limit(30),
+    db.from('recommendation_shadow_runs').select('id,experiment_id,policy_key,batch_id,created_at').eq('owner_id',ownerId).order('created_at',{ascending:false}).limit(100),
+    db.from('recommendation_shadow_evaluations').select('*').eq('owner_id',ownerId).order('created_at',{ascending:false}).limit(30),
   ])
   for (const r of responses) if (r.error) throw new Error(r.error.message)
   return {
@@ -736,6 +740,8 @@ export async function fetchRecommendationWorkspace(ownerId: string) {
     cohorts: responses[5].data ?? [],
     forecasts: responses[6].data ?? [],
     experiments: responses[7].data ?? [],
+    shadowRuns: responses[8].data ?? [],
+    shadowEvaluations: responses[9].data ?? [],
   }
 }
 

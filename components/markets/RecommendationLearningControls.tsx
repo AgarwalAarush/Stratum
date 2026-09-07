@@ -1,4 +1,6 @@
 'use client'
+import { SHADOW_POLICIES } from '@/lib/markets/shadow-policy'
+import { RECOMMENDATION_POLICY } from '@/lib/markets/recommendations'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 const row = (v: unknown): Record<string, unknown> =>
@@ -224,7 +226,7 @@ export function ManualExecutionRecord({
 }
 export function LearningRegistrationForm() {
   const [hypothesis, setHypothesis] = useState(''),
-    [candidate, setCandidate] = useState(''),
+    [candidate, setCandidate] = useState('forecast-shrink-20-v1'),
     [start, setStart] = useState(''),
     [end, setEnd] = useState(''),
     [status, setStatus] = useState('')
@@ -236,7 +238,7 @@ export function LearningRegistrationForm() {
         body: JSON.stringify({
           action: 'register-experiment',
           hypothesis,
-          baselinePolicy: 'prospective-v1',
+          baselinePolicy: RECOMMENDATION_POLICY,
           candidatePolicy: candidate,
           startsAt: new Date(start).toISOString(),
           endsAt: new Date(end).toISOString(),
@@ -265,7 +267,7 @@ export function LearningRegistrationForm() {
       <p className="mt-3 text-xs leading-6 text-[var(--text-muted)]">
         Default protocol: improve Brier score by at least 0.02, at least 30
         independent episodes, 20-day overlap embargo, and no drawdown
-        deterioration. Registration does not deploy a candidate policy.
+        deterioration. The alternative forecast probabilities are captured prospectively against the same economic outcomes. Registration never changes published capital actions.
       </p>
       <label className="mt-3 block">
         Falsifiable process hypothesis
@@ -276,14 +278,10 @@ export function LearningRegistrationForm() {
         />
       </label>
       <div className="mt-3 grid gap-3 md:grid-cols-3">
-        <label>
-          Candidate policy version
-          <input
-            value={candidate}
-            onChange={(e) => setCandidate(e.target.value)}
-            className="mt-1 block w-full border border-[var(--border)] bg-transparent p-2"
-          />
-        </label>
+        <fieldset>
+          <legend>Candidate policy version</legend>
+          <div className="mt-2 grid gap-2">{Object.entries(SHADOW_POLICIES).map(([key, policy]) => <button type="button" key={key} aria-pressed={candidate===key} onClick={()=>setCandidate(key)} className="border border-[var(--border)] p-2 text-left text-xs aria-pressed:font-semibold">{policy.label}</button>)}</div>
+        </fieldset>
         <label>
           Prospective start
           <input
