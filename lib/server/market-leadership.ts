@@ -131,6 +131,30 @@ async function loadAllRows<T>(
   return rows
 }
 
+/** Bound each indexed history scan. Paginating one 500-symbol date sort grows
+ * increasingly expensive at high offsets and timed out on the live corpus. */
+export async function loadLeadershipBars(
+  symbols: string[], feed: string, startDate: string, endDate: string,
+): Promise<PersistedBar[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const result: PersistedBar[] = []
+  for (const group of batches([...new Set(symbols)].sort(), 25)) {
+    const rows = await loadAllRows<PersistedBar>(async (from, to) => await supabase
+      .from('market_bars_daily')
+      .select('symbol,trading_date,close')
+      .in('symbol', group)
+      .eq('feed', feed)
+      .gte('trading_date', startDate)
+      .lte('trading_date', endDate)
+      .order('symbol', { ascending: true })
+      .order('trading_date', { ascending: true })
+      .range(from, to))
+    result.push(...rows)
+  }
+  return result
+}
+
 export async function materializeMarketLeadership(
   options: LeadershipMaterializationOptions = {},
 ): Promise<MarketLeadershipSnapshot> {
@@ -159,18 +183,12 @@ export async function materializeMarketLeadership(
   const start = new Date(now)
   start.setUTCDate(start.getUTCDate() - 430)
   const [persistedBars, screenerMetrics] = await Promise.all([
-    loadAllRows<PersistedBar>(async (from, to) => await supabase
-      .from('market_bars_daily')
-      .select('symbol,trading_date,close')
-      .in('symbol', symbols)
-      .eq('feed', snapshot.feed)
-      .gte('trading_date', start.toISOString().slice(0, 10))
-      .order('trading_date', { ascending: true })
-      .range(from, to)),
+    loadLeadershipBars(symbols, snapshot.feed, start.toISOString().slice(0, 10), now.toISOString().slice(0, 10)),
     loadAllRows<ScreenerSnapshotMetric>(async (from, to) => await supabase
       .from('screener_rows')
       .select('symbol,relative_volume,daily_change')
       .eq('snapshot_id', snapshot.id)
+      .order('symbol')
       .range(from, to)),
   ])
   const bars: LeadershipPriceBar[] = persistedBars.map((bar) => ({
