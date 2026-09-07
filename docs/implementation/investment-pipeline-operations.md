@@ -137,3 +137,23 @@ Shadow capture `edc6c6aa-bf47-4ca4-a967-a6a2102e4dbf` belongs to that exact batc
 The worker previously waited for the slowest job in a batch, leaving completed sibling slots idle. The deployed bounded pool now reuses those slots while preserving atomic claims, errors and the existing concurrency cap. The recommendation repair was verified through a single existing-queue handler process, not an additional daemon. The system worker reports healthy on `c2e4ffc`; Vercel delivery is checked separately.
 
 The core owner-review loop is now implemented and verified through publication and prospective outcome bookkeeping. Investment efficacy remains unproven. The next substantive learning milestone is typed, source-resolvable company metrics with useful quarterly resolution windows and ETF look-through exposure, followed by real prospective outcomes. Manual account confirmation, unresolved PIKA, unsupported UTES and offsite recovery configuration remain explicit limits rather than invented data or completed capabilities.
+
+
+## Clear insights and owner allocation budgets (September 7)
+
+PR #15 makes `/markets` the daily investment brief, with four primary destinations (Today, Portfolio, Research, World). `/markets/recommendations` remains compatible; the prior market overview is available at `/markets/overview`, including the legacy macro redirect. Capital actions, existing holdings, and background research are grouped without removing recommendation coverage. Detailed evidence and process controls remain available through progressive disclosure. The four links remain visible at mobile widths.
+
+An immutable manual confirmation can now contain `allocationBudget: {total, holdingsValue}`. Its remaining allocation equals total budget less captured holdings value; the Portfolio UI labels this available budget, and frozen recommendation names record `capitalBasis: owner_budget`. This is owner-authorized allocation capacity, never a claim about broker buying power. Existing cash-based confirmations remain compatible, and repricing preserves the budget metadata. No transactions or order execution are created.
+
+PR #16 fixes two observed input failures. Market-universe coverage now includes current authoritative manual and broker holdings even without watchlist/transaction rows. Decision assembly reads the exact packet IDs referenced by the latest selected research notes in batches of five, retaining owner and cutoff filters, instead of scanning all historical packets. An authenticated production read loaded 87 referenced packets in approximately five seconds. The original incomplete morning edition remains immutable.
+
+Browser responses project source references, timestamps, account context, and World summaries without serializing raw research and evidence payloads. Dashboard reads share a 15-second deadline. The durable manifest remains complete and unchanged.
+
+Validation: 669 passing tests and one existing skip; production build and focused ESLint passed. Desktop (1672 by 941), mobile (390 pixels), dark mode, portfolio filtering, and expandable thesis/counter-thesis were inspected. The temporary illustrative preview was removed before deployment. Product release is `f9db19fa5030e1947cf7995521e7872fb126d4f3` on Vercel and the private worker.
+
+
+PR #17 keeps an explicitly authorized total investment budget as the allocation sizing denominator even if a held instrument has no usable quote. Portfolio labels this Investment budget. Individual missing/stale-price gates remain in force; account cash and market value are not fabricated.
+
+The updated input manifest was checked against production after the packet-read repair: all confirmed positions and the owner budget were retained, and no global data-read gaps remained. Individual unsupported fund evidence remains restricted. A spot measurement of the browser workspace was approximately 482 KB and 1.45 seconds, including recommendations and learning records; this is a measurement, not a latency guarantee.
+
+Observed limits during this release: one newly tracked fund required a 318-bar history backfill, and a subsequent complete-market refresh failed its required-coverage gate because a thinly traded watchlist fund had only an older IEX trade. The last complete market snapshot was retained. Universe admission does not by itself prove that a provider has delivered enough current history or a usable quote. Do not relabel these missing/stale sources or remove publication gates to make an endpoint look healthy.
