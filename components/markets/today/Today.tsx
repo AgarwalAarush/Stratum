@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { recommendationStatus } from '@/lib/markets/recommendation-status'
+import type { Recommendation } from '@/lib/markets/recommendations'
 import {
   fetchTodayMarket,
   fetchTodayPortfolio,
@@ -56,27 +58,23 @@ export async function TodayPortfolio({ ownerId }: { ownerId: string }) {
       <Unavailable title="Your assessment" href="/markets/recommendations" />
     )
   const summary = summarizeTodayDecisions(data.decisions)
-  const title = !data.decisions.length
-    ? 'No assessment available'
-    : summary.actionCount
-      ? `${summary.actionCount} ${summary.actionCount === 1 ? 'action' : 'actions'} to review`
-      : summary.expired
-        ? 'Assessment needs a refresh'
-        : 'No changes to make'
+  const status = recommendationStatus(
+    data.decisions.map(
+      (d) =>
+        ({
+          action: d.action,
+          reason: d.reason,
+          gateReasons: d.gate_reasons,
+          expiresAt: d.expires_at,
+        }) as Recommendation,
+    ),
+  )
   return (
     <section className={styles.decision}>
       <div className={styles.call}>
         <p className={styles.eyebrow}>Your next move</p>
-        <h2>{title}</h2>
-        <p className={styles.deck}>
-          {!data.decisions.length
-            ? 'There are no published decisions in this edition.'
-            : summary.actionCount
-              ? 'Review the reasoning and position size before acting.'
-              : summary.expired
-                ? 'Some decisions have expired. Check the latest evidence before acting.'
-                : 'No approved buys, adds, trims or sells in the latest assessment.'}
-        </p>
+        <h2>{status.title}</h2>
+        <p className={styles.deck}>{status.description}</p>
         {summary.cleared.length > 0 && (
           <ul className={styles.actions}>
             {summary.cleared.map((d) => (
@@ -94,11 +92,10 @@ export async function TodayPortfolio({ ownerId }: { ownerId: string }) {
           href="/markets/recommendations"
           prefetch={false}
         >
-          {summary.actionCount ? 'Review changes' : 'View assessment'} <span>↗</span>
+          {summary.actionCount ? 'Review changes' : 'View assessment'}{' '}
+          <span>↗</span>
         </Link>
-        <p className={styles.meta}>
-          Assessment · {time(data.publishedAt)}
-        </p>
+        <p className={styles.meta}>Assessment · {time(data.publishedAt)}</p>
       </div>
       <div className={styles.allocation}>
         <div className={styles.sectionHead}>

@@ -1,5 +1,6 @@
 'use client'
 import Link from 'next/link'
+import { RecommendationStatus } from './RecommendationStatus'
 import { RecommendationRefresh } from './RecommendationRefresh'
 import { ManualPortfolioConfirmation } from './ManualPortfolioConfirmation'
 import {
@@ -28,7 +29,6 @@ const stamp = (v: unknown) =>
       })
     : 'Unavailable'
 const actionLabel = (s: string) => s === 'no_trade' ? 'Wait — evidence incomplete' : s.replaceAll('_', ' ')
-const money = (v: number) => new Intl.NumberFormat('en-US', {style:'currency', currency:'USD', maximumFractionDigits:2}).format(v)
 export function RecommendationsWorkspace({
   initialData,
 }: {
@@ -53,13 +53,14 @@ export function RecommendationsWorkspace({
   }
   return (
     <div className="mx-auto max-w-[1200px] px-5 py-7 md:px-10 md:py-10">
+      <Link href="/markets" className="mb-6 inline-flex items-center gap-2 text-sm font-medium underline-offset-4 hover:underline"><span aria-hidden="true">←</span> Back to Today</Link>
       <header className="grid gap-4 border-b border-[var(--border)] pb-5 md:grid-cols-[1fr_auto]">
         <div>
           <p className="mb-3 text-[11px] uppercase tracking-[.18em] text-[var(--text-muted)]">
-            Portfolio changes
+            Your investment decisions
           </p>
           <h1 className="text-3xl font-medium tracking-tight md:text-4xl">
-            Changes to make.
+            Recommendations
           </h1>
 
         </div>
@@ -67,7 +68,7 @@ export function RecommendationsWorkspace({
           <p>Daily · 7:00 AM Pacific</p>
           <p className="mt-2 text-xs text-[var(--text-muted)]">
             {latest
-              ? stamp(latest.published_at)
+              ? `Published ${stamp(latest.published_at)}`
               : 'Awaiting first publication'}
           </p>
           <RecommendationRefresh />
@@ -84,7 +85,7 @@ export function RecommendationsWorkspace({
             aria-current={tab === t ? 'page' : undefined}
             className={`py-4 text-sm capitalize ${tab === t ? 'border-b-2 border-current' : 'text-[var(--text-muted)]'}`}
           >
-            {t === 'decisions' ? 'Insights' : 'Track record'}
+            {t === 'decisions' ? 'Actions' : 'Track record'}
           </button>
         ))}
       </nav>
@@ -113,17 +114,9 @@ export function RecommendationsWorkspace({
               acting.
             </p>
           ) : null}
-          <section className="py-7">
-
-            <details className="mt-4 text-xs text-[var(--text-muted)]">
-              <summary className="cursor-pointer">Edition details</summary><p className="mt-2">{latest.summary}</p>
-              <p className="mt-2">Evidence as of {stamp(context?.cutoff)} · {context?.policy} · {data?.recommendations.length} account decisions</p>
-            </details>
-          </section>
-          <nav aria-label="Portfolio filter" className="mb-6 flex flex-wrap gap-2">
+          <nav aria-label="Portfolio filter" className="mt-6 flex flex-wrap gap-2">
             {[{id:'all',name:'All portfolios'}, ...(data?.accounts ?? [])].map(a => <button key={a.id} onClick={() => setPortfolioId(a.id)} aria-pressed={portfolioId === a.id} className={`rounded-full border border-[var(--border)] px-4 py-2 text-sm ${portfolioId === a.id ? 'bg-[var(--text)] text-[var(--bg)]' : 'text-[var(--text-muted)]'}`}>{a.name}</button>)}
           </nav>
-          {Array.isArray(context?.portfolio) && context.portfolio.filter(p => (portfolioId === 'all' || p.account.id === portfolioId) && p.allocationBudget).map(p => <p key={p.account.id} className="mb-5 text-sm text-[var(--text-muted)]">{p.account.name}: {money(p.allocationBudget.total)} investment budget · {money(p.cashBalance)} available to allocate</p>)}
           {(context?.gaps.length ?? 0) > 0 && (
             <details className="mb-6 text-xs text-[var(--text-muted)]">
               <summary className="cursor-pointer">Evidence limits</summary>
@@ -135,9 +128,15 @@ export function RecommendationsWorkspace({
             </details>
           )}
           <section aria-label="Capital actions">
-            <h2 className="text-lg font-medium">{actionRows.length ? 'Actions to consider' : 'No changes to make'}</h2>
-            {!actionRows.length && <p className="mt-2 text-sm text-[var(--text-muted)]">Only approved, unexpired buys, adds, trims and sells appear here.</p>}
+            <RecommendationStatus recommendations={visible.map(r => r.content as Recommendation)} viewedAt={data!.viewedAt} />
             {actionRows.map(renderDecision)}
+          </section>
+          <section className="pb-3">
+
+            <details className="mt-4 text-xs text-[var(--text-muted)]">
+              <summary className="cursor-pointer">Edition details</summary><p className="mt-2">{latest.summary}</p>
+              <p className="mt-2">Evidence as of {stamp(context?.cutoff)} · {context?.policy} · {data?.recommendations.length} account decisions</p>
+            </details>
           </section>
           {archivedRows.length > 0 && <details className="mt-8 border-t border-[var(--border)] py-5">
             <summary className="cursor-pointer text-xs text-[var(--text-muted)]">Full assessment archive · {archivedRows.length}</summary>
@@ -230,12 +229,7 @@ export function RecommendationsWorkspace({
         {data?.accounts.filter(a => a.kind === 'manual').map(a => <ManualPortfolioConfirmation key={a.id} account={a} />)}
       </details>
       <footer className="mt-12 border-t border-[var(--border)] pt-5 text-xs text-[var(--text-muted)]">
-        Newsletter delivery:{' '}
-        {String(
-          record(record(data?.delivery).investment_newsletter_delivery)
-            .status ?? 'Not configured or not sent',
-        )}{' '}
-        · Recommendations never place orders.
+        Email alerts only for approved capital changes · Stratum does not place orders.
       </footer>
     </div>
   )
