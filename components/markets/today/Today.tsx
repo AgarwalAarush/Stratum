@@ -62,7 +62,7 @@ export async function TodayPortfolio({ ownerId }: { ownerId: string }) {
       ? `${summary.actionCount} ${summary.actionCount === 1 ? 'action' : 'actions'} to review`
       : summary.expired
         ? 'Assessment needs a refresh'
-        : 'No new trades cleared'
+        : 'No changes to make'
   return (
     <section className={styles.decision}>
       <div className={styles.call}>
@@ -75,7 +75,7 @@ export async function TodayPortfolio({ ownerId }: { ownerId: string }) {
               ? 'Review the reasoning and position size before acting.'
               : summary.expired
                 ? 'Some decisions have expired. Check the latest evidence before acting.'
-                : 'The latest review cleared no changes to capital. Existing holdings and open questions are summarized below.'}
+                : 'No approved buys, adds, trims or sells in the latest assessment.'}
         </p>
         {summary.cleared.length > 0 && (
           <ul className={styles.actions}>
@@ -89,30 +89,15 @@ export async function TodayPortfolio({ ownerId }: { ownerId: string }) {
             ))}
           </ul>
         )}
-        <div className={styles.counts}>
-          <div>
-            <strong>{summary.hold}</strong>
-            <span>Hold</span>
-          </div>
-          <div>
-            <strong>{summary.investigate}</strong>
-            <span>Watch / research</span>
-          </div>
-          <div>
-            <strong>{summary.blocked}</strong>
-            <span>No trade / blocked</span>
-          </div>
-        </div>
         <Link
           className={styles.primary}
           href="/markets/recommendations"
           prefetch={false}
         >
-          Review decisions <span>↗</span>
+          {summary.actionCount ? 'Review changes' : 'View assessment'} <span>↗</span>
         </Link>
         <p className={styles.meta}>
-          Assessment · {time(data.publishedAt)} · Counts are decisions across
-          accounts.
+          Assessment · {time(data.publishedAt)}
         </p>
       </div>
       <div className={styles.allocation}>

@@ -9,7 +9,7 @@ import {
 } from './RecommendationLearningControls'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { decisionHeadline, decisionIsBlocked, readableDecisionText } from '@/lib/markets/recommendation-display'
+import { decisionHeadline, decisionIsBlocked, readableDecisionText, isActionableCapitalChange } from '@/lib/markets/recommendation-display'
 import type { fetchRecommendationWorkspace } from '@/lib/server/recommendations'
 import type {
   DecisionContext,
@@ -45,13 +45,9 @@ export function RecommendationsWorkspace({
       timeZone: 'America/Los_Angeles',
     })
   const visible = data?.recommendations.filter(r => portfolioId === 'all' || (r.content as Recommendation).portfolioId === portfolioId) ?? []
-  const actionRows = visible.filter(r => ['buy','add','trim','sell'].includes(r.action))
-  const heldRows = visible.filter(r => !['buy','add','trim','sell'].includes(r.action) && context?.names.some(n => n.owned && n.symbol === r.symbol && n.portfolioId === (r.content as Recommendation).portfolioId))
-  const otherRows = visible.filter(r => !actionRows.includes(r) && !heldRows.includes(r))
-  const actionable =
-    data?.recommendations.filter((r) =>
-      ['buy', 'add', 'trim', 'sell'].includes(r.action),
-    ).length ?? 0
+  const viewedAt = Date.parse(data?.viewedAt ?? '')
+  const actionRows = visible.filter(r => isActionableCapitalChange(r.content as Recommendation, viewedAt))
+  const archivedRows = visible.filter(r => !actionRows.includes(r))
   function renderDecision(row: NonNullable<Data>['recommendations'][number]) {
     return <DecisionCard key={row.id} row={row} context={context} viewedAt={data!.viewedAt} events={data!.events.filter(e => e.recommendation_id === row.id)} />
   }
@@ -60,10 +56,10 @@ export function RecommendationsWorkspace({
       <header className="grid gap-4 border-b border-[var(--border)] pb-5 md:grid-cols-[1fr_auto]">
         <div>
           <p className="mb-3 text-[11px] uppercase tracking-[.18em] text-[var(--text-muted)]">
-            Your daily investment brief
+            Portfolio changes
           </p>
           <h1 className="text-3xl font-medium tracking-tight md:text-4xl">
-            What matters today.
+            Changes to make.
           </h1>
 
         </div>
@@ -101,7 +97,7 @@ export function RecommendationsWorkspace({
           </h2>
           <p className="mt-3 text-sm leading-6 text-[var(--text-muted)]">
             {data
-              ? 'Once published, every owned and watched name will appear here with an action, counter-thesis and evidence trail.'
+              ? 'Approved buys, adds, trims and sells will appear here with their reasoning and evidence.'
               : 'Stratum cannot verify a current investment recommendation. Existing holdings have not been declared safe. Your standing risk controls still apply.'}
           </p>
         </section>
@@ -118,9 +114,9 @@ export function RecommendationsWorkspace({
             </p>
           ) : null}
           <section className="py-7">
-            <p className="max-w-4xl text-base leading-7 md:text-lg md:leading-8">{latest.summary}</p>
+
             <details className="mt-4 text-xs text-[var(--text-muted)]">
-              <summary className="cursor-pointer">Edition details</summary>
+              <summary className="cursor-pointer">Edition details</summary><p className="mt-2">{latest.summary}</p>
               <p className="mt-2">Evidence as of {stamp(context?.cutoff)} · {context?.policy} · {data?.recommendations.length} account decisions</p>
             </details>
           </section>
@@ -129,27 +125,23 @@ export function RecommendationsWorkspace({
           </nav>
           {Array.isArray(context?.portfolio) && context.portfolio.filter(p => (portfolioId === 'all' || p.account.id === portfolioId) && p.allocationBudget).map(p => <p key={p.account.id} className="mb-5 text-sm text-[var(--text-muted)]">{p.account.name}: {money(p.allocationBudget.total)} investment budget · {money(p.cashBalance)} available to allocate</p>)}
           {(context?.gaps.length ?? 0) > 0 && (
-            <div className="mb-6 border border-[var(--border)] p-5 text-sm">
-              <p className="font-medium">Evidence limits</p>
+            <details className="mb-6 text-xs text-[var(--text-muted)]">
+              <summary className="cursor-pointer">Evidence limits</summary>
               <ul className="mt-2 list-disc space-y-1 pl-5">
                 {context!.gaps.map((g) => (
                   <li key={g}>{g}</li>
                 ))}
               </ul>
-            </div>
+            </details>
           )}
           <section aria-label="Capital actions">
-            <h2 className="text-lg font-medium">{actionRows.length ? 'Actions to consider' : 'No portfolio changes proposed'}</h2>
-            {!actionRows.length && <p className="mt-2 text-sm text-[var(--text-muted)]">{actionable ? 'No capital changes for this portfolio in this edition.' : 'No buy, add, trim or sell passed this edition’s review. Holds and evidence gaps are listed below.'}</p>}
+            <h2 className="text-lg font-medium">{actionRows.length ? 'Actions to consider' : 'No changes to make'}</h2>
+            {!actionRows.length && <p className="mt-2 text-sm text-[var(--text-muted)]">Only approved, unexpired buys, adds, trims and sells appear here.</p>}
             {actionRows.map(renderDecision)}
           </section>
-          {heldRows.length > 0 && <section aria-label="Your holdings" className="mt-8">
-            <h2 className="mb-2 text-lg font-medium">Your holdings <span className="text-sm font-normal text-[var(--text-muted)]">{heldRows.length}</span></h2>
-            {heldRows.map(renderDecision)}
-          </section>}
-          {otherRows.length > 0 && <details className="mt-8 border-t border-[var(--border)] py-5">
-            <summary className="cursor-pointer text-sm font-medium">Watchlist & research · {otherRows.length}</summary>
-            {otherRows.map(renderDecision)}
+          {archivedRows.length > 0 && <details className="mt-8 border-t border-[var(--border)] py-5">
+            <summary className="cursor-pointer text-xs text-[var(--text-muted)]">Full assessment archive · {archivedRows.length}</summary>
+            {archivedRows.map(renderDecision)}
           </details>}
         </>
       ) : (

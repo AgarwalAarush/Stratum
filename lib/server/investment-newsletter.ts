@@ -1,5 +1,6 @@
+import { isActionableCapitalChange } from '../markets/recommendation-display.ts'
 import { gmailMessage, gmailTransport, newsletterProvider, newsletterSender, NEWSLETTER_OWNER } from './newsletter-transport.ts'
-import { renderInvestmentNewsletter } from '../markets/investment-newsletter.ts'
+import { ACTION_NEWSLETTER_PREFIX, renderInvestmentNewsletter } from '../markets/investment-newsletter.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import {
   contentHash,
@@ -28,8 +29,6 @@ export async function prepareInvestmentNewsletter(
     .eq('edition_date', date)
     .maybeSingle()
   if (existing.error) throw new Error(existing.error.message)
-  if (existing.data) return existing.data
-  const provider = newsletterProvider(), sender = newsletterSender(provider)
   const workspace = await fetchRecommendationWorkspace(ownerId)
   const latest =
     workspace.latest?.decision_date === date ? workspace.latest : null
@@ -37,9 +36,15 @@ export async function prepareInvestmentNewsletter(
     | DecisionContext
     | undefined
   const recommendations = latest
-    ? workspace.recommendations.map((r) => r.content as Recommendation)
+    ? workspace.recommendations.map((r) => r.content as Recommendation).filter(r => isActionableCapitalChange(r, now.getTime()))
     : []
+  // Quiet days do not create an outbox message or touch the delivery lease.
+  if (!recommendations.length) return null
+  // Preserve immutable prior editions; never send an old holds-filled draft.
+  if (existing.data) return existing.data.batch_id === latest?.id && existing.data.subject.startsWith(ACTION_NEWSLETTER_PREFIX) ? existing.data : null
+  const provider = newsletterProvider(), sender = newsletterSender(provider)
   const rendered = renderInvestmentNewsletter({
+    asOf: now.toISOString(),
     date,
     publishedAt: latest?.published_at ?? null,
     summary:
@@ -92,7 +97,9 @@ function weekendLimit(date: string) {
 }
 
 export async function sendInvestmentNewsletter(now = new Date()) {
-  const db = investmentDb(), outbox = await prepareInvestmentNewsletter(now)
+  const outbox = await prepareInvestmentNewsletter(now)
+  if (!outbox) return { sent: false, status: 'skipped', reason: 'No current approved capital changes to notify, or a legacy edition is frozen.' }
+  const db = investmentDb()
   const provider = outbox.delivery_provider
   if (provider !== 'gmail' && provider !== 'resend') throw new Error('Unknown frozen newsletter provider')
   const apiKey = process.env.RESEND_API_KEY?.trim()

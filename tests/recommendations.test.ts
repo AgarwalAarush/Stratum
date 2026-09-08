@@ -263,7 +263,7 @@ test('newsletter escapes source content and states missing current publication',
   })
   assert.ok(!email.html.includes('<script>'))
   assert.match(email.text, /service-status edition/)
-  assert.match(email.subject, /Weekend review/)
+  assert.match(email.subject, /Portfolio changes/)
 })
 test('morning delivery tracks Pacific daylight saving and catches up after restart', () => {
   for (const date of [

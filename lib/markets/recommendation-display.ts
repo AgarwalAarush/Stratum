@@ -38,3 +38,13 @@ export function recommendationDisplayContext(row: {content: unknown; content_has
     evidence: c.evidence.map(e => ({id:e.id, url:e.url, asOf:e.asOf, availableAt:e.availableAt})),
   }}
 }
+
+/** Only reviewed, unexpired capital changes deserve an owner alert. */
+export function isActionableCapitalChange(
+  rec: Pick<Recommendation, 'action' | 'gateReasons' | 'expiresAt'>,
+  now: number,
+): boolean {
+  return ['buy', 'add', 'trim', 'sell'].includes(rec.action)
+    && Array.isArray(rec.gateReasons) && rec.gateReasons.length === 0
+    && Date.parse(rec.expiresAt) > now
+}
