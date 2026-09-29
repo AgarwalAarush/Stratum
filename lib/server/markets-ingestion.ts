@@ -89,19 +89,26 @@ function finiteMetric(value: number | string | null): number | null {
   return Number.isFinite(number) ? number : null
 }
 
-async function loadScreenerHistoryMetrics(
+export async function loadScreenerHistoryMetrics(
   supabase: SupabaseServiceClient,
   symbols: string[],
   feed: Exclude<MarketFeed, 'illustrative'>,
   asOf: string,
 ): Promise<Map<string, ScreenerHistoryMetrics>> {
-  const { data, error } = await supabase.rpc('screener_history_metrics', {
-    p_symbols: symbols,
-    p_feed: feed,
-    p_as_of: newYorkDate(asOf),
-  })
-  if (error) throw new Error(`Unable to calculate persisted screener history metrics: ${error.message}`)
-  return new Map(((data ?? []) as ScreenerHistoryMetricRow[]).flatMap((row) => {
+  // A full-universe reduction can exceed Postgres's statement deadline. Its
+  // cached-snapshot fallback cannot cover names added since that snapshot.
+  // Bound each reduction while retaining the same feed and market-date cutoff.
+  const rows: ScreenerHistoryMetricRow[] = []
+  for (const symbolBatch of batches([...new Set(symbols)], HISTORY_QUERY_SYMBOL_BATCH_SIZE)) {
+    const { data, error } = await supabase.rpc('screener_history_metrics', {
+      p_symbols: symbolBatch,
+      p_feed: feed,
+      p_as_of: newYorkDate(asOf),
+    })
+    if (error) throw new Error(`Unable to calculate persisted screener history metrics: ${error.message}`)
+    rows.push(...((data ?? []) as ScreenerHistoryMetricRow[]))
+  }
+  return new Map(rows.flatMap((row) => {
     const barCount = Number(row.bar_count)
     const averageVolume = finiteMetric(row.average_volume)
     const fiftyDayAverage = finiteMetric(row.fifty_day_average)
