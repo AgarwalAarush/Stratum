@@ -95,20 +95,13 @@ export async function loadScreenerHistoryMetrics(
   feed: Exclude<MarketFeed, 'illustrative'>,
   asOf: string,
 ): Promise<Map<string, ScreenerHistoryMetrics>> {
-  // A full-universe reduction can exceed Postgres's statement deadline. Its
-  // cached-snapshot fallback cannot cover names added since that snapshot.
-  // Bound each reduction while retaining the same feed and market-date cutoff.
-  const rows: ScreenerHistoryMetricRow[] = []
-  for (const symbolBatch of batches([...new Set(symbols)], HISTORY_QUERY_SYMBOL_BATCH_SIZE)) {
-    const { data, error } = await supabase.rpc('screener_history_metrics', {
-      p_symbols: symbolBatch,
-      p_feed: feed,
-      p_as_of: newYorkDate(asOf),
-    })
-    if (error) throw new Error(`Unable to calculate persisted screener history metrics: ${error.message}`)
-    rows.push(...((data ?? []) as ScreenerHistoryMetricRow[]))
-  }
-  return new Map(rows.flatMap((row) => {
+  const { data, error } = await supabase.rpc('screener_history_metrics', {
+    p_symbols: symbols,
+    p_feed: feed,
+    p_as_of: newYorkDate(asOf),
+  })
+  if (error) throw new Error(`Unable to calculate persisted screener history metrics: ${error.message}`)
+  return new Map(((data ?? []) as ScreenerHistoryMetricRow[]).flatMap((row) => {
     const barCount = Number(row.bar_count)
     const averageVolume = finiteMetric(row.average_volume)
     const fiftyDayAverage = finiteMetric(row.fifty_day_average)
@@ -132,6 +125,24 @@ export async function loadScreenerHistoryMetrics(
     }
     return [[metric.symbol, metric] as const]
   }))
+}
+
+export async function fillScreenerHistoryGaps(
+  supabase: SupabaseServiceClient,
+  symbols: string[],
+  feed: Exclude<MarketFeed, 'illustrative'>,
+  asOf: string,
+  metrics: Map<string, ScreenerHistoryMetrics>,
+  cached: ReadonlyMap<string, CachedScreenerHistory>,
+): Promise<void> {
+  const missing = [...new Set(symbols)].filter(symbol =>
+    (metrics.get(symbol)?.barCount ?? 0) < 50 && !cached.has(symbol))
+  // The archive fallback can predate newly required constituents. Resolve
+  // just those gaps in smaller reductions instead of silently dropping them.
+  for (const group of batches(missing, 10)) {
+    const recovered = await loadScreenerHistoryMetrics(supabase, group, feed, asOf)
+    for (const [symbol, value] of recovered) metrics.set(symbol, value)
+  }
 }
 
 async function loadCachedScreenerHistory(
@@ -504,6 +515,9 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
     }
     if (historyResult.feed !== feed) throw new Error(`Alpaca returned inconsistent feeds: ${feed} and ${historyResult.feed}`)
     historyMetrics = await loadScreenerHistoryMetrics(supabase, symbols, feed, newestTimestamp(snapshotsResult.data, now.toISOString()))
+  }
+  if (cachedHistory.size > 0) {
+    await fillScreenerHistoryGaps(supabase, symbols, feed, dataAsOf, historyMetrics, cachedHistory)
   }
   const { data: snapshotRecord, error: snapshotError } = await supabase
     .from('market_snapshots')
