@@ -51,6 +51,7 @@ export function ForecastReview({
         {String(forecast.deadline).slice(0, 10)}
       </summary>
       <p className="mt-3 text-xs text-[var(--text-muted)]">{forecastCategory({metric: String(content.metric ?? '')}) === 'market_return' ? 'Market return · scored separately from economic thesis outcomes' : 'Economic outcome'}</p>
+      <p className="mt-3 text-xs">{content.observationPeriod ? `Observation period: ${String(content.observationPeriod)} · Unit: ${String(content.unit)}` : 'Legacy forecast: no structured period or unit.'}</p>
       <p className="mt-3">Confirm: {String(content.confirmation)}</p>
       <p>Invalidate: {String(content.invalidation)}</p>
       <div className="mt-4 grid gap-3 md:grid-cols-3">

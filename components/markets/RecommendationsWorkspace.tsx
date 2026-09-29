@@ -193,6 +193,7 @@ export function RecommendationsWorkspace({
             {learning.shadowEvaluations.length ? learning.shadowEvaluations.slice(0,5).map(e => {
               const result=record(e.content)
               return <div key={e.id} className="mt-4 border-t border-[var(--border)] pt-3">
+                <p className="font-medium">{result.comparisonPolicy === 'world-context-ablation-v1' ? 'Company evidence alone versus added World context' : 'Forecast probability calibration'}</p>
                 <p>{String(result.resolvedEpisodes ?? 0)} resolved, {String(result.unresolvedEpisodes ?? 0)} unresolved after repeated and overlapping forecasts are removed.</p>
                 <p className="mt-1">Baseline Brier: {result.baselineBrier == null ? 'Awaiting outcomes' : Number(result.baselineBrier).toFixed(3)} · Shadow Brier: {result.candidateBrier == null ? 'Awaiting outcomes' : Number(result.candidateBrier).toFixed(3)}</p>
                 <p className="mt-1 text-xs text-[var(--text-muted)]">Lower is better. No automatic promotion; uncertainty and repeated experiments require review.</p>
