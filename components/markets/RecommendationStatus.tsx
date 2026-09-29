@@ -4,9 +4,11 @@ import styles from './RecommendationStatus.module.css'
 export function RecommendationStatus({
   recommendations,
   viewedAt,
+  earlierEdition = false,
 }: {
   recommendations: Recommendation[]
   viewedAt: string
+  earlierEdition?: boolean
 }) {
   const status = recommendationStatus(recommendations, Date.parse(viewedAt))
   return (
@@ -14,18 +16,22 @@ export function RecommendationStatus({
       className={styles.panel}
       aria-labelledby="recommendation-status-title"
     >
+      <div className={styles.summary}>
       <div className={styles.heading}>
         <span
           className={styles.indicator}
           data-ready={status.approved > 0}
           aria-hidden="true"
         />
-        <p className={styles.eyebrow}>
-          {status.approved ? 'Ready for your review' : 'Latest assessment'}
-        </p>
+        <h2 id="recommendation-status-title">{status.title}</h2>
       </div>
-      <h2 id="recommendation-status-title">{status.title}</h2>
       <p className={styles.description}>{status.description}</p>
+      {earlierEdition && !status.expired && <p className={styles.description}>Earlier edition · a current daily evaluation is unavailable.</p>}
+      </div>
+      <dl className={styles.metrics}>
+        <div><dd>{status.approved}</dd><dt>Actionable</dt></div>
+        <div><dd>{status.total - status.approved}</dd><dt>Other decisions</dt></div>
+      </dl>
       {!status.approved && status.reasons.length > 0 && (
         <div className={styles.reasons}>
           {status.reasons.map((reason) => (

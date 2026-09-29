@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ArrowClockwise, Moon, Sun } from '@phosphor-icons/react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { StockSearch } from './StockSearch'
 import { useThemeStore } from '@/store/theme'
 
@@ -38,9 +38,9 @@ interface MarketStatusResponse {
 export function MarketsShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [refreshing, setRefreshing] = useState(false)
+  const [refreshing, startRefresh] = useTransition()
   const [dataAsOf, setDataAsOf] = useState<string>()
-  const prefetchedRoutes = useRef(new Set<string>())
+  const prefetchedRoutes = useRef(new Map<string, number>())
   const { theme, setTheme, toggle: toggleTheme } = useThemeStore()
 
   useEffect(() => {
@@ -60,15 +60,13 @@ export function MarketsShell({ children }: { children: React.ReactNode }) {
   }, [])
 
   const prefetchRoute = useCallback((href: string) => {
-    if (prefetchedRoutes.current.has(href)) return
-    prefetchedRoutes.current.add(href)
+    if (Date.now() - (prefetchedRoutes.current.get(href) ?? 0) < 30_000) return
+    prefetchedRoutes.current.set(href, Date.now())
     router.prefetch(href)
   }, [router])
 
   const refresh = () => {
-    setRefreshing(true)
-    router.refresh()
-    window.setTimeout(() => setRefreshing(false), 650)
+    startRefresh(() => router.refresh())
   }
 
   return (
@@ -114,6 +112,8 @@ export function MarketsShell({ children }: { children: React.ReactNode }) {
             type="button"
             className="markets-icon-button"
             aria-label="Refresh market data"
+            aria-busy={refreshing}
+            disabled={refreshing}
             onClick={refresh}
           >
             <ArrowClockwise size={17} weight="regular" className={refreshing ? 'markets-refreshing' : ''} />
