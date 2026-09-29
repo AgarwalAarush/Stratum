@@ -433,13 +433,16 @@ function normalizeInbox(row: Record<string, unknown>): DecisionInboxItem {
 /** Fail closed and page durable inputs. A successful broker capture replaces the
  * ledger for that account, including an explicitly empty brokerage account. */
 export async function fetchAuthoritativePortfolios(ownerId: string): Promise<PortfolioWorkspaceData['portfolios']> {
+  return (await fetchAuthoritativePortfolioState(ownerId)).portfolios
+}
+
+async function fetchAuthoritativePortfolioState(ownerId: string) {
   const db = getSupabaseClient()
   if (!db || !validOwnerId(ownerId)) throw new Error('Persisted portfolio owner required')
-  const rows = async (table: string, select: string, order: string, succeeded = false) => {
+  const rows = async (table: string, select: string, order: string) => {
     const result: Record<string, unknown>[] = []
     for (let offset = 0; ; offset += 500) {
-      let query = db.from(table).select(select).eq('owner_id', ownerId).order(order, { ascending: false }).order('id').range(offset, offset + 499)
-      if (succeeded) query = query.eq('status', 'succeeded')
+      const query = db.from(table).select(select).eq('owner_id', ownerId).order(order, { ascending: false }).order('id').range(offset, offset + 499)
       const { data, error } = await query
       if (error) throw new Error(`Unable to read authoritative ${table}: ${error.message}`)
       const page = (data ?? []) as unknown as Record<string, unknown>[]
@@ -447,15 +450,27 @@ export async function fetchAuthoritativePortfolios(ownerId: string): Promise<Por
       if (page.length < 500) return result
     }
   }
+  const accountsPromise = rows('portfolios', '*', 'created_at')
+  const capturesPromise = accountsPromise.then(accounts => Promise.all(accounts
+    .filter(account => account.kind === 'brokerage')
+    .map(async account => {
+      const { data, error } = await db.from('brokerage_sync_runs')
+        .select('id,portfolio_id,captured_at,brokerage_account_snapshots(cash_balance,equity_value,total_value),brokerage_position_snapshots(symbol,quantity,cost_basis_per_share,current_price,quote_as_of)')
+        .eq('owner_id', ownerId).eq('portfolio_id', account.id).eq('status', 'succeeded')
+        .order('captured_at', { ascending: false }).order('id').limit(1)
+      if (error) throw new Error(`Unable to read authoritative brokerage_sync_runs: ${error.message}`)
+      return data ?? []
+    }))).then(captures => captures.flat())
   const [accounts, transactions, captures, confirmations] = await Promise.all([
-    rows('portfolios', '*', 'created_at'),
+    accountsPromise,
     rows('portfolio_transactions', '*', 'occurred_at'),
-    rows('brokerage_sync_runs', 'id,portfolio_id,captured_at,brokerage_account_snapshots(cash_balance,equity_value,total_value),brokerage_position_snapshots(symbol,quantity,cost_basis_per_share,current_price,quote_as_of)', 'captured_at', true),
+    capturesPromise,
     rows('portfolio_confirmations', '*', 'confirmed_at'),
   ])
-  const ledger = transactions.map(normalizePortfolioTransaction).filter(t => t.voidedAt === null)
-    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.createdAt.localeCompare(b.createdAt))
-  return accounts.map(normalizePortfolioAccount).map(account => {
+  const portfolioTransactions = transactions.map(normalizePortfolioTransaction)
+    .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt) || left.createdAt.localeCompare(right.createdAt))
+  const ledger = portfolioTransactions.filter(transaction => transaction.voidedAt === null)
+  const portfolios = accounts.map(normalizePortfolioAccount).map(account => {
     const capture = captures.find(c => c.portfolio_id === account.id)
     const snapshot = capture ? normalizeBrokerageSnapshot(capture) : null
     if (account.kind === 'brokerage' && capture && !snapshot) throw new Error('Invalid successful brokerage capture')
@@ -467,6 +482,7 @@ export async function fetchAuthoritativePortfolios(ownerId: string): Promise<Por
     }
     return calculatePortfolioSummary(account, ledger.filter(t => t.portfolioId === account.id), new Map())
   })
+  return { portfolios, portfolioTransactions }
 }
 
 export async function fetchAllAuthoritativeHoldings(): Promise<Array<{ ownerId: string; portfolioId: string; symbol: string; quantity: number }>> {
@@ -512,7 +528,7 @@ export async function fetchPortfolioWorkspace(
     { data: decisionRows },
     { data: reviewRows },
     { data: inboxRows },
-    { data: portfolioTransactionRows },
+    authoritative,
     { data: constraintRows },
   ] = await Promise.all([
     supabase.from('market_watchlists').select('id,client_id,name,market_watchlist_items(symbol)').eq('owner_id', ownerId).order('created_at'),
@@ -520,7 +536,7 @@ export async function fetchPortfolioWorkspace(
     supabase.from('thesis_decisions').select('*').eq('owner_id', ownerId).order('created_at', { ascending: false }),
     supabase.from('decision_reviews').select('*').eq('owner_id', ownerId).order('reviewed_at', { ascending: false }),
     supabase.from('decision_inbox_items').select('*').eq('owner_id', ownerId).eq('status', 'open').not('portfolio_id', 'is', null).order('occurred_at', { ascending: false }),
-    supabase.from('portfolio_transactions').select('*').eq('owner_id', ownerId).order('occurred_at', { ascending: true }).order('created_at', { ascending: true }),
+    fetchAuthoritativePortfolioState(ownerId),
     supabase.from('capital_decision_constraint_checks').select('*').eq('owner_id', ownerId).order('evaluated_at', { ascending: false }),
   ])
   const lists = (listRows ?? []).map((row) => ({
@@ -537,9 +553,8 @@ export async function fetchPortfolioWorkspace(
     const key = `${decision.portfolioId ?? 'legacy'}:${decision.symbol}`
     if (!latestDecisionBySymbol.has(key)) latestDecisionBySymbol.set(key, decision)
   }
-  const portfolioTransactions = (portfolioTransactionRows ?? []).map((row) => normalizePortfolioTransaction(row))
-  const authoritative = await fetchAuthoritativePortfolios(ownerId)
-  const portfolios = applyPortfolioQuotes({ portfolios: authoritative, portfolioTransactions } as PortfolioWorkspaceData, availableQuotes).portfolios
+  const { portfolioTransactions } = authoritative
+  const portfolios = applyPortfolioQuotes({ portfolios: authoritative.portfolios, portfolioTransactions } as PortfolioWorkspaceData, availableQuotes).portfolios
   return {
     watchlists,
     watchlistsPersisted: lists.length > 0,

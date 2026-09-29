@@ -1,5 +1,6 @@
 import { WorldLearningHealth } from '@/components/markets/WorldLearningHealth'
 import { fetchLearningHealth } from '@/lib/server/learning-health'
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import type { WorldNode } from '@/lib/markets/world-thinker-types'
@@ -48,8 +49,7 @@ function leadScore(lead: Record<string, unknown>, key: string): number {
 
 export default async function MarketsWorldPage() {
   const user = await requireAllowedMarketUser()
-  const [world, learningHealth] = await Promise.all([fetchWorldWorkspace(), fetchLearningHealth(user.id).catch(() => null)])
-  const now = learningHealth ? Date.parse(learningHealth.checkedAt) : Number.NaN
+  const world = await fetchWorldWorkspace({ includeReplayBatches: false })
   const changes = world.latestChanges[0]
   const runNeedsAttention = world.health.lastRunStatus === 'failed' || (Boolean(world.health.failure) && world.health.lastRunStatus !== 'rejected')
   const needsAttention = runNeedsAttention || world.health.quarantinedEvents > 0 || world.replay.run?.status === 'failed'
@@ -130,7 +130,9 @@ export default async function MarketsWorldPage() {
         </aside>
       </section>
 
-      <WorldLearningHealth health={learningHealth} overdue={world.hypotheses.filter(node => Date.parse(node.nextReviewAt) < now).map(({ id, title }) => ({ id, title }))} />
+      <Suspense fallback={<p className="world-empty-copy" role="status">Loading learning and evidence health…</p>}>
+        <LearningHealthSection ownerId={user.id} hypotheses={world.hypotheses} />
+      </Suspense>
 
       <section className="world-model-section" id="active-model">
         <div className="world-section-heading world-section-heading--major">
@@ -212,4 +214,10 @@ export default async function MarketsWorldPage() {
       </section>
     </div>
   )
+}
+
+async function LearningHealthSection({ ownerId, hypotheses }: { ownerId: string; hypotheses: WorldNode[] }) {
+  const health = await fetchLearningHealth(ownerId).catch(() => null)
+  const now = health ? Date.parse(health.checkedAt) : Number.NaN
+  return <WorldLearningHealth health={health} overdue={hypotheses.filter(node => Date.parse(node.nextReviewAt) < now).map(({ id, title }) => ({ id, title }))} />
 }

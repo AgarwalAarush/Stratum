@@ -7,6 +7,8 @@ import { getSupabaseClient } from './supabase.ts'
 import { loadWorldCoverageFrontiers, refreshWorldCoverageState } from './world-coverage.ts'
 import { projectWorldCausalModel } from './causal-model.ts'
 import type { WorldReplayBatch, WorldReplayRun } from './world-replay.ts'
+import { cachedFetchWithFallback } from './cache.ts'
+import { AsyncTtlCache } from './async-ttl-cache.ts'
 
 const execFile = promisify(execFileCallback)
 
@@ -171,12 +173,35 @@ function freshness(asOf: string | null): WorldWorkspace['freshness'] {
   return hours <= 14 ? 'current' : hours <= 36 ? 'aging' : 'stale'
 }
 
-export async function fetchWorldWorkspace(): Promise<WorldWorkspace> {
+const worldOverviewCache = new AsyncTtlCache<WorldWorkspace>({ maxEntries: 1 })
+
+export async function fetchWorldWorkspace(options: { includeReplayBatches?: boolean } = {}): Promise<WorldWorkspace> {
+  if (options.includeReplayBatches !== false) return loadWorldWorkspace(options)
+  const workspace = await worldOverviewCache.get('overview', 5_000, async () => (await cachedFetchWithFallback({
+    key: 'stratum:markets:world:overview:v2', ttlSeconds: 60, staleMaxAgeMs: 60_000,
+    fetcher: () => loadWorldWorkspace(options),
+  })).data)
+  if (!workspace) throw new Error('World overview unavailable')
+  return { ...workspace, freshness: freshness(workspace.dataAsOf) }
+}
+
+async function loadWorldWorkspace(options: { includeReplayBatches?: boolean }): Promise<WorldWorkspace> {
   const supabase = getSupabaseClient()
   if (!supabase) return { commit: null, branch: null, canonical: false, dataAsOf: null, freshness: 'unavailable', current: null, latestChanges: [], actors: [], situations: [], themes: [], scenarios: [], hypotheses: [], indicators: [], leads: [], coverage: [], replay: { run: null, batches: [] }, health: { lastRunAt: null, lastRunStatus: null, lastCommit: null, pendingEvents: 0, failedEvents: 0, quarantinedEvents: 0, oldestPendingAt: null, sourceCount: 0, failure: 'Supabase is not configured', lastSuccessfulRunAt: null, lastSuccessfulCommit: null } }
-  const replayPromise = import('./world-replay.ts').then(({ fetchWorldReplayStatus }) => fetchWorldReplayStatus())
-  const [projectionResult, runResult, successfulRunResult, eventResult, leadResult, coverage, replay] = await Promise.all([
-    supabase.from('world_repository_projections').select('*').order('is_canonical', { ascending: false }).order('projected_at', { ascending: false }).limit(1).maybeSingle(),
+  const replayPromise = import('./world-replay.ts').then(({ fetchWorldReplayStatus }) => fetchWorldReplayStatus({ includeBatches: options.includeReplayBatches }))
+  const projectionPromise = supabase.from('world_repository_projections').select('commit_sha,branch,is_canonical')
+    .order('is_canonical', { ascending: false }).order('projected_at', { ascending: false }).limit(1).maybeSingle()
+    .then(result => {
+      if (result.error) throw new Error(`Unable to load world projection: ${result.error.message}`)
+      return result.data as { commit_sha: string; branch: string; is_canonical: boolean } | null
+    })
+  const nodesPromise = projectionPromise.then(async projection => {
+    if (!projection) return []
+    return fetchProjectedWorldNodes(projection.commit_sha)
+  })
+  const [projection, nodes, runResult, successfulRunResult, eventResult, leadResult, coverage, replay] = await Promise.all([
+    projectionPromise,
+    nodesPromise,
     supabase.from('world_thinker_runs').select('status,result_commit,started_at,error').order('started_at', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('world_thinker_runs').select('result_commit,started_at').in('status', ['projected', 'push_pending']).not('result_commit', 'is', null).order('started_at', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('world_event_clusters').select('processing_state,source_diversity,first_seen_at').in('processing_state', ['pending', 'failed', 'quarantined']),
@@ -184,9 +209,9 @@ export async function fetchWorldWorkspace(): Promise<WorldWorkspace> {
     loadWorldCoverageFrontiers(),
     replayPromise,
   ])
-  if (projectionResult.error) throw new Error(`Unable to load world projection: ${projectionResult.error.message}`)
-  const projection = projectionResult.data as { commit_sha: string; branch: string; is_canonical: boolean } | null
-  const nodes = projection ? await fetchProjectedWorldNodes(projection.commit_sha) : []
+  for (const result of [runResult, successfulRunResult, eventResult, leadResult]) {
+    if (result.error) throw new Error(`Unable to load World status: ${result.error.message}`)
+  }
   const current = nodes.find((node) => node.kind === 'current') ?? null
   const journals = latestDistinctWorldJournals(nodes, 2)
   const events = (eventResult.data ?? []) as Array<{ processing_state: string; source_diversity: number; first_seen_at: string }>
