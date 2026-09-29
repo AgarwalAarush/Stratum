@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "probability": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "key",
+          "probability",
+          "reason",
+          "sourceIds"
+        ]
+      }
+    }
+  },
+  "required": [
+    "answers"
+  ]
+}

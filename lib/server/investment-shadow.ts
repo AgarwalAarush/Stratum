@@ -1,5 +1,7 @@
 import { forecastsAreApproved, reviewedForecasts, forecastCategory, FORECAST_REVIEW_POLICY } from '../markets/forecast-review.ts'
 import { investmentDb, record, contentHash } from './recommendations.ts'
+import { WORLD_ABLATION_POLICY } from '../markets/world-ablation.ts'
+import { runWorldAblation } from './world-ablation.ts'
 import {
   applyShadowPolicy,
   evaluateShadowCalibration,
@@ -93,21 +95,31 @@ export async function captureShadowPolicies(
       )
     )
       continue
-    const alternative = applyShadowPolicy(String(experiment.policy_key), recs)
+    const isAblation = experiment.policy_key === WORLD_ABLATION_POLICY
+    if (isAblation) {
+      const daily = await db.from('recommendation_shadow_runs').select('id').eq('experiment_id', experiment.id)
+        .gte('created_at', `${now.toISOString().slice(0, 10)}T00:00:00Z`).limit(1)
+      if (daily.error) throw new Error(daily.error.message)
+      if (daily.data?.length) continue
+    }
+    const ablation = isAblation ? await runWorldAblation(context, recs) : null
+    const alternative = isAblation ? recs : applyShadowPolicy(String(experiment.policy_key), recs)
+    const comparisons = ablation ? ablation.comparisons.map(pair => {
+      const i = recs.findIndex(r => r.symbol === pair.question.symbol && r.portfolioId === pair.question.portfolioId)
+      const f = recs[i].forecasts[pair.question.ordinal]
+      return { recommendationId: versions[i].id, episodeId: versions[i].episode_id, securityId: versions[i].security_id,
+        issuedAt: versions[i].issued_at, forecastOrdinals: [pair.question.ordinal],
+        baseline: { ...recs[i], forecasts: [{ ...f, probability: pair.baseline.probability! }] },
+        candidate: { ...recs[i], forecasts: [{ ...f, probability: pair.candidate.probability! }] } }
+    }) : versions.map((v, i) => ({ recommendationId: v.id, episodeId: v.episode_id, securityId: v.security_id, issuedAt: v.issued_at, baseline: recs[i], candidate: alternative[i] }))
     const content = {
+      ablation,
       decisionCutoff: context.cutoff,
       codeVersion: context.codeVersion,
       baselineGenerationRelease: record(batch.data.model_metadata).generationRelease ?? 'legacy-unreported',
       registration,
       baselinePolicy: context.policy,
-      comparisons: versions.map((v, i) => ({
-        recommendationId: v.id,
-        episodeId: v.episode_id,
-        securityId: v.security_id,
-        issuedAt: v.issued_at,
-        baseline: recs[i],
-        candidate: alternative[i],
-      })),
+      comparisons,
       authority:
         'Shadow probabilities only; published owner recommendations remain unchanged.',
     }
@@ -172,7 +184,7 @@ export async function evaluateShadowPolicies(
             .filter(
               (e) =>
                 e.kind === 'thesis' &&
-                e.horizon === String(index) &&
+                e.horizon === String(Array.isArray(comparison.forecastOrdinals) ? comparison.forecastOrdinals[index] : index) &&
                 Date.parse(String(e.as_of)) <= now.getTime(),
             )
             .sort((a, b) =>
@@ -215,6 +227,8 @@ export async function evaluateShadowPolicies(
       minimumImprovement: registration.minimumImprovement,
       trialNumber: registration.trialNumber,
       promotionEligible: false,
+      comparisonPolicy: experiment.policy_key,
+      referenceBrier: assessment.retained.filter(p => p.outcome !== null).length ? 0.25 : null,
       promotionReason:
         'Statistical uncertainty, cross-security dependence, multiple testing and explicit owner review must be assessed before any separately tested policy release.',
     }

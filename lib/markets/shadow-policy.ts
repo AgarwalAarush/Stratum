@@ -2,6 +2,11 @@ import type { Recommendation } from './recommendations.ts'
 
 /** Finite, versioned alternatives. None changes capital actions or owner theses. */
 export const SHADOW_POLICIES = {
+  'world-context-ablation-v1': {
+    label: 'World context versus company evidence alone',
+    shrinkage: 0,
+    metric: 'brier',
+  },
   'forecast-shrink-20-v1': {
     label: 'Forecasts 20% closer to 50%',
     shrinkage: 0.2,
@@ -24,6 +29,7 @@ export function applyShadowPolicy(
   recommendations: Recommendation[],
 ): Recommendation[] {
   const policy = shadowPolicy(key)
+  if (key === 'world-context-ablation-v1') throw new Error('World ablation requires independently generated frozen-evidence arms')
   return recommendations.map((r) => ({
     ...r,
     forecasts: r.forecasts.map((f) => ({
