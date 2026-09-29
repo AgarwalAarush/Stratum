@@ -89,7 +89,7 @@ function finiteMetric(value: number | string | null): number | null {
   return Number.isFinite(number) ? number : null
 }
 
-async function loadScreenerHistoryMetrics(
+export async function loadScreenerHistoryMetrics(
   supabase: SupabaseServiceClient,
   symbols: string[],
   feed: Exclude<MarketFeed, 'illustrative'>,
@@ -125,6 +125,24 @@ async function loadScreenerHistoryMetrics(
     }
     return [[metric.symbol, metric] as const]
   }))
+}
+
+export async function fillScreenerHistoryGaps(
+  supabase: SupabaseServiceClient,
+  symbols: string[],
+  feed: Exclude<MarketFeed, 'illustrative'>,
+  asOf: string,
+  metrics: Map<string, ScreenerHistoryMetrics>,
+  cached: ReadonlyMap<string, CachedScreenerHistory>,
+): Promise<void> {
+  const missing = [...new Set(symbols)].filter(symbol =>
+    (metrics.get(symbol)?.barCount ?? 0) < 50 && !cached.has(symbol))
+  // The archive fallback can predate newly required constituents. Resolve
+  // just those gaps in smaller reductions instead of silently dropping them.
+  for (const group of batches(missing, 10)) {
+    const recovered = await loadScreenerHistoryMetrics(supabase, group, feed, asOf)
+    for (const [symbol, value] of recovered) metrics.set(symbol, value)
+  }
 }
 
 async function loadCachedScreenerHistory(
@@ -497,6 +515,9 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
     }
     if (historyResult.feed !== feed) throw new Error(`Alpaca returned inconsistent feeds: ${feed} and ${historyResult.feed}`)
     historyMetrics = await loadScreenerHistoryMetrics(supabase, symbols, feed, newestTimestamp(snapshotsResult.data, now.toISOString()))
+  }
+  if (cachedHistory.size > 0) {
+    await fillScreenerHistoryGaps(supabase, symbols, feed, dataAsOf, historyMetrics, cachedHistory)
   }
   const { data: snapshotRecord, error: snapshotError } = await supabase
     .from('market_snapshots')
