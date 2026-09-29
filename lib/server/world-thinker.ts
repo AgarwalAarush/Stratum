@@ -656,14 +656,14 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
     const criticSelection = selectMarketModel('world_critic')
     const criticResult = await runCodexJson({
       prompt: await criticPrompt(context, proposal), schemaPath: join(process.cwd(), 'schemas/world-critique.schema.json'), validate: validateWorldCritique,
-      model: criticSelection.model, cwd: worldDataRoot(root), timeoutMs: 12 * 60_000,
+      model: criticSelection.model, cwd: worldDataRoot(root), webSearch: context.needsWebSearch, timeoutMs: 12 * 60_000,
     })
     let critique = criticResult.data
     if (critique.verdict === 'revise') {
       await updateRun(runId, { status: 'revising', critic_verdict: 'revise' })
       const revision = await runCodexJson({
         prompt: await revisionPrompt(context, proposal, critique), schemaPath: draftSchemaPath, validate: (value) => validateWorldUpdateDraftWithHostSources(value, hostSources),
-        model: thinkerSelection.model, cwd: worldDataRoot(root), timeoutMs: 15 * 60_000,
+        model: thinkerSelection.model, cwd: worldDataRoot(root), webSearch: context.needsWebSearch, timeoutMs: 15 * 60_000,
       })
       proposal = materializeWorldUpdateProposal(revision.data, context, options.trigger)
       await captureWorldSearchSources(proposal, context)
@@ -675,7 +675,7 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
       // establish that causal support was actually repaired.
       const revisionCritic = await runCodexJson({
         prompt: await criticPrompt(context, proposal), schemaPath: join(process.cwd(), 'schemas/world-critique.schema.json'), validate: validateWorldCritique,
-        model: criticSelection.model, cwd: worldDataRoot(root), timeoutMs: 12 * 60_000,
+        model: criticSelection.model, cwd: worldDataRoot(root), webSearch: context.needsWebSearch, timeoutMs: 12 * 60_000,
       })
       critique = revisionCritic.data
       await updateRun(runId, { model_metadata: { specialists: specialistResults.map((result) => result.metadata), thinker: draftResult.metadata, revision: revision.metadata, critic: criticResult.metadata, revisionCritic: revisionCritic.metadata, webSearch: context.needsWebSearch } })
