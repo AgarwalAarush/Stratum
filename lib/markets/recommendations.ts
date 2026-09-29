@@ -76,6 +76,8 @@ export type DecisionContext = {
   universe: Array<{ symbol: string; reason: string; selected: boolean }>
 }
 export type Forecast = {
+  observationPeriod?: string
+  unit?: string
   proposition: string
   metric: string
   operator: 'gt' | 'lt'
@@ -207,7 +209,14 @@ export function validateRecommendation(
     const ids = texts(f.sourceIds)
     if (!ids.length || ids.some((id) => !allowed.has(id)))
       throw new Error('Unknown forecast evidence')
+    const observationPeriod = typeof f.observationPeriod === 'string' ? f.observationPeriod : undefined
+    const unit = typeof f.unit === 'string' ? f.unit.trim() : undefined
+    if ((observationPeriod !== undefined || unit !== undefined) &&
+      (!observationPeriod || !/^\d{4}-\d{2}-\d{2}$/.test(observationPeriod) ||
+        !Number.isFinite(Date.parse(observationPeriod)) || new Date(observationPeriod).toISOString().slice(0, 10) !== observationPeriod ||
+        observationPeriod > str(f.deadline).slice(0, 10) || !unit)) throw new Error('Forecast needs an exact observation period and unit')
     return {
+      ...(observationPeriod ? { observationPeriod, unit } : {}),
       proposition: str(f.proposition),
       metric: str(f.metric),
       operator: f.operator as 'gt' | 'lt',

@@ -152,6 +152,14 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "observationPeriod": {
+                  "type": "string",
+                  "description": "Exact economic observation date or financial quarter-end, YYYY-MM-DD. This is not the reporting deadline."
+                },
+                "unit": {
+                  "type": "string",
+                  "description": "Exact source units: percent, index, or reported financial currency such as USD."
                 }
               },
               "required": [
@@ -163,7 +171,9 @@
                 "deadline",
                 "confirmation",
                 "invalidation",
-                "sourceIds"
+                "sourceIds",
+                "observationPeriod",
+                "unit"
               ]
             }
           },

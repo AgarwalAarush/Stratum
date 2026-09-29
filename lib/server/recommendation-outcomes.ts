@@ -1,5 +1,6 @@
 import { forecastsAreApproved, forecastCategory, FORECAST_REVIEW_POLICY } from '../markets/forecast-review.ts'
 import { resolveNumericForecast } from '../markets/investment-learning.ts'
+import { companyForecastObservations, COMPANY_FORECAST_METRICS } from '../markets/forecast-metrics.ts'
 import { getAlpacaClient } from './alpaca.ts'
 import { contentHash, investmentDb, record } from './recommendations.ts'
 import {
@@ -129,6 +130,7 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
           period: string
           availableAt: string
           sourceUrl: string
+          unit?: string
         }> = []
         if (String(f.metric).startsWith('FRED:')) {
           const series = String(f.metric).slice(5)
@@ -152,8 +154,20 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
                 period: String(raw.date),
                 availableAt: vintage.observed_at,
                 sourceUrl: String(vintage.content.sourceUrl),
+                unit: String(vintage.content.units),
               })
             }
+        } else if (Object.hasOwn(COMPANY_FORECAST_METRICS, String(f.metric))) {
+          const packets = await db.from('company_packets').select('id,generated_at,packet')
+            .eq('symbol', rec.symbol).eq('owner_id', task.owner_id).eq('status', 'complete')
+            .gt('generated_at', issued).lte('generated_at', now.toISOString()).order('generated_at').limit(100)
+          if (packets.error) throw new Error(packets.error.message)
+          observations.push(...companyForecastObservations(String(f.metric), packets.data ?? []))
+          if (!observations.some(o => o.period === f.observationPeriod && o.unit === f.unit)) {
+            const { enqueueAgentJob } = await import('./agent-jobs.ts')
+            await enqueueAgentJob('refresh-company-packet', { ownerId: task.owner_id, symbol: rec.symbol, reason: 'due economic forecast' },
+              `forecast-packet:${task.owner_id}:${rec.symbol}:${now.toISOString().slice(0, 10)}`)
+          }
         } else {
           const values = await db
             .from('world_observations')
@@ -175,6 +189,7 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
                 period: String(value.valid_from).slice(0, 10),
                 availableAt: value.ingested_at,
                 sourceUrl: String(record(value.world_documents).canonical_url),
+                unit: typeof record(value.metadata).unit === 'string' ? String(record(value.metadata).unit) : undefined,
               })
         }
         const assessment = resolveNumericForecast(
@@ -184,6 +199,8 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
             deadline: forecast.data.deadline,
             issuedAt: issued,
             metric: String(f.metric),
+            observationPeriod: typeof f.observationPeriod === 'string' ? f.observationPeriod : undefined,
+            unit: typeof f.unit === 'string' ? f.unit : undefined,
           },
           observations,
           now.toISOString(),
