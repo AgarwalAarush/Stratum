@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAllowedMarketUser } from '@/lib/auth/markets-session'
 import { enqueueAgentJob } from '@/lib/server/agent-jobs'
-import { fetchResearchJobs } from '@/lib/server/research-jobs'
+import { fetchResearchJobs, parseResearchJobIds } from '@/lib/server/research-jobs'
 import { isEtfInstrument } from '@/lib/server/etf-research'
 
 export const dynamic = 'force-dynamic'
@@ -13,10 +13,16 @@ export async function GET(request: Request) {
   const id = url.searchParams.get('id') ?? undefined
   const symbolInput = url.searchParams.get('symbol')
   const symbol = symbolInput?.trim().toUpperCase()
+  let ids: string[] | undefined
+  try {
+    ids = parseResearchJobIds(url.searchParams.get('ids'))
+  } catch {
+    return NextResponse.json({ error: 'Provide up to 12 valid research job IDs' }, { status: 400 })
+  }
   if (symbol && !/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol)) {
     return NextResponse.json({ error: 'A valid symbol is required' }, { status: 400 })
   }
-  const jobs = await fetchResearchJobs(user.id, { id, symbol, limit: id || symbol ? 1 : 12 })
+  const jobs = await fetchResearchJobs(user.id, { id, ids, symbol, limit: id || symbol ? 1 : 12 })
   return NextResponse.json({ jobs }, {
     headers: { 'Cache-Control': 'private, no-store' },
   })

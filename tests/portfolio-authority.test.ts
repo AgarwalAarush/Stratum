@@ -20,9 +20,11 @@ test('broker-only holdings and empty successful captures override corrected ledg
     },
   ]
   let fail = false
+  const requests: URL[] = []
   globalThis.fetch = async (input) => {
     const url = new URL(String(input)),
       table = url.pathname.split('/').at(-1)
+    requests.push(url)
     if (fail && table === 'brokerage_sync_runs')
       return new Response(
         JSON.stringify({ message: 'Unavailable capture store' }),
@@ -88,8 +90,15 @@ test('broker-only holdings and empty successful captures override corrected ledg
       (await fetchAuthoritativePortfolios(owner))[0].holdings,
       [],
     )
+    requests.length = 0
     const workspace = await fetchPortfolioWorkspace(owner)
     assert.deepEqual(workspace.portfolios[0].holdings, [])
+    assert.equal(requests.filter(url => url.pathname.endsWith('/portfolio_transactions')).length, 1)
+    const capture = requests.find(url => url.pathname.endsWith('/brokerage_sync_runs'))!
+    assert.equal(capture.searchParams.get('portfolio_id'), `eq.${account}`)
+    assert.equal(capture.searchParams.get('owner_id'), `eq.${owner}`)
+    assert.equal(capture.searchParams.get('status'), 'eq.succeeded')
+    assert.equal(capture.searchParams.get('limit'), '1')
     fail = true
     await assert.rejects(
       () => fetchAuthoritativePortfolios(owner),

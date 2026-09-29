@@ -5,9 +5,11 @@ import Link from 'next/link'
 import { formatMarketDateTime } from '@/lib/markets/format-date'
 import type { ResearchJobStatus } from '@/lib/markets/types'
 import { ResearchProgressRing } from './ResearchProgressRing'
+import styles from './ResearchQueue.module.css'
 
 export function ResearchQueue({ initialJobs }: { initialJobs: ResearchJobStatus[] }) {
   const [jobs, setJobs] = useState(initialJobs)
+  const [pollError, setPollError] = useState(false)
   const activeIds = jobs
     .filter((job) => job.status === 'queued' || job.status === 'running')
     .map((job) => job.id)
@@ -15,37 +17,40 @@ export function ResearchQueue({ initialJobs }: { initialJobs: ResearchJobStatus[
 
   useEffect(() => {
     if (!activeIds) return
-    let cancelled = false
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
     const poll = async () => {
-      const currentIds = activeIds.split(',')
-      const updates = await Promise.all(currentIds.map(async (id) => {
-        const response = await fetch(`/api/markets/research?id=${encodeURIComponent(id)}`, { cache: 'no-store' })
-        if (!response.ok) return null
+      try {
+        if (document.hidden) return
+        const response = await fetch(`/api/markets/research?ids=${encodeURIComponent(activeIds)}`, { cache: 'no-store', signal: controller.signal })
+        if (!response.ok) throw new Error('Queue unavailable')
         const payload = await response.json() as { jobs?: ResearchJobStatus[] }
-        return payload.jobs?.[0] ?? null
-      }))
-      if (cancelled) return
-      const byId = new Map(updates.filter((job): job is ResearchJobStatus => Boolean(job)).map((job) => [job.id, job]))
-      setJobs((current) => current.map((job) => byId.get(job.id) ?? job))
+        if (controller.signal.aborted) return
+        const byId = new Map((payload.jobs ?? []).map(job => [job.id, job]))
+        setJobs(current => current.map(job => byId.get(job.id) ?? job))
+        setPollError(false)
+      } catch {
+        if (!controller.signal.aborted) setPollError(true)
+      } finally {
+        if (!controller.signal.aborted) timer = setTimeout(() => void poll(), 5_000)
+      }
     }
-    const interval = window.setInterval(() => void poll(), 2_500)
     void poll()
     return () => {
-      cancelled = true
-      window.clearInterval(interval)
+      controller.abort()
+      clearTimeout(timer)
     }
   }, [activeIds])
 
   if (jobs.length === 0) return null
   return (
     <section className="research-queue" aria-labelledby="research-queue-title">
-      <header>
-        <div>
-          <p className="markets-eyebrow">Durable background work</p>
-          <h2 id="research-queue-title">Research queue</h2>
-        </div>
-        <span>{jobs.filter((job) => job.status === 'queued' || job.status === 'running').length} active</span>
-      </header>
+      <details className={styles.disclosure}>
+      <summary className={styles.summary}>
+        <span id="research-queue-title">Research queue</span>
+        <span className={styles.status}>{jobs.filter((job) => job.status === 'queued' || job.status === 'running').length} active · View progress</span>
+      </summary>
+      {pollError ? <p className={styles.error} role="status">Progress updates are temporarily unavailable. Retrying automatically.</p> : null}
       <div className="research-queue-list">
         {jobs.map((job) => (
           <Link key={job.id} href={`/markets/stocks/${job.symbol}/research`}>
@@ -54,6 +59,7 @@ export function ResearchQueue({ initialJobs }: { initialJobs: ResearchJobStatus[
           </Link>
         ))}
       </div>
+      </details>
     </section>
   )
 }

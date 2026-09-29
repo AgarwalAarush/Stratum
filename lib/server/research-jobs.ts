@@ -66,7 +66,7 @@ function normalizeResearchJob(job: ResearchJobRow, run?: ResearchRunRow): Resear
 
 export async function fetchResearchJobs(
   ownerId: string,
-  options: { id?: string; symbol?: string; limit?: number } = {},
+  options: { id?: string; ids?: string[]; symbol?: string; limit?: number } = {},
 ): Promise<ResearchJobStatus[]> {
   const supabase = getSupabaseClient()
   if (!supabase) return []
@@ -79,6 +79,7 @@ export async function fetchResearchJobs(
     .order('created_at', { ascending: false })
     .limit(options.limit ?? 12)
   if (options.id) query = query.eq('id', options.id)
+  if (options.ids) query = query.in('id', options.ids)
   if (options.symbol) query = query.contains('payload', { symbol: options.symbol.toUpperCase() })
 
   const { data, error } = await query
@@ -94,4 +95,13 @@ export async function fetchResearchJobs(
     if (!latestRunByJob.has(run.job_id)) latestRunByJob.set(run.job_id, run)
   }
   return jobs.map((job) => normalizeResearchJob(job, latestRunByJob.get(job.id)))
+}
+
+export function parseResearchJobIds(value: string | null): string[] | undefined {
+  if (value === null) return undefined
+  const ids = value.split(',')
+  if (ids.length > 12 || ids.some(id => !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(id))) {
+    throw new Error('Provide up to 12 valid research job IDs')
+  }
+  return [...new Set(ids)]
 }

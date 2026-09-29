@@ -33,11 +33,7 @@ interface ResearchRow {
 
 interface PacketRow {
   symbol: string
-  packet: unknown
-}
-
-function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+  peers: unknown
 }
 
 function symbols(value: unknown): string[] {
@@ -119,25 +115,40 @@ export function buildPortfolioResearchCoverage(input: {
 export async function fetchPortfolioResearchCoverage(ownerId: string, options: { now?: Date; maxTargets?: number } = {}): Promise<PortfolioResearchCoverage> {
   const supabase = getSupabaseClient()
   if (!supabase) return { ownedSymbols: [], watchlistedSymbols: [], adjacentSymbols: [], coveredSymbols: [], queuedSymbols: [], targets: [] }
-  const [portfolios, watchlistsResult, researchResult, packetsResult] = await Promise.all([
+  const [portfolios, watchlistsResult, researchResult] = await Promise.all([
     fetchAuthoritativePortfolios(ownerId),
     supabase.from('market_watchlist_items').select('symbol,market_watchlists!inner(owner_id)').eq('market_watchlists.owner_id', ownerId),
     supabase.from('equity_research_notes').select('symbol,status,generated_at').eq('owner_id', ownerId).order('generated_at', { ascending: false }).limit(500),
-    supabase.from('company_packets').select('symbol,packet').eq('owner_id', ownerId).eq('status', 'complete').order('generated_at', { ascending: false }).limit(500),
   ])
-  const error = watchlistsResult.error ?? researchResult.error ?? packetsResult.error
+  const error = watchlistsResult.error ?? researchResult.error
   if (error) throw new Error(`Unable to build portfolio research coverage: ${error.message}`)
   const shares = new Map<string, number>()
   for (const portfolio of portfolios) for (const holding of portfolio.holdings) shares.set(holding.symbol, (shares.get(holding.symbol) ?? 0) + holding.quantity)
   const ownedSymbols = [...shares].flatMap(([symbol, quantity]) => quantity > 0 ? [symbol] : [])
+  const latestPacketBySymbol = new Map<string, string>()
+  if (ownedSymbols.length) {
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await supabase.from('company_packets').select('id,symbol')
+        .eq('owner_id', ownerId).in('symbol', ownedSymbols).eq('status', 'complete')
+        .order('generated_at', { ascending: false }).order('id').range(offset, offset + 499)
+      if (error) throw new Error(`Unable to read research peers: ${error.message}`)
+      for (const row of data ?? []) if (!latestPacketBySymbol.has(row.symbol)) latestPacketBySymbol.set(row.symbol, row.id)
+      if ((data?.length ?? 0) < 500 || latestPacketBySymbol.size === ownedSymbols.length) break
+    }
+  }
+  const packetsResult = latestPacketBySymbol.size
+    ? await supabase.from('company_packets').select('symbol,peers:packet->peers')
+      .eq('owner_id', ownerId).in('id', [...latestPacketBySymbol.values()])
+    : { data: [], error: null }
+  if (packetsResult.error) throw new Error(`Unable to read research peers: ${packetsResult.error.message}`)
   const watchlistedSymbols = (watchlistsResult.data ?? []).flatMap((row) => {
     const item = row as WatchlistRow
     return watchlistOwner(item) === ownerId ? [item.symbol] : []
   })
   const peerSymbolsByOwnedSymbol = new Map<string, string[]>()
-  for (const row of (packetsResult.data ?? []) as PacketRow[]) {
+  for (const row of (packetsResult.data ?? []) as unknown as PacketRow[]) {
     if (!shares.has(row.symbol) || (shares.get(row.symbol) ?? 0) <= 0.00000001 || peerSymbolsByOwnedSymbol.has(row.symbol)) continue
-    peerSymbolsByOwnedSymbol.set(row.symbol, symbols(record(row.packet).peers))
+    peerSymbolsByOwnedSymbol.set(row.symbol, symbols(row.peers))
   }
   const researchBySymbol = latestStatusBySymbol((researchResult.data ?? []) as ResearchRow[])
   const allCandidates = [...new Set([...ownedSymbols, ...watchlistedSymbols, ...[...peerSymbolsByOwnedSymbol.values()].flat()])]

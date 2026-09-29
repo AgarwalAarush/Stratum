@@ -187,13 +187,14 @@ export async function processWorldReplayStep(replayRunId: string, options: { mod
   return { replay: await loadReplayRun(replay.id), complete, deferred: false, batchId: batch.data.id, nextStep: complete ? 'complete' : `reconstruct:${end}` }
 }
 
-export async function fetchWorldReplayStatus(): Promise<{ run: WorldReplayRun | null; batches: WorldReplayBatch[] }> {
+export async function fetchWorldReplayStatus(options: { includeBatches?: boolean } = {}): Promise<{ run: WorldReplayRun | null; batches: WorldReplayBatch[] }> {
   const supabase = getSupabaseClient()
   if (!supabase) return { run: null, batches: [] }
   const { data: run, error: runError } = await supabase.from('world_replay_runs').select('*').order('created_at', { ascending: false }).limit(1).maybeSingle()
   if (runError && (runError.code === '42P01' || runError.code === 'PGRST205')) return { run: null, batches: [] }
   if (runError) throw new Error(`Unable to load world replay: ${runError.message}`)
   if (!run) return { run: null, batches: [] }
+  if (options.includeBatches === false) return { run: normalizeReplayRun(run as ReplayRunRow), batches: [] }
   const { data: batches, error } = await supabase.from('world_replay_batches').select('*').eq('replay_run_id', run.id).order('week_start', { ascending: false }).limit(60)
   if (error) throw new Error(`Unable to load world replay batches: ${error.message}`)
   return {
