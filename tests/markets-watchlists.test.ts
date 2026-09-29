@@ -8,6 +8,7 @@ import {
   isValidWatchlistSymbol,
   parseWatchlistState,
   updateWatchlist,
+  watchlistContentKey,
   WATCHLIST_STORAGE_KEY,
 } from '../lib/markets/watchlists.ts'
 
@@ -81,8 +82,10 @@ test('watchlists live inside Explore and the legacy route preserves the destinat
   const explore = readFileSync(join(process.cwd(), 'components/markets/MarketsExplore.tsx'), 'utf8')
   const workspace = readFileSync(join(process.cwd(), 'components/markets/PortfolioWorkspace.tsx'), 'utf8')
   assert.match(legacyPage, /redirect\('\/markets\/explore\?view=watchlists'\)/)
-  assert.match(page, /fetchPortfolioWorkspace/)
-  assert.match(explore, /\['watchlists', 'Watchlists'\]/)
+  assert.match(page, /fetchExploreData/)
+  assert.doesNotMatch(page, /fetchPortfolioWorkspace/)
+  const shell = readFileSync(join(process.cwd(), 'components/markets/ExploreShell.tsx'), 'utf8')
+  assert.match(shell, /\['watchlists', 'Watchlists'\]/)
   assert.match(explore, /<MarketsWatchlists/)
   assert.match(component, /localStorage\.setItem\(WATCHLIST_STORAGE_KEY/)
   assert.match(component, /replace-watchlists/)
@@ -92,6 +95,15 @@ test('watchlists live inside Explore and the legacy route preserves the destinat
   assert.match(component, /Search symbol or company/)
   assert.match(workspace, /portfolio-alert-list/)
   assert.match(workspace, /initialData\.decisionHistory\.map/)
+})
+
+test('switching the active watchlist does not change the persisted content', () => {
+  const state = createDefaultWatchlistState(['AAPL'])
+  assert.equal(watchlistContentKey(state), watchlistContentKey({ ...state, activeListId: 'core' }))
+  const changed = updateWatchlist(state, 'core', list => ({ ...list, symbols: ['MSFT'] }))
+  assert.notEqual(watchlistContentKey(state), watchlistContentKey(changed))
+  const renamed = updateWatchlist(state, 'core', list => ({ ...list, name: 'Ideas' }))
+  assert.notEqual(watchlistContentKey(state), watchlistContentKey(renamed))
 })
 
 test('server watchlist persistence remains owner-scoped without relying on a partial-index upsert', () => {

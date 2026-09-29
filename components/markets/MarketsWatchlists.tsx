@@ -10,7 +10,7 @@ import {
   Trash,
   X,
 } from '@phosphor-icons/react'
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { MarketSparkline } from './MarketSparkline'
 import { MarketsIntentLink } from './MarketsIntentLink'
 import {
@@ -19,6 +19,7 @@ import {
   isValidWatchlistSymbol,
   parseWatchlistState,
   updateWatchlist,
+  watchlistContentKey,
   WATCHLIST_STORAGE_KEY,
   type MarketWatchlistState,
 } from '@/lib/markets/watchlists'
@@ -58,6 +59,8 @@ function feedLabel(feed: ScreenerResponse['feed']): string {
 function formatMarketTime(value: string): string {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
+    month: 'short',
+    day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
     timeZoneName: 'short',
@@ -86,56 +89,49 @@ export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount 
   const [deleteArmed, setDeleteArmed] = useState(false)
   const [notice, setNotice] = useState('')
   const [persistence, setPersistence] = useState<'loading' | 'server' | 'local'>('loading')
+  const queuedContent = useRef('')
+  const saveQueue = useRef(Promise.resolve())
 
   useEffect(() => {
-    let active = true
-    const migrate = async () => {
-      let nextState = ensureEnergyWatchlist(initialState ?? fallbackState)
-      try {
-        const saved = localStorage.getItem(WATCHLIST_STORAGE_KEY)
-        if (migrateLocalOnMount && saved) nextState = ensureEnergyWatchlist(parseWatchlistState(JSON.parse(saved), nextState))
-      } catch {
-        setNotice('Saved lists could not be read. A fresh list is ready instead.')
-      }
-      try {
-        const response = await fetch('/api/markets/portfolio', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'replace-watchlists', state: nextState }),
-        })
-        const payload = await response.json()
-        if (!response.ok) throw new Error()
-        if (active) {
-          setState(ensureEnergyWatchlist(payload.watchlists))
-          setPersistence('server')
-        }
-      } catch {
-        if (active) {
-          setState(ensureEnergyWatchlist(nextState))
-          setPersistence('local')
-        }
-      } finally {
-        if (active) setHydrated(true)
-      }
+    let nextState = ensureEnergyWatchlist(initialState ?? fallbackState)
+    try {
+      const saved = localStorage.getItem(WATCHLIST_STORAGE_KEY)
+      if (migrateLocalOnMount && saved) nextState = ensureEnergyWatchlist(parseWatchlistState(JSON.parse(saved), nextState))
+    } catch {
+      setNotice('Saved lists could not be read. A fresh list is ready instead.')
     }
-    void migrate()
-    return () => { active = false }
+    queuedContent.current = watchlistContentKey(nextState)
+    setState(nextState)
+    setPersistence(initialState && !migrateLocalOnMount ? 'server' : 'local')
+    setHydrated(true)
   }, [fallbackState, initialState, migrateLocalOnMount])
 
   useEffect(() => {
     if (!hydrated) return
-    localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(state))
-    const timeout = window.setTimeout(async () => {
-      try {
-        const response = await fetch('/api/markets/portfolio', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'replace-watchlists', state }),
-        })
-        setPersistence(response.ok ? 'server' : 'local')
-      } catch {
-        setPersistence('local')
-      }
+    try {
+      localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(state))
+    } catch {
+      setNotice('Browser storage is unavailable. Changes will still be saved privately when connected.')
+    }
+    const content = watchlistContentKey(state)
+    if (content === queuedContent.current) return
+    const timeout = window.setTimeout(() => {
+      queuedContent.current = content
+      saveQueue.current = saveQueue.current.then(async () => {
+        try {
+          const response = await fetch('/api/markets/portfolio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'replace-watchlists', state }),
+          })
+          if (!response.ok) throw new Error('Watchlists could not be saved')
+          setPersistence('server')
+        } catch {
+          if (queuedContent.current === content) queuedContent.current = ''
+          setPersistence('local')
+          setNotice('Private save failed. Your changes remain in this browser; edit a list to retry.')
+        }
+      })
     }, 250)
     return () => window.clearTimeout(timeout)
   }, [hydrated, state])
@@ -228,7 +224,10 @@ export function MarketsWatchlists({ universe, initialState, migrateLocalOnMount 
       {!embedded ? <header className="market-screener-heading market-watchlists-heading">
         <h1 id="market-watchlists-title" className="markets-display">Watchlists</h1>
         <p>{feedLabel(universe.feed)} data · As of {formatMarketTime(universe.dataAsOf)}{universe.stale ? ' · Stale' : ''} · {persistence === 'server' ? 'Saved privately' : 'Local fallback'}</p>
-      </header> : <h2 id="market-watchlists-title" className="sr-only">Watchlists</h2>}
+      </header> : <>
+        <h2 id="market-watchlists-title" className="sr-only">Watchlists</h2>
+        <p className="market-watchlists-provenance">{feedLabel(universe.feed)} data · As of {formatMarketTime(universe.dataAsOf)}{universe.stale ? ' · Stale' : ''} · {persistence === 'server' ? 'Saved privately' : 'Local fallback'}</p>
+      </>}
 
       <div className="market-watchlist-toolbar">
         <nav className="market-watchlist-tabs" aria-label="Saved watchlists">

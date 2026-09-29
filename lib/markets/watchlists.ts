@@ -12,6 +12,10 @@ export interface MarketWatchlistState {
   lists: MarketWatchlist[]
 }
 
+export function watchlistContentKey(state: MarketWatchlistState): string {
+  return JSON.stringify({ version: state.version, lists: state.lists })
+}
+
 const DEFAULT_SYMBOLS = ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL']
 export const ENERGY_WATCHLIST_SYMBOLS = ['GRID', 'MLPX', 'NLR', 'PAVE', 'PIKA', 'RACK', 'URA', 'UTES', 'XLU']
 const MAX_LISTS = 12
