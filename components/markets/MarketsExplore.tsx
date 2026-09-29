@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from 'react'
 import { MarketsIntentLink } from './MarketsIntentLink'
-import { MarketsScreener } from './MarketsScreener'
-import { MarketsWatchlists } from './MarketsWatchlists'
-import type { MarketGroupMetric, MarketLeadershipSnapshot, ScreenerResponse } from '@/lib/markets/types'
-import type { MarketWatchlistState } from '@/lib/markets/watchlists'
+import dynamic from 'next/dynamic'
+import type { ExploreData, ExploreLeadership } from '@/lib/markets/explore'
+import styles from './Explore.module.css'
+import type { MarketGroupMetric } from '@/lib/markets/types'
 
-type ExploreView = 'stocks' | 'sectors' | 'sub-industries' | 'watchlists'
+const MarketsScreener = dynamic(() => import('./MarketsScreener').then(module => module.MarketsScreener))
+const MarketsWatchlists = dynamic(() => import('./MarketsWatchlists').then(module => module.MarketsWatchlists))
 
 function percent(value: number | null): string {
   return value === null ? '—' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
@@ -36,7 +37,7 @@ function GroupTable({
   leadership,
 }: {
   groups: MarketGroupMetric[]
-  leadership: MarketLeadershipSnapshot | null
+  leadership: ExploreLeadership | null
 }) {
   const [selected, setSelected] = useState(groups[0]?.label ?? '')
   const [sort, setSort] = useState<{ key: GroupSortKey; direction: 'ascending' | 'descending' }>({
@@ -126,7 +127,7 @@ function GroupTable({
               </MarketsIntentLink>
             ))}
           </div>
-          <MarketsIntentLink className="market-group-filter-link" href={`/markets/explore?view=stocks&group=${encodeURIComponent(group.label)}`}>
+          <MarketsIntentLink className="market-group-filter-link" href={`/markets/explore?view=stocks&group=${encodeURIComponent(group.label)}&groupType=${group.groupType}`}>
             Open as filtered stock screen →
           </MarketsIntentLink>
         </aside>
@@ -135,53 +136,13 @@ function GroupTable({
   )
 }
 
-export function MarketsExplore({
-  initialView,
-  screener,
-  watchlistUniverse,
-  leadership,
-  watchlists,
-  watchlistsPersisted,
-}: {
-  initialView: ExploreView
-  screener: ScreenerResponse
-  watchlistUniverse: ScreenerResponse
-  leadership: MarketLeadershipSnapshot | null
-  watchlists?: MarketWatchlistState
-  watchlistsPersisted?: boolean
-}) {
-  return (
-    <section className="market-explore">
-      <header className="market-explore-heading">
-        <div>
-          <p className="markets-eyebrow">From market structure to names</p>
-          <h1 className="markets-display">Explore</h1>
-        </div>
-        {leadership ? <span>Hermes snapshot · {leadership.tradingDate} · {leadership.usableCount}/{leadership.universeCount} usable</span> : null}
-      </header>
-      <nav className="market-explore-tabs" aria-label="Explore market data">
-        {([
-          ['stocks', 'Stocks'],
-          ['sectors', 'Sectors'],
-          ['sub-industries', 'Sub-industries'],
-          ['watchlists', 'Watchlists'],
-        ] as const).map(([id, label]) => (
-          <MarketsIntentLink key={id} href={`/markets/explore?view=${id}`} aria-current={initialView === id ? 'page' : undefined}>{label}</MarketsIntentLink>
-        ))}
-      </nav>
-      {initialView === 'stocks' ? <MarketsScreener initialResponse={screener} /> : initialView === 'watchlists' ? (
-        <MarketsWatchlists
-          embedded
-          universe={watchlistUniverse}
-          initialState={watchlists}
-          migrateLocalOnMount={!watchlistsPersisted}
-        />
-      ) : (
-        <GroupTable
-          groups={initialView === 'sectors' ? leadership?.sectors ?? [] : leadership?.subIndustries ?? []}
-          leadership={leadership}
-        />
-      )}
-    </section>
-  )
+export function MarketsExplore({ data }: { data: ExploreData }) {
+  if (data.view === 'stocks') return <MarketsScreener key={JSON.stringify(data.query)} initialResponse={data.screener} initialQuery={data.query} />
+  if (data.view === 'watchlists') return <MarketsWatchlists embedded universe={data.universe} initialState={data.watchlists} migrateLocalOnMount={!data.persisted} />
+  if (!data.leadership) return <p className={styles.empty} role="status">Sector data is unavailable. Try Stocks or refresh this view.</p>
+  const groups = data.view === 'sectors' ? data.leadership.sectors : data.leadership.subIndustries
+  return <>
+    <p className={styles.metadata}>Saved leadership snapshot · {data.leadership.tradingDate} · {data.leadership.usableCount}/{data.leadership.universeCount} usable</p>
+    {groups.length ? <GroupTable key={data.view} groups={groups} leadership={data.leadership} /> : <p className={styles.empty}>No groups in this snapshot.</p>}
+  </>
 }

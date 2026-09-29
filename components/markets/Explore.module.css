@@ -1,0 +1,107 @@
+.page :global(.market-explore-heading) {
+  padding-bottom: 20px;
+}
+
+.page :global(.market-screener) {
+  padding-top: 16px;
+}
+
+.page :global(.market-screener-heading) {
+  display: block;
+}
+
+.page :global(.market-watchlists-embedded) {
+  padding-top: 0;
+}
+
+.metadata,
+.page :global(.market-screener-heading p),
+.page :global(.market-watchlists-provenance) {
+  color: var(--market-text-muted);
+  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.metadata,
+.page :global(.market-watchlists-provenance) {
+  padding-top: 16px;
+}
+
+.page :global(.market-filter-bar) {
+  margin-top: 12px;
+  min-height: 48px;
+}
+
+.page :global(.market-screen-table) {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.page :global(.market-screen-table th) {
+  font-size: 12px;
+  height: 44px;
+}
+
+.page :global(.market-screen-table tbody tr) {
+  height: 46px;
+}
+
+.page :global(.market-screen-table td:nth-child(2)) {
+  font-family: var(--font-ibm-plex-sans), system-ui, sans-serif;
+  font-size: 13px;
+}
+
+.page :global(.market-symbol-button) {
+  font-weight: 600;
+}
+
+.page :global(.market-screen-footer) {
+  font-size: 11px;
+}
+
+.loading,
+.empty {
+  padding: 32px 0;
+  color: var(--market-text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.loading {
+  display: grid;
+  gap: 16px;
+}
+
+.loading div {
+  background: var(--market-surface-soft);
+  height: 42px;
+}
+
+@media (max-width: 600px) {
+  .page :global(.market-explore-heading) {
+    padding-bottom: 16px;
+  }
+
+  .page :global(.market-filter-bar) {
+    margin-top: 16px;
+  }
+
+  .page :global(.market-screen-table) {
+    min-width: 1300px;
+  }
+
+  .page :global(.market-screen-table th:nth-child(2)) {
+    width: 150px;
+  }
+
+  .page :global(.market-screen-table td:nth-child(2)),
+  .page :global(.market-screen-table th:nth-child(2)) {
+    position: static;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: none;
+  }
+}

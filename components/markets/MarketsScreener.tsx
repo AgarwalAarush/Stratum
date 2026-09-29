@@ -32,6 +32,7 @@ import type {
 
 interface MarketsScreenerProps {
   initialResponse: ScreenerResponse
+  initialQuery?: ScreenerQuery
 }
 
 const RESULTS_PAGE_SIZE = 50
@@ -130,18 +131,20 @@ function feedLabel(feed: ScreenerResponse['feed']): string {
 function formatMarketTime(value: string): string {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
+    month: 'short',
+    day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
     timeZoneName: 'short',
   }).format(new Date(value))
 }
 
-export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
+export function MarketsScreener({ initialResponse, initialQuery = DEFAULT_SCREENER_QUERY }: MarketsScreenerProps) {
   const router = useRouter()
-  const [preset, setPreset] = useState<ScreenerPreset>(DEFAULT_SCREENER_QUERY.preset)
-  const [filters, setFilters] = useState<ScreenerFilter[]>(DEFAULT_SCREENER_FILTERS)
-  const [sort, setSort] = useState<ScreenerSortField>(DEFAULT_SCREENER_QUERY.sort)
-  const [direction, setDirection] = useState<'asc' | 'desc'>(DEFAULT_SCREENER_QUERY.direction)
+  const [preset, setPreset] = useState<ScreenerPreset>(initialQuery.preset)
+  const [filters, setFilters] = useState<ScreenerFilter[]>(initialQuery.filters)
+  const [sort, setSort] = useState<ScreenerSortField>(initialQuery.sort)
+  const [direction, setDirection] = useState<'asc' | 'desc'>(initialQuery.direction)
   const [response, setResponse] = useState(initialResponse)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -242,6 +245,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
       const nextResponse = payload as ScreenerResponse
       setResponse(nextResponse)
     } catch (caught) {
+      if (requestRef.current !== controller || controller.signal.aborted) return
       if (caught instanceof Error && caught.name === 'AbortError') return
       setError(caught instanceof Error ? caught.message : 'The screen could not be run')
     } finally {
@@ -508,7 +512,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
   return (
     <section className="market-screener" aria-labelledby="stock-screener-title">
       <header className="market-screener-heading">
-        <h1 id="stock-screener-title" className="markets-display">Stock Screener</h1>
+        <h2 id="stock-screener-title" className="sr-only">Stock Screener</h2>
         <p>Private preview · {feedLabel(response.feed)} data · As of {formatMarketTime(response.dataAsOf)}{response.stale ? ' · Stale' : ''}</p>
       </header>
 
@@ -639,7 +643,7 @@ export function MarketsScreener({ initialResponse }: MarketsScreenerProps) {
                   }}
                 >
                   <td><span className="market-symbol-button">{row.symbol}</span></td>
-                  <td>{row.company}</td>
+                  <td title={row.company}>{row.company}</td>
                   <td>{formatPrice(row.price)}</td>
                   <td className={(row[selectedReturnField] ?? 0) >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(row[selectedReturnField])}</td>
                   <td className={row.gap >= 0 ? 'market-positive' : 'market-negative'}>{formatPercent(row.gap)}</td>
