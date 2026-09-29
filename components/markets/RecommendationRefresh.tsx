@@ -1,11 +1,16 @@
 'use client'
 import { useRef, useState } from 'react'
+import { ArrowClockwise } from '@phosphor-icons/react'
+import styles from './RecommendationsWorkspace.module.css'
 export function RecommendationRefresh() {
   const [pending, setPending] = useState(false),
-    [status, setStatus] = useState('')
+    [status, setStatus] = useState(''),
+    [queued, setQueued] = useState(false)
   const request = useRef<string | null>(null)
   async function refresh() {
+    if (pending || queued) return
     setPending(true)
+    setStatus('')
     try {
       request.current ??= crypto.randomUUID()
       const response = await fetch('/api/markets/recommendations', {
@@ -20,33 +25,36 @@ export function RecommendationRefresh() {
       if (!response.ok)
         throw new Error(body.error ?? 'Unable to request an update')
       setStatus(
-        'Update queued. Reload after the worker finishes to see the new edition. Earlier editions remain in the ledger.',
+        'Assessment queued. Check back after it finishes.',
       )
+      setQueued(true)
     } catch (error) {
       setStatus(
         error instanceof Error
           ? error.message
           : 'Unable to request an update',
       )
+    } finally {
       setPending(false)
     }
   }
   return (
-    <div className="mt-4 max-w-sm">
+    <div className={styles.refresh}>
       <button
         type="button"
-        disabled={pending}
+        disabled={pending || queued}
         onClick={refresh}
-        className="border border-[var(--border)] px-3 py-2 text-xs disabled:opacity-50"
+        className={styles.primaryButton}
       >
-        {pending ? 'Update requested' : 'Request updated evaluation'}
+        <ArrowClockwise size={16} />
+        {queued ? 'Assessment queued' : pending ? 'Requesting…' : 'Refresh assessment'}
       </button>
-      <p
+      {status && <p
         role="status"
         className="mt-2 text-xs leading-5 text-[var(--text-muted)]"
       >
         {status}
-      </p>
+      </p>}
     </div>
   )
 }

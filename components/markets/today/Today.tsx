@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { MarketsIntentLink } from '../MarketsIntentLink'
 import { recommendationStatus } from '@/lib/markets/recommendation-status'
 import type { Recommendation } from '@/lib/markets/recommendations'
 import {
@@ -87,14 +88,13 @@ export async function TodayPortfolio({ ownerId }: { ownerId: string }) {
             ))}
           </ul>
         )}
-        <Link
+        <MarketsIntentLink
           className={styles.primary}
           href="/markets/recommendations"
-          prefetch={false}
         >
           {summary.actionCount ? 'Review changes' : 'View assessment'}{' '}
           <span>↗</span>
-        </Link>
+        </MarketsIntentLink>
         <p className={styles.meta}>Assessment · {time(data.publishedAt)}</p>
       </div>
       <div className={styles.allocation}>

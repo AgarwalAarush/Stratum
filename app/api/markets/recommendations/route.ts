@@ -12,13 +12,20 @@ import {
   record,
 } from '@/lib/server/recommendations'
 import { adjudicateRecommendationForecast } from '@/lib/server/recommendation-outcomes'
+import { fetchRecommendationActions, fetchRecommendationEvidence, fetchRecommendationLearning } from '@/lib/server/recommendation-reads'
 export const dynamic = 'force-dynamic'
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getAllowedMarketUser()
   if (!user)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   try {
-    return NextResponse.json(await fetchRecommendationWorkspace(user.id), {
+    const params = new URL(request.url).searchParams
+    const view = params.get('view')
+    const result = view === 'actions' ? await fetchRecommendationActions(user.id)
+      : view === 'learning' ? await fetchRecommendationLearning(user.id)
+        : view === 'evidence' ? await fetchRecommendationEvidence(user.id, params.get('batch') ?? '')
+          : await fetchRecommendationWorkspace(user.id)
+    return NextResponse.json(result, {
       headers: { 'Cache-Control': 'private, no-store' },
     })
   } catch {

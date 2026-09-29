@@ -9,14 +9,22 @@ import {
   ManualExecutionRecord,
 } from './RecommendationLearningControls'
 import { useState } from 'react'
+import useSWR from 'swr'
+import { CaretDown, ArrowLeft, ArrowClockwise } from '@phosphor-icons/react'
+import styles from './RecommendationsWorkspace.module.css'
 import { useRouter } from 'next/navigation'
 import { decisionHeadline, decisionIsBlocked, readableDecisionText, isActionableCapitalChange } from '@/lib/markets/recommendation-display'
-import type { fetchRecommendationWorkspace } from '@/lib/server/recommendations'
+import type { fetchRecommendationActions, fetchRecommendationEvidence, fetchRecommendationLearning } from '@/lib/server/recommendation-reads'
 import type {
   DecisionContext,
   Recommendation,
 } from '@/lib/markets/recommendations'
-type Data = Awaited<ReturnType<typeof fetchRecommendationWorkspace>>
+type Data = Awaited<ReturnType<typeof fetchRecommendationActions>>
+async function fetchView<Data>(url: string): Promise<Data> {
+  const response = await fetch(url, { signal: AbortSignal.timeout(15_000) })
+  if (!response.ok) throw new Error('This view could not be loaded. Try again.')
+  return response.json()
+}
 const record = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v)
     ? (v as Record<string, unknown>)
@@ -26,6 +34,7 @@ const stamp = (v: unknown) =>
     ? new Date(v).toLocaleString('en-US', {
         dateStyle: 'medium',
         timeStyle: 'short',
+        timeZone: 'America/Los_Angeles',
       })
     : 'Unavailable'
 const actionLabel = (s: string) => s === 'no_trade' ? 'Wait — evidence incomplete' : s.replaceAll('_', ' ')
@@ -36,8 +45,15 @@ export function RecommendationsWorkspace({
 }) {
   const [tab, setTab] = useState<'decisions' | 'learning'>('decisions')
   const [portfolioId, setPortfolioId] = useState('all')
+  const [archiveLimit, setArchiveLimit] = useState(12)
+  const router = useRouter()
+  const { data: learning, error: learningError, mutate: retryLearning } = useSWR<Awaited<ReturnType<typeof fetchRecommendationLearning>>>(
+    tab === 'learning' ? `/api/markets/recommendations?view=learning&edition=${initialData?.latest?.id ?? ''}&read=${initialData?.viewedAt ?? ''}` : null,
+    fetchView,
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  )
   const data = initialData,
-    context = record(data?.context).content as DecisionContext | undefined
+    context = data?.context
   const latest = data?.latest
   const currentEdition =
     latest?.decision_date ===
@@ -49,26 +65,22 @@ export function RecommendationsWorkspace({
   const actionRows = visible.filter(r => isActionableCapitalChange(r.content as Recommendation, viewedAt))
   const archivedRows = visible.filter(r => !actionRows.includes(r))
   function renderDecision(row: NonNullable<Data>['recommendations'][number]) {
-    return <DecisionCard key={row.id} row={row} context={context} viewedAt={data!.viewedAt} events={data!.events.filter(e => e.recommendation_id === row.id)} />
+    return <DecisionRow key={row.id} row={row} data={data!} />
   }
   return (
-    <div className="mx-auto max-w-[1200px] px-5 py-7 md:px-10 md:py-10">
-      <Link href="/markets" className="mb-6 inline-flex items-center gap-2 text-sm font-medium underline-offset-4 hover:underline"><span aria-hidden="true">←</span> Back to Today</Link>
-      <header className="grid gap-4 border-b border-[var(--border)] pb-5 md:grid-cols-[1fr_auto]">
+    <div className={styles.page}>
+      <Link href="/markets" className={styles.breadcrumb}><ArrowLeft size={14} /> Today <span>/</span> Recommendations</Link>
+      <header className={styles.header}>
         <div>
-          <p className="mb-3 text-[11px] uppercase tracking-[.18em] text-[var(--text-muted)]">
-            Your investment decisions
-          </p>
-          <h1 className="text-3xl font-medium tracking-tight md:text-4xl">
+          <h1>
             Recommendations
           </h1>
-
+          <p className={styles.subtitle}>Daily portfolio decisions · 7:00 AM Pacific</p>
         </div>
-        <div className="text-sm md:text-right">
-          <p>Daily · 7:00 AM Pacific</p>
-          <p className="mt-2 text-xs text-[var(--text-muted)]">
+        <div className={styles.publication}>
+          <p>
             {latest
-              ? `Published ${stamp(latest.published_at)}`
+              ? `Published ${stamp(latest.published_at)} PT`
               : 'Awaiting first publication'}
           </p>
           <RecommendationRefresh />
@@ -76,14 +88,14 @@ export function RecommendationsWorkspace({
       </header>
       <nav
         aria-label="Recommendation views"
-        className="flex gap-7 border-b border-[var(--border)]"
+        className={styles.tabs}
       >
         {(['decisions', 'learning'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             aria-current={tab === t ? 'page' : undefined}
-            className={`py-4 text-sm capitalize ${tab === t ? 'border-b-2 border-current' : 'text-[var(--text-muted)]'}`}
+            className={tab === t ? styles.activeTab : undefined}
           >
             {t === 'decisions' ? 'Actions' : 'Track record'}
           </button>
@@ -101,48 +113,36 @@ export function RecommendationsWorkspace({
               ? 'Approved buys, adds, trims and sells will appear here with their reasoning and evidence.'
               : 'Stratum cannot verify a current investment recommendation. Existing holdings have not been declared safe. Your standing risk controls still apply.'}
           </p>
+          {!data && <button className={styles.retry} onClick={() => router.refresh()}><ArrowClockwise size={16} /> Try again</button>}
         </section>
       ) : tab === 'decisions' ? (
         <>
-          {!currentEdition ? (
-            <p
-              role="status"
-              className="mt-6 border border-[var(--border)] p-5 text-sm"
-            >
-              This is an earlier recorded edition. A current daily evaluation
-              is unavailable; check each recommendation’s expiry before
-              acting.
-            </p>
-          ) : null}
-          <nav aria-label="Portfolio filter" className="mt-6 flex flex-wrap gap-2">
-            {[{id:'all',name:'All portfolios'}, ...(data?.accounts ?? [])].map(a => <button key={a.id} onClick={() => setPortfolioId(a.id)} aria-pressed={portfolioId === a.id} className={`rounded-full border border-[var(--border)] px-4 py-2 text-sm ${portfolioId === a.id ? 'bg-[var(--text)] text-[var(--bg)]' : 'text-[var(--text-muted)]'}`}>{a.name}</button>)}
+          <RecommendationStatus recommendations={visible.map(r => r.content as Recommendation)} viewedAt={data!.viewedAt} earlierEdition={!currentEdition} />
+          <nav aria-label="Portfolio filter" className={styles.filters}>
+            {[{id:'all',name:'All portfolios'}, ...(data?.accounts ?? [])].map(account => <button key={account.id} onClick={() => { setPortfolioId(account.id); setArchiveLimit(12) }} aria-pressed={portfolioId === account.id}>{account.name}</button>)}
           </nav>
-          {(context?.gaps.length ?? 0) > 0 && (
-            <details className="mb-6 text-xs text-[var(--text-muted)]">
-              <summary className="cursor-pointer">Evidence limits</summary>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                {context!.gaps.map((g) => (
-                  <li key={g}>{g}</li>
-                ))}
-              </ul>
-            </details>
-          )}
-          <section aria-label="Capital actions">
-            <RecommendationStatus recommendations={visible.map(r => r.content as Recommendation)} viewedAt={data!.viewedAt} />
+          {actionRows.length > 0 && <section aria-label="Capital actions">
+            <h2 className={styles.sectionTitle}>Ready for review <span>{actionRows.length}</span></h2>
             {actionRows.map(renderDecision)}
-          </section>
-          <section className="pb-3">
-
-            <details className="mt-4 text-xs text-[var(--text-muted)]">
-              <summary className="cursor-pointer">Edition details</summary><p className="mt-2">{latest.summary}</p>
-              <p className="mt-2">Evidence as of {stamp(context?.cutoff)} · {context?.policy} · {data?.recommendations.length} account decisions</p>
-            </details>
-          </section>
-          {archivedRows.length > 0 && <details className="mt-8 border-t border-[var(--border)] py-5">
-            <summary className="cursor-pointer text-xs text-[var(--text-muted)]">Full assessment archive · {archivedRows.length}</summary>
-            {archivedRows.map(renderDecision)}
-          </details>}
+          </section>}
+          {archivedRows.length > 0 && <section className={styles.archive} aria-label="Assessment archive">
+            <h2 className={styles.sectionTitle}>{currentEdition ? 'Other decisions' : 'Previous assessment'} <span>{archivedRows.length} decisions</span></h2>
+            <p className={styles.sectionNote}>{currentEdition ? 'Holds, deferred decisions and expired advice.' : 'Historical decisions · check validity before acting.'}</p>
+            <div className={styles.tableHead} aria-hidden="true"><span>Symbol</span><span>Portfolio</span><span>Assessment</span><span>Validity</span><span /></div>
+            {archivedRows.slice(0, archiveLimit).map(renderDecision)}
+            {archiveLimit < archivedRows.length && <button className={styles.showMore} onClick={() => setArchiveLimit(limit => limit + 12)}>Show more decisions <span>{archiveLimit} of {archivedRows.length}</span><CaretDown size={14} /></button>}
+          </section>}
+          {!visible.length && <p className={styles.sectionNote}>No decisions for this portfolio in this edition.</p>}
+          <details className={styles.disclosure}>
+            <summary>Edition details</summary><p>{latest.summary}</p>
+            <p>Evidence as of {stamp(context?.cutoff)} PT · {context?.policy} · {data?.recommendations.length} account decisions</p>
+          </details>
+          {(context?.gaps.length ?? 0) > 0 && <details className={styles.disclosure}><summary>Evidence limits <span>{context!.gaps.length}</span></summary><ul>{context!.gaps.map(gap => <li key={gap}>{gap}</li>)}</ul></details>}
         </>
+      ) : learningError ? (
+        <div className={styles.feedback} role="alert"><p>Track record could not be loaded. Your assessment is still available.</p><button className={styles.retry} onClick={() => void retryLearning()}>Try again</button></div>
+      ) : !learning ? (
+        <div className={styles.feedback} role="status" aria-busy="true">Loading track record…</div>
       ) : (
         <section className="py-8">
           <h2 className="text-xl">Did the recommendation work—and why?</h2>
@@ -151,9 +151,9 @@ export function RecommendationsWorkspace({
             timing. Economic forecasts are assessed separately from price.
             Unfilled entries, missing data and owner overrides remain visible.
           </p>
-          {data?.evaluations.length ? (
+          {learning.evaluations.length ? (
             <div className="mt-6 space-y-4">
-              {data.evaluations.map((e) => (
+              {learning.evaluations.map((e) => (
                 <details
                   key={e.id}
                   className="border border-[var(--border)] p-5"
@@ -182,15 +182,15 @@ export function RecommendationsWorkspace({
           <div className="mt-8">
             <h3 className="font-medium">Forecast review</h3>
             <p className="mt-2 text-sm text-[var(--text-muted)]">Only forecasts that passed review are eligible. Operating outcomes and market returns are assessed separately.</p>
-            {data?.forecasts.map((f) => (
+            {learning.forecasts.map((f) => (
               <ForecastReview key={f.id} forecast={f} />
             ))}
           </div>
           <LearningRegistrationForm />
           <section className="mt-6 border border-[var(--border)] p-5 text-sm" aria-label="Shadow calibration">
             <h3 className="font-medium">Prospective shadow comparisons</h3>
-            <p className="mt-2 text-[var(--text-muted)]">{data?.shadowRuns.length ?? 0} captured editions in the latest 100 runs. These alternatives change forecast probabilities only; your published capital actions stay unchanged.</p>
-            {data?.shadowEvaluations.length ? data.shadowEvaluations.slice(0,5).map(e => {
+            <p className="mt-2 text-[var(--text-muted)]">{learning.shadowRuns.length} captured editions in the latest 100 runs. These alternatives change forecast probabilities only; your published capital actions stay unchanged.</p>
+            {learning.shadowEvaluations.length ? learning.shadowEvaluations.slice(0,5).map(e => {
               const result=record(e.content)
               return <div key={e.id} className="mt-4 border-t border-[var(--border)] pt-3">
                 <p>{String(result.resolvedEpisodes ?? 0)} resolved, {String(result.unresolvedEpisodes ?? 0)} unresolved after repeated and overlapping forecasts are removed.</p>
@@ -208,7 +208,7 @@ export function RecommendationsWorkspace({
               require a registered comparison, prospective evidence and owner
               review. Old recommendations and probabilities remain unchanged.
             </p>
-            {data?.cohorts.map((c) => (
+            {learning.cohorts.map((c) => (
               <p key={c.id} className="mt-3">
                 {String(
                   record(record(c.content).calibration).independentEpisodes ??
@@ -233,6 +233,36 @@ export function RecommendationsWorkspace({
       </footer>
     </div>
   )
+}
+function DecisionRow({ row, data }: { row: Data['recommendations'][number]; data: Data }) {
+  const rec = row.content as Recommendation
+  const [expanded, setExpanded] = useState(false)
+  const { data: details, error, mutate } = useSWR<Awaited<ReturnType<typeof fetchRecommendationEvidence>>>(
+    expanded ? `/api/markets/recommendations?view=evidence&batch=${data.latest!.id}&read=${data.viewedAt}` : null,
+    fetchView,
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  )
+  const expired = !(Date.parse(rec.expiresAt) > Date.parse(data.viewedAt))
+  const portfolioName = data.accounts.find(account => account.id === rec.portfolioId)?.name ?? 'Recorded portfolio'
+  const context = {
+    ...data.context,
+    names: [{ portfolioId: rec.portfolioId, portfolioName, symbol: rec.symbol }],
+    evidence: details?.evidence ?? [],
+  } as DecisionContext
+  return <div className={styles.decisionRow}>
+    <button className={styles.rowButton} aria-expanded={expanded} aria-controls={`decision-${row.id}`} onClick={() => setExpanded(value => !value)}>
+      <span className={styles.symbol}>{rec.symbol}</span>
+      <span className={styles.portfolio}>{portfolioName}</span>
+      <span className={styles.assessment}>{rec.action === 'no_trade' ? 'Wait' : actionLabel(rec.action)}</span>
+      <span className={styles.validity} data-expired={expired}>{expired ? 'Expired' : decisionIsBlocked(rec) ? 'Needs review' : 'Current'}</span>
+      <CaretDown size={15} className={expanded ? styles.rotated : undefined} />
+    </button>
+    {expanded && <div id={`decision-${row.id}`} className={styles.rowDetails}>
+      {!details && !error && <p role="status">Loading sources and responses…</p>}
+      {error && <p role="alert">Source details are unavailable. <button className={styles.textButton} onClick={() => void mutate()}>Try again</button></p>}
+      <DecisionCard row={row} context={context} viewedAt={data.viewedAt} events={details?.events.filter(event => event.recommendation_id === row.id) ?? []} />
+    </div>}
+  </div>
 }
 function DecisionCard({
   row,
