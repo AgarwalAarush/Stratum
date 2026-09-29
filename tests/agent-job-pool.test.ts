@@ -1,6 +1,28 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { AgentJobPool } from '../lib/server/agent-job-pool.ts'
+import { startAttemptWatchdog, workerProgressState } from '../lib/server/worker-watchdog.ts'
+
+test('all hung slots yield for supervision without releasing or duplicating work', async () => {
+  let calls = 0
+  const pool = new AgentJobPool(() => { calls++; return new Promise(() => {}) })
+  assert.equal(await pool.next(2, 5), 0)
+  assert.equal(await pool.next(2, 5), 0)
+  assert.equal(pool.active, 2)
+  assert.equal(calls, 2)
+})
+
+test('expired attempts trigger termination; completed attempts cancel the watchdog', async () => {
+  let expirations = 0
+  const stop = startAttemptWatchdog(5, () => { expirations++ })
+  stop()
+  const stopExpired = startAttemptWatchdog(5, () => { expirations++ })
+  await new Promise(resolve => setTimeout(resolve, 20))
+  stopExpired()
+  assert.equal(expirations, 1)
+  assert.equal(workerProgressState(1000, 182000).stalled, true)
+  assert.equal(workerProgressState(1000, 2000).stalled, false)
+})
 
 test('a short job releases its slot while a long sibling remains active', async () => {
   const releases: Array<(value: boolean) => void> = []

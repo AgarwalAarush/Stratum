@@ -16,6 +16,11 @@ import {
   shouldRefreshClosedMarket,
 } from '../lib/server/agent-jobs.ts'
 
+test('routine World ingestion coalesces but explicit historical windows stay distinct', () => {
+  assert.equal(shouldCoalesceAgentJob('refresh-world-events', {}), true)
+  assert.equal(shouldCoalesceAgentJob('refresh-world-events', { since: '2026-09-01' }), false)
+})
+
 test('agent job parser rejects unknown work', () => {
   assert.equal(parseAgentJobType('refresh-market-screener'), 'refresh-market-screener')
   assert.equal(parseAgentJobType('refresh-company-packet'), 'refresh-company-packet')
