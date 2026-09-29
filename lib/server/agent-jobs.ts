@@ -1,6 +1,7 @@
 import { captureShadowPolicies, evaluateShadowPolicies } from './investment-shadow.ts'
 import { needsDecisionResearchRefresh } from '../markets/decision-admission.ts'
 import { AgentJobPool } from './agent-job-pool.ts'
+import { startAttemptWatchdog } from './worker-watchdog.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { captureInvestmentMacro } from './investment-macro.ts'
 import { assembleDecisionContext, generateDailyRecommendations } from './recommendations.ts'
@@ -443,6 +444,7 @@ export function agentJobStaleAfterMs(jobType: AgentJobType, defaultStaleAfterMs 
  * earlier refresh is still queued or running, a later calendar tick can reuse
  * it; symbol-specific coverage and all governed research work stay distinct. */
 export function shouldCoalesceAgentJob(jobType: AgentJobType, payload: Record<string, unknown>): boolean {
+  if (jobType === 'refresh-world-events') return Object.keys(payload).length === 0
   if (jobType === 'refresh-market-screener') return payload.mode !== 'coverage' && typeof payload.symbol !== 'string'
   return jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence' || jobType === 'monitor-investment-theses'
 }
@@ -1366,6 +1368,12 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
     }).eq('id', run.id).eq('status', 'running')
   }
   const fmpUsageBefore = getFmpUsageSnapshot()
+  const stopWatchdog = startAttemptWatchdog(agentJobStaleAfterMs(job.job_type) - 60_000, () => {
+    console.error(JSON.stringify({ event: 'worker_attempt_deadline_exceeded', workerId, jobId: job.id, jobType: job.job_type }))
+    // Exit before stale recovery can release a still-executing attempt. The
+    // daemon restarts us and recoverInterruptedAgentJobs preserves its history.
+    process.exit(1)
+  })
 
   try {
     const output = outputWithUsage(
@@ -1387,6 +1395,8 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
       p_run_after:new Date(Date.now()+Math.min(30,2**job.attempts)*60_000).toISOString(),
     })
     if(transition.error) throw new Error(`Unable to persist job transition: ${transition.error.message}`)
+  } finally {
+    stopWatchdog()
   }
 
   return true

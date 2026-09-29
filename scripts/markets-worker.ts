@@ -1,6 +1,7 @@
 import { writeWorkerLocalHealth, safeWorkerError } from '../lib/server/worker-local-health.ts'
+import { workerProgressState } from '../lib/server/worker-watchdog.ts'
 import { hostname } from 'node:os'
-import { enqueueAgentJob, processAgentJobs, recoverInterruptedAgentJobs, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
+import { enqueueAgentJob, processAgentJobs, processOneAgentJob, recoverInterruptedAgentJobs, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
 import { enqueueDueAgentJobs } from '../lib/server/agent-schedule.ts'
 import { recordWorkerHeartbeat } from '../lib/server/worker-heartbeat.ts'
 import type { AgentJobType } from '../lib/server/agent-jobs.ts'
@@ -29,6 +30,7 @@ let nextHeartbeatAt = 0
 let nextRecoveryAt = 0
 let nextQueueReconcileAt = 0
 let shutdownTimer: NodeJS.Timeout | null = null
+let lastLoopAt = Date.now()
 
 function requestStop(signal: 'SIGINT' | 'SIGTERM') {
   if (stopping) return
@@ -52,7 +54,12 @@ async function heartbeat(): Promise<void> {
   nextHeartbeatAt = Date.now() + HEARTBEAT_INTERVAL_MS
   try {
     await recordWorkerHeartbeat({ workerId, schedulerEnabled, fmpEnabled, codexEnabled })
-    await writeWorkerLocalHealth({workerId,status:consecutiveFailures?'degraded':'healthy',consecutiveFailures})
+    const progress = workerProgressState(lastLoopAt)
+    await writeWorkerLocalHealth({workerId,status:consecutiveFailures || progress.stalled?'degraded':'healthy',consecutiveFailures, ...progress})
+    if (progress.stalled) {
+      console.error(JSON.stringify({ event: 'worker_control_loop_stalled', workerId, ...progress }))
+      process.exit(1)
+    }
   } catch (error) {
     await writeWorkerLocalHealth({workerId,status:'degraded',consecutiveFailures,error:safeWorkerError(error)})
     console.warn(JSON.stringify({
@@ -158,6 +165,7 @@ async function main() {
     void maintenance().catch(error=>console.warn(JSON.stringify({event:'worker_maintenance_failed',error:safeWorkerError(error)})))
   },Math.min(HEARTBEAT_INTERVAL_MS,SCHEDULER_INTERVAL_MS))
   try { do {
+    lastLoopAt = Date.now()
     try {
       await maintenance()
       if (Date.now() >= nextRecoveryAt) {
@@ -170,7 +178,7 @@ async function main() {
         if (superseded > 0) console.info(JSON.stringify({ level: 'info', workerId, event: 'routine_queue_superseded', count: superseded }))
         nextQueueReconcileAt = Date.now() + 60_000
       }
-      const processed = await processAgentJobs(workerId, runOnce ? 1 : WORKER_CONCURRENCY)
+      const processed = runOnce ? Number(await processOneAgentJob(workerId)) : await processAgentJobs(workerId, WORKER_CONCURRENCY)
       consecutiveFailures = 0
       await writeWorkerLocalHealth({workerId,status:'healthy',consecutiveFailures})
       if (runOnce) return

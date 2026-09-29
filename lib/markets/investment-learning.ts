@@ -105,6 +105,8 @@ export function resolveNumericForecast(
     deadline: string
     issuedAt: string
     metric: string
+    observationPeriod?: string
+    unit?: string
   },
   observations: Array<{
     id: string
@@ -113,6 +115,7 @@ export function resolveNumericForecast(
     period: string
     availableAt: string
     sourceUrl: string
+    unit?: string
   }>,
   cutoff: string,
 ) {
@@ -121,7 +124,8 @@ export function resolveNumericForecast(
       (o) =>
         o.metric === input.metric &&
         Number.isFinite(o.value) &&
-        o.period > input.issuedAt.slice(0, 10) &&
+        (input.observationPeriod ? o.period === input.observationPeriod : o.period > input.issuedAt.slice(0, 10)) &&
+        (!input.unit || o.unit === input.unit) &&
         o.period <= input.deadline.slice(0, 10) &&
         Date.parse(o.availableAt) > Date.parse(input.issuedAt) &&
         Date.parse(o.availableAt) <= Date.parse(cutoff),

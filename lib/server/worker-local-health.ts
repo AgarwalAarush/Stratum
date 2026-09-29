@@ -14,6 +14,8 @@ export async function writeWorkerLocalHealth(state: {
   status: 'starting' | 'healthy' | 'degraded'
   consecutiveFailures: number
   error?: string
+  loopAgeSeconds?: number
+  stalled?: boolean
 }) {
   const directory = join(
     process.env.STRATUM_DATA_ROOT || DEFAULT_MARKET_DATA_ROOT,

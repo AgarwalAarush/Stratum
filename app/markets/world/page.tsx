@@ -1,3 +1,5 @@
+import { WorldLearningHealth } from '@/components/markets/WorldLearningHealth'
+import { fetchLearningHealth } from '@/lib/server/learning-health'
 import Link from 'next/link'
 import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import type { WorldNode } from '@/lib/markets/world-thinker-types'
@@ -45,8 +47,9 @@ function leadScore(lead: Record<string, unknown>, key: string): number {
 }
 
 export default async function MarketsWorldPage() {
-  await requireAllowedMarketUser()
-  const world = await fetchWorldWorkspace()
+  const user = await requireAllowedMarketUser()
+  const [world, learningHealth] = await Promise.all([fetchWorldWorkspace(), fetchLearningHealth(user.id).catch(() => null)])
+  const now = learningHealth ? Date.parse(learningHealth.checkedAt) : Number.NaN
   const changes = world.latestChanges[0]
   const runNeedsAttention = world.health.lastRunStatus === 'failed' || (Boolean(world.health.failure) && world.health.lastRunStatus !== 'rejected')
   const needsAttention = runNeedsAttention || world.health.quarantinedEvents > 0 || world.replay.run?.status === 'failed'
@@ -120,12 +123,14 @@ export default async function MarketsWorldPage() {
           <p>{world.current?.summary ?? 'The repository is ready, but no validated World Thinker commit has been projected.'}</p>
           {world.current?.body ? <WorldMarkdown className="world-current-body">{world.current.body}</WorldMarkdown> : null}
           <dl className="world-current-meta">
-            <div><dt>Last run</dt><dd>{world.health.lastRunStatus === 'rejected' ? 'no material update' : world.health.lastRunStatus ?? 'None'}</dd></div>
+            <div><dt>Last run</dt><dd>{world.health.lastRunStatus === 'rejected' ? 'Rejected by evidence review' : world.health.lastRunStatus ?? 'None'}</dd></div>
             <div><dt>Run started</dt><dd>{formatTime(world.health.lastRunAt)}</dd></div>
             <div><dt>Projection</dt><dd>{world.canonical ? 'Canonical' : 'Shadow'}</dd></div>
           </dl>
         </aside>
       </section>
+
+      <WorldLearningHealth health={learningHealth} overdue={world.hypotheses.filter(node => Date.parse(node.nextReviewAt) < now).map(({ id, title }) => ({ id, title }))} />
 
       <section className="world-model-section" id="active-model">
         <div className="world-section-heading world-section-heading--major">

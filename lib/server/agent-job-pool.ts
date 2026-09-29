@@ -10,7 +10,7 @@ export class AgentJobPool {
 
   get active() { return this.pending.size }
 
-  async next(concurrency: number): Promise<number> {
+  async next(concurrency: number, pollMs = 1_000): Promise<number> {
     if (this.completed.length) return this.drainCompletions()
     const slots = Number.isFinite(concurrency) ? Math.max(1, Math.min(4, Math.floor(concurrency))) : 1
     while (this.pending.size < slots) {
@@ -22,7 +22,16 @@ export class AgentJobPool {
         .finally(() => this.pending.delete(task))
       this.pending.add(task)
     }
-    await Promise.race(this.pending)
+    // Yield even when every handler is waiting forever. Keep the occupied
+    // slots; the supervisor, not a detached Promise.race, owns cancellation.
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      await Promise.race([...this.pending, new Promise<void>(resolve => {
+        timer = setTimeout(resolve, pollMs)
+      })])
+    } finally {
+      clearTimeout(timer)
+    }
     return this.drainCompletions()
   }
 

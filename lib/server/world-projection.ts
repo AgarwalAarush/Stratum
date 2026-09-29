@@ -186,13 +186,7 @@ export async function fetchWorldWorkspace(): Promise<WorldWorkspace> {
   ])
   if (projectionResult.error) throw new Error(`Unable to load world projection: ${projectionResult.error.message}`)
   const projection = projectionResult.data as { commit_sha: string; branch: string; is_canonical: boolean } | null
-  let rows: WorldIndexRow[] = []
-  if (projection) {
-    const { data, error } = await supabase.from('world_file_index').select('*').eq('commit_sha', projection.commit_sha).order('importance', { ascending: false })
-    if (error) throw new Error(`Unable to load world nodes: ${error.message}`)
-    rows = (data ?? []) as WorldIndexRow[]
-  }
-  const nodes = rows.map((row) => row.structured_content)
+  const nodes = projection ? await fetchProjectedWorldNodes(projection.commit_sha) : []
   const current = nodes.find((node) => node.kind === 'current') ?? null
   const journals = latestDistinctWorldJournals(nodes, 2)
   const events = (eventResult.data ?? []) as Array<{ processing_state: string; source_diversity: number; first_seen_at: string }>
@@ -219,6 +213,21 @@ export async function fetchWorldWorkspace(): Promise<WorldWorkspace> {
       lastSuccessfulRunAt: successfulRun?.started_at ?? null, lastSuccessfulCommit: successfulRun?.result_commit ?? null,
     },
   }
+}
+
+/** The overview needs the live model and two recent journals, not every
+ * historical journal plus duplicated search text and top-level content. */
+export async function fetchProjectedWorldNodes(commit: string): Promise<WorldNode[]> {
+  const db = getSupabaseClient()
+  if (!db) throw new Error('World evidence unavailable')
+  const [model, journals] = await Promise.all([
+    db.from('world_file_index').select('structured_content').eq('commit_sha', commit).neq('kind', 'journal')
+      .in('status', ['active', 'monitoring']).order('importance', { ascending: false }),
+    db.from('world_file_index').select('structured_content').eq('commit_sha', commit).eq('kind', 'journal')
+      .order('as_of', { ascending: false }).limit(8),
+  ])
+  if (model.error || journals.error) throw new Error(`Unable to load world nodes: ${model.error?.message ?? journals.error?.message}`)
+  return [...(model.data ?? []), ...(journals.data ?? [])].map(r => r.structured_content as WorldNode)
 }
 
 export async function fetchWorldNode(id: string): Promise<{ commit: string; node: WorldNode; related: WorldNode[]; history: WorldNode[]; sources: Array<Record<string, unknown>> } | null> {
