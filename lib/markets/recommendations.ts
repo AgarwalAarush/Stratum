@@ -13,7 +13,7 @@ export const RECOMMENDATION_ACTIONS = [
 export type RecommendationAction = (typeof RECOMMENDATION_ACTIONS)[number]
 // v1.1 corrects thesis schema/provenance. New manifests retain the original
 // abstention edition rather than rewriting its frozen inputs after repair.
-export const RECOMMENDATION_POLICY = 'prospective-v1.3'
+export const RECOMMENDATION_POLICY = 'prospective-v1.4'
 export type EvidenceRef = {
   id: string
   kind: string
@@ -363,10 +363,8 @@ export function gateRecommendation(
   if (reducing) {
     const researchContent = obj(name.research?.content)
     const supportedExit = name.thesis?.status === 'invalidated' || researchContent.formalRating === 'SELL'
-    const concentrationReduction = name.currentWeightPct !== null && name.currentWeightPct > 10 &&
-      rec.entry.targetWeightPct !== null && rec.entry.targetWeightPct <= 10 && rec.action === 'trim'
-    if (!rec.forecasts.length && !supportedExit && !concentrationReduction)
-      reasons.push('Risk reduction requires evidenced thesis invalidation, exit research, concentration excess, or a measurable risk forecast')
+    if (!rec.forecasts.length && !supportedExit)
+      reasons.push('Risk reduction requires evidenced thesis invalidation, exit research, or a measurable risk forecast')
     const target = rec.entry.targetWeightPct,
       current = name.currentWeightPct
     if (
@@ -378,8 +376,8 @@ export function gateRecommendation(
     )
       reasons.push('Reduction must lower existing exposure; sell targets zero')
   }
-  if (rec.action === 'hold' && (name.thesis?.status === 'invalidated' || obj(name.research?.content).formalRating === 'SELL'))
-    reasons.push('Affirmative hold conflicts with thesis invalidation or exit research')
+  if (rec.action === 'hold' && (name.thesis?.status === 'invalidated' || ['SELL', 'NOT_RATED'].includes(String(obj(name.research?.content).formalRating))))
+    reasons.push('Affirmative hold conflicts with thesis invalidation, exit research, or an unrated evidence case')
   for (const id of [
     ...rec.sourceIds,
     ...rec.forecasts.flatMap((f) => f.sourceIds),

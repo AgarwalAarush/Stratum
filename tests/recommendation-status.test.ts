@@ -55,3 +55,11 @@ test('hold-only, empty, stale and approved editions have distinct states', () =>
     1,
   )
 })
+
+test('deliberate waits are never counted as failed independent reviews',()=>{
+  const s=recommendationStatus([row({action:'sell'}),row({reason:'Wait for a documented capital entry condition.'}),row({gateReasons:['Unsupported target weight']})],now)
+  assert.equal(s.rejected,1)
+  assert.equal(s.deferred,1)
+  assert.equal(s.reasons.find(r=>r.key==='review')?.count,1)
+  assert.equal(s.reasons.find(r=>r.key==='entry')?.count,1)
+})

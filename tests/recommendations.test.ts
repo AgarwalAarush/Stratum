@@ -183,9 +183,10 @@ test('evidenced exits and holds do not invent economic forecasts; new risk still
   const holding = {...c,names:[{...c.names[0],thesis:{status:'accepted'},research:{id:'research',content:{formalRating:'HOLD'}}}]}
   assert.equal(gateRecommendation({...sell,action:'hold'},holding).action,'hold')
   assert.equal(gateRecommendation(sell,holding).action,'no_trade')
+  assert.equal(gateRecommendation({...sell,action:'hold'}, {...holding,names:[{...holding.names[0],research:{id:'research',content:{formalRating:'NOT_RATED'}}}]}).action,'no_trade')
   assert.equal(gateRecommendation({...recommendation(),forecasts:[]},context).action,'no_trade')
   const oversized = {...holding,names:[{...holding.names[0],currentWeightPct:15}]}
-  assert.equal(gateRecommendation({...sell,action:'trim',entry:{...sell.entry,targetWeightPct:10}},oversized).action,'trim')
+  assert.equal(gateRecommendation({...sell,action:'trim',entry:{...sell.entry,targetWeightPct:10}},oversized).action,'no_trade')
   const blockedAccount = {...name,portfolioId:'stale-account',gaps:['Current portfolio capture needs verification']}
   assert.equal(gateRecommendation(sell,{...c,names:[...c.names,blockedAccount]}).action,'sell')
 })
