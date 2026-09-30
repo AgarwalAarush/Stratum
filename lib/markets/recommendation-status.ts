@@ -46,7 +46,7 @@ export function recommendationStatus(rows: StatusInput[], now = Date.now()) {
   for (const r of current.filter(
     (r) => r.action === 'no_trade' || r.gateReasons?.length,
   )) {
-    const text = [...(r.gateReasons ?? []), r.reason].join(' ')
+    const text = r.gateReasons?.length ? r.gateReasons.join(' ') : r.reason
     const key = /portfolio capture|Cash availability/i.test(text)
       ? 'portfolio'
       : /measurable forecast|evidence-backed.*forecast/i.test(text)
