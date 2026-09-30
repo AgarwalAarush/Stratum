@@ -49,10 +49,17 @@ export const ETF_SOURCES: Record<string, IssuerSource> = {
   },
 }
 
-for (const symbol of ['PAVE', 'MLPX']) ETF_SOURCES[symbol] = {
+for (const symbol of ['PAVE', 'MLPX', 'SHLD']) ETF_SOURCES[symbol] = {
   ...ETF_SOURCES.URA!, summaryUrl: `https://www.globalxetfs.com/funds/${symbol.toLowerCase()}`,
   holdingsUrl: `https://www.globalxetfs.com/funds/${symbol.toLowerCase()}`,
 }
+ETF_SOURCES.SGOV = {
+  issuer: 'iShares',
+  summaryUrl: 'https://www.ishares.com/us/products/314116/ishares-0-3-month-treasury-bond-etf',
+  holdingsUrl: 'https://www.ishares.com/us/products/314116/ishares-0-3-month-treasury-bond-etf/latest-holdings.csv',
+  parse: parseIsharesTreasury,
+}
+
 for (const symbol of ['XLK', 'XLU']) ETF_SOURCES[symbol] = {
   issuer: 'State Street', summaryUrl: `https://www.ssga.com/mainfund/${symbol}`,
   holdingsUrl: `https://www.ssga.com/library-content/products/fund-data/etfs/us/holdings-daily-us-en-${symbol.toLowerCase()}.xlsx`,
@@ -169,6 +176,45 @@ function csvCells(line: string): string[] {
   }
   cells.push(cell.trim())
   return cells
+}
+
+/** iShares bills share a name: retain CUSIPs and signed cash offsets, not
+ * a name-deduplicated equity table. The issuer CSV carries its own date. */
+export function parseIsharesTreasury(summaryHtml: string, csv: string, now: Date) {
+  const lines = csv.replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim())
+  const dateRow = lines.map(csvCells).find(row => row[0] === 'Fund Holdings as of')
+  const time = dateRow?.[1] ? Date.parse(`${dateRow[1]} UTC`) : Number.NaN
+  if (!Number.isFinite(time) || time > now.getTime()) throw new Error('Issuer holdings date is missing, invalid or future-dated')
+  const headerIndex = lines.findIndex(line => csvCells(line)[0] === 'Name' && csvCells(line).includes('Weight (%)'))
+  if (headerIndex < 0) throw new Error('iShares holdings CSV header is missing')
+  const header = csvCells(lines[headerIndex]!)
+  for (const field of ['Sector', 'Asset Class', 'Market Value', 'Weight (%)', 'Par Value', 'CUSIP'])
+    if (!header.includes(field)) throw new Error(`iShares holdings column is missing: ${field}`)
+  const holdings = lines.slice(headerIndex + 1).flatMap(line => {
+    const cells = csvCells(line)
+    if (cells.length !== header.length) {
+      if (['Cash', 'Money Market', 'Fixed Income'].includes(cells[header.indexOf('Asset Class')] ?? ''))
+        throw new Error('Malformed iShares holding columns')
+      return [] // issuer footnotes, not holdings
+    }
+    const get = (field: string) => cells[header.indexOf(field)] ?? ''
+    const name = get('Name'), weight = parsePercent(get('Weight (%)'))
+    if (!name || weight === null) throw new Error('Invalid iShares holding')
+    return [{symbol:null, name, identifier:get('CUSIP') === '-' ? null : get('CUSIP'),
+      classification:get('Asset Class'), shares:null,
+      marketValue:parseDecimal(get('Market Value')), weight}]
+  })
+  const {document} = parseHTML(summaryHtml)
+  let strategy: string | null = null
+  const context = document.querySelector('walrus-context[contextid="productDataContext"]')?.getAttribute('value')
+  if (context) {
+    const content = record(record(JSON.parse(context)).content)
+    const objective = content.fund_objective
+    if (Array.isArray(objective)) strategy = String(record(objective[0]).text ?? '') || null
+  }
+  return {...basePacket({issuer:'iShares',fundName:lines[0]!,benchmark:null,strategy,
+    expenseRatio:null,assetsUnderManagement:null,rebalanceFrequency:null,
+    holdings,holdingsCount:holdings.length,topTenWeight:0}), dataAsOf:new Date(time).toISOString()}
 }
 
 function globalXCsvHoldings(csv: string): EtfHolding[] {
