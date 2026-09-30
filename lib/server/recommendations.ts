@@ -619,11 +619,11 @@ export async function generateDailyRecommendations(
         },
       })
       const critic = await runCodexJson({
-        schemaPath: resolve('schemas/recommendation-critic.schema.json'),
+        schemaPath: input.criticSchemaPath,
         cwd: input.directory,
         webSearch: false,
         timeoutMs: 8 * 60 * 1000,
-        prompt: `Independently criticize these proposed decisions against the frozen evidence. Flag any unsupported economic link, overlooked contrary evidence, misleading timestamp, stale data, invalid sizing or invented factual claim. Identify blocking problems by portfolioId and symbol. Do not change the original thesis or fetch new information.\nCONTEXT ${input.prompt}\nDECISIONS ${JSON.stringify({summary: generated.data.summary, recommendations: generated.data.recommendations})}`,
+        prompt: `Independently criticize these proposed decisions against the frozen evidence. Flag any unsupported economic link, overlooked contrary evidence, misleading timestamp, stale data, invalid sizing or invented factual claim. Identify blocking problems only by the exact portfolioId and symbol pairs in DECISIONS; copy both values verbatim. Never use a portfolio name, wildcard, or global target. For a shared blocking problem, name each affected valid pair separately. Do not change the original thesis or fetch new information.\nCONTEXT ${input.prompt}\nDECISIONS ${JSON.stringify({summary: generated.data.summary, recommendations: generated.data.recommendations})}`,
         validate: (value) => {
           const v = record(value)
           if (!Array.isArray(v.blocks)) throw new Error('Invalid critic')
