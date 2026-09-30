@@ -1,10 +1,11 @@
 import { captureShadowPolicies, evaluateShadowPolicies } from './investment-shadow.ts'
-import { needsDecisionResearchRefresh } from '../markets/decision-admission.ts'
+import { dependencyReadiness, parseRecommendationDependencies } from '../markets/recommendation-preparation.ts'
+import { prepareDailyRecommendations } from './recommendation-preparation.ts'
 import { AgentJobPool } from './agent-job-pool.ts'
 import { startAttemptWatchdog } from './worker-watchdog.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { captureInvestmentMacro } from './investment-macro.ts'
-import { assembleDecisionContext, generateDailyRecommendations } from './recommendations.ts'
+import { generateDailyRecommendations } from './recommendations.ts'
 import { evaluateRecommendationOutcomes, reviewRecommendationCohort } from './recommendation-outcomes.ts'
 import { sendInvestmentNewsletter } from './investment-newsletter.ts'
 import { generateMorningBrief } from '../data/morning-brief.ts'
@@ -416,6 +417,7 @@ export function shouldRefreshClosedMarket(
  * behind a backlog of routine market-refresh work, while it remains only
  * operational telemetry—not admission authority. */
 export function agentJobPriority(jobType: AgentJobType): number {
+  if (jobType === 'sync-robinhood-portfolio') return 6
   if (jobType === 'send-investment-newsletter') return 5
   if (jobType === 'generate-daily-recommendations') return 10
   if (jobType === 'evaluate-recommendation-outcomes' || jobType === 'review-recommendation-cohort') return 15
@@ -749,14 +751,10 @@ async function executeJob(
   if (job.job_type === 'generate-daily-recommendations') {
     await captureInvestmentMacro().catch(error => console.warn(JSON.stringify({ event: 'investment_macro_capture_failed', error: error instanceof Error ? error.message : String(error) })))
     const now = new Date(), ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : undefined, editionKey = typeof job.payload.editionKey === 'string' ? job.payload.editionKey : 'daily'
-    const context = await assembleDecisionContext(ownerId, now, editionKey)
-    const requested = new Set<string>()
-    for (const name of context.names) {
-      if (requested.has(name.symbol) || name.securityId.startsWith('unresolved:') || !needsDecisionResearchRefresh(name)) continue
-      requested.add(name.symbol)
-      await enqueueAgentJob(name.instrumentType === 'etf' ? 'generate-etf-research' : 'generate-company-research', {ownerId:context.ownerId,symbol:name.symbol,reason:'Daily decision evidence gap'}, `investment-research:${context.ownerId}:${name.symbol}:${context.date}`)
-    }
-    const result = await generateDailyRecommendations(ownerId, now, editionKey)
+    const result = job.payload.phase === 'publish'
+      ? await generateDailyRecommendations(ownerId, now, editionKey)
+      : await prepareDailyRecommendations(ownerId ?? MARKETS_OWNER_ID,editionKey,enqueueAgentJob,now)
+    if ('preparing' in result) return result
     await captureShadowPolicies(result.batchId)
     return result
   }
@@ -1343,6 +1341,27 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
   const job = normalizeClaimedAgentJob(data)
   if (!job) return false
 
+  // Waiting for source work is not a failed model attempt and must not occupy
+  // a worker slot or exhaust retries. Preserve the claim-owner condition.
+  let preparationError: unknown
+  try {
+  if (job.job_type === 'generate-daily-recommendations') {
+    const ids = parseRecommendationDependencies(job.payload)
+    if (ids.length) {
+      const dependencies = await supabase.from('agent_jobs').select('id,status').in('id',ids)
+      if (dependencies.error) throw new Error(dependencies.error.message)
+      if (!dependencyReadiness(ids,dependencies.data)) {
+        const deferred = await supabase.from('agent_jobs').update({status:'queued',claimed_by:null,claimed_at:null,
+          attempts:job.attempts-1,run_after:new Date(Date.now()+60_000).toISOString(),updated_at:new Date().toISOString()})
+          .eq('id',job.id).eq('status','running').eq('claimed_by',workerId).eq('attempts',job.attempts).select('id')
+        if (deferred.error || deferred.data.length !== 1) throw new Error('Unable to defer recommendation preparation')
+        return false
+      }
+    }
+  }
+
+  } catch (error) { preparationError = error }
+
   const startedAt = Date.now()
   const provider = job.job_type === 'generate-market-memo' && job.payload.synthesize === false
     ? 'market-data'
@@ -1376,6 +1395,7 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
   })
 
   try {
+    if (preparationError) throw preparationError
     const output = outputWithUsage(
       await executeJob(job, reportProgress),
       fmpUsageBefore,

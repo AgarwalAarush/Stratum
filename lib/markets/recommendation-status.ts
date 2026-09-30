@@ -5,6 +5,10 @@ type StatusInput = Pick<
   'action' | 'reason' | 'gateReasons' | 'expiresAt'
 >
 const definitions = {
+  portfolio: {
+    label: 'Portfolio inputs need confirmation',
+    detail: 'Current holdings or available capital have not been verified for this account.',
+  },
   forecast: {
     label: 'Expected outcome needs evidence',
     detail: 'A measurable, evidence-backed forecast is missing.',
@@ -43,7 +47,9 @@ export function recommendationStatus(rows: StatusInput[], now = Date.now()) {
     (r) => r.action === 'no_trade' || r.gateReasons?.length,
   )) {
     const text = [...(r.gateReasons ?? []), r.reason].join(' ')
-    const key = /measurable forecast|evidence-backed.*forecast/i.test(text)
+    const key = /portfolio capture|Cash availability/i.test(text)
+      ? 'portfolio'
+      : /measurable forecast|evidence-backed.*forecast/i.test(text)
       ? 'forecast'
       : /identity/i.test(text)
         ? 'identity'
@@ -67,7 +73,9 @@ export function recommendationStatus(rows: StatusInput[], now = Date.now()) {
       ? 'No assessment published'
       : expired
         ? 'Assessment needs refreshing'
-        : rejected || deferred
+        : rejected === current.length && current.length > 0
+          ? 'Assessment blocked'
+          : rejected || deferred
           ? 'No actionable recommendation yet'
           : 'No portfolio changes recommended'
   const description = approved
@@ -77,7 +85,7 @@ export function recommendationStatus(rows: StatusInput[], now = Date.now()) {
       : expired
         ? `${expired} decisions have expired. A fresh assessment is needed before acting.`
         : rejected || deferred
-          ? `${rows.length} account decisions assessed. ${rejected} failed review; ${deferred} were deferred. This is not an all-clear for existing holdings.`
+          ? `${rows.length} account decisions covered. ${rejected} were blocked; ${deferred} were deferred. This is not an all-clear for existing holdings.`
           : 'The current assessment recommends no capital changes. Holds remain in the archive.'
   return {
     title,

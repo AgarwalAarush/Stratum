@@ -1058,6 +1058,7 @@ export interface PortfolioAccountSummary {
   holdings: PortfolioHolding[]
   dataSource: 'ledger' | 'robinhood' | 'manual_snapshot'
   confirmedAt?: string
+  capitalAsOf?: string
   dataAsOf: string | null
 }
 

@@ -13,7 +13,7 @@ import useSWR from 'swr'
 import { CaretDown, ArrowLeft, ArrowClockwise } from '@phosphor-icons/react'
 import styles from './RecommendationsWorkspace.module.css'
 import { useRouter } from 'next/navigation'
-import { decisionHeadline, decisionIsBlocked, readableDecisionText, isActionableCapitalChange } from '@/lib/markets/recommendation-display'
+import { decisionActionLabel, decisionHeadline, decisionIsBlocked, readableDecisionText, isActionableCapitalChange } from '@/lib/markets/recommendation-display'
 import type { fetchRecommendationActions, fetchRecommendationEvidence, fetchRecommendationLearning } from '@/lib/server/recommendation-reads'
 import type {
   DecisionContext,
@@ -101,6 +101,9 @@ export function RecommendationsWorkspace({
           </button>
         ))}
       </nav>
+      {data?.preparation && <p role="status" className={styles.sectionNote}>
+        Preparing an updated assessment. Source refreshes finish before a new edition is evaluated and published.
+      </p>}
       {!latest ? (
         <section className="my-10 max-w-2xl">
           <h2 className="text-xl">
@@ -127,7 +130,7 @@ export function RecommendationsWorkspace({
           </section>}
           {archivedRows.length > 0 && <section className={styles.archive} aria-label="Assessment archive">
             <h2 className={styles.sectionTitle}>{currentEdition ? 'Other decisions' : 'Previous assessment'} <span>{archivedRows.length} decisions</span></h2>
-            <p className={styles.sectionNote}>{currentEdition ? 'Holds, deferred decisions and expired advice.' : 'Historical decisions · check validity before acting.'}</p>
+            <p className={styles.sectionNote}>{currentEdition ? 'Holds, blocked assessments, deferred decisions and expired advice.' : 'Historical decisions · check validity before acting.'}</p>
             <div className={styles.tableHead} aria-hidden="true"><span>Symbol</span><span>Portfolio</span><span>Assessment</span><span>Validity</span><span /></div>
             {archivedRows.slice(0, archiveLimit).map(renderDecision)}
             {archiveLimit < archivedRows.length && <button className={styles.showMore} onClick={() => setArchiveLimit(limit => limit + 12)}>Show more decisions <span>{archiveLimit} of {archivedRows.length}</span><CaretDown size={14} /></button>}
@@ -254,7 +257,7 @@ function DecisionRow({ row, data }: { row: Data['recommendations'][number]; data
     <button className={styles.rowButton} aria-expanded={expanded} aria-controls={`decision-${row.id}`} onClick={() => setExpanded(value => !value)}>
       <span className={styles.symbol}>{rec.symbol}</span>
       <span className={styles.portfolio}>{portfolioName}</span>
-      <span className={styles.assessment}>{rec.action === 'no_trade' ? 'Wait' : actionLabel(rec.action)}</span>
+      <span className={styles.assessment}>{decisionActionLabel(rec)}</span>
       <span className={styles.validity} data-expired={expired}>{expired ? 'Expired' : decisionIsBlocked(rec) ? 'Needs review' : 'Current'}</span>
       <CaretDown size={15} className={expanded ? styles.rotated : undefined} />
     </button>
@@ -326,7 +329,7 @@ function DecisionCard({
             {rec.symbol}
           </Link>
           <span className="border border-[var(--border)] px-2 py-1 text-[11px] uppercase tracking-wider">
-            {rec.action === 'no_trade' ? 'Wait' : actionLabel(rec.action)}
+            {decisionActionLabel(rec)}
           </span>
         </div>
         <span className="text-xs text-[var(--text-muted)]">

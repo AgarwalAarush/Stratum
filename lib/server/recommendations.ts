@@ -97,6 +97,7 @@ export async function assembleDecisionContext(
   ownerId = MARKETS_OWNER_ID,
   now = new Date(),
   editionKey = 'daily',
+  options: { persist?: boolean } = {},
 ): Promise<DecisionContext> {
   const db = investmentDb(),
     date = investmentDate(now)
@@ -109,7 +110,7 @@ export async function assembleDecisionContext(
     .eq('edition_key', editionKey)
     .maybeSingle()
   if (existing.error) throw new Error(existing.error.message)
-  if (existing.data) return existing.data.content as DecisionContext
+  if (existing.data && options.persist !== false) return existing.data.content as DecisionContext
   const cutoff = now.toISOString(),
     gaps: string[] = [],
     evidence: EvidenceRef[] = []
@@ -456,7 +457,12 @@ export async function assembleDecisionContext(
         instrumentType: isFund ? 'etf' : 'equity',
         systemThesisValidated,
         limitations,
-        entryGaps: !Number.isFinite(Date.parse(String(quality.priceAsOf))) || Date.parse(cutoff) - Date.parse(String(quality.priceAsOf)) > 96 * 3600000 ? ['Research entry assumptions use stale price evidence; refresh research'] : [],
+        entryGaps: [
+          ...(!Number.isFinite(Date.parse(String(quality.priceAsOf))) || Date.parse(cutoff) - Date.parse(String(quality.priceAsOf)) > 96 * 3600000 ? ['Research entry assumptions use stale price evidence; refresh research'] : []),
+          ...(p.dataSource === 'manual_snapshot' && !p.allocationBudget &&
+            (!p.capitalAsOf || !Number.isFinite(Date.parse(p.capitalAsOf)) || Date.parse(cutoff) - Date.parse(p.capitalAsOf) > 96 * 3600000)
+            ? ['Cash availability needs a current owner confirmation'] : []),
+        ],
         owned: Boolean(h && h.quantity > 0),
         quantity: h?.quantity ?? 0,
         currentWeightPct:
@@ -549,6 +555,7 @@ export async function assembleDecisionContext(
     universe,
   }
   // Bounded reads must never quietly truncate an actionable context.
+  if (options.persist === false) return context
   const insert = await db.from('recommendation_input_manifests').insert({
     id: context.id,
     owner_id: ownerId,
@@ -587,7 +594,7 @@ export async function generateDailyRecommendations(
   let summary =
     'Daily evaluation is incomplete. Review the stated gaps before changing capital.'
   // Do not spend model time pretending a completely blocked context is decision-ready.
-  if (context.gaps.length || context.names.every((n) => n.gaps.length > 0)) {
+  if (context.names.every((n) => n.gaps.length > 0)) {
     recommendations = context.names.map((n) =>
       abstention(
         n,
@@ -602,7 +609,7 @@ export async function generateDailyRecommendations(
         cwd: input.directory,
         webSearch: false,
         timeoutMs: 15 * 60 * 1000,
-        prompt: `Generate owner-facing investment recommendations using only the frozen context below. Do not fetch live data or execute orders. Inspect only the frozen files supplied below. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires a validated system thesis (systemThesisValidated) or an accepted owner thesis plus fresh evidence. System recommendations are published for owner review; never rewrite the accepted owner thesis. A candidate screen is only a research lead. State evidence limitations, and never invent consensus or transcripts when they are absent. ETF evidence must be interpreted as fund exposure, never corporate earnings. Risk reductions may follow invalidation without a new bullish thesis. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers only when the evidence supports them. Prefer a 30-to-95-day reporting checkpoint alongside longer-term beliefs. Each forecast must specify observationPeriod (exact quarter-end or economic observation date), unit, threshold and a reporting deadline after that period. Use exact automatically resolvable metrics when relevant: FRED:<series ID> in the captured series units, or FMP:incomeQuarterly:revenue, FMP:incomeQuarterly:operatingIncome, FMP:incomeQuarterly:netIncome, FMP:cashFlowQuarterly:operatingCashFlow, FMP:cashFlowQuarterly:freeCashFlow in reportedCurrency units. Do not invent a quarter-end, earnings date, growth transformation or unsupported threshold to satisfy the contract. Other metrics require an explicitly sourced manual resolution and must not masquerade as automatic. Omit unsupported forecasts and explain the missing evidence. Do not use security-price returns as economic mechanism forecasts; market returns are evaluated separately. Use an empty forecasts array for unresolved identity, missing research or unsupported claims; never encode uncertainty as a directional price forecast. Narrative confidence is not a calibrated probability. Maximum new position is 10%; do not invent prices or sizing. A trim requires an explicit positive targetWeightPct below currentWeightPct; a sell requires targetWeightPct zero. If no justified reduction size can be determined, abstain. For capitalBasis owner_budget, cash means owner-authorized remaining allocation budget, not broker buying power. Use this budget for recommendations without requesting funding or transfer confirmation; never claim it is settled broker cash. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Every narrative field, entry condition, and decision dimension must contain at least eight characters; risks and invalidation must be nonempty arrays. Provide a substantive exit and reassessment rule even for watch, research, and no-trade. Expiry must be after the cutoff and within seven days; horizons are 1 to 1825 integer days, confidence is 0 to 100, and forecast probabilities are strictly between zero and one. Respond with summary and recommendations.\n${input.prompt}`,
+        prompt: `Generate owner-facing investment recommendations using only the frozen context below. Do not fetch live data or execute orders. Inspect only the frozen files supplied below. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires a validated system thesis (systemThesisValidated) or an accepted owner thesis plus fresh evidence. System recommendations are published for owner review; never rewrite the accepted owner thesis. A candidate screen is only a research lead. State evidence limitations, and never invent consensus or transcripts when they are absent. ETF evidence must be interpreted as fund exposure, never corporate earnings. Assess each instrument and portfolio independently; a missing input elsewhere must not suppress a supported decision here. An affirmative hold does not require a new economic forecast. A trim or sell may proceed without an economic forecast when supported by documented thesis invalidation, explicit SELL research, or a verified reduction of an existing position above the 10% concentration cap. Cite that evidence and explain the reduction. Missing optional macro/World context alone does not veto a supported hold or risk reduction. Buy/add still require evidence-backed measurable forecasts and the full entry, liquidity, cash and portfolio checks. Never invent a forecast to unlock a hold or exit. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers only when the evidence supports them. Prefer a 30-to-95-day reporting checkpoint alongside longer-term beliefs. Each forecast must specify observationPeriod (exact quarter-end or economic observation date), unit, threshold and a reporting deadline after that period. Use exact automatically resolvable metrics when relevant: FRED:<series ID> in the captured series units, or FMP:incomeQuarterly:revenue, FMP:incomeQuarterly:operatingIncome, FMP:incomeQuarterly:netIncome, FMP:cashFlowQuarterly:operatingCashFlow, FMP:cashFlowQuarterly:freeCashFlow in reportedCurrency units. Do not invent a quarter-end, earnings date, growth transformation or unsupported threshold to satisfy the contract. Other metrics require an explicitly sourced manual resolution and must not masquerade as automatic. Omit unsupported forecasts and explain the missing evidence. Do not use security-price returns as economic mechanism forecasts; market returns are evaluated separately. Use an empty forecasts array for unresolved identity, missing research or unsupported claims; never encode uncertainty as a directional price forecast. Narrative confidence is not a calibrated probability. Maximum new position is 10%; do not invent prices or sizing. A trim requires an explicit positive targetWeightPct below currentWeightPct; a sell requires targetWeightPct zero. If no justified reduction size can be determined, abstain. For capitalBasis owner_budget, cash means owner-authorized remaining allocation budget, not broker buying power. Use this budget for recommendations without requesting funding or transfer confirmation; never claim it is settled broker cash. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Every narrative field, entry condition, and decision dimension must contain at least eight characters; risks and invalidation must be nonempty arrays. Provide a substantive exit and reassessment rule even for watch, research, and no-trade. Expiry must be after the cutoff and within seven days; horizons are 1 to 1825 integer days, confidence is 0 to 100, and forecast probabilities are strictly between zero and one. Respond with summary and recommendations.\n${input.prompt}`,
         validate: (value) => {
           const v = record(value)
           return {
@@ -640,7 +647,7 @@ export async function generateDailyRecommendations(
         return block
           ? {
               ...r,
-              proposedAction: r.action,
+              proposedAction: r.proposedAction ?? r.action,
               action: 'no_trade' as const,
               entry: { ...r.entry, targetWeightPct: null },
               reason: `Independent review blocked action: ${block.reason}`,

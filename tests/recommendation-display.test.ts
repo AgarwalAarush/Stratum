@@ -1,8 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { recommendationDisplayContext, decisionHeadline, readableDecisionText } from '../lib/markets/recommendation-display.ts'
+import { decisionActionLabel, recommendationDisplayContext, decisionHeadline, readableDecisionText } from '../lib/markets/recommendation-display.ts'
 import type { Recommendation } from '../lib/markets/recommendations.ts'
 import { renderInvestmentNewsletter } from '../lib/markets/investment-newsletter.ts'
+
+test('a blocked assessment is distinct from an affirmative wait or hold', () => {
+  assert.equal(decisionActionLabel({action:'no_trade',gateReasons:['Missing evidence']}),'Blocked')
+  assert.equal(decisionActionLabel({action:'no_trade',gateReasons:[]}),'Wait')
+  assert.equal(decisionActionLabel({action:'hold',gateReasons:[]}),'hold')
+})
 
 test('browser projection retains source dates and account identity without serializing raw research', () => {
   const raw = {world:[{title:'Rates',summary:'Rates changed',raw:'large'}],cutoff:'2026-09-07', policy:'p', gaps:[], universe:[],portfolio:[],

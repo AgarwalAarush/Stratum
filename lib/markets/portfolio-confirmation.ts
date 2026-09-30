@@ -8,6 +8,14 @@ export type PortfolioConfirmation = {
   cash: number
   positions: ConfirmedPosition[]
   allocationBudget?: { total: number; holdingsValue: number }
+  /** Holdings reconfirmation does not relabel cash as freshly observed. */
+  capitalAsOf?: string
+  confirmationScope?: 'holdings'
+}
+
+export function reconfirmHoldings(snapshot: PortfolioConfirmation, now = new Date()): PortfolioConfirmation {
+  return validatePortfolioConfirmation({ ...snapshot, asOf: now.toISOString(),
+    capitalAsOf: snapshot.capitalAsOf ?? snapshot.asOf, confirmationScope: 'holdings' }, now)
 }
 
 /** Owner-authorized allocation capacity, distinct from settled broker cash. */

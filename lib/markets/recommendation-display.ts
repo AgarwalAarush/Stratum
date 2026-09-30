@@ -4,6 +4,11 @@ export function decisionIsBlocked(rec: Recommendation): boolean {
   return Boolean(rec.gateReasons?.length)
 }
 
+export function decisionActionLabel(rec: Pick<Recommendation, 'action' | 'gateReasons'>): string {
+  if (rec.gateReasons?.length) return 'Blocked'
+  return rec.action === 'no_trade' ? 'Wait' : rec.action.replaceAll('_', ' ')
+}
+
 /** Preserve evidence IDs in the source ledger, not in the owner's first line. */
 export function readableDecisionText(text: string): string {
   return text.replace(/\[(?:portfolio|research|packet|quote|liquidity|world|source):[^\]]+\]/g, '')
@@ -16,6 +21,8 @@ export function readableDecisionText(text: string): string {
 export function decisionHeadline(rec: Recommendation): string {
   if (!decisionIsBlocked(rec)) return readableDecisionText(rec.reason)
   const reasons = [rec.reason, ...rec.gateReasons].join(' ')
+  if (/portfolio capture|Cash availability/i.test(reasons))
+    return 'Portfolio inputs need confirmation before this position can be assessed.'
   if (/target weight|targetWeight|target size|sizing|partial reduction|sell targets zero|exposure.*size/i.test(reasons))
     return 'The proposed position change needs a clear, justified size before acting.'
   if (/quote|price is unavailable|stale price/i.test(reasons) && /missing|unavailable|no current|stale/i.test(reasons))
