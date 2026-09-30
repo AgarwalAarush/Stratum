@@ -171,6 +171,24 @@ test('invalidated holdings can be sold without accepting a new bullish thesis', 
     'no_trade',
   )
 })
+
+test('evidenced exits and holds do not invent economic forecasts; new risk still requires one', () => {
+  const c = {...context,names:[{...name,owned:true,quantity:10,currentWeightPct:5,
+    research:{id:'research',content:{formalRating:'SELL'}},thesis:{status:'invalidated'}}],gaps:['No governed World/industry context available']}
+  const sell = {...recommendation(),action:'sell' as const,forecasts:[],entry:{condition:'Exit invalidated exposure',maxPrice:null,targetWeightPct:0}}
+  assert.equal(gateRecommendation(sell,c).action,'sell')
+  assert.equal(gateRecommendation({...sell,entry:{...sell.entry,targetWeightPct:null}},c).action,'no_trade')
+  assert.equal(gateRecommendation({...sell,sourceIds:[]},c).action,'no_trade')
+  assert.equal(gateRecommendation({...sell,action:'hold'},c).action,'no_trade')
+  const holding = {...c,names:[{...c.names[0],thesis:{status:'accepted'},research:{id:'research',content:{formalRating:'HOLD'}}}]}
+  assert.equal(gateRecommendation({...sell,action:'hold'},holding).action,'hold')
+  assert.equal(gateRecommendation(sell,holding).action,'no_trade')
+  assert.equal(gateRecommendation({...recommendation(),forecasts:[]},context).action,'no_trade')
+  const oversized = {...holding,names:[{...holding.names[0],currentWeightPct:15}]}
+  assert.equal(gateRecommendation({...sell,action:'trim',entry:{...sell.entry,targetWeightPct:10}},oversized).action,'trim')
+  const blockedAccount = {...name,portfolioId:'stale-account',gaps:['Current portfolio capture needs verification']}
+  assert.equal(gateRecommendation(sell,{...c,names:[...c.names,blockedAccount]}).action,'sell')
+})
 test('exchange sessions exclude a holiday and never assume the pre-publication close', () => {
   const sessions = [
     '2026-09-04',

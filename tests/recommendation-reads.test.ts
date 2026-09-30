@@ -13,6 +13,7 @@ test('recommendation views isolate owner reads and defer expensive optional data
     recommendation_batches: { id: 'batch', manifest_id: 'manifest', published_at: '2026-09-22T16:39:00Z', decision_date: '2026-09-22', summary: 'Recorded edition' },
     recommendation_versions: [{ id: 'decision', content: { symbol: 'EXAMPLE', portfolioId: 'portfolio' } }],
     recommendation_owner_events: [],
+    agent_jobs: [],
   }
   context.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL) => {
     const url = new URL(String(input))
@@ -30,12 +31,13 @@ test('recommendation views isolate owner reads and defer expensive optional data
     return Response.json(fixtures[table])
   })
 
-  await context.test('Actions needs four narrow queries even when learning is unavailable', async () => {
+  await context.test('Actions reads the durable edition and narrow preparation status even when learning is unavailable', async () => {
     const data = await fetchRecommendationActions('owner-one')
     assert.equal(data.recommendations.length, 1)
     assert.equal(data.context?.gaps[0], 'Missing price')
-    assert.equal(requests.length, 4)
-    assert.ok(requests.every(url => url.searchParams.get('owner_id') === 'eq.owner-one'))
+    assert.equal(requests.length, 5)
+    assert.ok(requests.every(url => url.pathname.endsWith('agent_jobs')
+      ? url.searchParams.get('or')?.includes('ownerId.eq.owner-one') : url.searchParams.get('owner_id') === 'eq.owner-one'))
     assert.equal(requests.find(url => url.pathname.endsWith('recommendation_batches'))?.searchParams.get('limit'), '1')
     assert.ok(requests.every(url => !url.searchParams.get('select')?.includes('*')))
     assert.ok(!requests.some(url => /evaluations|forecasts|outbox|experiments/.test(url.pathname)))
@@ -48,8 +50,9 @@ test('recommendation views isolate owner reads and defer expensive optional data
     const data = await fetchRecommendationActions('owner-two')
     assert.equal(data.latest, null)
     assert.deepEqual(data.recommendations, [])
-    assert.equal(requests.length, 2)
-    assert.ok(requests.every(url => url.searchParams.get('owner_id') === 'eq.owner-two'))
+    assert.equal(requests.length, 3)
+    assert.ok(requests.every(url => url.pathname.endsWith('agent_jobs')
+      ? url.searchParams.get('or')?.includes('ownerId.eq.owner-two') : url.searchParams.get('owner_id') === 'eq.owner-two'))
     missingBatch = false
   })
   await context.test('Missing required evidence fails instead of presenting an empty safe assessment', async () => {

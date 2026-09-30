@@ -10,6 +10,7 @@ import {
   newYorkClockParts,
 } from '../markets/market-clock.ts'
 import { isMarketWorldModelEnabled } from './world-memory.ts'
+import { reconcileRecommendationEvidence } from './recommendation-preparation.ts'
 
 export interface ScheduledAgentJob {
   jobType: AgentJobType
@@ -183,5 +184,6 @@ export async function enqueueDueAgentJobs(
     enqueued.push({ ...job, ...result })
   }
 
+  if (options.includeCodex !== false) await reconcileRecommendationEvidence(enqueueAgentJob)
   return enqueued
 }

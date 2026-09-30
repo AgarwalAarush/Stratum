@@ -4,7 +4,20 @@ import {
   parsePositionCsv,
   budgetPortfolioConfirmation,
   validatePortfolioConfirmation,
+  reconfirmHoldings,
 } from '../lib/markets/portfolio-confirmation.ts'
+
+test('holdings reconfirmation preserves original capital provenance and budget', () => {
+  const previous={asOf:'2026-09-07T14:00:00Z',cash:300,positions:[{symbol:'ABC',quantity:2,costBasisPerShare:50}],allocationBudget:{total:1000,holdingsValue:700}}
+  const result=reconfirmHoldings(previous,new Date('2026-09-30T14:00:00Z'))
+  assert.equal(result.asOf,'2026-09-30T14:00:00.000Z')
+  assert.equal(result.capitalAsOf,previous.asOf)
+  assert.equal(result.cash,previous.cash)
+  assert.deepEqual(result.positions,previous.positions)
+  assert.deepEqual(result.allocationBudget,previous.allocationBudget)
+  assert.equal(previous.asOf,'2026-09-07T14:00:00Z')
+  assert.equal(reconfirmHoldings(result,new Date('2026-10-01T14:00:00Z')).capitalAsOf,previous.asOf)
+})
 
 test('manual holdings import preserves fractional shares, cash and explicit empty accounts', () => {
   const positions = parsePositionCsv(

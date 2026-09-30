@@ -15,14 +15,23 @@ function database() {
 export async function fetchRecommendationActions(ownerId: string) {
   const client = database()
   const signal = AbortSignal.timeout(8_000)
-  const [accounts, batch] = await Promise.all([
+  const [accounts, batch, jobs] = await Promise.all([
     client.from('portfolios').select('id,name,kind').eq('owner_id', ownerId).abortSignal(signal),
     client.from('recommendation_batches').select('id,manifest_id,decision_date,published_at,summary')
       .eq('owner_id', ownerId).order('published_at', { ascending: false }).limit(1).abortSignal(signal).maybeSingle(),
+    client.from('agent_jobs').select('status,payload').eq('job_type','generate-daily-recommendations')
+      .or(`payload->>ownerId.eq.${ownerId},payload->>ownerId.is.null`)
+      .in('status',['queued','running']).order('created_at',{ascending:false}).limit(30).abortSignal(signal),
   ])
   if (accounts.error || batch.error) throw new Error('Unable to load the latest assessment')
+  const pending = (jobs.data ?? []).find(job => {
+    const payload = job.payload as Row
+    return !payload.ownerId || payload.ownerId === ownerId
+  })
+  const preparation = pending ? {status:pending.status,waitingFor:Array.isArray((pending.payload as Row).dependencyJobIds)
+    ? ((pending.payload as Row).dependencyJobIds as unknown[]).length : 0} : null
   const latest = batch.data
-  if (!latest) return { viewedAt: new Date().toISOString(), accounts: accounts.data ?? [], latest: null, recommendations: [], context: null }
+  if (!latest) return { viewedAt: new Date().toISOString(), accounts: accounts.data ?? [], latest: null, recommendations: [], context: null, preparation }
   const [decisions, manifest] = await Promise.all([
     client.from('recommendation_versions').select('id,content').eq('owner_id', ownerId)
       .eq('batch_id', latest.id).order('symbol').abortSignal(signal),
@@ -33,6 +42,7 @@ export async function fetchRecommendationActions(ownerId: string) {
   return {
     viewedAt: new Date().toISOString(),
     accounts: accounts.data ?? [], latest, recommendations: decisions.data ?? [],
+    preparation,
     context: manifest.data as unknown as Pick<DecisionContext, 'cutoff' | 'policy' | 'gaps'>,
   }
 }

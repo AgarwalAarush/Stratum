@@ -31,6 +31,9 @@ test('deferred and rejected assessments never imply a portfolio all-clear', () =
   assert.match(s.description, /not an all-clear/)
 })
 test('hold-only, empty, stale and approved editions have distinct states', () => {
+  const blocked = recommendationStatus([row({gateReasons:['Current portfolio capture needs verification']})],now)
+  assert.equal(blocked.title,'Assessment blocked')
+  assert.equal(blocked.reasons[0].key,'portfolio')
   assert.equal(
     recommendationStatus([row({ action: 'hold' })], now).title,
     'No portfolio changes recommended',

@@ -32,7 +32,7 @@ export function RecommendationStatus({
         <div><dd>{status.approved}</dd><dt>Actionable</dt></div>
         <div><dd>{status.total - status.approved}</dd><dt>Other decisions</dt></div>
       </dl>
-      {!status.approved && status.reasons.length > 0 && (
+      {status.reasons.length > 0 && (
         <div className={styles.reasons}>
           {status.reasons.map((reason) => (
             <div key={reason.key}>

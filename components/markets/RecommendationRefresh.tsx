@@ -25,7 +25,7 @@ export function RecommendationRefresh() {
       if (!response.ok)
         throw new Error(body.error ?? 'Unable to request an update')
       setStatus(
-        'Assessment queued. Check back after it finishes.',
+        'Source checks queued. A fresh assessment will publish after the required refreshes finish.',
       )
       setQueued(true)
     } catch (error) {
