@@ -41,7 +41,7 @@ test('bounded prompt preserves the complete frozen manifest, source values and n
     assert.equal(index.names[0].research.file, index.names[0].file)
     assert.equal(index.names[0].research.field, 'research')
     for (const file of await readdir(directory)) {
-      assert.match(file, /^(manifest|name-\d+|evidence-\d+)\.json$/)
+      assert.match(file, /^(manifest|critic-schema|name-\d+|evidence-\d+)\.json$/)
       assert.equal((await stat(join(directory, file))).mode & 0o777, 0o600)
     }
     return null
