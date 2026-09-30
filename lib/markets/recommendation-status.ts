@@ -57,7 +57,7 @@ export function recommendationStatus(rows: StatusInput[], now = Date.now()) {
           ? 'stale'
           : /entry.readiness|entry.ready/i.test(text)
             ? 'entry'
-            : 'review'
+            : r.gateReasons?.length ? 'review' : 'entry'
     counts[key] = (counts[key] ?? 0) + 1
   }
   const reasons = Object.entries(counts)
