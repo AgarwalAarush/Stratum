@@ -13,7 +13,7 @@ export const RECOMMENDATION_ACTIONS = [
 export type RecommendationAction = (typeof RECOMMENDATION_ACTIONS)[number]
 // v1.1 corrects thesis schema/provenance. New manifests retain the original
 // abstention edition rather than rewriting its frozen inputs after repair.
-export const RECOMMENDATION_POLICY = 'prospective-v1.4'
+export const RECOMMENDATION_POLICY = 'prospective-v1.5'
 export type EvidenceRef = {
   id: string
   kind: string
