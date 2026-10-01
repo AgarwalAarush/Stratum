@@ -7,6 +7,9 @@ import {
   mergeMarketDailyBars,
   newestTimestamp,
   symbolsNeedingHistoryBackfill,
+  finiteMetric,
+  historySyncStart,
+  synchronizeDailyHistory,
 } from '../lib/server/markets-ingestion.ts'
 import type { MarketDailyBar } from '../lib/markets/types.ts'
 
@@ -75,9 +78,40 @@ test('history backfill suppresses young symbols already attempted today', () => 
 
 test('screener refresh explicitly aligns snapshots to the durable history feed instead of mixing delayed SIP and IEX', () => {
   const source = readFileSync(join(process.cwd(), 'lib/server/markets-ingestion.ts'), 'utf8')
-  assert.match(source, /!hasUsableScreenerHistory\(historyMetrics\) && feed === 'delayed_sip'/)
+  assert.match(source, /!hasUsableScreenerHistory\(historyMetrics, symbols\) && feed === 'delayed_sip'/)
   assert.match(source, /client\.fetchSnapshots\(symbols, 'iex'\)/)
   assert.match(source, /Never blend those feeds/)
-  assert.match(source, /metric\.barCount >= 50/)
+  assert.match(source, /symbols\.every/)
   assert.match(source, /loadCachedScreenerHistory\(supabase, 'iex'\)/)
+})
+
+
+test('missing metric values remain unavailable while genuine zero is preserved', () => {
+  assert.equal(finiteMetric(null), null)
+  assert.equal(finiteMetric(undefined), null)
+  assert.equal(finiteMetric(''), null)
+  assert.equal(finiteMetric('0'), 0)
+  assert.equal(finiteMetric('not-a-number'), null)
+})
+
+test('established history resumes from its last stored session, not a rolling week', () => {
+  assert.equal(historySyncStart({ symbol: 'TSLA', history_through: '2026-09-04', bar_count: 252 }, '2026-09-30'), '2026-08-27')
+  assert.equal(historySyncStart({ symbol: 'TSLA', history_through: '2026-09-30', bar_count: 252 }, '2026-09-30'), null)
+})
+
+test('cached established history still ingests new completed bars and refuses a feed switch', async () => {
+  const calls: unknown[] = []
+  const db = {
+    rpc: async () => ({ data: [{ symbol: 'TEST', history_through: '2026-09-04', bar_count: 252 }], error: null }),
+    from: () => ({ upsert: async (bars: unknown) => { calls.push(bars); return { error: null } } }),
+  }
+  const client = { fetchDailyBars: async (symbols: string[], start: string, end: string, feed: string) => {
+    calls.push({ symbols, start, end, feed })
+    return { feed: 'iex', data: [bar('2026-09-30', 102), bar('2026-10-01', 103)] }
+  } }
+  const count = await synchronizeDailyHistory(client as never, db as never, ['TEST'], 'iex', '2026-09-30')
+  assert.equal(count, 1)
+  assert.deepEqual(calls[0], { symbols: ['TEST'], start: '2026-08-27', end: '2026-10-01', feed: 'iex' })
+  const changed = { fetchDailyBars: async () => ({ feed: 'sip', data: [] }) }
+  await assert.rejects(synchronizeDailyHistory(changed as never, db as never, ['TEST'], 'iex', '2026-09-30'), /History feed changed/)
 })

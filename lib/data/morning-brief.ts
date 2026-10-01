@@ -16,11 +16,12 @@ import {
   type FeedItemRow,
 } from './overview-persistence.ts'
 import { fetchWorldWorkspace } from '../server/world-projection.ts'
-import type { WorldNode } from '../markets/world-thinker-types.ts'
 
 interface SourceItem {
   title: string
   url: string
+  publishedAt?: string | null
+  retrievedAt?: string
   detail?: string
 }
 
@@ -29,56 +30,56 @@ const SECTIONS: Array<{ label: string; fetch: () => Promise<SourceItem[]> }> = [
     label: 'GENERAL AI',
     fetch: async () => {
       const items = await fetchNewsItemsByTopic('general', 5)
-      return items.map((i) => ({ title: i.title, url: i.url }))
+      return items.map((i) => ({ ...i, title: i.title, url: i.url }))
     },
   },
   {
     label: 'POLICY',
     fetch: async () => {
       const items = await fetchNewsItemsByTopic('policy', 5)
-      return items.map((i) => ({ title: i.title, url: i.url }))
+      return items.map((i) => ({ ...i, title: i.title, url: i.url }))
     },
   },
   {
     label: 'CYBERSECURITY',
     fetch: async () => {
       const items = await fetchNewsItemsByTopic('cybersecurity', 5)
-      return items.map((i) => ({ title: i.title, url: i.url }))
+      return items.map((i) => ({ ...i, title: i.title, url: i.url }))
     },
   },
   {
     label: 'VENTURE CAPITAL',
     fetch: async () => {
       const items = await fetchNewsItemsByTopic('venture-capital', 5)
-      return items.map((i) => ({ title: i.title, url: i.url }))
+      return items.map((i) => ({ ...i, title: i.title, url: i.url }))
     },
   },
   {
     label: 'TECH EVENTS',
     fetch: async () => {
       const items = await fetchNewsItemsByTopic('tech-events', 5)
-      return items.map((i) => ({ title: i.title, url: i.url }))
+      return items.map((i) => ({ ...i, title: i.title, url: i.url }))
     },
   },
   {
     label: 'INFRA & HARDWARE',
     fetch: async () => {
       const items = await fetchNewsItemsByTopic('infra-hardware', 5)
-      return items.map((i) => ({ title: i.title, url: i.url }))
+      return items.map((i) => ({ ...i, title: i.title, url: i.url }))
     },
   },
   {
     label: 'NEW TECHNOLOGY',
     fetch: async () => {
       const items = await fetchNewsItemsByTopic('new-technology', 5)
-      return items.map((i) => ({ title: i.title, url: i.url }))
+      return items.map((i) => ({ ...i, title: i.title, url: i.url }))
     },
   },
   {
     label: 'STARTUPS',
     fetch: async () => {
       const items = await fetchNewsItemsByTopic('startups', 5)
-      return items.map((i) => ({ title: i.title, url: i.url }))
+      return items.map((i) => ({ ...i, title: i.title, url: i.url }))
     },
   },
   {
@@ -86,6 +87,7 @@ const SECTIONS: Array<{ label: string; fetch: () => Promise<SourceItem[]> }> = [
     fetch: async () => {
       const items = await fetchArxivPapers(5)
       return items.map((i) => ({
+        ...i,
         title: i.title,
         url: i.url,
         detail: i.categories.join(', '),
@@ -98,6 +100,7 @@ const SECTIONS: Array<{ label: string; fetch: () => Promise<SourceItem[]> }> = [
       const items = await fetchTrendingRepos(5)
       if (!items) return []
       return items.map((i) => ({
+        ...i,
         title: `${i.owner}/${i.name}: ${i.description}`,
         url: i.url,
         detail: `${i.totalStars} stars, ${i.language}`,
@@ -109,6 +112,7 @@ const SECTIONS: Array<{ label: string; fetch: () => Promise<SourceItem[]> }> = [
     fetch: async () => {
       const items = await fetchDiscussions(5)
       return items.map((i) => ({
+        ...i,
         title: i.title,
         url: i.url,
         detail: `${i.points} pts, ${i.commentCount} comments`,
@@ -120,6 +124,7 @@ const SECTIONS: Array<{ label: string; fetch: () => Promise<SourceItem[]> }> = [
     fetch: async () => {
       const items = await fetchFinanceEarnings(5)
       return items.map((i) => ({
+        ...i,
         title: `${i.ticker} ${i.quarter} earnings${i.beat !== undefined ? (i.beat ? ' (beat)' : ' (miss)') : ''}`,
         url: i.url,
         detail: i.epsActual !== undefined ? `EPS: ${i.epsActual}` : undefined,
@@ -130,51 +135,27 @@ const SECTIONS: Array<{ label: string; fetch: () => Promise<SourceItem[]> }> = [
     label: 'DEALS & M&A',
     fetch: async () => {
       const items = await fetchFinanceDeals(5)
-      return items.map((i) => ({ title: i.title, url: i.url }))
+      return items.map((i) => ({ ...i, title: i.title, url: i.url }))
     },
   },
   {
     label: 'RESEARCH REPORTS',
     fetch: async () => {
       const items = await fetchFinanceReports(5)
-      return items.map((i) => ({ title: i.title, url: i.url }))
+      return items.map((i) => ({ ...i, title: i.title, url: i.url }))
     },
   },
   {
     label: 'MACRO INDICATORS',
     fetch: async () => {
       const items = await fetchMacroIndicators(5)
-      return items.map((i) => ({ title: i.title, url: i.url }))
+      return items.map((i) => ({ ...i, title: i.title, url: i.url }))
     },
   },
 ]
 
-const FALLBACK_BRIEF: MorningBriefData = {
-  headline: 'Morning brief generation is temporarily unavailable.',
-  sections: [
-    {
-      title: 'AI & Research',
-      bullets: [
-        'AI development continues to accelerate across research and enterprise.',
-        'Open-source models are narrowing the gap with frontier proprietary systems.',
-        'Academic research pushes boundaries in multimodal understanding.',
-      ],
-    },
-    {
-      title: 'Finance & Markets',
-      bullets: [
-        'Infrastructure investments in AI remain at record levels.',
-        'Venture capital activity in AI startups shows continued momentum.',
-      ],
-    },
-  ],
-  watchList: [
-    'Monitor upcoming earnings from major tech companies.',
-    'Track policy developments around AI regulation.',
-  ],
-  itemCount: 0,
-  generatedAt: new Date().toISOString(),
-  fetchedAt: new Date().toISOString(),
+function unavailableBrief(readiness: 'blocked' | 'failed', reason: string): MorningBriefData {
+  return { headline: '', sections: [], watchList: [], itemCount: 0, generatedAt: '', fetchedAt: new Date().toISOString(), dataAsOf: null, readiness, errors: [reason], sourceCoverage: [], sources: [] }
 }
 
 function feedItemRowToSourceItem(row: FeedItemRow): SourceItem {
@@ -194,7 +175,7 @@ function feedItemRowToSourceItem(row: FeedItemRow): SourceItem {
       detail = meta.epsActual !== undefined ? `EPS: ${meta.epsActual}` : undefined
       break
   }
-  return { title: row.title, url: row.url, detail: detail || undefined }
+  return { title: row.title, url: row.url, publishedAt: row.published_at, retrievedAt: row.fetched_at, detail: detail || undefined }
 }
 
 interface MorningBriefGenerationOptions {
@@ -225,16 +206,10 @@ function validateMorningBrief(value: unknown): GeneratedMorningBrief {
   return { headline: brief.headline, sections, watchList: brief.watchList as string[] }
 }
 
-function worldJournalSection(journal: WorldNode | undefined): { title: string; bullets: string[] } | null {
-  if (!journal) return null
-  const bullets = journal.body.split('\n').map((line) => line.trim()).filter((line) => line.startsWith('- ') && line !== '- None.').map((line) => line.slice(2)).slice(0, 5)
-  return bullets.length > 0 ? { title: 'World Model — Material Change', bullets } : { title: 'World Model — Material Change', bullets: [journal.summary] }
-}
-
 export async function generateMorningBrief(options: MorningBriefGenerationOptions = {}): Promise<MorningBriefData> {
   const apiKey = process.env.OPENAI_API_KEY
   if (options.provider !== 'codex' && !apiKey) {
-    return { ...FALLBACK_BRIEF, fetchedAt: new Date().toISOString() }
+    return unavailableBrief('blocked', 'OpenAI credentials are not configured')
   }
 
   // Fetch live items, historical items, and yesterday's brief in parallel
@@ -269,7 +244,7 @@ export async function generateMorningBrief(options: MorningBriefGenerationOption
   const allItems = [...liveByUrl.values(), ...historicalByUrl.values()]
 
   if (allItems.length === 0) {
-    return { ...FALLBACK_BRIEF, fetchedAt: new Date().toISOString() }
+    return unavailableBrief('blocked', 'No usable source evidence was collected')
   }
 
   // Group by label for the prompt
@@ -281,7 +256,10 @@ export async function generateMorningBrief(options: MorningBriefGenerationOption
   }
 
   const headlineBlocks: string[] = []
-  const sourceIndex: Array<{ n: number; url: string }> = []
+  const collectedAt = new Date().toISOString()
+  const sourceCoverage = liveResults.map((r, i) => ({ source: SECTIONS[i].label, status: r.status === 'rejected' ? 'failed' as const : r.value.length ? 'complete' as const : 'partial' as const, count: r.status === 'fulfilled' ? r.value.length : 0 }))
+  const errors = liveResults.flatMap((r, i) => r.status === 'rejected' ? [`${SECTIONS[i].label}: ${String(r.reason)}`] : r.value.length ? [] : [`${SECTIONS[i].label}: no usable records`])
+  const sourceIndex: Array<{ n: number; url: string; title: string; publishedAt: string | null; availableAt: string; retrievedAt: string; section: string }> = []
   let sourceCounter = 1
   let totalItems = 0
 
@@ -289,7 +267,7 @@ export async function generateMorningBrief(options: MorningBriefGenerationOption
     totalItems += items.length
     const numberedItems = items.map((item) => {
       const n = sourceCounter++
-      sourceIndex.push({ n, url: item.url })
+      sourceIndex.push({ n, url: item.url, title: item.title, publishedAt: item.publishedAt ?? null, availableAt: item.retrievedAt ?? collectedAt, retrievedAt: item.retrievedAt ?? collectedAt, section: label })
       const detailSuffix = item.detail ? ` (${item.detail})` : ''
       return `[${n}] ${item.title}${detailSuffix}`
     })
@@ -310,16 +288,16 @@ Yesterday's Brief Context:
 - Sections covered: ${sectionTitles}
 - Watch list: ${watchItems}
 
-Note developing stories and whether yesterday's watch list items have materialized in today's headlines.`
+Previous prose is comparison context, never evidence. Note developing stories and whether yesterday's watch list items have materialized in today's headlines.`
   }
   const latestWorldJournal = worldWorkspace?.latestChanges[0]
   const worldBlock = latestWorldJournal ? `
 
-Canonical World Thinker journal (commit ${worldWorkspace?.commit ?? 'unavailable'}, as of ${latestWorldJournal.asOf}):
+Shadow World research journal (commit ${worldWorkspace?.commit ?? 'unavailable'}, as of ${latestWorldJournal.asOf}):
 ${latestWorldJournal.summary}
 ${latestWorldJournal.body.slice(0, 6_000)}
 
-Use this canonical journal to identify what materially changed, which beliefs moved, scenario changes, new company investigations, and indicators requiring attention. It is an assessment layer; retain its uncertainty and do not turn research leads into recommendations.` : ''
+Use this shadow journal only to nominate questions. Its conclusions are not verified source facts. Identify what materially changed, which beliefs moved, scenario changes, new company investigations, and indicators requiring attention. It is an assessment layer; retain its uncertainty and do not turn research leads into recommendations.` : ''
 
   const prompt = `You are a morning intelligence briefing writer for Stratum, a tech intelligence dashboard. Below are the latest headlines across AI research, policy, cybersecurity, venture capital, tech events, infrastructure, startups, papers, repos, discussions, earnings, deals, research reports, and macro indicators. Each headline has a numbered source reference. Some items include metadata details in parentheses (categories, star counts, engagement metrics, EPS figures) — use these for richer analysis.
 
@@ -387,6 +365,8 @@ Requirements:
       })
     const parsed = result.data
 
+    if (!parsed.sections.length || parsed.sections.some(section => !section.bullets.length || section.bullets.some(bullet => { const refs = [...bullet.matchAll(/\[(\d+)\]/g)].map(m => Number(m[1])); return !refs.length || refs.some(n => !sourceIndex.some(source => source.n === n)) }))) throw new Error('Morning brief requires valid source citations for every bullet')
+
     // Expand bare [n] references into [n](url) markdown links
     const sourceMap = new Map(sourceIndex.map((s) => [s.n, s.url]))
     const expandCitations = (str: string) =>
@@ -399,13 +379,17 @@ Requirements:
       title: s.title,
       bullets: s.bullets.map(expandCitations),
     }))
-    const worldSection = worldJournalSection(latestWorldJournal)
-    const sections = worldSection ? [worldSection, ...generatedSections.filter((section) => !section.title.toLowerCase().includes('world model')).slice(0, 4)] : generatedSections
+    const sections = generatedSections
 
     const watchList = (parsed.watchList || []).map(expandCitations)
 
     const now = new Date().toISOString()
     return {
+      readiness: errors.length ? 'partial' : 'complete',
+      errors, sourceCoverage,
+      dataAsOf: sourceIndex.flatMap(source => source.publishedAt ? [source.publishedAt] : []).sort().at(-1) ?? null,
+      sources: sourceIndex.map(({ n, ...source }) => ({ ...source, id: String(n) })),
+      generation: result.metadata,
       headline: expandCitations(parsed.headline),
       sections,
       watchList,
@@ -413,7 +397,7 @@ Requirements:
       generatedAt: now,
       fetchedAt: now,
     }
-  } catch {
-    return { ...FALLBACK_BRIEF, fetchedAt: new Date().toISOString() }
+  } catch (error) {
+    return unavailableBrief('failed', error instanceof Error ? error.message : String(error))
   }
 }

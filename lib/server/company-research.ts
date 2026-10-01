@@ -473,7 +473,7 @@ export async function materializeCompanyPacket(
   const version = await nextVersion('company_packets', ownerId, symbol)
   const generatedAt = now.toISOString()
   const packet: CompanyPacket = {
-    worldOrigin: worldOrigin ?? null,
+    worldOrigin: worldOrigin ? { ...worldOrigin, authority: 'shadow', mayAuthorizeCapital: false } : null,
     evidenceQuality: {
       checkedAt: generatedAt, priceAsOf: stock.asOf,
       sourceDates: sources.map(source => ({ id: source.id, asOf: source.asOf })),

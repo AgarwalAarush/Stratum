@@ -19,7 +19,7 @@ export type EvidenceRef = {
   kind: string
   url: string | null
   asOf: string | null
-  availableAt: string
+  availableAt: string | null
   retrievedAt: string
   hash: string
   feed: string | null
@@ -385,8 +385,8 @@ export function gateRecommendation(
     const source = context.evidence.find((e) => e.id === id)
     if (
       !source ||
-      !Number.isFinite(Date.parse(source.availableAt)) ||
-      Date.parse(source.availableAt) > Date.parse(context.cutoff)
+      !Number.isFinite(Date.parse(source.availableAt ?? '')) ||
+      Date.parse(source.availableAt ?? '') > Date.parse(context.cutoff)
     )
       reasons.push('Evidence was unavailable at the decision cutoff')
   }
@@ -394,6 +394,7 @@ export function gateRecommendation(
   return {
     ...rec,
     proposedAction: rec.action,
+    sourceIds: rec.sourceIds.filter(id => context.evidence.some(e => e.id === id && Number.isFinite(Date.parse(e.availableAt ?? '')) && Date.parse(e.availableAt ?? '') <= Date.parse(context.cutoff))),
     action: 'no_trade',
     gateReasons: [...new Set(reasons)],
     reason: `Evaluation blocked: ${[...new Set(reasons)].join('; ')}. Existing holdings have not been declared safe.`,

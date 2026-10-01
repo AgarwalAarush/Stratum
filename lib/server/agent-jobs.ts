@@ -1,8 +1,13 @@
+import { lastCompletedSession } from '../markets/market-sessions.ts'
+import { generateAIOverview } from '../data/overview.ts'
+import { generateGlobalNewsOverview } from '../data/global-news-overview.ts'
+import { saveDailyOverview, saveGlobalNewsDailyOverview } from '../data/overview-persistence.ts'
 import { captureShadowPolicies, evaluateShadowPolicies } from './investment-shadow.ts'
 import { dependencyReadiness, parseRecommendationDependencies } from '../markets/recommendation-preparation.ts'
 import { prepareDailyRecommendations } from './recommendation-preparation.ts'
 import { AgentJobPool } from './agent-job-pool.ts'
-import { startAttemptWatchdog } from './worker-watchdog.ts'
+import { runIsolatedAgentAttempt } from './isolated-agent-attempt.ts'
+import { blockingFingerprint, blockingReason } from './agent-blocking.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { captureInvestmentMacro } from './investment-macro.ts'
 import { generateDailyRecommendations } from './recommendations.ts'
@@ -84,6 +89,7 @@ export const AGENT_JOB_TYPES = [
   'refresh-fmp-intelligence',
   'fetch-stock-price-history',
   'generate-market-memo',
+  'generate-daily-overview',
   'generate-morning-brief',
   'generate-weekly-overview',
   'generate-monthly-overview',
@@ -167,6 +173,7 @@ export function parseAgentJobType(value: unknown): AgentJobType {
 
 export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), payload: Record<string, unknown> = {}): string {
   if (['generate-daily-recommendations','evaluate-recommendation-outcomes','review-recommendation-cohort','send-investment-newsletter'].includes(jobType)) return `${jobType}:${now.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })}`
+  if (jobType === 'generate-daily-overview') return `${jobType}:${now.toISOString().slice(0, 10)}:${String(payload.scope ?? 'ai-research')}`
   if (jobType === 'refresh-world-events') {
     const bucket = new Date(now)
     bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
@@ -744,6 +751,27 @@ async function runMarketThesisCycle(
   }
 }
 
+export async function executeAgentJob(job: AgentJobRecord, reportProgress: (progress: number, phase: string) => Promise<void> = async () => {}): Promise<unknown> {
+  const before = getFmpUsageSnapshot()
+  return outputWithUsage(await executeJob(job, reportProgress), before, getFmpUsageSnapshot())
+}
+
+export async function resumeBlockedAgentJobs(): Promise<number> {
+  const db = getSupabaseClient()
+  if (!db) return 0
+  const rows = await db.from('agent_jobs').select('id,blocked_on').eq('status', 'blocked').limit(100)
+  if (rows.error) throw new Error(rows.error.message)
+  let resumed = 0
+  for (const row of rows.data ?? []) {
+    const state = row.blocked_on as { reason: string; fingerprint: string }
+    if (!state?.reason || state.fingerprint === await blockingFingerprint(state.reason)) continue
+    const changed = await db.from('agent_jobs').update({ status: 'queued', blocked_on: null, attempts: 0, run_after: new Date().toISOString() }).eq('id', row.id).eq('status', 'blocked')
+    if (changed.error) throw new Error(changed.error.message)
+    resumed++
+  }
+  return resumed
+}
+
 async function executeJob(
   job: AgentJobRecord,
   reportProgress: (progress: number, phase: string) => Promise<void> = async () => {},
@@ -861,7 +889,12 @@ async function executeJob(
       : null
     if (!clock.isOpen && !coverageSymbol) {
       const latest = await fetchLatestSnapshotMeta()
-      if (!shouldRefreshClosedMarket(latest)) {
+      const now = new Date()
+      const calendar = await client.fetchCalendar(new Date(now.getTime() - 14 * 86_400_000).toISOString().slice(0, 10), now.toISOString().slice(0, 10))
+      const completed = lastCompletedSession(calendar, now)
+      // A recently published intraday snapshot must not suppress final-session ingestion.
+      const finalSessionCaptured = latest && completed && latest.history_through === completed.date
+      if (!shouldRefreshClosedMarket(latest) && finalSessionCaptured) {
         return { skipped: 'market_closed_recent_snapshot', nextOpen: clock.nextOpen }
       }
     }
@@ -1315,9 +1348,18 @@ async function executeJob(
     return materializeMarketMemo(snapshotId, { synthesize: job.payload.synthesize !== false })
   }
 
+  if (job.job_type === 'generate-daily-overview') {
+    const global = job.payload.scope === 'global-news'
+    const data = await (global ? generateGlobalNewsOverview : generateAIOverview)({ provider: 'codex' })
+    await (global ? saveGlobalNewsDailyOverview : saveDailyOverview)(data)
+    if (['blocked', 'failed'].includes(data.readiness ?? '')) throw new Error(data.errors?.join('; ') ?? 'Intelligence generation unavailable')
+    return data
+  }
+
   if (job.job_type === 'generate-morning-brief') {
     const brief = await generateMorningBrief({ provider: 'codex' })
     await saveMorningBrief(brief)
+    if (['blocked', 'failed'].includes(brief.readiness ?? '')) throw new Error(brief.errors?.join('; ') ?? 'Morning brief unavailable')
     return { sectionCount: brief.sections.length, generatedAt: brief.generatedAt }
   }
 
@@ -1386,21 +1428,11 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
       },
     }).eq('id', run.id).eq('status', 'running')
   }
-  const fmpUsageBefore = getFmpUsageSnapshot()
-  const stopWatchdog = startAttemptWatchdog(agentJobStaleAfterMs(job.job_type) - 60_000, () => {
-    console.error(JSON.stringify({ event: 'worker_attempt_deadline_exceeded', workerId, jobId: job.id, jobType: job.job_type }))
-    // Exit before stale recovery can release a still-executing attempt. The
-    // daemon restarts us and recoverInterruptedAgentJobs preserves its history.
-    process.exit(1)
-  })
 
   try {
     if (preparationError) throw preparationError
-    const output = outputWithUsage(
-      await executeJob(job, reportProgress),
-      fmpUsageBefore,
-      getFmpUsageSnapshot(),
-    )
+    const output = await runIsolatedAgentAttempt(job, agentJobStaleAfterMs(job.job_type) - 60_000, reportProgress)
+    if (output && typeof output === 'object' && (output as { readiness?: string }).readiness === 'blocked') throw new Error((output as { errors?: string[] }).errors?.join('; ') ?? 'Source collection is blocked; no usable evidence was captured')
     const transition = await supabase.rpc('finish_agent_attempt', {
       p_job_id:job.id,p_run_id:run.id,p_worker_id:workerId,p_success:true,p_output:output,
       p_error:null,p_duration_ms:Date.now()-startedAt,p_run_after:null,
@@ -1408,15 +1440,15 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
     if(transition.error) throw new Error(`Unable to persist job transition: ${transition.error.message}`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    const reason = blockingReason(message)
+    const blocked = reason ? { readiness: 'blocked', reason, fingerprint: await blockingFingerprint(reason) } : null
     const transition = await supabase.rpc('finish_agent_attempt', {
-      p_job_id:job.id,p_run_id:run.id,p_worker_id:workerId,p_success:false,p_output:null,
+      p_job_id:job.id,p_run_id:run.id,p_worker_id:workerId,p_success:false,p_output:blocked,
       p_error:message.includes('<!DOCTYPE')?'Database gateway unavailable':message.slice(0,2000),
       p_duration_ms:Date.now()-startedAt,
       p_run_after:new Date(Date.now()+Math.min(30,2**job.attempts)*60_000).toISOString(),
     })
     if(transition.error) throw new Error(`Unable to persist job transition: ${transition.error.message}`)
-  } finally {
-    stopWatchdog()
   }
 
   return true

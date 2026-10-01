@@ -6,7 +6,7 @@ test('history gap reduction preserves its feed and New York observation cutoff',
   const symbols = ['ILMN', 'P']
   const calls: string[][] = []
   const db = { rpc: async (name: string, args: { p_symbols: string[]; p_feed: string; p_as_of: string }) => {
-    assert.equal(name, 'screener_history_metrics')
+    assert.equal(name, 'screener_history_metrics_v2')
     assert.equal(args.p_feed, 'iex')
     assert.equal(args.p_as_of, '2026-09-29')
     if (args.p_symbols.length > 40) return { data: null, error: { message: 'statement timeout' } }

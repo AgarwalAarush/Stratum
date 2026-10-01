@@ -47,6 +47,7 @@ const snapshotRowsCache = new Map<string, ScreenerRow[]>()
 const snapshotRowsInflight = new Map<string, Promise<ScreenerRow[] | null>>()
 
 interface SnapshotRecord {
+  history_through?: string | null
   id: string
   feed: MarketFeed
   data_as_of: string
@@ -98,6 +99,7 @@ interface MarketHomeRecord {
 }
 
 interface ScreenerRowRecord {
+  history_provenance?: ScreenerRow['history']
   symbol: string
   company: string
   price: number | string
@@ -218,6 +220,7 @@ function marketMemo(value: unknown, generatedAt: string): MarketMemo | null {
 
 function normalizeScreenerRow(row: ScreenerRowRecord): ScreenerRow {
   return {
+    history: row.history_provenance,
     symbol: row.symbol,
     company: row.company,
     price: Number(row.price),
@@ -248,7 +251,7 @@ export async function fetchLatestSnapshotMeta(options: { bypassCache?: boolean }
   const load = async () => {
     const { data, error } = await supabase
       .from('market_snapshots')
-      .select('id,feed,data_as_of,published_at')
+      .select('id,feed,data_as_of,published_at,history_through')
       .eq('status', 'complete')
       .eq('is_latest', true)
       .maybeSingle()
@@ -300,7 +303,7 @@ export async function fetchLatestScreener(query: ScreenerQuery): Promise<Screene
     for (let from = 0; ; from += DATABASE_PAGE_SIZE) {
       const { data, error } = await supabase
         .from('screener_rows')
-        .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,sector,sub_industry,tradable,data_as_of')
+        .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,sector,sub_industry,tradable,data_as_of,history_provenance')
         .eq('snapshot_id', snapshot.id)
         .range(from, from + DATABASE_PAGE_SIZE - 1)
       if (error) return null
@@ -333,7 +336,7 @@ export async function fetchLatestScreenerSymbols(symbols: string[]): Promise<Scr
 
   const { data, error } = await supabase
     .from('screener_rows')
-    .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,sector,sub_industry,tradable,data_as_of')
+    .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,sector,sub_industry,tradable,data_as_of,history_provenance')
     .eq('snapshot_id', snapshot.id)
     .in('symbol', requested)
   if (error) return null

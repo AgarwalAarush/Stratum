@@ -12,7 +12,7 @@ test('market retention keeps short-lived snapshots separate from durable memo ar
 
   const source = await readFile(new URL('../lib/server/market-retention.ts', import.meta.url), 'utf8')
   assert.match(source, /market_memos/)
-  assert.match(source, /protectedSnapshotIds/)
+  assert.match(source, /prune_market_snapshot_slice/)
   assert.match(source, /cross_asset_snapshots/)
   assert.match(source, /succeeded', 'failed', 'cancelled/)
 })

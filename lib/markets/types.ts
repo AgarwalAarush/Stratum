@@ -1160,6 +1160,8 @@ export interface SavedScreenerScreen {
 }
 
 export interface ScreenerRow {
+  history?: { through: string; feed: MarketFeed; barCount: number; windows: { liquidity: number; movingAverage: number; year: number }; completeness: 'complete' | 'partial' }
+
   symbol: string
   company: string
   price: number

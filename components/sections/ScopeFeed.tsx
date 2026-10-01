@@ -133,6 +133,7 @@ export function ScopeFeed({ scope, initialData }: ScopeFeedProps) {
       {isAiResearchScope ? (
         <IntelligenceResearchDashboard
           sections={data ?? {}}
+          overviewArtifact={overviewData}
           overviewBullets={overviewData?.bullets ?? []}
           isLoading={isLoading}
           overviewLoading={overviewLoading}
@@ -143,6 +144,7 @@ export function ScopeFeed({ scope, initialData }: ScopeFeedProps) {
         <div className="intelligence-legacy-feed">
           <AIOverview
             title="Global News Overview"
+            artifact={globalNewsOverviewData}
             bullets={globalNewsOverviewData?.bullets ?? []}
             isLoading={globalNewsOverviewLoading}
           />

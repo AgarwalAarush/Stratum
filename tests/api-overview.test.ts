@@ -6,18 +6,6 @@ import { generateAIOverview } from '../lib/data/overview.ts'
 import { saveDailyOverview, fetchDailyOverviews } from '../lib/data/overview-persistence.ts'
 import { GET as getOverviewRoute } from '../app/api/ai-research/overview/route.ts'
 
-function disableRedisForTest() {
-  const originalUrl = process.env.UPSTASH_REDIS_REST_URL
-  const originalToken = process.env.UPSTASH_REDIS_REST_TOKEN
-  process.env.UPSTASH_REDIS_REST_URL = ''
-  process.env.UPSTASH_REDIS_REST_TOKEN = ''
-
-  return () => {
-    process.env.UPSTASH_REDIS_REST_URL = originalUrl
-    process.env.UPSTASH_REDIS_REST_TOKEN = originalToken
-  }
-}
-
 function openAIOverviewResponse(bullets: string[]): Response {
   return new Response(JSON.stringify({
     id: 'resp_test',
@@ -36,7 +24,7 @@ function openAIOverviewResponse(bullets: string[]): Response {
   }), { status: 200, headers: { 'Content-Type': 'application/json' } })
 }
 
-test('generateAIOverview returns fallback bullets when API key is missing', { concurrency: false }, async (t) => {
+test('generateAIOverview reports blocked status when API key is missing', { concurrency: false }, async (t) => {
   const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   
@@ -58,13 +46,11 @@ test('generateAIOverview returns fallback bullets when API key is missing', { co
   const result = await generateAIOverview()
   
   assert.ok(Array.isArray(result.bullets))
-  assert.ok(result.bullets.length > 0)
+  assert.equal(result.bullets.length, 0)
+  assert.equal(result.readiness, 'blocked')
+  assert.equal(result.generatedAt, null)
   assert.ok(typeof result.fetchedAt === 'string')
   
-  // Should contain some expected fallback content
-  const bulletText = result.bullets.join(' ').toLowerCase()
-  assert.ok(bulletText.includes('ai'), 'Should contain AI-related content')
-  assert.ok(bulletText.includes('development') || bulletText.includes('research'), 'Should contain development or research content')
 })
 
 test('generateAIOverview handles fetch failures gracefully', { concurrency: false }, async (t) => {
@@ -85,13 +71,15 @@ test('generateAIOverview handles fetch failures gracefully', { concurrency: fals
 
   const result = await generateAIOverview()
   
-  // Should fall back to default bullets when all data sources fail
+  // Failed collection cannot fabricate analysis
   assert.ok(Array.isArray(result.bullets))
-  assert.ok(result.bullets.length > 0)
+  assert.equal(result.bullets.length, 0)
+  assert.equal(result.readiness, 'blocked')
   assert.ok(typeof result.fetchedAt === 'string')
 })
 
 test('generateAIOverview processes successful data sources', { concurrency: false }, async (t) => {
+  clearCacheForTests()
   const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   
@@ -107,8 +95,8 @@ test('generateAIOverview processes successful data sources', { concurrency: fals
     if (url.includes('api.openai.com')) {
       return openAIOverviewResponse([
         'AI development accelerates with new breakthrough [1]',
-        'Policy changes impact tech industry [2]',
-        'Venture funding reaches new milestone [3]',
+        'Policy changes impact tech industry [1]',
+        'Venture funding reaches new milestone [1]',
       ])
     } else {
       // Mock RSS/API responses
@@ -151,7 +139,7 @@ test('generateAIOverview expands source citations to markdown links', { concurre
     if (url.includes('api.openai.com')) {
       return openAIOverviewResponse([
         'Major AI breakthrough announced [1]',
-        'New policy framework released [2]',
+        'New policy framework released [1]',
       ])
     } else {
       return new Response(
@@ -181,168 +169,25 @@ test('generateAIOverview expands source citations to markdown links', { concurre
   assert.ok(hasMarkdownLinks, 'Should expand citations to markdown links')
 })
 
-test('overview route returns fresh data when force=true', { concurrency: false }, async (t) => {
-  clearCacheForTests()
-  const restoreRedis = disableRedisForTest()
-  
-  const originalApiKey = process.env.OPENAI_API_KEY
-  const originalFetch = global.fetch
-  
+test('overview page reads never invoke generation, including force requests', { concurrency: false }, async (t) => {
+  const original = global.fetch
+  const key = process.env.OPENAI_API_KEY
   process.env.OPENAI_API_KEY = 'test-key'
-  
+  let generationCalls = 0
   global.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(input)
-    
-    if (url.includes('api.openai.com')) {
-      return openAIOverviewResponse(['Forced refresh overview bullet [1]'])
-    } else {
-      return new Response(
-        `<rss><channel><item><title>Force refresh test</title><link>https://example.com/force</link><pubDate>Thu, 06 Mar 2026 10:00:00 GMT</pubDate></item></channel></rss>`,
-        { status: 200, headers: { 'Content-Type': 'application/xml' } }
-      )
-    }
+    if (String(input).includes('api.openai.com')) generationCalls++
+    return new Response(JSON.stringify([]), { status: 200 })
   }) as typeof fetch
-
-  t.after(() => {
-    process.env.OPENAI_API_KEY = originalApiKey
-    global.fetch = originalFetch
-    restoreRedis()
-  })
-
-  const request = new Request('http://localhost/api/ai-research/overview?force=true')
-  const response = await getOverviewRoute(request)
-  const body = await response.json()
-  
-  assert.equal(response.status, 200)
-  assert.ok(Array.isArray(body.bullets))
-  assert.equal(response.headers.get('X-Data-Source'), 'fresh')
-  assert.equal(response.headers.get('X-Cache-Tier'), 'slow')
-})
-
-test('overview route uses cached data by default', { concurrency: false }, async (t) => {
-  clearCacheForTests()
-  const restoreRedis = disableRedisForTest()
-  
-  const originalApiKey = process.env.OPENAI_API_KEY
-  const originalFetch = global.fetch
-  
-  process.env.OPENAI_API_KEY = 'test-key'
-  let fetchCount = 0
-  
-  global.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(input)
-    fetchCount++
-    
-    if (url.includes('api.openai.com')) {
-      return openAIOverviewResponse(['Cached overview test bullet'])
-    } else {
-      return new Response(
-        `<rss><channel><item><title>Cache test</title><link>https://example.com/cache</link><pubDate>Thu, 06 Mar 2026 10:00:00 GMT</pubDate></item></channel></rss>`,
-        { status: 200, headers: { 'Content-Type': 'application/xml' } }
-      )
-    }
-  }) as typeof fetch
-
-  t.after(() => {
-    process.env.OPENAI_API_KEY = originalApiKey
-    global.fetch = originalFetch
-    restoreRedis()
-  })
-
-  // First request should fetch fresh data
-  const request1 = new Request('http://localhost/api/ai-research/overview')
-  const response1 = await getOverviewRoute(request1)
-  const body1 = await response1.json()
-  
-  assert.equal(response1.headers.get('X-Data-Source'), 'fresh')
-  
-  const initialFetchCount = fetchCount
-  
-  // Second request should use cached data
-  const request2 = new Request('http://localhost/api/ai-research/overview')
-  const response2 = await getOverviewRoute(request2)
-  const body2 = await response2.json()
-  
-  assert.equal(response2.headers.get('X-Data-Source'), 'memory')
-  assert.deepEqual(body1, body2)
-  
-  // Fetch count should not have increased significantly (maybe 1-2 RSS calls)
-  assert.ok(fetchCount - initialFetchCount < 5, 'Should not make many new fetches for cached request')
-})
-
-test('overview route returns safe empty response when generation fails', { concurrency: false }, async (t) => {
-  clearCacheForTests()
-  const restoreRedis = disableRedisForTest()
-  
-  const originalApiKey = process.env.OPENAI_API_KEY
-  const originalFetch = global.fetch
-  
-  // Remove API key to force fallback
-  process.env.OPENAI_API_KEY = ''
-  
-  // Make all data sources fail
-  global.fetch = (async () => {
-    throw new Error('All sources down')
-  }) as typeof fetch
-
-  t.after(() => {
-    process.env.OPENAI_API_KEY = originalApiKey
-    global.fetch = originalFetch
-    restoreRedis()
-  })
-
-  const request = new Request('http://localhost/api/ai-research/overview')
-  const response = await getOverviewRoute(request)
-  const body = await response.json()
-  
-  assert.equal(response.status, 200)
-  assert.ok(Array.isArray(body.bullets))
-  // When API key is missing, generateAIOverview returns FALLBACK_BULLETS (non-empty),
-  // so the cache treats it as a successful fresh fetch
-  assert.equal(response.headers.get('X-Data-Source'), 'fresh')
-  assert.equal(response.headers.get('X-Cache-Tier'), 'slow')
-})
-
-test('overview route handles malformed force parameter', { concurrency: false }, async (t) => {
-  clearCacheForTests()
-  const restoreRedis = disableRedisForTest()
-  
-  const originalApiKey = process.env.OPENAI_API_KEY
-  const originalFetch = global.fetch
-  
-  process.env.OPENAI_API_KEY = ''
-  
-  global.fetch = (async () =>
-    new Response(
-      `<rss><channel><item><title>Malformed test</title><link>https://example.com</link><pubDate>Thu, 06 Mar 2026 10:00:00 GMT</pubDate></item></channel></rss>`,
-      { status: 200, headers: { 'Content-Type': 'application/xml' } }
-    )) as typeof fetch
-
-  t.after(() => {
-    process.env.OPENAI_API_KEY = originalApiKey
-    global.fetch = originalFetch
-    restoreRedis()
-  })
-
-  // Test various force parameter values
-  const testCases = ['false', 'True', 'yes', '1', '', 'random']
-  
-  for (const forceValue of testCases) {
-    const request = new Request(`http://localhost/api/ai-research/overview?force=${forceValue}`)
-    const response = await getOverviewRoute(request)
-    
+  t.after(() => { global.fetch = original; process.env.OPENAI_API_KEY = key })
+  for (let i = 0; i < 2; i++) {
+    const response = await Reflect.apply(getOverviewRoute, null, [new Request(`http://localhost/api/ai-research/overview?force=${i === 0}`)])
+    const body = await response.json()
     assert.equal(response.status, 200)
-    
-    // Only 'true' should trigger force mode
-    const expectedCacheBehavior = forceValue === 'true' ? 'fresh' : ['fresh', 'memory', 'none']
-    const actualSource = response.headers.get('X-Data-Source')
-    
-    if (forceValue === 'true') {
-      assert.equal(actualSource, 'fresh', `Force=true should return fresh data`)
-    } else {
-      assert.ok(Array.isArray(expectedCacheBehavior) ? expectedCacheBehavior.includes(actualSource!) : actualSource === expectedCacheBehavior)
-    }
+    assert.deepEqual(body.bullets, [])
+    assert.equal(body.readiness, 'blocked')
+    assert.equal(response.headers.get('X-Data-Source'), 'none')
   }
+  assert.equal(generationCalls, 0)
 })
 
 test('saveDailyOverview persists bullets when Supabase is available', { concurrency: false }, async (t) => {
@@ -361,7 +206,7 @@ test('saveDailyOverview persists bullets when Supabase is available', { concurre
   // This is more of an integration test - in a real test environment,
   // you would mock the Supabase client
   try {
-    await saveDailyOverview(testBullets)
+    await saveDailyOverview({ bullets: testBullets, fetchedAt: new Date().toISOString(), readiness: 'blocked' })
     // If no error thrown, consider it successful
     assert.ok(true, 'saveDailyOverview completed without error')
   } catch (error) {
@@ -384,7 +229,6 @@ test('fetchDailyOverviews handles missing Supabase gracefully', async () => {
 
 test('overview route sets correct cache headers', { concurrency: false }, async (t) => {
   clearCacheForTests()
-  const restoreRedis = disableRedisForTest()
   
   const originalApiKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
@@ -398,11 +242,10 @@ test('overview route sets correct cache headers', { concurrency: false }, async 
   t.after(() => {
     process.env.OPENAI_API_KEY = originalApiKey
     global.fetch = originalFetch
-    restoreRedis()
   })
 
   const request = new Request('http://localhost/api/ai-research/overview')
-  const response = await getOverviewRoute(request)
+  const response = await Reflect.apply(getOverviewRoute, null, [request])
   
   assert.equal(response.headers.get('X-Cache-Tier'), 'slow')
   assert.ok(['fresh', 'memory', 'none'].includes(response.headers.get('X-Data-Source')!))

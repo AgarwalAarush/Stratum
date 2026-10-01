@@ -1,3 +1,4 @@
+import { canonicalCausalVersions } from '../markets/evidence-authority.ts'
 import { RECOMMENDATION_REVIEW_RULES } from '../markets/recommendation-critic.ts'
 import { recommendationDisplayContext } from '../markets/recommendation-display.ts'
 import { admitDiscoveryCandidates, hasValidatedSystemThesis } from '../markets/decision-admission.ts'
@@ -127,7 +128,7 @@ export async function assembleDecisionContext(
       )
       return []
     })
-  const [research, theses, world, market, candidates, watches, macro, fundResearch] =
+  const [research, theses, worldVersions, market, candidates, watches, macro, fundResearch] =
     await Promise.all([
       optional('Research', rows('equity_research_notes', ownerId, cutoff)),
       optional(
@@ -198,6 +199,7 @@ export async function assembleDecisionContext(
         ? 'Owner watchlist'
         : selected.has(symbol) ? 'Scout discovery admitted for investigation; screening is not a buy signal' : 'Discovery candidate outside the bounded daily admission',
   }))
+  const world = canonicalCausalVersions(worldVersions, process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true')
   const addEvidence = (
     id: string,
     kind: string,
@@ -213,7 +215,7 @@ export async function assembleDecisionContext(
         kind,
         value,
         asOf: typeof asOf === 'string' ? asOf : null,
-        availableAt: typeof availableAt === 'string' ? availableAt : cutoff,
+        availableAt: typeof availableAt === 'string' ? availableAt : null,
         retrievedAt: cutoff,
         url: typeof url === 'string' ? url : null,
         feed: typeof feed === 'string' ? feed : null,
@@ -238,7 +240,7 @@ export async function assembleDecisionContext(
       w.as_of,
       w.created_at ?? cutoff,
     )
-  if (!world.length) gaps.push('No governed World/industry context available')
+  // Shadow World is optional research context, not missing decision authority.
   if (snapshot)
     addEvidence(
       `market:${snapshot.id}`,
@@ -392,10 +394,11 @@ export async function assembleDecisionContext(
         nameGaps.push('Current portfolio capture needs verification')
       const liquidityResult = await db
         .from('market_bars_daily')
-        .select('close,volume,trading_date')
+        .select('close,volume,trading_date,retrieved_at')
         .eq('symbol', symbol)
         .eq('feed', price?.feed ?? 'unknown')
         .lt('trading_date', cutoff.slice(0, 10))
+        .lte('retrieved_at', cutoff)
         .order('trading_date', { ascending: false })
         .limit(20)
       if (liquidityResult.error)
@@ -429,7 +432,7 @@ export async function assembleDecisionContext(
             'trailing_20_session_liquidity',
             liquidity,
             liquidity[0]?.trading_date,
-            cutoff,
+            liquidity.map(b => b.retrieved_at).filter(Boolean).sort().at(-1) ?? null,
             null,
             price?.feed,
           ),

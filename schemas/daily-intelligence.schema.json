@@ -1,0 +1,1 @@
+{"type":"object","properties":{"bullets":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":12}},"required":["bullets"],"additionalProperties":false}
