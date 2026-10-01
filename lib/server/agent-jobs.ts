@@ -1359,6 +1359,7 @@ async function executeJob(
   if (job.job_type === 'generate-morning-brief') {
     const brief = await generateMorningBrief({ provider: 'codex' })
     await saveMorningBrief(brief)
+    if (['blocked', 'failed'].includes(brief.readiness ?? '')) throw new Error(brief.errors?.join('; ') ?? 'Morning brief unavailable')
     return { sectionCount: brief.sections.length, generatedAt: brief.generatedAt }
   }
 

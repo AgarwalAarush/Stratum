@@ -52,6 +52,7 @@ export async function fetchGlobalNewsDailyOverviews(
     .from('overviews')
     .select('date, content')
     .eq('type', 'daily:global-news')
+    .not('artifact_metadata', 'is', null)
     .gte('date', startDate)
     .lte('date', endDate)
     .order('date', { ascending: true })
@@ -75,6 +76,7 @@ export async function fetchDailyOverviews(
     .from('overviews')
     .select('date, content')
     .eq('type', 'daily')
+    .not('artifact_metadata', 'is', null)
     .gte('date', startDate)
     .lte('date', endDate)
     .order('date', { ascending: true })
@@ -135,44 +137,29 @@ export async function fetchLatestOverview(
   }
 }
 
-export async function saveMorningBrief(data: import('../types').MorningBriefData): Promise<void> {
+export async function saveMorningBrief(data: MorningBriefData): Promise<void> {
   const supabase = getSupabaseClient()
-  if (!supabase) return
-
-  const today = new Date().toISOString().slice(0, 10)
-
-  await supabase
-    .from('overviews')
-    .upsert(
-      { type: 'morning-brief', content: JSON.stringify(data), date: today },
-      { onConflict: 'type,date' },
-    )
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const attempt = await supabase.from('intelligence_generation_attempts').insert({ type: 'morning-brief', readiness: data.readiness ?? 'blocked', metadata: data })
+  if (attempt.error) throw new Error(`Unable to record morning brief attempt: ${attempt.error.message}`)
+  if (!['complete', 'partial'].includes(data.readiness ?? '') || !data.sections.length || !data.sources?.length || !data.generatedAt) return
+  const { error } = await supabase.from('overviews').upsert({ type: 'morning-brief', content: JSON.stringify(data), date: data.generatedAt.slice(0, 10), artifact_metadata: data }, { onConflict: 'type,date' })
+  if (error) throw new Error(`Unable to persist morning brief: ${error.message}`)
 }
 
-export async function fetchLatestMorningBrief(): Promise<import('../types').MorningBriefData | null> {
+export async function fetchLatestMorningBrief(): Promise<MorningBriefData | null> {
   const supabase = getSupabaseClient()
   if (!supabase) return null
-
-  const { data, error } = await supabase
-    .from('overviews')
-    .select('content, date')
-    .eq('type', 'morning-brief')
-    .order('date', { ascending: false })
-    .limit(1)
-    .single()
-
-  if (error || !data) return null
-
-  const row = data as OverviewRow
-  const parsed = JSON.parse(row.content) as import('../types').MorningBriefData
-
-  // Mark as stale if not from today
-  const today = new Date().toISOString().slice(0, 10)
-  if (row.date !== today) {
-    parsed.stale = true
-  }
-
-  return parsed
+  const [accepted, attempt] = await Promise.all([
+    supabase.from('overviews').select('artifact_metadata').eq('type', 'morning-brief').not('artifact_metadata', 'is', null).order('date', { ascending: false }).limit(1).maybeSingle(),
+    supabase.from('intelligence_generation_attempts').select('metadata').eq('type', 'morning-brief').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+  ])
+  if (accepted.error || attempt.error) throw new Error('Unable to read morning brief readiness')
+  const data = accepted.data?.artifact_metadata as MorningBriefData | undefined
+  const latest = attempt.data?.metadata as MorningBriefData | undefined
+  if (!data) return latest ?? null
+  const failed = latest && ['failed', 'blocked'].includes(latest.readiness ?? '')
+  return { ...data, stale: Boolean(failed) || data.generatedAt.slice(0, 10) !== new Date().toISOString().slice(0, 10), ...(failed ? { readiness: latest.readiness, errors: latest.errors } : {}) }
 }
 
 export async function saveOverview(
@@ -310,6 +297,7 @@ export async function fetchYesterdaysBrief(): Promise<MorningBriefData | null> {
     .from('overviews')
     .select('content')
     .eq('type', 'morning-brief')
+    .not('artifact_metadata', 'is', null)
     .eq('date', yesterday)
     .limit(1)
     .single()

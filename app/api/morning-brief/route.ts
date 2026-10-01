@@ -1,24 +1,11 @@
 import type { MorningBriefData } from '../../../lib/types.ts'
-import { generateMorningBrief } from '../../../lib/data/morning-brief.ts'
 import { fetchLatestMorningBrief } from '../../../lib/data/overview-persistence.ts'
 import { cachedFetchWithFallback } from '../../../lib/server/cache.ts'
 import { sectionJsonResponse } from '../../../lib/server/http-cache.ts'
 
 export const CACHE_TTL_SECONDS = 21_600
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const force = searchParams.get('force') === 'true'
-
-  if (force) {
-    try {
-      const brief = await generateMorningBrief()
-      return sectionJsonResponse(brief, 'slow', 'fresh')
-    } catch {
-      return sectionJsonResponse(emptyResponse(), 'slow', 'none')
-    }
-  }
-
+export async function GET() {
   try {
     const { data, source } = await cachedFetchWithFallback<MorningBriefData>({
       key: 'stratum:morning-brief:v1',
@@ -36,6 +23,7 @@ export async function GET(request: Request) {
 
 function emptyResponse(): MorningBriefData {
   return {
+    readiness: 'blocked', errors: ['No accepted morning brief is available'], dataAsOf: null, sourceCoverage: [], sources: [],
     headline: '',
     sections: [],
     watchList: [],

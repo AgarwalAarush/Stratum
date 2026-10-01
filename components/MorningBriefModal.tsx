@@ -82,6 +82,7 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto main-scroll px-8 py-6">
+          {data?.readiness && !isLoading && <p role="status" className="mb-4 text-[12px] text-[var(--text-muted)]">{data.readiness}. {data.errors?.join('; ')}{data.dataAsOf ? ` Evidence as of ${new Date(data.dataAsOf).toLocaleString()}.` : ' Source publication coverage is unavailable.'}</p>}
           {isLoading ? (
             <div className="space-y-6">
               <div className="h-5 rounded bg-surface-2 animate-pulse w-3/4" />
@@ -104,7 +105,7 @@ export function MorningBriefModal({ open, onClose }: MorningBriefModalProps) {
               {data.stale && (
                 <div className="mb-4 px-3 py-1.5 rounded bg-surface-2">
                   <span className="font-mono text-[10px] text-[var(--text-muted)]">
-                    Showing yesterday&apos;s brief
+                    Showing the last accepted brief, generated {briefDate}
                   </span>
                 </div>
               )}

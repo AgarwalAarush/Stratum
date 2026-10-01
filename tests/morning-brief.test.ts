@@ -30,13 +30,15 @@ function openAIResponse(): Response {
   }), { status: 200, headers: { 'Content-Type': 'application/json' } })
 }
 
-test('morning brief returns the fallback without OpenAI credentials', { concurrency: false }, async (t) => {
+test('morning brief reports blocked work without OpenAI credentials', { concurrency: false }, async (t) => {
   const originalKey = process.env.OPENAI_API_KEY
   process.env.OPENAI_API_KEY = ''
   t.after(() => { process.env.OPENAI_API_KEY = originalKey })
 
   const brief = await generateMorningBrief()
-  assert.match(brief.headline, /temporarily unavailable/)
+  assert.equal(brief.readiness, 'blocked')
+  assert.equal(brief.generatedAt, '')
+  assert.deepEqual(brief.sections, [])
   assert.equal(brief.itemCount, 0)
 })
 

@@ -125,7 +125,7 @@ export interface MorningBriefSection {
   bullets: string[]
 }
 
-export interface MorningBriefData {
+export interface MorningBriefData extends Omit<OverviewData, 'bullets' | 'generatedAt'> {
   headline: string
   sections: MorningBriefSection[]
   watchList: string[]

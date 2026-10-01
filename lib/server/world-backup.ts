@@ -27,7 +27,7 @@ async function runRestic(args: string[]): Promise<string> {
     let output = ''
     child.stdout.on('data', (chunk: Buffer) => { output = `${output}${chunk}`.slice(-16_000) })
     child.stderr.on('data', (chunk: Buffer) => { output = `${output}${chunk}`.slice(-16_000) })
-    child.on('error', reject)
+    child.on('error', error => reject(new Error(`Restic runtime is not configured: ${error.message}`)))
     child.on('close', (code) => code === 0 ? resolve(output) : reject(new Error(`Restic exited ${code}: ${output}`)))
   })
 }
