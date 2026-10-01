@@ -25,6 +25,7 @@ function fallbackPhase(status: ResearchJobStatus['status']): string {
   if (status === 'queued') return 'Waiting for research worker'
   if (status === 'running') return 'Building research'
   if (status === 'succeeded') return 'Research complete'
+  if (status === 'blocked') return 'Research blocked by a missing prerequisite'
   if (status === 'cancelled') return 'Research cancelled'
   return 'Research failed'
 }

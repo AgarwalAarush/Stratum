@@ -1,3 +1,5 @@
+import { beginResearchVersion, publishResearchVersion, failResearchVersion } from './research-lifecycle.ts'
+import { fetchResearchBaseline, recordResearchRefresh } from './research-refresh.ts'
 import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchAdvice, type ResearchAdvice } from '../markets/research-advice.ts'
 import type {
   CompanyPacket,
@@ -23,7 +25,7 @@ import { proposeStockThesis } from './theses.ts'
 import { collectCompanyResearchEvidence } from './company-research-evidence.ts'
 import { fetchSecLiquidityFacts } from './sec-financials.ts'
 import { isEtfInstrument } from './etf-research.ts'
-import { materializeCompanyMarketModel } from './company-market-model.ts'
+import { companyMarketModelPrompt, fetchLatestCompanyMarketModel, validateCompanyMarketModel, materializeCompanyMarketModel } from './company-market-model.ts'
 import { parseHTML } from 'linkedom'
 
 const RESEARCH_SECTION_IDS: EquityResearchSectionId[] = [
@@ -607,11 +609,6 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
   const rawConfidence = Number(output.confidence)
   const confidence = rawConfidence > 0 && rawConfidence <= 1 ? rawConfidence * 100 : rawConfidence
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 100) throw new Error('Invalid confidence')
-  const wordCount = sections.reduce((total, section) =>
-    total + String(section.content ?? '').trim().split(/\s+/).filter(Boolean).length, 0)
-  if (wordCount < 1_600 || wordCount > 3_000) {
-    throw new Error(`Equity research must contain 1,600-3,000 words of analysis; received ${wordCount}`)
-  }
   const investmentThesis = string('investmentThesis')
   if (investmentThesis.includes('?')) {
     throw new Error('Investment thesis must be an affirmative statement, not a question')
@@ -645,8 +642,8 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
   const revisionChanges = Array.isArray(revisionRecord.changes)
     ? revisionRecord.changes.map(record)
     : []
-  if (revisionChanges.length < 1 || revisionChanges.length > 8) {
-    throw new Error('Research revision must contain 1-8 material changes')
+  if (revisionChanges.length > 8) {
+    throw new Error('Research revision may contain at most eight changes')
   }
   const changes = revisionChanges.map((change) => {
     const field = change.field as EquityResearchRevisionChange['field']
@@ -662,7 +659,7 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
     }
   })
   return {
-    advice: output.advice || allowedSourceIds ? validateResearchAdvice(output.advice, allowedSourceIds) : null,
+    advice: output.advice || allowedSourceIds ? validateResearchAdvice(output.advice, Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []) : null,
     formalRating,
     entryAction,
     investmentThesis,
@@ -691,7 +688,7 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
 
 function researchPrompt(
   packet: CompanyPacket,
-  marketModel: CompanyMarketModel,
+  marketModel: CompanyMarketModel | null,
   priorResearch: EquityResearchNote | null,
   reason: string,
 ): string {
@@ -700,7 +697,7 @@ function researchPrompt(
         `This is a refresh of research version ${priorResearch.version}, triggered by "${reason}". Treat the prior report as the analytical baseline.`,
         'Preserve conclusions and section analysis that remain supported. Revise only where the new CompanyPacket adds, removes, or contradicts material evidence.',
         'Compare the new formal rating, entry action, fair value, thesis, key debate, and kill criteria against the prior report. Do not manufacture a change when the evidence is unchanged.',
-        `Set revision.priorVersion to ${priorResearch.version}. Set revision.opinionChange to more_constructive, less_constructive, or unchanged. Summarize the net opinion change in plain English and list 1-8 material changes. If nothing material changed, use one evidence change explaining what was refreshed and why the opinion stayed unchanged.`,
+        `Set revision.priorVersion to ${priorResearch.version}. Set revision.opinionChange to more_constructive, less_constructive, or unchanged. Summarize the net opinion change in plain English and list only supported changes, up to eight. If nothing material changed, use an empty changes array and explain the unchanged conclusion in the summary.`,
       ]
     : [
         'This is the initial report. Set revision.priorVersion to null, revision.opinionChange to initial, and include one evidence change explaining the initial evidence baseline.',
@@ -721,7 +718,7 @@ function researchPrompt(
     'The other executive fields must state quantified Mispricing, Fastest Kill Signal, and today’s practical Entry Decision.',
     'Return confidence as a whole-number percentage from 0 to 100, not as a decimal fraction.',
     'Return exactly the 15 schema sections in schema order: Snapshot; Business Model & Moat; Financial Profile; Market & Competition; Growth Drivers; Management & Capital Allocation; Valuation; Catalysts; Bull Case; Base Case; Bear Case; Risk Factors; Sentiment & Positioning; Verdict; Kill Criteria.',
-    'Write 1,800-2,500 total words across those sections. Lead every section with its conclusion and bold the single most important number or claim.',
+    'Use the length justified by evidence. Lead each section with its conclusion; an explicit evidence gap can be brief. Do not pad prose or repeat facts to meet a quota.',
     'Write an investor memo, not an audit workpaper: favor clear analytical prose and short connective paragraphs over a stream of labeled bullets. Use bullets only for catalysts, scenario assumptions, risks, and concrete decision rules.',
     'Keep factual, consensus, and analyst thinking distinct through natural attribution: write “reported data show” or “the latest filing shows” for facts, “consensus expects” for market expectations, “our view” for analysis, and “in our base case” for assumptions. For auditability, prefix each distinct claim paragraph with **FACT:**, **CONSENSUS:**, **VIEW:** or **ESTIMATE:**. The application strips these internal markers in its default memo view and exposes them only in Evidence mode.',
     'Attach supporting CompanyPacket source IDs only through each section sourceIds array and the report sourceIds array. Never print bracketed source IDs inside prose. Never imply a claim is sourced if the supporting source is absent.',
@@ -744,7 +741,7 @@ function researchPrompt(
     '',
     priorResearch ? `PRIOR RESEARCH VERSION ${priorResearch.version}:\n${JSON.stringify(priorResearch)}` : 'PRIOR RESEARCH: none',
     '',
-    `COMPANY MARKET MODEL VERSION ${marketModel.version}:\n${JSON.stringify(marketModel)}`,
+    marketModel ? `PRIOR COMPANY MARKET MODEL VERSION ${marketModel.version}:\n${JSON.stringify(marketModel)}` : 'Build the business-model representation in the same response before writing research.',
     '',
     JSON.stringify(packet),
   ].join('\n')
@@ -771,66 +768,30 @@ export async function generateFullEquityResearch(
     if (error || !data) throw new Error('Originating World dossier is unavailable or mismatched')
     worldOrigin = data
   }
+  const previousPacket = priorResearch ? await fetchResearchBaseline(ownerId, 'equity', priorResearch.id) : null
   const packet = await materializeCompanyPacket(symbol, ownerId, new Date(), worldOrigin)
+  const refresh = await recordResearchRefresh({ownerId,instrument:'equity',packet,priorPacket:previousPacket,prior:priorResearch,reason,conditionsChanged: /kill|entry|invalidation/i.test(reason)})
+  if (priorResearch && refresh.kind !== 'full_research') { await onProgress?.(100, `Evidence ${refresh.kind}; retained research v${priorResearch.version}`); return priorResearch }
   await onProgress?.(45, 'Company packet assembled')
-  await onProgress?.(50, 'Building company market model')
-  const marketModel = await materializeCompanyMarketModel(packet, ownerId, reason)
-  await onProgress?.(65, 'Company market model assembled')
-  const version = await nextVersion('equity_research_notes', ownerId, symbol)
-  const notePayload = {
-    symbol,
-    owner_id: ownerId,
-    company_packet_id: packet.id,
-    company_market_model_id: marketModel.id,
-    version,
-    status: 'running',
-    data_as_of: packet.dataAsOf,
-  }
-  let createResult = await supabase.from('equity_research_notes').insert({
-    ...notePayload,
-    previous_research_note_id: priorResearch?.id ?? null,
-  }).select('id').single()
-  if (createResult.error?.message.includes('previous_research_note_id')) {
-    createResult = await supabase.from('equity_research_notes').insert(notePayload).select('id').single()
-  }
-  const { data: noteRecord, error: createError } = createResult
-  if (createError || !noteRecord) throw new Error(`Unable to create research version: ${createError?.message ?? 'unknown error'}`)
+  const priorMarketModel = await fetchLatestCompanyMarketModel(ownerId, symbol)
+  await onProgress?.(50, 'Preparing one research and business-model generation')
+  const noteRecord = await beginResearchVersion({kind:'equity',ownerId,symbol,packetId:packet.id,dataAsOf:packet.dataAsOf,previousId:priorResearch?.id??null,extra:{company_market_model_id:null}})
+  const version = noteRecord.version
+
   try {
     await onProgress?.(72, 'Synthesizing 15-section analysis')
-    const result = await runCodexJson({
-      prompt: researchPrompt(packet, marketModel, priorResearch, reason),
-      schemaPath: 'schemas/equity-research.schema.json',
-      validate: value => validateEquityResearch(value, packet.sources.map(s => s.id)),
+    const bundle = await runCodexJson({
+      prompt: `Produce research and its company market model together in one response. Build marketModel first from primary evidence, then write research with that causal representation. This model is a compatibility projection of the same generation, never new evidence.\n${companyMarketModelPrompt(packet, priorMarketModel, reason)}\n${researchPrompt(packet, priorMarketModel, priorResearch, reason)}`,
+      schemaPath: 'schemas/company-research-bundle.schema.json',
+      validate: value => { const v=record(value); return {research:validateEquityResearch(v.research, packet.sources.map(s=>s.id)),marketModel:validateCompanyMarketModel(v.marketModel,new Set(packet.sources.map(s=>s.id)))} },
       timeoutMs: 20 * 60 * 1_000,
     })
+    const marketModel = await materializeCompanyMarketModel(packet, ownerId, reason, {data: bundle.data.marketModel, metadata: bundle.metadata})
+    const result = {data: bundle.data.research, metadata: bundle.metadata}
     await onProgress?.(90, 'Validating and publishing research')
     const generatedAt = new Date().toISOString()
     const content = { ...result.data, reason, worldContextOrigin: packet.worldOrigin ?? null }
-    if (packet.sources.length > 0) {
-      const used = new Set(result.data.sourceIds)
-      const { error: sourceError } = await supabase.from('equity_research_sources').insert(
-        packet.sources.filter((source) => used.has(source.id)).map((source) => ({
-          research_note_id: noteRecord.id,
-          source_id: source.id,
-          label: source.label,
-          url: source.url,
-          source: source.source,
-          source_as_of: source.asOf,
-        })),
-      )
-      if (sourceError) throw new Error(`Unable to persist research sources: ${sourceError.message}`)
-    }
-    const { error } = await supabase.from('equity_research_notes').update({
-      status: 'complete',
-      formal_rating: result.data.formalRating,
-      entry_action: result.data.entryAction,
-      content,
-      provider: result.metadata.provider,
-      model: result.metadata.model,
-      generated_at: generatedAt,
-      error: null,
-    }).eq('id', noteRecord.id).eq('status', 'running')
-    if (error) throw new Error(`Unable to publish research version: ${error.message}`)
+    await publishResearchVersion({kind:'equity',id:noteRecord.id,content,sources:packet.sources,metadata:result.metadata,generatedAt,extra:{company_market_model_id:marketModel.id}})
     await onProgress?.(100, 'Research complete')
     const note: EquityResearchNote = {
       id: noteRecord.id,
@@ -854,7 +815,7 @@ export async function generateFullEquityResearch(
     return note
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    await supabase.from('equity_research_notes').update({ status: 'failed', error: message }).eq('id', noteRecord.id)
+    await failResearchVersion('equity',noteRecord.id,message)
     throw error
   }
 }

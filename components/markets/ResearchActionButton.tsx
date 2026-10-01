@@ -91,7 +91,7 @@ export function ResearchActionButton({
         <ResearchProgressRing job={job} />
         {job.status === 'succeeded'
           ? <a href={`/markets/stocks/${symbol}/research`}>Open {instrumentType === 'etf' ? 'ETF' : 'full'} research →</a>
-          : job.status === 'failed'
+          : (job.status === 'failed' || job.status === 'blocked')
             ? <button type="button" onClick={() => setJob(null)}>Try again</button>
             : <Link href="/markets/research">View research queue →</Link>}
       </div>

@@ -1,3 +1,4 @@
+import { renewUnchangedRecommendation } from '../markets/decision-refresh.ts'
 import { canonicalCausalVersions } from '../markets/evidence-authority.ts'
 import { RECOMMENDATION_REVIEW_RULES } from '../markets/recommendation-critic.ts'
 import { recommendationDisplayContext } from '../markets/recommendation-display.ts'
@@ -184,9 +185,17 @@ export async function assembleDecisionContext(
       .sort((a,b) => String(b.generated_at).localeCompare(String(a.generated_at)))[0]
     return note ? [note] : []
   })
+  const refreshChecks = await optional('Research revalidation', (async()=>{
+    if(!selectedNotes.length)return []
+    const result=await db.from('research_refresh_checks').select('*').eq('owner_id',ownerId).in('research_note_id',selectedNotes.map(n=>n.id)).neq('classification','full_research').eq('content->>readiness','complete').lte('created_at',cutoff).order('created_at',{ascending:false}).limit(100)
+    if(result.error)throw new Error(result.error.message)
+    return result.data as Row[]
+  })())
+  const checkByNote=new Map<string,Row>()
+  for(const check of refreshChecks)if(!checkByNote.has(String(check.research_note_id)))checkByNote.set(String(check.research_note_id),check)
   const [packets,fundPackets] = await Promise.all([
-    optional('Company packets', loadDecisionPackets('company_packets',ownerId,cutoff,selectedNotes.flatMap(n => typeof n.company_packet_id === 'string' ? [n.company_packet_id] : []))),
-    optional('ETF packets', loadDecisionPackets('etf_research_packets',ownerId,cutoff,selectedNotes.flatMap(n => typeof n.etf_research_packet_id === 'string' ? [n.etf_research_packet_id] : []))),
+    optional('Company packets', loadDecisionPackets('company_packets',ownerId,cutoff,selectedNotes.flatMap(n => typeof n.company_packet_id === 'string' ? [String(checkByNote.get(String(n.id))?.packet_id ?? n.company_packet_id)] : []))),
+    optional('ETF packets', loadDecisionPackets('etf_research_packets',ownerId,cutoff,selectedNotes.flatMap(n => typeof n.etf_research_packet_id === 'string' ? [String(checkByNote.get(String(n.id))?.packet_id ?? n.etf_research_packet_id)] : []))),
   ])
   const universe = [
     ...new Set([...selected, ...candidates.map((c) => String(c.symbol))]),
@@ -302,7 +311,7 @@ export async function assembleDecisionContext(
         [...research, ...fundResearch].filter(r => r.symbol === symbol && r.status === 'complete').sort((a,b) => String(b.generated_at).localeCompare(String(a.generated_at)))[0] ??
         null
       const isFund = Boolean(note?.etf_research_packet_id) || /\b(?:ETF|exchange[- ]traded fund)\b/i.test(String(asset?.name ?? ''))
-      const packet = [...packets, ...fundPackets].find((r) => r.id === (note?.company_packet_id ?? note?.etf_research_packet_id)),
+      const packet = [...packets, ...fundPackets].find((r) => r.id === ((note ? checkByNote.get(String(note.id))?.packet_id ?? note.company_packet_id : null) ?? (note ? checkByNote.get(String(note.id))?.packet_id ?? note.etf_research_packet_id : null))),
         packetContent = record(packet?.packet)
       const thesis =
         theses.find(
@@ -318,7 +327,9 @@ export async function assembleDecisionContext(
               feed: String(snapshot?.feed ?? q.feed ?? 'unknown'),
             }
           : null
+      const researchCheck = note ? checkByNote.get(String(note.id)) : null
       const sourceIds = [`portfolio:${portfolioId}`]
+      if (researchCheck) sourceIds.push(addEvidence(`research-check:${researchCheck.id}`, 'research_revalidation', researchCheck.content, researchCheck.created_at, researchCheck.created_at))
       if (q)
         sourceIds.push(
           addEvidence(
@@ -373,7 +384,7 @@ export async function assembleDecisionContext(
       if (
         !note ||
         !Number.isFinite(Date.parse(String(note.generated_at))) ||
-        Date.parse(cutoff) - Date.parse(String(note.generated_at)) >
+        Date.parse(cutoff) - Date.parse(String(researchCheck?.created_at ?? note.generated_at)) >
           35 * 86400000
       )
         nameGaps.push('Research missing or older than 35 days')
@@ -590,6 +601,21 @@ export async function generateDailyRecommendations(
     .maybeSingle()
   if (prior.error) throw new Error(prior.error.message)
   if (prior.data) return { batchId: prior.data.id, reused: true }
+  const latest=await db.from('recommendation_batches').select('id,manifest_id').eq('owner_id',ownerId).order('published_at',{ascending:false}).limit(1).maybeSingle()
+  if(latest.error)throw new Error(latest.error.message)
+  const retained:Recommendation[]=[]
+  if(latest.data) {
+    const [manifest,versions]=await Promise.all([
+      db.from('recommendation_input_manifests').select('content').eq('id',latest.data.manifest_id).single(),
+      db.from('recommendation_versions').select('content').eq('batch_id',latest.data.id),
+    ])
+    if(manifest.error||versions.error)throw new Error('Unable to read prior frozen decision edition')
+    for(const version of versions.data??[]) {
+      const renewed=renewUnchangedRecommendation(version.content as Recommendation,manifest.data.content as DecisionContext,context)
+      if(renewed)retained.push(renewed)
+    }
+  }
+  const analysisContext={...context,names:context.names.filter(n=>!retained.some(r=>r.symbol===n.symbol&&r.portfolioId===n.portfolioId))}
   let recommendations: Recommendation[] = [],
     metadata: unknown = {
       provider: 'deterministic',
@@ -598,8 +624,8 @@ export async function generateDailyRecommendations(
   let summary =
     'Daily evaluation is incomplete. Review the stated gaps before changing capital.'
   // Do not spend model time pretending a completely blocked context is decision-ready.
-  if (context.names.every((n) => n.gaps.length > 0)) {
-    recommendations = context.names.map((n) =>
+  if (analysisContext.names.every((n) => n.gaps.length > 0)) {
+    recommendations = analysisContext.names.map((n) =>
       abstention(
         n,
         context,
@@ -607,7 +633,7 @@ export async function generateDailyRecommendations(
       ),
     )
   } else {
-    await withDecisionInputs(context, async (input) => {
+    await withDecisionInputs(analysisContext, async (input) => {
       const generated = await runCodexJson({
         schemaPath: resolve('schemas/daily-recommendations.schema.json'),
         cwd: input.directory,
@@ -618,7 +644,7 @@ export async function generateDailyRecommendations(
           const v = record(value)
           return {
             summary: String(v.summary ?? ''),
-            ...validateGeneratedBatch(v.recommendations, context),
+            ...validateGeneratedBatch(v.recommendations, analysisContext),
           }
         },
       })
@@ -676,6 +702,9 @@ export async function generateDailyRecommendations(
         : generated.data.summary
     })
   }
+  recommendations = validateGeneratedBatch([...retained,...recommendations],context).recommendations
+  if (!analysisContext.names.length) summary = `Retained ${retained.length} analytical conclusions and validated every instrument against a new frozen context. This edition is newly logged advice for owner review.`
+  metadata = {...record(metadata),reusedConclusions:retained.length,analyzedNames:analysisContext.names.length}
   const result = await db.rpc('publish_recommendation_batch', {
     p_manifest_id: context.id,
     p_recommendations: recommendations,

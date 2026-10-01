@@ -911,7 +911,7 @@ export interface EquityResearchNote {
 export interface ResearchJobStatus {
   id: string
   symbol: string
-  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'blocked' | 'cancelled'
   progress: number
   phase: string
   error: string | null

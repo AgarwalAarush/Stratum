@@ -1,3 +1,5 @@
+import { beginResearchVersion, publishResearchVersion, failResearchVersion } from './research-lifecycle.ts'
+import { fetchResearchBaseline, recordResearchRefresh } from './research-refresh.ts'
 import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchAdvice } from '../markets/research-advice.ts'
 import { randomUUID } from 'node:crypto'
 import { parseStateStreetHoldings } from './etf-workbook.ts'
@@ -466,8 +468,7 @@ export function validateEtfResearch(value: unknown, packet?: EtfResearchPacket):
   }
   const confidence = number(output.confidence)
   if (confidence === null || confidence < 0 || confidence > 100) throw new Error('Invalid confidence')
-  const wordCount = sections.reduce((total, section) => total + String(section.content ?? '').trim().split(/\s+/).filter(Boolean).length, 0)
-  if (wordCount < 1_200 || wordCount > 2_400) throw new Error(`ETF research must contain 1,200-2,400 words of analysis; received ${wordCount}`)
+
   const revision = record(output.revision)
   const changes = Array.isArray(revision.changes) ? revision.changes.map(record) : []
   const normalizedChanges = changes.flatMap((change) => {
@@ -478,7 +479,7 @@ export function validateEtfResearch(value: unknown, packet?: EtfResearchPacket):
   })
   if (normalizedChanges.length === 0) throw new Error('ETF research revision must contain at least one material evidence change')
   return {
-    advice: output.advice || packet ? validateResearchAdvice(output.advice, packet?.sources.map(s => s.id)) : null,
+    advice: output.advice || packet ? validateResearchAdvice(output.advice, Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []) : null,
     formalRating, entryAction, investmentThesis: requiredString('investmentThesis'), keyDebate: requiredString('keyDebate'),
     fastestKillSignal: requiredString('fastestKillSignal'), confidence,
     revision: {
@@ -507,7 +508,7 @@ function etfResearchPrompt(packet: EtfResearchPacket, prior: EtfResearchNote | n
     RESEARCH_ADVICE_RULES,
     'Use BUY/HOLD/SELL separately from today\'s entry action. Use NOT_RATED or wait when fund-level evidence is inadequate.',
     'Return exactly these 12 sections in schema order: Fund Snapshot; Portfolio Exposure; Top Holdings; Index & Rebalance; Fundamentals Look-through; Valuation & Setup; Catalysts; Bull Case; Base Case; Bear Case; Risk Factors; Verdict.',
-    'Write 1,400-2,100 words. Prefix each factual, analytical, or estimate paragraph with **FACT:**, **VIEW:** or **ESTIMATE:**. Attach source IDs through sections and sourceIds, never in prose.',
+    'Use only the length the evidence warrants; do not pad the report. Prefix each factual, analytical, or estimate paragraph with **FACT:**, **VIEW:** or **ESTIMATE:**. Attach source IDs through sections and sourceIds, never in prose.',
     prior
       ? `This refresh follows version ${prior.version}; preserve supported conclusions and give a structured, evidence-based comparison. Reason: ${reason}.\nPRIOR RESEARCH: ${JSON.stringify(prior)}`
       : `This is the initial version. revision.priorVersion must be null and revision.opinionChange must be initial. Reason: ${reason}.`,
@@ -561,14 +562,14 @@ export async function generateEtfResearch(
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const prior = await fetchLatestCompletedEtfResearch(ownerId, symbol)
   await onProgress?.(15, prior ? `Refreshing version ${prior.version} issuer evidence` : 'Collecting issuer holdings')
+  const previousPacket = prior ? await fetchResearchBaseline(ownerId, 'etf', prior.id) : null
   const packet = await materializeEtfResearchPacket(symbol, ownerId)
+  const refresh = await recordResearchRefresh({ownerId,instrument:'etf',packet,priorPacket:previousPacket,prior,reason,conditionsChanged:/kill|entry|invalidation/i.test(reason)})
+  if (prior && refresh.kind !== 'full_research') { await onProgress?.(100, `Evidence ${refresh.kind}; retained research v${prior.version}`); return prior }
   await onProgress?.(45, 'ETF packet assembled')
-  const version = await nextVersion('etf_research_notes', ownerId, symbol)
-  const { data: note, error: createError } = await supabase.from('etf_research_notes').insert({
-    symbol, owner_id: ownerId, etf_research_packet_id: packet.id, previous_research_note_id: prior?.id ?? null,
-    version, status: 'running', data_as_of: packet.dataAsOf,
-  }).select('id').single()
-  if (createError || !note) throw new Error(`Unable to create ETF research version: ${createError?.message ?? 'unknown error'}`)
+  const note = await beginResearchVersion({kind:'etf',ownerId,symbol,packetId:packet.id,dataAsOf:packet.dataAsOf,previousId:prior?.id??null})
+  const version = note.version
+
   try {
     await onProgress?.(55, 'Synthesizing ETF analysis')
     const result = await runCodexJson({
@@ -578,20 +579,12 @@ export async function generateEtfResearch(
     await onProgress?.(90, 'Validating and publishing ETF research')
     const generatedAt = new Date().toISOString()
     const content = { ...result.data, reason }
-    const used = new Set(result.data.sourceIds)
-    const { error: sourceError } = await supabase.from('etf_research_sources').insert(packet.sources
-      .filter((source) => used.has(source.id)).map((source) => ({ research_note_id: note.id, source_id: source.id, label: source.label, url: source.url, source: source.source, source_as_of: source.asOf })))
-    if (sourceError) throw new Error(`Unable to persist ETF research sources: ${sourceError.message}`)
-    const { error } = await supabase.from('etf_research_notes').update({
-      status: 'complete', formal_rating: result.data.formalRating, entry_action: result.data.entryAction, content,
-      provider: result.metadata.provider, model: result.metadata.model, generated_at: generatedAt, error: null,
-    }).eq('id', note.id).eq('status', 'running')
-    if (error) throw new Error(`Unable to publish ETF research version: ${error.message}`)
+    await publishResearchVersion({kind:'etf',id:note.id,content,sources:packet.sources,metadata:result.metadata,generatedAt})
     await onProgress?.(100, 'ETF research complete')
     return { id: note.id, symbol, version, status: 'complete', ...result.data, provider: result.metadata.provider, model: result.metadata.model, dataAsOf: packet.dataAsOf, generatedAt, error: null }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    await supabase.from('etf_research_notes').update({ status: 'failed', error: message }).eq('id', note.id)
+    await failResearchVersion('etf',note.id,message)
     throw error
   }
 }

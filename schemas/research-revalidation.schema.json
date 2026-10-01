@@ -1,0 +1,1 @@
+{"type":"object","additionalProperties":false,"required":["conclusion","summary","sourceIds","conditions"],"properties":{"conclusion":{"enum":["supported","needs_research","insufficient"]},"summary":{"type":"string","minLength":8},"sourceIds":{"type":"array","items":{"type":"string"}},"conditions":{"type":"array","items":{"type":"string"}}}}
