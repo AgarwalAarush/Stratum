@@ -1,3 +1,6 @@
+import { FORECAST_RESOLUTION_POLICY } from '../markets/forecast-metrics.ts'
+import { economicEpisodeKey, forecastCorrelationGroup } from '../markets/economic-episodes.ts'
+import { runSimpleBaseline } from './research-baselines.ts'
 import { forecastsAreApproved, reviewedForecasts, forecastCategory, FORECAST_REVIEW_POLICY } from '../markets/forecast-review.ts'
 import { investmentDb, record, contentHash } from './recommendations.ts'
 import { WORLD_ABLATION_POLICY } from '../markets/world-ablation.ts'
@@ -95,15 +98,17 @@ export async function captureShadowPolicies(
       )
     )
       continue
+    if (experiment.policy_key === 'world-context-ablation-v1') continue // Retain old records; this contaminated design cannot acquire new evidence.
     const isAblation = experiment.policy_key === WORLD_ABLATION_POLICY
-    if (isAblation) {
+    const isBaseline = ['evidence-only-v1','simple-research-v1'].includes(String(experiment.policy_key))
+    if (isAblation || isBaseline) {
       const daily = await db.from('recommendation_shadow_runs').select('id').eq('experiment_id', experiment.id)
         .gte('created_at', `${now.toISOString().slice(0, 10)}T00:00:00Z`).limit(1)
       if (daily.error) throw new Error(daily.error.message)
       if (daily.data?.length) continue
     }
-    const ablation = isAblation ? await runWorldAblation(context, recs) : null
-    const alternative = isAblation ? recs : applyShadowPolicy(String(experiment.policy_key), recs)
+    const ablation = isAblation ? await runWorldAblation(context, recs) : isBaseline ? await runSimpleBaseline(context, recs, String(experiment.policy_key)) : null
+    const alternative = (isAblation || isBaseline) ? recs : applyShadowPolicy(String(experiment.policy_key), recs)
     const comparisons = ablation ? ablation.comparisons.map(pair => {
       const i = recs.findIndex(r => r.symbol === pair.question.symbol && r.portfolioId === pair.question.portfolioId)
       const f = recs[i].forecasts[pair.question.ordinal]
@@ -176,6 +181,7 @@ export async function evaluateShadowPolicies(
           'recommendation_id',
         )
         baseline.forecasts.forEach((f, index) => {
+          if (!economicEpisodeKey(String(comparison.securityId), f)) { excludedForecasts++; return }
           if (forecastCategory(f) === 'market_return') {
             marketReturnForecasts++
             return
@@ -192,13 +198,8 @@ export async function evaluateShadowPolicies(
             )[0]
           const outcome = record(assessment?.content).outcome
           pairs.push({
-            question: JSON.stringify([
-              comparison.securityId,
-              f.metric,
-              f.operator,
-              f.threshold,
-              f.deadline,
-            ]),
+            question: economicEpisodeKey(String(comparison.securityId), f) ?? `unresolvable:${comparison.recommendationId}:${index}`,
+            correlationGroup: forecastCorrelationGroup(String(comparison.securityId), f.metric),
             securityId: String(comparison.securityId),
             issuedAt: String(comparison.issuedAt),
             deadline: f.deadline,
@@ -237,7 +238,7 @@ export async function evaluateShadowPolicies(
       .insert({
         owner_id: ownerId,
         experiment_id: experiment.id,
-        evaluator_version: `shadow-calibration-${FORECAST_REVIEW_POLICY}`,
+        evaluator_version: `shadow-calibration-${FORECAST_RESOLUTION_POLICY}`,
         content,
         content_hash: contentHash(content),
       })

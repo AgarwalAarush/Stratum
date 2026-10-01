@@ -16,7 +16,8 @@
     "revision",
     "sections",
     "sourceIds",
-    "advice"
+    "advice",
+    "feedbackReview"
   ],
   "properties": {
     "formalRating": {
@@ -370,6 +371,29 @@
                 "minLength": 8
               }
             }
+          }
+        }
+      }
+    },
+    "feedbackReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changedConclusion",
+        "explanation",
+        "sourceIds"
+      ],
+      "properties": {
+        "changedConclusion": {
+          "type": "boolean"
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "sourceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         }
       }

@@ -15,7 +15,7 @@ test('shadow capture is prospective, retry safe and resolves only from dated eco
     cutoff = '2026-09-07T14:00:00Z',
     outcome: boolean | null = null
   const forecast = {
-    metric: 'revenue',
+    metric: 'revenue', observationPeriod:'2026-09-30',unit:'USD',resolutionSource:'source:report',
     operator: 'gt',
     threshold: 100,
     deadline: '2026-10-01T00:00:00Z',

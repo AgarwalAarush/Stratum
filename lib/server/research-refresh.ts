@@ -1,4 +1,5 @@
 import { classifyResearchRefresh, semanticHash, type RefreshDecision } from '../markets/research-refresh.ts'
+import { FEEDBACK_RULES, validateFeedbackReview } from '../markets/research-feedback.ts'
 import { runCodexJson } from './codex-exec.ts'
 import { getSupabaseClient } from './supabase.ts'
 import type { CompanyPacket, EquityResearchNote, EtfResearchNote, EtfResearchPacket } from '../markets/types.ts'
@@ -10,16 +11,25 @@ export async function recordResearchRefresh(input: {ownerId:string;instrument:'e
   let update: unknown=null
   if (decision.kind==='revalidate' && input.prior) {
     const allowed=input.packet.sources.map(s=>s.id)
-    const result=await runCodexJson({prompt:`Revalidate only the recorded decision conditions and evidence gaps. ${JSON.stringify(decision)} Compare the prior research with current primary evidence. World dossiers and prior prose are context, never independent facts. State whether the existing conclusion remains supported, which conditions changed, and which uncertainties remain. Return a short cited update; do not generate a full report or invent a material change. Source IDs must be current packet sources. PRIOR ${JSON.stringify(input.prior)} PACKET ${JSON.stringify(input.packet)}`,schemaPath:'schemas/research-revalidation.schema.json',validate:value=>{
+    const result=await runCodexJson({prompt:`Revalidate only the recorded decision conditions and evidence gaps. ${JSON.stringify(decision)} Compare the prior research with current primary evidence. World dossiers and prior prose are context, never independent facts. State whether the existing conclusion remains supported, which conditions changed, and which uncertainties remain. ${FEEDBACK_RULES} Return feedbackReview and a materialChange only for a supported new result, corporate/fund change, changed decisive premise, or newly available answer to a blocking question. Age and new artifact IDs are not materiality reasons. Return a short cited update; do not generate a full report or invent a material change. Source IDs must be current packet sources. PRIOR ${JSON.stringify(input.prior)} PACKET ${JSON.stringify(input.packet)}`,schemaPath:'schemas/research-revalidation.schema.json',validate:value=>{
       const v=object(value)
       if (!['supported','needs_research','insufficient'].includes(String(v.conclusion)) || typeof v.summary!=='string' || !Array.isArray(v.sourceIds) || v.sourceIds.some(id=>!allowed.includes(String(id))) || !Array.isArray(v.conditions)) throw new Error('Invalid targeted research revalidation')
       if(v.conclusion==='supported' && !v.sourceIds.length)throw new Error('Supported revalidation needs primary evidence')
+      if (input.packet.outcomeFeedback) validateFeedbackReview(v.feedbackReview, input.packet.outcomeFeedback)
+      if (v.conclusion === 'needs_research') {
+        const material = object(v.materialChange)
+        const kinds = ['results_guidance','corporate_fund_change','decisive_premise','blocking_answer']
+        const ids = Array.isArray(material.sourceIds) ? material.sourceIds.map(String) : []
+        const priorSources = Array.isArray(object(input.priorPacket).sources) ? object(input.priorPacket).sources as unknown[] : []
+        const changedSources = input.packet.sources.filter(s => !priorSources.some(p => object(p).id === s.id && semanticHash({...object(p), asOf: null}) === semanticHash({...s, asOf: null}))).map(s => s.id)
+        if (!kinds.includes(String(material.kind)) || typeof material.reason !== 'string' || material.reason.length < 8 || !ids.length || ids.some(id => !allowed.includes(id)) || !ids.some(id => changedSources.includes(id))) throw new Error('Full research requires a recorded material change supported by changed evidence; age alone cannot promote it')
+      }
       return v
     },timeoutMs:5*60_000})
     update={...result.data,generation:result.metadata}
     readiness=result.data.conclusion==='supported'?'complete':result.data.conclusion==='insufficient'?'blocked':'partial'
     // The check can nominate material research; it cannot silently promote a report.
-    if(result.data.conclusion==='needs_research') {decision.kind='full_research';decision.reasons.push(String(result.data.summary))}
+    if(result.data.conclusion==='needs_research') {decision.kind='full_research';decision.reasons.push(String(object(result.data.materialChange).reason)); decision.sourceReferences = (object(result.data.materialChange).sourceIds as string[]).map(id => input.packet.sources.find(s => s.id === id)!.url)}
   }
   const price=input.packet.priceHistory.latestPrice, fairValue=input.prior && 'fairValue' in input.prior ? input.prior.fairValue : null
   const output={decision,update,price,fairValue,impliedReturn:typeof price==='number' && price>0 && typeof fairValue==='number'?fairValue/price-1:null,readiness}

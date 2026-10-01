@@ -1,7 +1,9 @@
+import { feedbackSources, loadResearchFeedback } from './research-feedback.ts'
+import { needsIndependentResearch, primaryResearchPacket, PRIMARY_RESEARCH_AUTHORITY } from '../markets/evidence-authority.ts'
+import { FEEDBACK_RULES, validateFeedbackReview, type ResearchFeedback, type FeedbackReview } from '../markets/research-feedback.ts'
 import { beginResearchVersion, publishResearchVersion, failResearchVersion } from './research-lifecycle.ts'
 import { fetchResearchBaseline, recordResearchRefresh } from './research-refresh.ts'
-import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchAdvice, type ResearchAdvice } from '../markets/research-advice.ts'
-import { needsIndependentResearch, primaryResearchPacket, PRIMARY_RESEARCH_AUTHORITY } from '../markets/evidence-authority.ts'
+import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchNarrative, validateResearchAdvice, type ResearchAdvice } from '../markets/research-advice.ts'
 import type {
   CompanyPacket,
   CompanyPacketSource,
@@ -477,7 +479,10 @@ export async function materializeCompanyPacket(
     .slice(0, 20)
   const version = await nextVersion('company_packets', ownerId, symbol)
   const generatedAt = now.toISOString()
+  const outcomeFeedback = await loadResearchFeedback(ownerId, symbol, generatedAt)
+  sources.push(...feedbackSources(outcomeFeedback))
   const packet: CompanyPacket = {
+    outcomeFeedback,
     worldOrigin: worldOrigin ? { ...worldOrigin, authority: 'shadow', mayAuthorizeCapital: false } : null,
     evidenceQuality: {
       checkedAt: generatedAt, priceAsOf: stock.asOf,
@@ -569,6 +574,7 @@ export async function materializeCompanyPacket(
 }
 
 interface ResearchGeneration {
+  feedbackReview?: FeedbackReview | null
   advice?: ResearchAdvice | null
   formalRating: EquityResearchNote['formalRating']
   entryAction: EquityResearchNote['entryAction']
@@ -585,7 +591,7 @@ interface ResearchGeneration {
   sourceIds: string[]
 }
 
-export function validateEquityResearch(value: unknown, allowedSourceIds?: readonly string[]): ResearchGeneration {
+export function validateEquityResearch(value: unknown, allowedSourceIds?: readonly string[], feedback?: ResearchFeedback): ResearchGeneration {
   const output = record(value)
   const sections = Array.isArray(output.sections) ? output.sections.map(record) : []
   const ids = sections.map((section) => section.id)
@@ -660,8 +666,11 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
       explanation: change.explanation,
     }
   })
+  const advice = output.advice || allowedSourceIds ? validateResearchAdvice(output.advice, Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []) : null
+  validateResearchNarrative(advice, sections.filter(s => s.id === 'verdict').map(s => String(s.content ?? '')).join('\n'))
   return {
-    advice: output.advice || allowedSourceIds ? validateResearchAdvice(output.advice, Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []) : null,
+    feedbackReview: feedback ? validateFeedbackReview(output.feedbackReview, feedback) : null,
+    advice,
     formalRating,
     entryAction,
     investmentThesis,
@@ -688,7 +697,7 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
   }
 }
 
-function researchPrompt(
+export function researchPrompt(
   packet: CompanyPacket,
   marketModel: CompanyMarketModel | null,
   priorResearch: EquityResearchNote | null,
@@ -738,6 +747,7 @@ function researchPrompt(
     'Verdict must first state the company-and-market thesis in plain English, then cover ownership fit, current setup, behavior near highs and on weakness, entry action, better trigger, sizing, liquidity, and horizon. For a high-optionality or thin-data name, make clear that sizing and milestone evidence—not a fabricated valuation model—control the decision.',
     'Kill Criteria must contain 3-5 specific numeric thresholds or observable events—not vibes.',
     'When evidence is unavailable (TAM, 13F, short interest, options, geographic mix, unit economics, etc.), say “Not available in the current packet” and explain what source would be required.',
+    FEEDBACK_RULES,
     RESEARCH_ADVICE_RULES,
     'Formal rating is a compatibility summary. NOT_RATED is valid when the evidence is insufficient. Unsupported facts and valuation remain unavailable.',
     '',
@@ -789,7 +799,7 @@ export async function generateFullEquityResearch(
     const bundle = await runCodexJson({
       prompt: `Produce research and its company market model together in one response. Build marketModel first from primary evidence, then write research with that causal representation. This model is a compatibility projection of the same generation, never new evidence.\n${companyMarketModelPrompt(analysisPacket, priorMarketModel, reason)}\n${researchPrompt(analysisPacket, priorMarketModel, independentBaseline ? null : priorResearch, reason)}`,
       schemaPath: 'schemas/company-research-bundle.schema.json',
-      validate: value => { const v=record(value); return {research:validateEquityResearch(v.research, packet.sources.map(s=>s.id)),marketModel:validateCompanyMarketModel(v.marketModel,new Set(packet.sources.map(s=>s.id)))} },
+      validate: value => { const v=record(value); return {research:validateEquityResearch(v.research, packet.sources.map(s=>s.id), packet.outcomeFeedback),marketModel:validateCompanyMarketModel(v.marketModel,new Set(packet.sources.map(s=>s.id)))} },
       timeoutMs: 20 * 60 * 1_000,
     })
     const marketModel = await materializeCompanyMarketModel(packet, ownerId, reason, {data: bundle.data.marketModel, metadata: bundle.metadata})
@@ -844,8 +854,9 @@ function normalizeResearch(row: Record<string, unknown>): EquityResearchNote {
     symbol: String(row.symbol),
     version: Number(row.version),
     status: row.status as EquityResearchNote['status'],
-    advice: readResearchAdvice(content.advice),
+    feedbackReview: content.feedbackReview as FeedbackReview | undefined ?? null,
     evidenceAuthority: content.evidenceAuthority as EquityResearchNote['evidenceAuthority'],
+    advice: readResearchAdvice(content.advice),
     formalRating: row.formal_rating as EquityResearchNote['formalRating'],
     entryAction: row.entry_action as EquityResearchNote['entryAction'],
     investmentThesis: String(content.investmentThesis ?? content.mispricing ?? ''),

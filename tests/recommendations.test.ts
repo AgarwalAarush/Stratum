@@ -392,6 +392,7 @@ test('learning requires prospective registration and cannot promote a small luck
   )
   const f = {
     metric: 'revenue',
+    observationPeriod: '2026-12-31', unit: 'USD', resolutionSource: 'source:revenue',
     threshold: 100,
     operator: 'gt' as const,
     issuedAt: '2026-09-01T00:00:00Z',
@@ -403,7 +404,7 @@ test('learning requires prospective registration and cannot promote a small luck
       [
         {
           id: 'old',
-          metric: 'revenue',
+          metric: 'revenue', unit: 'USD',
           value: 200,
           period: '2025-12-31',
           availableAt: '2026-10-01',
@@ -420,7 +421,7 @@ test('learning requires prospective registration and cannot promote a small luck
       [
         {
           id: 'new',
-          metric: 'revenue',
+          metric: 'revenue', unit: 'USD',
           value: 110,
           period: '2026-12-31',
           availableAt: '2027-01-05',
@@ -437,7 +438,7 @@ test('learning requires prospective registration and cannot promote a small luck
       [
         {
           id: 'new',
-          metric: 'revenue',
+          metric: 'revenue', unit: 'USD',
           value: 110,
           period: '2026-12-31',
           availableAt: '2027-01-05',
@@ -546,4 +547,13 @@ test('validated system advice does not require another owner click or override i
  const system={...name,thesis:null,systemThesisValidated:true}
  assert.equal(gateRecommendation(recommendation(),{...context,names:[system]}).action,'buy')
  assert.equal(gateRecommendation(recommendation(),{...context,names:[{...system,thesis:{status:'invalidated'}}]}).action,'no_trade')
+})
+
+test('new forecast contracts reject ambiguous sources while legacy readers remain compatible',()=>{
+  const rec=recommendation(), strict={...context,contracts:{forecast:2 as const}}
+  assert.throws(()=>validateRecommendation(rec,strict),/period, unit/)
+  const forecast={...rec.forecasts[0],observationPeriod:'2026-12-31',unit:'USD',resolutionSource:'source:s',decisivePremise:true}
+  assert.equal(validateRecommendation({...rec,forecasts:[forecast]},strict).forecasts[0].resolutionSource,'source:s')
+  assert.throws(()=>validateRecommendation({...rec,forecasts:[{...forecast,resolutionSource:'source:unknown'}]},strict),/resolution source/)
+  assert.equal(validateRecommendation(rec,context).forecasts.length,1)
 })

@@ -6,7 +6,8 @@ export function legacyWorldNodes(workspace: MarketThesisWorkspaceData, existingI
  return workspace.hypotheses.filter(h => !existingIds.has(`legacy-${h.id}`)).map(h => {
   const versions=workspace.theses.filter(t => t.hypothesisId===h.id)
   const lineage={ authority:'legacy-domain', status:'legacy/shadow', hypothesisId:h.id,
-   researchVersionId:h.latestResearch?.id ?? null,
+   researchVersionId:h.latestResearch?.id ?? null, causalGraph:h.causalGraph, evidenceReferences:h.evidence.map(e => ({observationId:e.observationId,role:e.role,causalNode:e.causalNode,weight:e.weight})), horizon:h.horizon,
+   crossDomainLinks:workspace.crossDomainLinks.filter(link => link.fromHypothesisId===h.id || link.toHypothesisId===h.id),
    versions:versions.map(t => ({id:t.id,version:t.version,researchVersionId:t.researchVersionId,
     sourceLedger:t.content.sourceLedger, exposures:t.exposures.map(e => ({id:e.id,symbol:e.symbol,entityName:e.entityName,role:e.role,mechanism:e.mechanism,sourceIds:e.sourceIds,verificationStatus:e.verificationStatus})),
     predictions:t.predictions.map(p => ({id:p.id})),

@@ -29,6 +29,7 @@ export function ForecastReview({
           action: 'adjudicate-forecast',
           forecastId: forecast.id,
           observedValue: Number(value),
+          observationPeriod: content.observationPeriod, unit: content.unit, resolutionSource: content.resolutionSource,
           rationale,
           evidence: [{ url, availableAt: new Date(available).toISOString() }],
         }),
@@ -52,9 +53,10 @@ export function ForecastReview({
       </summary>
       <p className="mt-3 text-xs text-[var(--text-muted)]">{forecastCategory({metric: String(content.metric ?? '')}) === 'market_return' ? 'Market return · scored separately from economic thesis outcomes' : 'Economic outcome'}</p>
       <p className="mt-3 text-xs">{content.observationPeriod ? `Observation period: ${String(content.observationPeriod)} · Unit: ${String(content.unit)}` : 'Legacy forecast: no structured period or unit.'}</p>
+      <p className="mt-3 text-xs">{content.resolutionSource ? `Resolution source: ${String(content.resolutionSource)} · ${content.decisivePremise ? 'Decisive premise' : 'Supporting forecast'}` : 'Legacy resolution source unspecified; automatic resolution is unavailable.'}</p>
       <p className="mt-3">Confirm: {String(content.confirmation)}</p>
       <p>Invalidate: {String(content.invalidation)}</p>
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      {!content.observationPeriod || !content.unit || !content.resolutionSource ? <p className="mt-4 text-xs">This legacy question cannot be automatically resolved or narrowed retrospectively. Its original content remains preserved.</p> : <><div className="mt-4 grid gap-3 md:grid-cols-3">
         <label>
           Observed {String(content.metric)}
           <input
@@ -103,7 +105,7 @@ export function ForecastReview({
       </button>
       <p role="status" className="mt-2 text-xs">
         {status}
-      </p>
+      </p></>}
     </details>
   )
 }

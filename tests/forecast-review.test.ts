@@ -35,19 +35,19 @@ test('legacy rejected forecasts are excluded from calibration and owner adjudica
     let data: unknown = []
     if (table === 'recommendation_versions') data = [
       {id:'blocked',episode_id:'bad',action:'no_trade',issued_at:'2026-09-01',content:blocked},
-      {id:'accepted',episode_id:'good',action:'watch',issued_at:'2026-09-01',content:accepted},
+      {id:'accepted',security_id:'issuer-id',episode_id:'good',action:'watch',issued_at:'2026-09-01',content:accepted},
       {id:'market',episode_id:'market',action:'watch',issued_at:'2026-09-01',content:accepted},
     ]
     if (table === 'recommendation_forecasts') data = url.searchParams.has('id')
       ? {id:'f-bad',deadline:'2026-09-02',recommendation_versions:{content:blocked}}
-      : [{recommendation_id:'blocked',ordinal:0,probability:0.9},{recommendation_id:'accepted',ordinal:0,probability:0.7,content:{metric:'Revenue growth'}},{recommendation_id:'market',ordinal:0,probability:0.2,content:{metric:'Fund price return percentage'}}]
+      : [{recommendation_id:'blocked',ordinal:0,probability:0.9},{recommendation_id:'accepted',ordinal:0,probability:0.7,content:{metric:'Revenue growth',observationPeriod:'2026-09-30',unit:'Percent',resolutionSource:'source:report'}},{recommendation_id:'market',ordinal:0,probability:0.2,content:{metric:'Fund price return percentage'}}]
     if (table === 'recommendation_evaluations') data = ['blocked','accepted','market'].map(id=>({recommendation_id:id,kind:'thesis',horizon:'0',content:{outcome:true}}))
     return new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}})
   }
   try {
     const cohort = await reviewRecommendationCohort('owner',new Date('2026-10-01'))
     assert.equal(cohort.denominator,3)
-    assert.deepEqual(cohort.forecastReview,{policy:'reviewed-forecasts-v2',total:3,eligible:2,excluded:1})
+    assert.deepEqual(cohort.forecastReview,{policy:'reviewed-forecasts-v2',total:3,eligible:2,excluded:1,unresolvable:0})
     assert.equal(cohort.calibration.independentEpisodes,1)
     assert.equal(cohort.marketReturnCalibration.independentEpisodes,1)
     await assert.rejects(adjudicateRecommendationForecast('owner',{

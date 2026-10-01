@@ -32,3 +32,14 @@ test('ablation arms must answer exactly the same questions with their own allowe
   assert.throws(() => validateAblationAnswers({ answers: [answer, answer] }, ['one', 'two'], new Set(['p'])), /duplicate/)
   assert.throws(() => validateAblationAnswers({ answers: [{ ...answer, probability: 1.5 }] }, ['one'], new Set(['p'])), /probability/)
 })
+
+test('rebuilt research arms share checked-in report contracts without schema duplication',async()=>{
+  const {rebuiltResearchSchema}=await import('../lib/markets/world-ablation.ts')
+  const report={type:'object',additionalProperties:false,required:['research','marketModel'],properties:{research:{required:['feedbackReview']},marketModel:{type:'object'}}}
+  const answers={properties:{answers:{type:'array'}}}, original=JSON.stringify(report)
+  const composed=rebuiltResearchSchema(report,answers,true)
+  assert.deepEqual(composed.required,['research','marketModel','answers'])
+  assert.equal(JSON.stringify(report),original)
+  assert.deepEqual((composed.properties as Record<string,unknown>).research,report.properties.research)
+  assert.deepEqual(rebuiltResearchSchema({required:['advice']},answers,false).required,['research','answers'])
+})
