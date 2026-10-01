@@ -1,23 +1,29 @@
 # Decision-loop simplification delivery
 
-Status on October 1, 2026: Release 1 application and worker changes are deployed;
-its primary-collection acceptance gate remains blocked by corpus disk capacity.
-Final handoff review also found an indirect shadow boundary gap; the draft includes
-the correction in draft PR 42, which must be applied to the foundation before
-that gate can pass. The follow-up also removes unsupported Intelligence freshness,
-coverage and trend claims. The later draft branches include both corrections.
-Releases 2–5 are draft work pending that prerequisite and matching rollout.
+Status on October 1, 2026: the complete program and foundation follow-up are
+merged into `main`, with deployment explicitly held by the owner. Only the earlier
+Release 1 worker/frontend changes are live. Primary collection remains blocked by
+corpus disk capacity. PR 42's indirect shadow-boundary and truthful-readiness
+corrections and Releases 2–5 are merged but not deployed. Migrations 006–008,
+worker activation, backfills, retention and backup configuration remain unapplied.
 Passing tests establish contracts and mechanics, not investment efficacy.
+
+Vercel's Git integration automatically deploys `main`. To honor the merge-only
+request, its ignored-build command was changed from `null` to `exit 0` before
+merging. The merge attempts are canceled; the live domain retains its previous
+release. Restore the original command only when deployment is authorized and the
+matching migration/worker activation sequence is ready. GitHub merging alone is
+not safe as a deployment gate for this project.
 
 ## Release boundaries
 
 | Release | Implemented changes | Delivery and remaining gate |
 | --- | --- | --- |
 | 1 | Separate history ingestion, completed exchange sessions, per-security provenance, atomic snapshots, null-safe values, accepted-artifact reads, shadow isolation, blocked dependencies, isolated job processes, bounded pruning and reviewed retention tooling | PRs 36/37 merged; worker and frontend deployed. Historical bars and derived metrics verified through September 30 across a 2,523-row IEX snapshot. Primary document collection is blocked by capacity. |
-| 2 | Four cited advice dimensions shared across research, validation and presentation; seven immutable calendar checkpoints; retrospective backfill; original legacy evaluators retained | Draft PR 38. Migration 202610010006 pending. Actual recommendation backfill and live seven-task publication require the matched worker. |
-| 3 | Shared unchanged/reprice/revalidate/full classifier; deterministic repricing; short condition checks; combined company/model generation; shared company/ETF lifecycle; semantic recommendation editions | Draft PR 39. Migration 202610010007 pending. Price-only server replay performs no model invocation. Live cost/latency replay remains outstanding. |
-| 4 | Git World authority, computed baselines, retired legacy writers, original prediction resolver retained, bounded analyst/critic work, four daily slots with one in five reserved across days, evidence-based shared briefing synthesis | Draft PR 40. Migration 202610010008 pending. Six legacy beliefs passed read-only import validation; apply only after legacy writers are stopped. Benchmark/replay evidence remains unlabeled and cannot demonstrate learning. |
-| 5 | Exact forecast resolution contracts, issuer-matched measured feedback in research, explicit feedback review, targeted decisive-premise revalidation, economic episode/correlation controls, primary-evidence and short-research baselines, independently rebuilt World arms, batched outcome price retrieval, named timeline UI | Draft PR 41. Depends on migrations 006–008 and aligned frontend/worker. No efficacy or policy-promotion claim. |
+| 2 | Four cited advice dimensions shared across research, validation and presentation; seven immutable calendar checkpoints; retrospective backfill; original legacy evaluators retained | Merged PR 38; not deployed. Migration 202610010006 pending. Actual recommendation backfill and live seven-task publication require the matched worker. |
+| 3 | Shared unchanged/reprice/revalidate/full classifier; deterministic repricing; short condition checks; combined company/model generation; shared company/ETF lifecycle; semantic recommendation editions | Merged PR 39; not deployed. Migration 202610010007 pending. Price-only server replay performs no model invocation. Live cost/latency replay remains outstanding. |
+| 4 | Git World authority, computed baselines, retired legacy writers, original prediction resolver retained, bounded analyst/critic work, four daily slots with one in five reserved across days, evidence-based shared briefing synthesis | Merged PR 40; not deployed. Migration 202610010008 pending. Six legacy beliefs passed read-only import validation; apply only after legacy writers are stopped. Benchmark/replay evidence remains unlabeled and cannot demonstrate learning. |
+| 5 | Exact forecast resolution contracts, issuer-matched measured feedback in research, explicit feedback review, targeted decisive-premise revalidation, economic episode/correlation controls, primary-evidence and short-research baselines, independently rebuilt World arms, batched outcome price retrieval, named timeline UI | Merged PR 41; not deployed. Depends on migrations 006–008 and aligned frontend/worker. No efficacy or policy-promotion claim. |
 
 ## Contracts and preservation
 
@@ -65,7 +71,7 @@ Missing identity or feed continuity remains a gap. Price dependencies cannot
 prevent independent economic tasks from being assessed. Calendars still come from
 the exchange; retrospective schedules never become prospective evidence.
 
-The draft strips raw shadow economics and exposure claims from company-generation
+The merged code strips raw shadow economics and exposure claims from company-generation
 and canonical packet projections. World retains question/document nominations and
 immutable original lineage. A known World-influenced legacy report cannot authorize a
 capital decision until it has an independently reconstructed primary-evidence
@@ -105,11 +111,11 @@ credentials, corpus and World repositories are outside release-directory cleanup
    complete approved release retention; verify disk guard recovery and usable
    primary captures, including a failed-topic coverage record. Recheck the Release
    1 gate with persisted records and the production UI.
-2. Review and merge one release at a time. Before migration 006, run
+2. When deployment is authorized, activate one release at a time. Before migration 006, run
    `scripts/deploy-macserver-release.sh CHECKOUT --stage-only` on macserver. It
    installs, checks and builds the immutable origin/main release without moving
    the active worker or initializing World state. Use the deployment tooling from
-   the complete program branch; the older release script lacks staging support.
+   the complete program revision; the older release script lacks staging support.
 3. Drain and pause the old worker before migration 006 so it cannot consume the
    newly backfilled tasks under legacy semantics. Keep dispatch durable during
    the short activation window. Dry-run and apply only the matching migration.
@@ -145,7 +151,7 @@ feedback, and the observed zero-position/retain contradiction.
 Local desktop (1672 × 941) and mobile (390 × 844) checks exercised timeline
 security/checkpoint filters, seven disclosures, frozen evidence limits and
 hypothetical attribution using read-only production records. The pending migration
-means these real versions honestly render `Not scheduled` in the draft UI. The
+means these real versions honestly render `Not scheduled` in the local UI. The
 production migration dry-run confirms only 006–008 remain pending. No
 scheduled checkpoint, new research conclusion, backup recovery, model-quality gain,
 or live later-release deployment is inferred from local verification.
@@ -154,4 +160,4 @@ The final shared Intelligence UI was also checked locally against read-only live
 records at 1672 × 941 and 390 pixels wide. Its blocked overview remains visible;
 feed counts and retrieval age replace unsupported coverage and directional claims.
 The mobile navigation opened and closed without horizontal overflow or new console
-errors. These changes are committed in PR 42 and the later stack, not deployed.
+errors. These changes are merged in PR 42 and the later stack, not deployed.
