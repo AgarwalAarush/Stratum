@@ -79,8 +79,6 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
                     <button type="button" className="intelligence-icon-button" onClick={refresh} aria-label="Refresh intelligence sources">
                         <ArrowClockwise size={17} className={isRefreshing ? 'intelligence-refreshing' : ''} aria-hidden="true" />
                     </button>
-                    <span className="intelligence-status-dot" aria-hidden="true" />
-                    <span className="intelligence-status-copy">Updated just now</span>
                     <button
                         type="button"
                         className="intelligence-mobile-menu-button"
