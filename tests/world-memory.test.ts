@@ -91,19 +91,11 @@ test('completed research needs an explicit auto-promotion switch before a worker
   assert.equal(shouldAutoPromoteMarketResearch('complete', { MARKET_AUTO_THESIS_ENABLED: 'true' }), true)
 })
 
-test('promoted thesis confidence comes from validated research, not correlation score', async () => {
-  const source = await readFile(new URL('../lib/server/world-memory.ts', import.meta.url), 'utf8')
-  assert.match(source, /publishedConfidence = Math\.round\(researchContent\.confidence\)/)
-  assert.match(source, /confidence: publishedConfidence/)
-  assert.match(source, /!\/\^\(none\|no beneficiary\)\\b\/i/)
-})
+test('legacy promotion remains disabled even for historically complete research',async()=>{const {promoteEligibleMarketHypothesis}=await import('../lib/server/world-memory.ts');await assert.rejects(promoteEligibleMarketHypothesis('owner','hypothesis'),/legacy belief writer retired/)})
 
-test('source-named issuers can be resolved by the active asset registry without a model-guessed ticker', async () => {
-  const source = await readFile(new URL('../lib/server/world-memory.ts', import.meta.url), 'utf8')
-  assert.match(source, /requestedNames/)
-  assert.match(source, /activeAssetsByName/)
-  assert.match(source, /by exact issuer name/)
-})
+
+test('legacy domain inference cannot mutate beliefs on a source refresh',async()=>{const {correlateDomainHypothesis}=await import('../lib/server/world-memory.ts');await assert.rejects(correlateDomainHypothesis('owner','ai-power'),/legacy belief writer retired/)})
+
 
 test('all market domain packs use the same bounded correlation threshold', () => {
   assert.equal(minimumMechanismsForDomainHypothesis('ai-power'), 3)

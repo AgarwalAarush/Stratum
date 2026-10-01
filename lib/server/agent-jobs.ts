@@ -687,16 +687,6 @@ async function runMarketThesisCycle(
 ): Promise<Record<string, unknown>> {
   if (!isMarketWorldModelEnabled()) return { skipped: 'MARKET_WORLD_MODEL_ENABLED is false' }
 
-  if (process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true') {
-    await reportProgress(10, 'collecting governed sources for the World Thinker')
-    const collection = await collectGovernedWorldSourceDocuments()
-    await reportProgress(50, 'refreshing broad event awareness')
-    const events = await refreshWorldEvents()
-    const thinker = await enqueueAgentJob('run-world-thinker', { trigger: 'scheduled', eventClusterIds: events.urgent.length ? events.urgent : undefined })
-    await reportProgress(100, 'source collection complete; World Thinker queued')
-    return { cycle, cutover: true, collection, events, thinker, note: 'Fixed baselines and domain templates are retained as immutable history and no longer create hypotheses.' }
-  }
-
   await reportProgress(5, 'checking governed source health')
   const health = await auditWorldSourceHealth().catch((error) => ({
     healthy: 0,
@@ -722,33 +712,14 @@ async function runMarketThesisCycle(
 
   await reportProgress(48, 'collecting governed source documents')
   const collection = await collectGovernedWorldSourceDocuments()
-  await reportProgress(62, 'compiling the market baseline')
-  const baseline = await compileWorldBaseline('global', 'global')
-  await reportProgress(74, 'correlating source-backed hypotheses')
-  const worldCycle = await runMarketWorldCycle({ baseline })
+  await reportProgress(70, 'refreshing normalized events for the Git World authority')
+  const events = await refreshWorldEvents()
+  await reportProgress(90, 'queuing unresolved legacy predictions for their original resolver')
+  const predictions = await enqueueAgentJob('evaluate-market-predictions', {})
+  await reportProgress(100, 'source evidence refreshed; legacy belief writers are retired')
+  return { cycle, sourceAdapters: adapters.map(a => a.id), ingestions, health, collection, events, predictions,
+    authority: 'git-world-v1', readiness: collection.readiness, errors: collection.errors }
 
-  await reportProgress(84, 'queuing eligible analyst and critic revisions')
-  const { findDueMarketHypothesisResearch } = await import('./market-thesis-research.ts')
-  const due = await findDueMarketHypothesisResearch(undefined, scheduledMarketResearchRunLimit())
-  const research = await Promise.all(due.map((item) => enqueueAgentJob('deepen-market-hypothesis', item)))
-
-  // Keep the broader planner in the same completed source cycle. Its actions
-  // remain governed and durable, but cannot get ahead of this cycle's inputs.
-  const { runMarketResearchOrchestration } = await import('./market-research-orchestrator.ts')
-  const orchestration = await runMarketResearchOrchestration({ trigger: 'scheduled' })
-  await reportProgress(100, `${adapters.length} source packets, ${due.length} eligible thesis revisions, ${orchestration.planned} governed follow-ups`)
-  return {
-    cycle,
-    sourceAdapters: adapters.map((adapter) => adapter.id),
-    ingestions,
-    health,
-    collection,
-    baselineId: baseline.id,
-    worldCycle,
-    researchQueued: research.filter((item) => !item.deduplicated).length,
-    researchHypothesisIds: due.map((item) => item.hypothesisId),
-    orchestration,
-  }
 }
 
 export async function executeAgentJob(job: AgentJobRecord, reportProgress: (progress: number, phase: string) => Promise<void> = async () => {}): Promise<unknown> {
@@ -775,7 +746,11 @@ export async function resumeBlockedAgentJobs(): Promise<number> {
 async function executeJob(
   job: AgentJobRecord,
   reportProgress: (progress: number, phase: string) => Promise<void> = async () => {},
+
 ): Promise<unknown> {
+  const retiredBeliefJobs: AgentJobType[] = ['correlate-market-signals', 'synthesize-market-hypotheses', 'deepen-market-hypothesis',
+    'refresh-market-hypothesis-research', 'orchestrate-market-research', 'monitor-market-theses', 'route-market-research-frontiers'];
+  if (retiredBeliefJobs.includes(job.job_type)) return { readiness: 'blocked', errors: ['Unsupported capability: legacy belief writer retired; use Git World investigation'], authority: 'git-world-v1' };
   if (job.job_type === 'generate-daily-recommendations') {
     await captureInvestmentMacro().catch(error => console.warn(JSON.stringify({ event: 'investment_macro_capture_failed', error: error instanceof Error ? error.message : String(error) })))
     const now = new Date(), ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : undefined, editionKey = typeof job.payload.editionKey === 'string' ? job.payload.editionKey : 'daily'
@@ -839,6 +814,7 @@ async function executeJob(
       ? job.payload.coverageFrontierIds.filter((value): value is string => typeof value === 'string')
       : typeof job.payload.coverageFrontierId === 'string' ? [job.payload.coverageFrontierId] : undefined
     return runWorldThinker({
+      legacyHypothesisId: typeof job.payload.legacyHypothesisId === 'string' ? job.payload.legacyHypothesisId : undefined,
       ownerReviewItemId: typeof job.payload.ownerReviewItemId === 'string' ? job.payload.ownerReviewItemId : undefined,
       trigger, eventClusterIds, coverageFrontierIds, agentJobId: job.id, canonicalProjection: process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true',
       worldOpportunityLeadId: typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : undefined,
@@ -1026,9 +1002,7 @@ async function executeJob(
     if (worldOpportunityLeadId) {
       const supabase = getSupabaseClient()
       if (supabase) await supabase.from('world_opportunity_leads').update({ status: 'researched', research_note_id: note.id, updated_at: new Date().toISOString() }).eq('id', worldOpportunityLeadId)
-      await enqueueAgentJob('run-world-thinker', {
-        trigger: 'company_research', worldOpportunityLeadId, researchNoteId: note.id, symbol,
-      }, `run-world-thinker:company-research:${worldOpportunityLeadId}:${note.id}`)
+
     }
     return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf, worldOpportunityLeadId }
   }
@@ -1102,7 +1076,7 @@ async function executeJob(
         const evidenceFingerprint = [...sourceResult.observationIds].sort().join('-')
         await enqueueAgentJob('compile-world-baseline', { scopeType: 'domain', scopeKey: adapter.domain, evidenceFingerprint })
         await enqueueAgentJob('compile-world-baseline', { scopeType: 'global', scopeKey: 'global', evidenceFingerprint })
-        await enqueueAgentJob('synthesize-market-hypotheses', { reason: `source:${adapterId}`, evidenceFingerprint })
+        await enqueueAgentJob('refresh-world-events', { reason: `source:${adapterId}`, evidenceFingerprint })
       }
       return sourceResult
     }
@@ -1302,7 +1276,7 @@ async function executeJob(
       limit: typeof job.payload.limit === 'number' ? job.payload.limit : 40,
     })
     if (result.accepted > 0) {
-      await enqueueAgentJob('synthesize-market-hypotheses', {
+      await enqueueAgentJob('refresh-world-events', {
         reason: `policy auto-accept:${result.accepted}`,
         evidenceFingerprint: result.observationIds[0] ?? 'auto-accept',
       })
@@ -1317,8 +1291,8 @@ async function executeJob(
     await reportProgress(5, 'loading post-prediction evidence')
     const result = await evaluateMarketPrediction({ predictionId })
     if (result.evaluation.verdict === 'disconfirmed') {
-      await enqueueAgentJob('deepen-market-hypothesis', {
-        ownerId: result.ownerId, hypothesisId: result.hypothesisId,
+      await enqueueAgentJob('run-world-thinker', {
+        trigger: 'scheduled', legacyPredictionId: predictionId,
         reason: `prediction disconfirmed: ${predictionId}`,
       })
     }

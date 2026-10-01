@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ queued: true, ...queued })
     }
     if (body.action === 'orchestrate-market-research') {
-      const queued = await enqueueAgentJob('orchestrate-market-research', { trigger: 'manual' })
+      const queued = await enqueueAgentJob('run-world-thinker', { trigger: 'manual' })
       return NextResponse.json({ queued: true, ...queued })
     }
     if (body.action === 'scan-intelligence-source-referrals') {

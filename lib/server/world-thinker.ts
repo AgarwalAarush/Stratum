@@ -15,7 +15,6 @@ import { fetchPortfolioResearchCoverage } from './portfolio-research-seeding.ts'
 import { loadWorldCoverageFrontiers, recordWorldCoverageSearch, refreshWorldCoverageState, selectDueWorldCoverageFrontiers } from './world-coverage.ts'
 import type { WorldCoverageFrontier } from '../markets/world-coverage.ts'
 import type { WorldSpecialistLens } from '../markets/world-attention.ts'
-import { runWorldSpecialists } from './world-specialists.ts'
 import { projectWorldCausalModel } from './causal-model.ts'
 
 export interface WorldThinkerOptions {
@@ -31,6 +30,7 @@ export interface WorldThinkerOptions {
   ownerReviewItemId?: string
   researchNoteId?: string
   symbol?: string
+  legacyHypothesisId?: string
 }
 
 interface EventClusterRow {
@@ -101,7 +101,6 @@ interface ThinkerContext {
 }
 
 const MAX_CONTEXT_NODES = 60
-const MAX_EVENTS = 30
 const MAX_EXTRACTS = 8
 const MAX_ASSETS = 25_000
 function worldDataRoot(root: string): string {
@@ -119,25 +118,12 @@ function rowToEvent(row: EventClusterRow): WorldEventCluster {
 }
 
 function worldEventLimit(trigger: WorldUpdateProposal['trigger']): number {
-  if (trigger === 'urgent' || trigger === 'backfill') return 12
   if (trigger === 'company_research') return 0
-  return MAX_EVENTS
+  return 1
 }
 
 export function isCoverageOnlyWorldRun(options: Pick<WorldThinkerOptions, 'coverageFrontierIds' | 'eventClusterIds'>): boolean {
   return Boolean(options.coverageFrontierIds?.length && !options.eventClusterIds?.length)
-}
-
-function requestedSpecialistLenses(events: EventClusterRow[]): WorldSpecialistLens[] {
-  const requested = events.flatMap((event) => event.specialist_lenses ?? [])
-  if (requested.length) return [...new Set(requested)]
-  const text = events.map((event) => `${event.title} ${event.summary} ${event.channels.join(' ')}`).join(' ')
-  const fallback: WorldSpecialistLens[] = []
-  if (/war|sanction|government|authoritarian|election|military|taiwan|iran|institution/i.test(text)) fallback.push('geopolitics_institutions')
-  if (/climate|weather|el ni[nñ]o|enso|energy|power|food|crop|water|health|demograph|supply chain|shipping/i.test(text)) fallback.push('physical_economy')
-  if (/inflation|rate|credit|liquidity|bank|sovereign|currency|yield|recession|default/i.test(text)) fallback.push('macro_finance')
-  if (/technology|semiconductor|chip|ai|data center|factory|automation|cyber|export control/i.test(text)) fallback.push('technology_industrial_capacity')
-  return fallback
 }
 
 async function selectPendingEventIds(ids: string[] | undefined, trigger: WorldUpdateProposal['trigger']): Promise<string[]> {
@@ -145,7 +131,7 @@ async function selectPendingEventIds(ids: string[] | undefined, trigger: WorldUp
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const limit = worldEventLimit(trigger)
   if (limit === 0) return []
-  let query = supabase.from('world_event_clusters').select('id').in('processing_state', ['pending', 'failed']).or(`next_attempt_at.is.null,next_attempt_at.lte.${new Date().toISOString()}`).order('materiality', { ascending: false }).order('first_seen_at', { ascending: true }).limit(limit)
+  let query = supabase.from('world_event_clusters').select('id').in('processing_state', ['pending', 'failed']).or(`next_attempt_at.is.null,next_attempt_at.lte.${new Date().toISOString()}`).order('portfolio_dependency', { ascending: false }).order('thesis_dependency', { ascending: false }).order('materiality', { ascending: false }).order('first_seen_at', { ascending: true }).limit(limit)
   if (ids?.length) query = query.in('id', ids)
   const { data, error } = await query
   if (error) throw new Error(`Unable to retrieve pending world events: ${error.message}`)
@@ -302,7 +288,7 @@ export async function retrieveWorldThinkerContext(options: Pick<WorldThinkerOpti
   const journals = latestDistinctWorldJournals(snapshot.nodes.map((entry) => entry.node), 2)
   const relevantNodes = selectRelevantNodes(snapshot.nodes.map((entry) => entry.node), pending.events)
   // Review overdue economic hypotheses even when today's headlines do not match them.
-  if (options.trigger === 'scheduled' || options.trigger === 'manual') {
+  if (options.trigger === 'manual') {
     for (const { node } of snapshot.nodes.filter(({ node }) => node.kind === 'hypothesis' && ['active', 'monitoring'].includes(node.status) && Date.parse(node.nextReviewAt) <= Date.now()).slice(0, 2)) {
       if (!relevantNodes.some(n => n.id === node.id)) relevantNodes.push(node)
     }
@@ -318,8 +304,8 @@ export async function retrieveWorldThinkerContext(options: Pick<WorldThinkerOpti
   await writeFile(join(runtimeDirectory, 'asset-registry.json'), `${JSON.stringify(assetRegistry)}\n`, { mode: 0o600 })
   const requestedFrontiers = new Set(options.coverageFrontierIds ?? [])
   const explorationFrontiers = requestedFrontiers.size
-    ? coverageFrontiers.filter((frontier) => requestedFrontiers.has(frontier.id)).slice(0, 3)
-    : options.trigger === 'scheduled' || options.trigger === 'manual' ? selectDueWorldCoverageFrontiers(coverageFrontiers, new Date(), 3) : []
+    ? coverageFrontiers.filter((frontier) => requestedFrontiers.has(frontier.id)).slice(0, 1)
+    : options.trigger === 'scheduled' || options.trigger === 'manual' ? selectDueWorldCoverageFrontiers(coverageFrontiers, new Date(), 1) : []
   const needsWebSearch = explorationFrontiers.length > 0 || relevantNodes.some(node => node.kind === 'hypothesis' && Date.parse(node.nextReviewAt) <= Date.now()) || pending.events.some((event) => event.materiality >= 75 && (event.source_diversity < 2 || event.claim_state === 'contested'))
   const eventKeyMap = pending.events.map((event, index) => ({ eventKey: `E${String(index + 1).padStart(3, '0')}`, eventClusterId: event.id }))
   const retrievalLedger = [
@@ -360,7 +346,7 @@ When ownerInvestigation is present, investigate its exact causal version and unr
 
 When companyResearchFeedback is present, use its completed note and source ledger to strengthen, weaken, narrow, supersede, or retire the originating world hypothesis. Add the supplied equity-research sources to the draft source ledger before citing them. Do not copy a company rating, entry action, position, or capital decision into world memory.
 
-For every overdue hypothesis supplied, explicitly strengthen, weaken, narrow, retire, or retain it with an explained evidence gap. When fresh evidence warrants investigation, resolve up to two public issuers and produce a bounded company lead. If none qualifies, explain the missing capture or expectations evidence in the journal; do not invent a lead or leave the question silently unreviewed. For each opportunity, trace event -> mechanism -> economic variable -> constrained layer -> rent recipient -> expectations question before naming a company. Include capture conditions, contradictions, gaps, catalysts, and falsifiers. Every hypothesis upsert must populate non-empty mechanism, economicVariable, constrainedLayer, rentRecipient, expectationsQuestion, catalysts, and falsifiers; omit an immature hypothesis instead of returning null or empty specialized fields. Every scenario requires at least one signpost. Every active material situation should link to durable actor nodes and observable indicators when the evidence supports them. Before emitting any company lead, resolve its exact active/tradable symbol and issuer with the read-only command ${worldCli} market <symbol-or-issuer>; omit the lead if that command returns no verified asset. A lead is only a research queue candidate. Never accept a company thesis, recommend a purchase, allocate capital, or propose a trade. Return one bounded WorldUpdateDraft matching the schema; the host owns asOf, nextReviewAt, trigger, baseCommit, and database IDs, so omit those administrative fields. The upserts array must contain exactly one node with kind "current" and id "current", even on the first run; summarize the current assessment concisely there. Never include a node with kind "journal" in upserts; the host deterministically renders the journal from the draft journal fields. Do not delete nodes; archive or supersede them. Upsert only nodes that changed or were explicitly reviewed. Preserve every unchanged claim and its source IDs on updated nodes; explicitly explain any superseded claim in changeSummary. The current node is a concise navigation summary, not the evidence archive: link to durable nodes instead of copying their entire history. Use stable IDs.
+Investigate exactly one supplied event, frontier, or owner question. Related nodes supply context, not additional assignments. Do not fan out into specialist or recursive investigations. For the focal overdue hypothesis, explicitly strengthen, weaken, narrow, retire, or retain it with an explained evidence gap. When fresh evidence warrants investigation, resolve at most one public issuer and produce a bounded company lead. If none qualifies, explain the missing capture or expectations evidence in the journal; do not invent a lead or leave the question silently unreviewed. For each opportunity, trace event -> mechanism -> economic variable -> constrained layer -> rent recipient -> expectations question before naming a company. Include capture conditions, contradictions, gaps, catalysts, and falsifiers. Every hypothesis upsert must populate non-empty mechanism, economicVariable, constrainedLayer, rentRecipient, expectationsQuestion, catalysts, and falsifiers; omit an immature hypothesis instead of returning null or empty specialized fields. Every scenario requires at least one signpost. Every active material situation should link to durable actor nodes and observable indicators when the evidence supports them. Before emitting any company lead, resolve its exact active/tradable symbol and issuer with the read-only command ${worldCli} market <symbol-or-issuer>; omit the lead if that command returns no verified asset. A lead is only a research queue candidate. Never accept a company thesis, recommend a purchase, allocate capital, or propose a trade. Return one bounded WorldUpdateDraft matching the schema; the host owns asOf, nextReviewAt, trigger, baseCommit, and database IDs, so omit those administrative fields. The upserts array must contain exactly one node with kind "current" and id "current", even on the first run; summarize the current assessment concisely there. Never include a node with kind "journal" in upserts; the host deterministically renders the journal from the draft journal fields. Do not delete nodes; archive or supersede them. Upsert only nodes that changed or were explicitly reviewed. Preserve every unchanged claim and its source IDs on updated nodes; explicitly explain any superseded claim in changeSummary. The current node is a concise navigation summary, not the evidence archive: link to durable nodes instead of copying their entire history. Use stable IDs.
 
 UNTRUSTED_CONTEXT
 ${json}
@@ -539,16 +525,9 @@ export function selectResearchableWorldLeads(leads: WorldOpportunityLead[], opti
   ).sort((a, b) => b.dimensions.materiality - a.dimensions.materiality || b.dimensions.transmissionConfidence - a.dimensions.transmissionConfidence).slice(0, Math.min(runLimit, remainingDaily))
 }
 
-async function persistAndQueueLeads(leads: WorldOpportunityLead[], commit: string, trigger: WorldUpdateProposal['trigger']): Promise<Array<{ leadId: string; symbol: string; jobId: string; deduplicated: boolean }>> {
+async function persistAndQueueLeads(leads: WorldOpportunityLead[], commit: string, _trigger: WorldUpdateProposal['trigger']): Promise<Array<{ leadId: string; symbol: string; jobId: string; deduplicated: boolean }>> {
   const supabase = getSupabaseClient()
   if (!supabase || leads.length === 0) return []
-  const sinceDay = new Date(Date.now() - 24 * 60 * 60_000).toISOString()
-  const sinceFourteenDays = new Date(Date.now() - 14 * 24 * 60 * 60_000).toISOString()
-  const [{ data: today }, { data: recent }] = await Promise.all([
-    supabase.from('world_opportunity_leads').select('id').in('status', ['queued', 'researching', 'researched']).gte('created_at', sinceDay),
-    supabase.from('world_opportunity_leads').select('symbol').in('status', ['queued', 'researching']).gte('created_at', sinceFourteenDays),
-  ])
-  const eligible = selectResearchableWorldLeads(leads, { trigger, dailyAlreadyQueued: today?.length ?? 0, activeRecentSymbols: new Set((recent ?? []).map((row) => row.symbol)) })
   const rows = leads.map((lead) => ({
     id: lead.id, world_commit: commit, originating_node_id: lead.originatingNodeId, originating_hypothesis_id: lead.originatingHypothesisId,
     symbol: lead.symbol, issuer: lead.issuer, value_chain_role: lead.valueChainRole, what_changed: lead.whatChanged, why_now: lead.whyNow,
@@ -557,21 +536,13 @@ async function persistAndQueueLeads(leads: WorldOpportunityLead[], commit: strin
     decisive_questions: lead.decisiveQuestions, catalysts: lead.catalysts, falsifiers: lead.falsifiers, expectations_question: lead.expectationsQuestion,
     materiality: lead.dimensions.materiality, transmission_confidence: lead.dimensions.transmissionConfidence, capture_plausibility: lead.dimensions.capturePlausibility,
     expectations_gap: lead.dimensions.expectationsGap, evidence_readiness: lead.dimensions.evidenceReadiness, portfolio_relevance: lead.dimensions.portfolioRelevance,
-    investability: lead.dimensions.investability, decisive_new_event: lead.decisiveNewEvent, status: eligible.some((item) => item.id === lead.id) ? 'queued' : 'new',
+    investability: lead.dimensions.investability, decisive_new_event: lead.decisiveNewEvent, status: 'new',
   }))
   const { error } = await supabase.from('world_opportunity_leads').upsert(rows, { onConflict: 'id' })
   if (error) throw new Error(`Unable to persist World Thinker opportunity leads: ${error.message}`)
-  const { enqueueAgentJob } = await import('./agent-jobs.ts')
-  const queued = []
-  for (const lead of eligible) {
-    const job = await enqueueAgentJob('generate-company-research', {
-      ownerId: MARKETS_OWNER_ID, symbol: lead.symbol, reason: `world-opportunity:${lead.id}`, worldOpportunityLeadId: lead.id,
-      originatingWorldCommit: commit, originatingWorldNodeId: lead.originatingNodeId, originatingWorldHypothesisId: lead.originatingHypothesisId,
-    }, `generate-company-research:world-opportunity:${lead.id}`)
-    await supabase.from('world_opportunity_leads').update({ research_job_id: job.id, updated_at: new Date().toISOString() }).eq('id', lead.id)
-    queued.push({ leadId: lead.id, symbol: lead.symbol, jobId: job.id, deduplicated: job.deduplicated })
-  }
-  return queued
+  // Durable nominations are consumed by portfolio research and owner review.
+  // A World conclusion cannot recursively commission research that immediately feeds this writer.
+  return []
 }
 
 async function updateRun(id: string, changes: Record<string, unknown>): Promise<void> {
@@ -605,9 +576,30 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
     // An explicitly requested frontier review is a bounded breadth task, not a
     // second route into the oldest general backlog. Mixing both caused the
     // event batch to consume the prompt and left the named blind spot unchanged.
-    const candidateIds = isCoverageOnlyWorldRun(options) ? [] : await selectPendingEventIds(options.eventClusterIds, options.trigger)
-    claimedIds = await claimPendingEvents(runId, candidateIds)
-    context = await retrieveWorldThinkerContext({ eventClusterIds: claimedIds, root, branch, trigger: options.trigger, coverageFrontierIds: options.coverageFrontierIds, worldOpportunityLeadId: options.worldOpportunityLeadId, researchNoteId: options.researchNoteId, symbol: options.symbol, runId })
+    const automatic = options.trigger !== 'manual';
+    const preview = automatic ? await supabase.rpc('acquire_world_investigation_slot', {}) : null;
+    if (preview?.error) throw new Error(`Unable to inspect World investigation budget: ${preview.error.message}`);
+    const pendingIds = isCoverageOnlyWorldRun(options) ? [] : await selectPendingEventIds(options.eventClusterIds, options.trigger);
+    const lane = automatic ? preview?.data?.find((s: { lane: string }) => s.lane === ((pendingIds.length || options.trigger === 'company_research') ? 'priority' : 'exploration'))?.lane : null;
+    if (automatic && !lane) {
+      await updateRun(runId, { status: 'noop', outcome_reason: 'No available automatic slot for this question; unused reservations remain unused', finished_at: new Date().toISOString() });
+      return { runId, status: 'noop', commit: null, criticVerdict: 'pass', queuedResearch: [] };
+    }
+    const exploration = automatic && lane === 'exploration';
+    const candidateIds = exploration || isCoverageOnlyWorldRun(options) ? [] : pendingIds;
+    claimedIds = await claimPendingEvents(runId, candidateIds);
+    context = await retrieveWorldThinkerContext({ eventClusterIds: claimedIds, root, branch, trigger: exploration ? 'scheduled' : options.trigger,
+      coverageFrontierIds: options.coverageFrontierIds, worldOpportunityLeadId: options.worldOpportunityLeadId, researchNoteId: options.researchNoteId, symbol: options.symbol, runId });
+    // Priority slots cannot be consumed by an unrelated frontier sweep.
+    if (automatic && !exploration && !isCoverageOnlyWorldRun(options)) context.explorationFrontiers = [];
+    if (context.explorationFrontiers.length) context.events = [];
+    context.manifest = { ...context.manifest, investigationLane: lane ?? 'on-demand', eventClusterIds: context.events.map(e => e.id), coverageFrontierIds: context.explorationFrontiers.map(f => f.id) };
+    if (options.legacyHypothesisId) {
+      const focal = context.allNodes.find(n => n.aliases.includes(options.legacyHypothesisId!) || n.id === `legacy-${options.legacyHypothesisId}`)
+      if (!focal) throw new Error('Legacy World import is not configured for this hypothesis')
+      context.ownerInvestigation = {node:focal,question:'Reassess this legacy/shadow mechanism using independent primary evidence; preserve uncertainty and original lineage.'}
+      context.relevantNodes = [focal]; context.explorationFrontiers = []; context.needsWebSearch = true
+    }
     if (options.ownerReviewItemId) {
       const investigation = await supabase.from('owner_review_items').select('id,title,subject_id,what_changed,source_ids,owner_rationale,causal_model_versions(*)').eq('id',options.ownerReviewItemId).eq('owner_id',MARKETS_OWNER_ID).single()
       if(investigation.error)throw new Error('Owner investigation dossier unavailable')
@@ -624,19 +616,16 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
       await updateRun(runId, { status: 'rejected', critic_verdict: 'reject', error: 'Completed company research feedback was not available', finished_at: new Date().toISOString() })
       return { runId, status: 'rejected', commit: null, criticVerdict: 'reject', queuedResearch: [] }
     }
-    const specialistResults = await runWorldSpecialists({
-      runId,
-      trigger: options.trigger,
-      events: context.events.map(rowToEvent),
-      sources: context.sources,
-      signals: context.signals,
-      requestedLenses: requestedSpecialistLenses(context.events),
-      cwd: worldDataRoot(root),
-    })
-    context.specialistAssessments = specialistResults.map((result) => result.assessment)
-    context.manifest = { ...context.manifest, specialistLenses: context.specialistAssessments.map((assessment) => assessment.lens), specialistAssessmentCount: context.specialistAssessments.length }
-    context.retrievalLedger.push({ order: 5.75, specialistLenses: context.specialistAssessments.map((assessment) => assessment.lens), readOnly: true })
-    await updateRun(runId, { context_manifest: context.manifest, retrieval_ledger: context.retrievalLedger })
+    // Reserve only a useful, bounded investigation; collection and manual requests are outside this cap.
+    if (options.trigger !== 'manual') {
+      const question = { eventClusterId: context.events[0]?.id ?? null, frontierId: context.explorationFrontiers[0]?.id ?? null,
+        researchNoteId: context.companyResearchFeedback?.note.id ?? null };
+      const budget = await supabase.rpc('acquire_world_investigation_slot', { p_run_id: runId, p_question: question, p_lane: context.manifest.investigationLane });
+      if (budget.error) throw new Error(`Unable to reserve World investigation: ${budget.error.message}`);
+      if (!budget.data?.[0]?.available) throw new Error('World investigation budget changed while holding the execution lease');
+      context.manifest = { ...context.manifest, investigationBudget: budget.data[0], question };
+    }
+    await updateRun(runId, { context_manifest: context.manifest, retrieval_ledger: context.retrievalLedger });
     draftSchemaPath = await writeWorldUpdateDraftSchema(context, runId, root)
     context.inputDirectory = await mkdtemp(join(worldDataRoot(root), 'runtime', 'world-inputs-'))
     const hostSources = [...context.priorSources.map(source => ({ source_id: source.id, url: source.url, title: source.title, publisher: source.publisher ?? null, published_at: source.publishedAt ?? null, claim_state: source.claimState, stance: source.stance })), ...context.sources]
@@ -652,7 +641,7 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
     validateEventClassifications(proposal, context)
     validateWorldProposalAgainstState(proposal, context.allNodes, context.priorSourceIds)
     await validateLeadAssets(proposal.opportunityLeads)
-    await updateRun(runId, { status: 'criticizing', model_metadata: { specialists: specialistResults.map((result) => result.metadata), thinker: draftResult.metadata, webSearch: context.needsWebSearch } })
+    await updateRun(runId, { status: 'criticizing', model_metadata: { thinker: draftResult.metadata, webSearch: context.needsWebSearch } })
     const criticSelection = selectMarketModel('world_critic')
     const criticResult = await runCodexJson({
       prompt: await criticPrompt(context, proposal), schemaPath: join(process.cwd(), 'schemas/world-critique.schema.json'), validate: validateWorldCritique,
@@ -678,9 +667,9 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
         model: criticSelection.model, cwd: worldDataRoot(root), webSearch: context.needsWebSearch, timeoutMs: 12 * 60_000,
       })
       critique = revisionCritic.data
-      await updateRun(runId, { model_metadata: { specialists: specialistResults.map((result) => result.metadata), thinker: draftResult.metadata, revision: revision.metadata, critic: criticResult.metadata, revisionCritic: revisionCritic.metadata, webSearch: context.needsWebSearch } })
+      await updateRun(runId, { model_metadata: { thinker: draftResult.metadata, revision: revision.metadata, critic: criticResult.metadata, revisionCritic: revisionCritic.metadata, webSearch: context.needsWebSearch } })
     } else {
-      await updateRun(runId, { model_metadata: { specialists: specialistResults.map((result) => result.metadata), thinker: draftResult.metadata, critic: criticResult.metadata, webSearch: context.needsWebSearch } })
+      await updateRun(runId, { model_metadata: { thinker: draftResult.metadata, critic: criticResult.metadata, webSearch: context.needsWebSearch } })
     }
     if (critique.verdict !== 'pass') {
       await releaseClaimedEvents(context.events, runId, critique.summary)
@@ -709,7 +698,7 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
       }
       if (context.explorationFrontiers.length) await recordWorldCoverageSearch(context.explorationFrontiers.map((frontier) => frontier.id))
       await refreshWorldCoverageState(committedSnapshot.nodes.map((entry) => entry.node), new Date(), committedSnapshot.sources)
-      await updateRun(runId, { status: committed.pushPending ? 'push_pending' : 'projected', projection_status: 'projected', opportunity_lead_count: proposal.opportunityLeads.length, research_queued_count: queuedResearch.filter((item) => !item.deduplicated).length, model_metadata: { causalProjection, specialists: specialistResults.map((result) => result.metadata), thinker: draftResult.metadata, webSearch: context.needsWebSearch }, finished_at: new Date().toISOString() })
+      await updateRun(runId, { status: committed.pushPending ? 'push_pending' : 'projected', projection_status: 'projected', opportunity_lead_count: proposal.opportunityLeads.length, research_queued_count: queuedResearch.filter((item) => !item.deduplicated).length, model_metadata: { causalProjection, thinker: draftResult.metadata, webSearch: context.needsWebSearch }, finished_at: new Date().toISOString() })
       return { runId, status: committed.pushPending ? 'push_pending' : 'projected', commit: committed.commit, criticVerdict: 'pass', queuedResearch }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

@@ -13,7 +13,7 @@ test('worker suppresses five-minute screener work outside the US session', () =>
     'sync-market-assets',
     'prune-market-data',
     'refresh-fmp-intelligence',
-    'monitor-investment-theses',
+    'scan-research-refreshes',
   ])
   assert.equal(jobTypes('2026-08-01T15:00:00Z').includes('refresh-market-screener'), false)
   assert.equal(jobTypes('2026-07-28T14:30:00Z').includes('refresh-market-screener'), true)
@@ -35,14 +35,14 @@ test('market leadership runs once after the US close and queues Candidate Scout 
 test('worker does not enqueue FMP work before its credential is configured', () => {
   assert.deepEqual(
     buildDueAgentJobs(new Date('2026-07-28T08:00:00Z'), { includeFmp: false }).map((job) => job.jobType),
-    ['sync-market-assets', 'prune-market-data', 'monitor-investment-theses'],
+    ['sync-market-assets', 'prune-market-data', 'scan-research-refreshes'],
   )
 })
 
 test('worker does not enqueue scheduled Codex work when synthesis is disabled', () => {
   assert.deepEqual(
     buildDueAgentJobs(new Date('2026-07-27T14:00:00Z'), { includeCodex: false }).map((job) => job.jobType),
-    ['sync-market-assets', 'refresh-market-screener', 'prune-market-data', 'refresh-fmp-intelligence', 'refresh-cross-asset', 'monitor-investment-theses'],
+    ['sync-market-assets', 'refresh-market-screener', 'prune-market-data', 'refresh-fmp-intelligence', 'refresh-cross-asset', 'scan-research-refreshes'],
   )
 })
 
@@ -51,7 +51,7 @@ test('worker schedules daily intelligence only after its UTC release time', () =
     'sync-market-assets',
     'prune-market-data',
     'refresh-fmp-intelligence',
-    'monitor-investment-theses',
+    'scan-research-refreshes',
   ])
   assert.ok(jobTypes('2026-07-28T12:00:00Z').includes('generate-morning-brief'))
 })
@@ -66,9 +66,9 @@ test('FMP intelligence uses a slower cadence outside extended market hours', () 
 })
 
 test('thesis monitoring follows prices every five minutes and slows down off-hours', () => {
-  const session = buildDueAgentJobs(new Date('2026-07-28T15:31:00Z'))
+  const session = buildDueAgentJobs(new Date('2026-07-28T15:31:00Z'), { hasEligibleThesisMonitors: true })
     .find((job) => job.jobType === 'monitor-investment-theses')
-  const overnight = buildDueAgentJobs(new Date('2026-07-28T08:31:00Z'))
+  const overnight = buildDueAgentJobs(new Date('2026-07-28T08:31:00Z'), { hasEligibleThesisMonitors: true })
     .find((job) => job.jobType === 'monitor-investment-theses')
   assert.equal(session?.payload.cadenceMinutes, 5)
   assert.equal(overnight?.payload.cadenceMinutes, 120)
@@ -106,7 +106,7 @@ test('a market-thesis cycle runs twice daily and owns the source-to-research cha
 
   const source = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8'))
   assert.match(source, /sources -> governed collection ->[\s\S]*hypotheses -> eligible analyst\/critic work/)
-  assert.match(source, /runMarketResearchOrchestration\(\{ trigger: 'scheduled' \}\)/)
+  assert.match(source, /legacy belief writers are retired/)
 })
 
 test('portfolio-led research seeding runs after the morning thesis cycle', () => {
@@ -117,7 +117,7 @@ test('portfolio-led research seeding runs after the morning thesis cycle', () =>
 
 test('six-hour research bucket schedules only the market orchestrator', () => {
   const scheduled = buildDueAgentJobs(new Date('2026-08-04T04:05:00Z'), { worldSourceAdapters: [] }).map((job) => job.jobType)
-  assert.equal(scheduled.includes('orchestrate-market-research'), true)
+  assert.equal(scheduled.includes('orchestrate-market-research'), false)
   assert.equal(scheduled.includes('refresh-market-hypothesis-research'), false)
   assert.equal(scheduled.includes('route-market-research-frontiers'), false)
   assert.equal(scheduled.includes('evaluate-market-predictions'), false)
@@ -138,4 +138,13 @@ test('worker schedules weekly and semimonthly intelligence on due dates', () => 
   const firstOfMonth = jobTypes('2026-08-01T14:00:00Z')
   assert.ok(firstOfMonth.includes('generate-monthly-overview'))
   assert.ok(!firstOfMonth.includes('generate-weekly-overview'))
+})
+
+test('empty thesis monitors pause without suppressing independent research checks or source collection', () => {
+ const types = buildDueAgentJobs(new Date('2026-10-01T10:05:00Z'), { includeWorldThinker: true, worldSourceAdapters: [] }).map(j => j.jobType)
+ assert.ok(!types.includes('monitor-investment-theses'))
+ assert.ok(types.includes('scan-research-refreshes'))
+ assert.ok(types.includes('run-market-thesis-cycle'))
+ assert.ok(!types.includes('orchestrate-market-research'))
+ assert.ok(!buildDueAgentJobs(new Date('2026-10-04T00:05:00Z'), { includeWorldThinker: true }).some(j => j.jobType === 'refresh-world-benchmark'))
 })

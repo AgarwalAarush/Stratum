@@ -540,56 +540,7 @@ export async function completeEvidenceReceivedResearchFrontiers(hypothesisId: st
 }
 
 export async function deepenMarketHypothesis(options: DeepenMarketHypothesisOptions): Promise<MarketHypothesisResearchVersion> {
-  const supabase = getSupabaseClient()
-  if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const { hypothesis, sources, prior } = await loadResearchContext(options.ownerId, options.hypothesisId)
-  if (sources.length < 3) throw new Error('A market hypothesis needs at least three source-backed observations before deep research')
-  const allowedSourceIds = new Set(sources.map((source) => source.documentId))
-  const sourceWithExcerpt = await Promise.all(sources.slice(0, 10).map(async (source) => ({
-    ...source,
-    excerpt: source.extractedKey ? await readWorldCorpusExtract(source.extractedKey, 7_000).catch(() => `${source.title}\n${source.assertion}`) : `${source.title}\n${source.assertion}`,
-  })))
-  const now = new Date().toISOString()
-  const row = await createRunningResearchArtifact({
-    hypothesisId: hypothesis.id,
-    sourceIds: [...allowedSourceIds],
-    observationIds: sources.map((source) => source.observationId),
-    priorResearchVersionId: prior?.id ?? null,
-    dataAsOf: now,
-  })
-  const version = number(row.version)
-  const rowId = String(row.id)
-  try {
-    const researchRunner = options.researchRunner ?? ((prompt) => runCodexJson({ prompt, schemaPath: 'schemas/market-thesis-research.schema.json', validate: (value) => validateMarketThesisResearch(value, allowedSourceIds), model: selectMarketModel('hypothesis_analysis').model, timeoutMs: 20 * 60 * 1_000 }))
-    const criticRunner = options.criticRunner ?? ((prompt) => runCodexJson({ prompt, schemaPath: 'schemas/market-thesis-critique.schema.json', validate: (value) => validateMarketThesisCritique(value, allowedSourceIds), model: selectMarketModel('hypothesis_critic').model, timeoutMs: 12 * 60 * 1_000 }))
-    const researchResult = await researchRunner(researchPrompt(hypothesis, sourceWithExcerpt, prior, options.reason ?? 'scheduled deepening'))
-    const research = validateMarketThesisResearch(researchResult.data, allowedSourceIds)
-    const critiqueResult = await criticRunner(critiquePrompt(hypothesis, research, sourceWithExcerpt))
-    const critique = validateMarketThesisCritique(critiqueResult.data, allowedSourceIds)
-    const status = critique.verdict === 'pass' ? 'complete' : 'needs_revision'
-    const generatedAt = new Date().toISOString()
-    const { error: updateError } = await supabase.from('market_hypothesis_research_versions').update({
-      status, content: research, critique, source_ids: research.sourceIds, revision_diff: revisionDiff(prior, research), provider: researchResult.metadata.provider, model: researchResult.metadata.model,
-      critic_provider: critiqueResult.metadata.provider, critic_model: critiqueResult.metadata.model, critic_generated_at: generatedAt, generated_at: generatedAt, error: null,
-    }).eq('id', rowId).eq('status', 'running')
-    if (updateError) throw new Error(`Unable to publish market research artifact: ${updateError.message}`)
-    await persistFrontier(hypothesis.id, rowId, buildPersistedResearchFrontier(research.researchFrontier, critique))
-    await completeEvidenceReceivedResearchFrontiers(hypothesis.id, rowId)
-    // Keep unresolved capture visible on the live hypothesis without rewriting
-    // correlation confidence used by the deterministic promotion evidence gate.
-    if (research.evidenceGaps.some((gap) => /economic capture|rent capture|scarcity rent/i.test(gap))) {
-      const unresolvedNodes = [...new Set([...hypothesis.unresolvedNodes, 'economic_capture'])].slice(0, 8)
-      await supabase.from('market_hypotheses').update({
-        unresolved_nodes: unresolvedNodes,
-        updated_at: generatedAt,
-      }).eq('id', hypothesis.id).eq('owner_id', options.ownerId)
-    }
-    return { id: rowId, hypothesisId: hypothesis.id, version, status, content: research, critique, sourceIds: research.sourceIds, observationIds: sources.map((source) => source.observationId), priorResearchVersionId: prior?.id ?? null, revisionDiff: revisionDiff(prior, research), provider: researchResult.metadata.provider, model: researchResult.metadata.model, criticProvider: critiqueResult.metadata.provider, criticModel: critiqueResult.metadata.model, criticGeneratedAt: generatedAt, dataAsOf: now, generatedAt, error: null }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    await supabase.from('market_hypothesis_research_versions').update({ status: 'failed', error: message }).eq('id', rowId)
-    throw error
-  }
+  throw new Error('Unsupported capability: legacy belief writer retired; use Git World investigation')
 }
 
 /**

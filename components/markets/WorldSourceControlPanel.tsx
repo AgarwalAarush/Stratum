@@ -141,13 +141,13 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'orchestrate-market-research' }),
       })
       const payload = await response.json() as { error?: string; deduplicated?: boolean }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue market orchestration')
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue World investigation')
       setNotice(payload.deduplicated
         ? 'A market-wide orchestration run is already queued or completed in this planning window.'
-        : 'Market-wide orchestration queued. It auto-accepts eligible quote-bound proposals, records deterministic signals, optionally ranks contested expensive work, and queues only bounded worker jobs.')
+        : 'One bounded World investigation queued. Source admission and owner capital decisions remain separate.')
       router.refresh()
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Unable to queue market orchestration')
+      setNotice(error instanceof Error ? error.message : 'Unable to queue World investigation')
     } finally {
       setPending(false)
     }
@@ -494,7 +494,7 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
           {contradictingLeads[0] ? <p><b>Strongest recent dissent:</b> {contradictingLeads[0].lead.claim}</p> : null}
         </div>
         <div className="market-source-scout-form">
-          <button type="button" onClick={requestOrchestration} disabled={pending}>{pending ? 'Queuing planner…' : 'Queue market-wide orchestration'}</button>
+          <button type="button" onClick={requestOrchestration} disabled={pending}>{pending ? 'Queuing planner…' : 'Investigate one World question'}</button>
           <button type="button" className="market-source-secondary-button" onClick={requestAutoAccept} disabled={pending}>{pending ? 'Queuing auto-accept…' : 'Run proposal auto-accept now'}</button>
           <p>Deterministic eligibility always gates work. A standard-tier model ranks only when expensive jobs exceed the research-run budget. Auto-accept still requires an approved/probation source, live contract, and verbatim quote.</p>
         </div>

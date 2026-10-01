@@ -54,7 +54,7 @@ test('prediction evaluations are versioned and disconfirmation only queues resea
   assert.match(jobs, /'evaluate-market-prediction'/)
   assert.match(jobs, /prediction disconfirmed/)
   assert.match(jobs, /'deepen-market-hypothesis'/)
-  assert.match(schedule, /'orchestrate-market-research'/)
+  assert.doesNotMatch(schedule, /'orchestrate-market-research'/)
   assert.match(await readFile(new URL('../lib/server/market-research-orchestrator.ts', import.meta.url), 'utf8'), /evaluate_prediction/)
   assert.match(workspace, /market_thesis_prediction_evaluations/)
   assert.match(workspace, /latestEvaluation/)
