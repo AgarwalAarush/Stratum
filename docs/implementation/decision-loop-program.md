@@ -4,7 +4,8 @@ Status on October 1, 2026: Release 1 application and worker changes are deployed
 its primary-collection acceptance gate remains blocked by corpus disk capacity.
 Final handoff review also found an indirect shadow boundary gap; the draft includes
 the correction in draft PR 42, which must be applied to the foundation before
-that gate can pass. The later draft branches include that correction.
+that gate can pass. The follow-up also removes unsupported Intelligence freshness,
+coverage and trend claims. The later draft branches include both corrections.
 Releases 2–5 are draft work pending that prerequisite and matching rollout.
 Passing tests establish contracts and mechanics, not investment efficacy.
 
@@ -79,6 +80,12 @@ assembly against production covered 39 account/security names and 19 company
 packets with no raw shadow packet/note leaks and no additional independent-research
 gaps in the currently selected records; historical influence remains unproven.
 
+Intelligence presents factual feed counts and the latest retrieval age. Populated
+panels do not establish source coverage, and paper/news presence does not establish
+an advancing trend. Missing retrieval time remains unknown. The shell no longer
+claims an unconditional fresh update. Artifact readiness and its original timestamps
+remain separate from feed retrieval.
+
 ## Reviewed operational gates
 
 No release directories have been removed by this program. The current private
@@ -142,3 +149,9 @@ means these real versions honestly render `Not scheduled` in the draft UI. The
 production migration dry-run confirms only 006–008 remain pending. No
 scheduled checkpoint, new research conclusion, backup recovery, model-quality gain,
 or live later-release deployment is inferred from local verification.
+
+The final shared Intelligence UI was also checked locally against read-only live
+records at 1672 × 941 and 390 pixels wide. Its blocked overview remains visible;
+feed counts and retrieval age replace unsupported coverage and directional claims.
+The mobile navigation opened and closed without horizontal overflow or new console
+errors. These changes are committed in PR 42 and the later stack, not deployed.
