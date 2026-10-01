@@ -16,7 +16,7 @@ async function database() {
     create table agent_jobs(id uuid primary key default gen_random_uuid(), job_type text, payload jsonb default '{}', priority int default 100, status text default 'queued' constraint agent_jobs_status_check check(status in ('queued','running','succeeded','failed','cancelled')), attempts int default 0, max_attempts int default 3, run_after timestamptz default now(), claimed_by text, claimed_at timestamptz, created_at timestamptz default now(), updated_at timestamptz default now(), last_error text);
     create table agent_runs(id uuid primary key default gen_random_uuid(), job_id uuid references agent_jobs, worker_id text, status text default 'running', output jsonb, error text, started_at timestamptz default now(), finished_at timestamptz, duration_ms integer);
   `)
-  for (const name of ['202610010001_market_history_freshness','202610010002_intelligence_readiness','202610010003_agent_blocking_and_leases','202610010004_bounded_retention']) await db.exec(await migration(name))
+  for (const name of ['202610010001_market_history_freshness','202610010002_intelligence_readiness','202610010003_agent_blocking_and_leases','202610010004_bounded_retention','202610010005_history_cursor_index_seek']) await db.exec(await migration(name))
   return db
 }
 
@@ -27,6 +27,7 @@ test('history cursors and metrics expose missing data and actual archive freshne
     const cursors = await db.query<{ symbol: string; history_through: string | null; bar_count: number }>("select * from market_history_cursors(array['TSLA','MISSING'],'iex') order by symbol")
     assert.equal(cursors.rows[0].history_through, null)
     assert.equal(cursors.rows[0].bar_count, 0)
+    assert.equal(cursors.rows[1].bar_count, null)
     assert.equal(new Date(cursors.rows[1].history_through!).toISOString(), '2026-09-04T00:00:00.000Z')
     const metrics = await db.query<{ history_through: string | null; close_30d: number | null }>("select * from screener_history_metrics_v2(array['TSLA'],'iex','2026-10-01')")
     assert.equal(Number(metrics.rows[0].close_30d), 100)
