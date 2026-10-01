@@ -1,3 +1,4 @@
+import { COMPANY_FORECAST_METRICS } from './forecast-metrics.ts'
 import { readResearchAdvice } from './research-advice.ts'
 /** Published investment advice is an immutable, prospective experiment.
  * These functions never fetch data or place orders. */
@@ -68,6 +69,7 @@ export type DecisionContext = {
   policy: string
   editionKey?: string
   codeVersion: string
+  contracts?: { forecast: 2 }
   portfolio: unknown
   names: DecisionName[]
   evidence: EvidenceRef[]
@@ -77,6 +79,8 @@ export type DecisionContext = {
   universe: Array<{ symbol: string; reason: string; selected: boolean }>
 }
 export type Forecast = {
+  resolutionSource?: string
+  decisivePremise?: boolean
   observationPeriod?: string
   unit?: string
   proposition: string
@@ -216,7 +220,14 @@ export function validateRecommendation(
       (!observationPeriod || !/^\d{4}-\d{2}-\d{2}$/.test(observationPeriod) ||
         !Number.isFinite(Date.parse(observationPeriod)) || new Date(observationPeriod).toISOString().slice(0, 10) !== observationPeriod ||
         observationPeriod > str(f.deadline).slice(0, 10) || !unit)) throw new Error('Forecast needs an exact observation period and unit')
+    const resolutionSource = str(f.resolutionSource)
+    if (context.contracts?.forecast === 2) {
+      if (str(f.metric).startsWith('FMP:') && !Object.hasOwn(COMPANY_FORECAST_METRICS,str(f.metric))) throw new Error('Unsupported automatic forecast metric; declare a sourced manual question instead')
+      if (!observationPeriod || !unit || typeof f.decisivePremise !== 'boolean') throw new Error('New forecasts require period, unit and decisive-premise designation')
+      if (!(resolutionSource === str(f.metric) && /^(FRED:|FMP:)/.test(resolutionSource)) && !(resolutionSource.startsWith('source:') && ids.includes(resolutionSource.slice(7)))) throw new Error('Forecast needs a declared resolution source in its frozen evidence')
+    }
     return {
+      ...(resolutionSource ? { resolutionSource, decisivePremise: f.decisivePremise === true } : {}),
       ...(observationPeriod ? { observationPeriod, unit } : {}),
       proposition: str(f.proposition),
       metric: str(f.metric),

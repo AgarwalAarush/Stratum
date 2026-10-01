@@ -27,3 +27,12 @@ export function validateResearchAdvice(value: unknown, allowedSourceIds?: readon
 export function readResearchAdvice(value: unknown): ResearchAdvice | null {
   try { return validateResearchAdvice(value) } catch { return null }
 }
+/** Reject the observed PL failure at the research boundary, before a
+ * recommendation critic has to repair a conflicting ownership instruction. */
+export function validateResearchNarrative(advice: ResearchAdvice | null, verdict: string): void {
+  if (advice?.existingPositionStance.value !== 'retain') return
+  const conflict = verdict.split(/[.!?\n]/).some(sentence =>
+    /(?:keep|set|maintain|target|reduce)\s+(?:the\s+)?(?:position\s+(?:size|weight)|exposure|ownership|allocation)\s+(?:at|to|of)\s+0\s*%/i.test(sentence) &&
+    !/new (?:entrants?|buyers?|entry|positions?)|unowned|prospective (?:buyers?|positions?)/i.test(sentence))
+  if (conflict) throw new Error('Research retain stance contradicts its zero-position verdict')
+}

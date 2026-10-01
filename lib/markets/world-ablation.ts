@@ -1,10 +1,11 @@
 import type { DecisionContext, Recommendation } from './recommendations.ts'
 import { forecastsAreApproved, forecastCategory } from './forecast-review.ts'
 
-export const WORLD_ABLATION_POLICY = 'world-context-ablation-v1'
+export const WORLD_ABLATION_POLICY = 'world-context-ablation-v2'
 
 /** This measures incremental explicit World context given identical company
  * research. It cannot measure World information already embedded in research. */
+// Legacy helper is retained for historical readers; new arms rebuild primary research.
 export function withoutWorldContext(context: DecisionContext): DecisionContext {
   const copy = structuredClone(context)
   const excluded = new Set(copy.evidence.filter(e => e.kind === 'causal_model').map(e => e.id))

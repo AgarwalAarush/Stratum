@@ -2,6 +2,12 @@ import type { Recommendation } from './recommendations.ts'
 
 /** Finite, versioned alternatives. None changes capital actions or owner theses. */
 export const SHADOW_POLICIES = {
+  'world-context-ablation-v2': {
+    label: 'Rebuilt primary-evidence research with versus without World',
+    shrinkage: 0, metric: 'brier',
+  },
+  'evidence-only-v1': {label: 'Deterministic exact-metric history baseline', shrinkage: 0, metric: 'brier'},
+  'simple-research-v1': {label: 'Short research from frozen primary evidence', shrinkage: 0, metric: 'brier'},
   'world-context-ablation-v1': {
     label: 'World context versus company evidence alone',
     shrinkage: 0,
@@ -29,7 +35,7 @@ export function applyShadowPolicy(
   recommendations: Recommendation[],
 ): Recommendation[] {
   const policy = shadowPolicy(key)
-  if (key === 'world-context-ablation-v1') throw new Error('World ablation requires independently generated frozen-evidence arms')
+  if (key.startsWith('world-context-ablation-') || ['evidence-only-v1','simple-research-v1'].includes(key)) throw new Error('World ablation requires independently generated frozen-evidence arms')
   return recommendations.map((r) => ({
     ...r,
     forecasts: r.forecasts.map((f) => ({
@@ -41,6 +47,7 @@ export function applyShadowPolicy(
 export type ShadowForecastPair = {
   question: string
   securityId: string
+  correlationGroup?: string
   issuedAt: string
   deadline: string
   baselineProbability: number
@@ -70,13 +77,13 @@ export function evaluateShadowCalibration(
     }
     seen.add(pair.question)
     if (
-      Date.parse(pair.issuedAt) < (availableAfter.get(pair.securityId) ?? 0)
+      Date.parse(pair.issuedAt) < (availableAfter.get(pair.correlationGroup ?? pair.securityId) ?? 0)
     ) {
       overlapping++
       continue
     }
     availableAfter.set(
-      pair.securityId,
+      pair.correlationGroup ?? pair.securityId,
       Date.parse(pair.deadline) + embargoDays * 86400000,
     )
     retained.push(pair)

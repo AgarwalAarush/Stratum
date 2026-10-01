@@ -41,6 +41,7 @@ test('ETF research validation requires the fund-specific schema and meaningful a
     sections: sectionIds.map((id) => ({ id, title: id, content, sourceIds: ['issuer-holdings'] })), sourceIds: ['issuer-summary', 'issuer-holdings'],
   })
   assert.equal(validated.sections.length, 12)
+  assert.deepEqual(validateEtfResearch({...validated,revision:{priorVersion:1,opinionChange:'unchanged',summary:'No material evidence change; retain the original conclusion.',changes:[]}}).revision.changes,[])
   assert.throws(() => validateEtfResearch({ ...validated, sections: validated.sections.slice(1) }), /12 required sections/)
 })
 

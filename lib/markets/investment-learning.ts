@@ -107,6 +107,7 @@ export function resolveNumericForecast(
     metric: string
     observationPeriod?: string
     unit?: string
+    resolutionSource?: string
   },
   observations: Array<{
     id: string
@@ -119,6 +120,8 @@ export function resolveNumericForecast(
   }>,
   cutoff: string,
 ) {
+  if (!input.observationPeriod || !input.unit || !input.resolutionSource)
+    return { status: 'unresolvable' as const, outcome: null, observation: null }
   const eligible = observations
     .filter(
       (o) =>
@@ -140,7 +143,7 @@ export function resolveNumericForecast(
   const observation = eligible[0]
   if (!observation)
     return {
-      status: 'expired_without_evidence' as const,
+      status: 'needs_data' as const,
       outcome: null,
       observation: null,
     }

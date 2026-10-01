@@ -1,6 +1,8 @@
+import { feedbackSources, loadResearchFeedback } from './research-feedback.ts'
+import { FEEDBACK_RULES, validateFeedbackReview, type FeedbackReview } from '../markets/research-feedback.ts'
 import { beginResearchVersion, publishResearchVersion, failResearchVersion } from './research-lifecycle.ts'
 import { fetchResearchBaseline, recordResearchRefresh } from './research-refresh.ts'
-import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchAdvice } from '../markets/research-advice.ts'
+import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchNarrative, validateResearchAdvice } from '../markets/research-advice.ts'
 import { randomUUID } from 'node:crypto'
 import { parseStateStreetHoldings } from './etf-workbook.ts'
 import { fetchVanEckFund } from './vaneck-holdings.ts'
@@ -411,7 +413,10 @@ export async function materializeEtfResearchPacket(symbolInput: string, ownerId:
     { id: 'issuer-summary', label: `${source.issuer} fund summary`, url: source.summaryUrl, source: source.issuer, asOf: vanEck?.summaryAsOf ?? parsed.dataAsOf },
     { id: 'issuer-holdings', label: `${source.issuer} holdings`, url: holdingsUrl, source: source.issuer, asOf: parsed.dataAsOf },
   ]
+  const outcomeFeedback = await loadResearchFeedback(ownerId, symbol, generatedAt)
+  sources.push(...feedbackSources(outcomeFeedback))
   const packet: EtfResearchPacket = {
+    outcomeFeedback,
     ...parsed,
     id: randomUUID(), symbol, version, generatedAt,
     evidenceQuality: etfEvidenceQuality(parsed, stock.dataAsOf, now),
@@ -433,6 +438,7 @@ export async function materializeEtfResearchPacket(symbolInput: string, ownerId:
 }
 
 interface EtfResearchGeneration {
+  feedbackReview?: FeedbackReview | null
   advice?: import('../markets/research-advice.ts').ResearchAdvice | null
   formalRating: EtfResearchNote['formalRating']
   entryAction: EtfResearchNote['entryAction']
@@ -477,9 +483,13 @@ export function validateEtfResearch(value: unknown, packet?: EtfResearchPacket):
       ? [{ field, previous: String(change.previous ?? ''), current: String(change.current ?? ''), explanation: String(change.explanation ?? '') }]
       : []
   })
-  if (normalizedChanges.length === 0) throw new Error('ETF research revision must contain at least one material evidence change')
+  if (normalizedChanges.length > 8 || normalizedChanges.length !== changes.length || normalizedChanges.some(c => !c.explanation.trim())) throw new Error('Invalid ETF research revision changes')
+  if (!['initial', 'more_constructive', 'less_constructive', 'unchanged'].includes(String(revision.opinionChange)) || !String(revision.summary ?? '').trim()) throw new Error('Invalid ETF research revision comparison')
+  const advice = output.advice || packet ? validateResearchAdvice(output.advice, Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []) : null
+  validateResearchNarrative(advice, sections.filter(s => s.id === 'verdict').map(s => String(s.content ?? '')).join('\n'))
   return {
-    advice: output.advice || packet ? validateResearchAdvice(output.advice, Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []) : null,
+    feedbackReview: packet?.outcomeFeedback ? validateFeedbackReview(output.feedbackReview, packet.outcomeFeedback) : null,
+    advice,
     formalRating, entryAction, investmentThesis: requiredString('investmentThesis'), keyDebate: requiredString('keyDebate'),
     fastestKillSignal: requiredString('fastestKillSignal'), confidence,
     revision: {
@@ -498,19 +508,20 @@ export function validateEtfResearch(value: unknown, packet?: EtfResearchPacket):
   }
 }
 
-function etfResearchPrompt(packet: EtfResearchPacket, prior: EtfResearchNote | null, reason: string): string {
+export function etfResearchPrompt(packet: EtfResearchPacket, prior: EtfResearchNote | null, reason: string): string {
   return [
     'Act as a senior ETF research analyst. Produce an institutional-quality ETF research note for a capital-allocation decision.',
     'This security is a fund, not an operating company. Do not use company financial statements, revenue, earnings transcripts, management commentary, corporate P/E, or forward EPS as if they belonged to the ETF.',
     'Use only the facts and source IDs in the ETF research packet. Never invent holdings, weights, benchmark rules, flows, NAV, AUM, valuation, or citations.',
     'The issuer holdings snapshot is authoritative for what the fund owns. Distinguish issuer facts, constituent look-through inference, and analyst view.',
     'Assess exposure, top-holding concentration, portfolio construction, benchmark/rebalance mechanics, price setup, catalysts, risks, and the practical entry decision. For look-through fundamentals, state when the current packet lacks constituent financial evidence rather than inventing it.',
+    FEEDBACK_RULES,
     RESEARCH_ADVICE_RULES,
     'Use BUY/HOLD/SELL separately from today\'s entry action. Use NOT_RATED or wait when fund-level evidence is inadequate.',
     'Return exactly these 12 sections in schema order: Fund Snapshot; Portfolio Exposure; Top Holdings; Index & Rebalance; Fundamentals Look-through; Valuation & Setup; Catalysts; Bull Case; Base Case; Bear Case; Risk Factors; Verdict.',
     'Use only the length the evidence warrants; do not pad the report. Prefix each factual, analytical, or estimate paragraph with **FACT:**, **VIEW:** or **ESTIMATE:**. Attach source IDs through sections and sourceIds, never in prose.',
     prior
-      ? `This refresh follows version ${prior.version}; preserve supported conclusions and give a structured, evidence-based comparison. Reason: ${reason}.\nPRIOR RESEARCH: ${JSON.stringify(prior)}`
+      ? `This refresh follows version ${prior.version}; preserve supported conclusions and give a structured, evidence-based comparison. Use an empty changes array when substantive evidence and conclusion are unchanged. Reason: ${reason}.\nPRIOR RESEARCH: ${JSON.stringify(prior)}`
       : `This is the initial version. revision.priorVersion must be null and revision.opinionChange must be initial. Reason: ${reason}.`,
     `ETF RESEARCH PACKET:\n${JSON.stringify(packet)}`,
   ].join('\n')
@@ -522,6 +533,7 @@ function normalizeEtfResearch(row: Record<string, unknown>): EtfResearchNote {
   const changes = Array.isArray(revision.changes) ? revision.changes.map(record) : []
   return {
     id: String(row.id), symbol: String(row.symbol), version: Number(row.version), status: row.status as EtfResearchNote['status'],
+    feedbackReview: content.feedbackReview as FeedbackReview | undefined ?? null,
     advice: readResearchAdvice(content.advice),
     formalRating: row.formal_rating as EtfResearchNote['formalRating'], entryAction: row.entry_action as EtfResearchNote['entryAction'],
     investmentThesis: String(content.investmentThesis ?? ''), keyDebate: String(content.keyDebate ?? ''), fastestKillSignal: String(content.fastestKillSignal ?? ''),

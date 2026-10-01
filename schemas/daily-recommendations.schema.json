@@ -160,6 +160,14 @@
                 "unit": {
                   "type": "string",
                   "description": "Exact source units: percent, index, or reported financial currency such as USD."
+                },
+                "resolutionSource": {
+                  "type": "string",
+                  "description": "Exact FRED:/FMP: metric registry key or source:<cited packet source ID>; never a price proxy for an economic mechanism."
+                },
+                "decisivePremise": {
+                  "type": "boolean",
+                  "description": "True only when this economic claim is decisive to the research conclusion."
                 }
               },
               "required": [
@@ -173,7 +181,9 @@
                 "invalidation",
                 "sourceIds",
                 "observationPeriod",
-                "unit"
+                "unit",
+                "resolutionSource",
+                "decisivePremise"
               ]
             }
           },

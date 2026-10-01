@@ -1,3 +1,4 @@
+export const FORECAST_RESOLUTION_POLICY = 'exact-observations-v3'
 /** Exact reported fields only. No model-created metric aliases or inferred
  * quarterly/annual conversion is allowed in automatic outcome resolution. */
 export const COMPANY_FORECAST_METRICS = {
@@ -8,11 +9,12 @@ export const COMPANY_FORECAST_METRICS = {
   'FMP:cashFlowQuarterly:freeCashFlow': ['cashFlowQuarterly', 'freeCashFlow'],
 } as const
 
-export function companyForecastObservations(metric: string, packets: Array<{ id: string; generated_at: string; packet: unknown }>) {
+export function companyForecastObservations(metric: string, packets: Array<{ id: string; generated_at: string; packet: unknown }>, issuerCik?: string) {
   if (!Object.hasOwn(COMPANY_FORECAST_METRICS, metric)) return []
   const [statement, field] = COMPANY_FORECAST_METRICS[metric as keyof typeof COMPANY_FORECAST_METRICS]
   return packets.flatMap(p => {
-    const packet = p.packet as { financialStatements?: Record<string, unknown>; symbol?: string }
+    const packet = p.packet as { company?: {cik?: string|number}; financialStatements?: Record<string, unknown>; symbol?: string }
+    if (issuerCik && String(packet.company?.cik ?? '').replace(/^0+/, '') !== issuerCik.replace(/^0+/, '')) return []
     const rows = packet?.financialStatements?.[statement]
     if (!Array.isArray(rows)) return []
     return rows.flatMap((r: Record<string, unknown>) => {

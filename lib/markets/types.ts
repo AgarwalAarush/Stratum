@@ -485,6 +485,7 @@ export interface EtfHolding {
 }
 
 export interface EtfResearchPacket {
+  outcomeFeedback?: import('./research-feedback.ts').ResearchFeedback
   evidenceQuality?: { checkedAt: string; missing: string[]; coveredWeight: number; priceAsOf: string; holdingsAsOf: string }
   id: string
   symbol: string
@@ -527,6 +528,7 @@ export interface EtfResearchSection {
 }
 
 export interface EtfResearchNote {
+  feedbackReview?: import('./research-feedback.ts').FeedbackReview | null
   advice?: import('./research-advice.ts').ResearchAdvice | null
   id: string
   symbol: string
@@ -623,6 +625,7 @@ export interface CompanyFinancialReconciliation {
 }
 
 export interface CompanyPacket {
+  outcomeFeedback?: import('./research-feedback.ts').ResearchFeedback
   worldOrigin?: Record<string, unknown> | null
   evidenceQuality?: { checkedAt: string; missing: string[]; sourceDates: Array<{ id: string; asOf: string }>; priceAsOf: string }
 
@@ -882,6 +885,7 @@ export interface EquityResearchRevision {
 }
 
 export interface EquityResearchNote {
+  feedbackReview?: import('./research-feedback.ts').FeedbackReview | null
   advice?: import('./research-advice.ts').ResearchAdvice | null
   id: string
   companyMarketModelId?: string | null
