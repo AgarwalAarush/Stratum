@@ -115,6 +115,22 @@ test('Postgres atomically publishes immutable advice and safely leases newslette
       ).rows[0].count,
       4,
     )
+    await db.exec(await readFile(new URL('../supabase/migrations/202610010006_recommendation_calendar_aging.sql', import.meta.url), 'utf8'))
+    const historical = (await db.query<{horizon:string;retrospective:boolean}>("select horizon,retrospective from recommendation_evaluation_tasks where kind='aging'")).rows
+    assert.equal(historical.length,7)
+    assert.ok(historical.every(task => task.retrospective))
+    assert.equal((await db.query<{count:number}>("select count(*)::int from recommendation_evaluation_tasks where kind='markout'")).rows[0].count,4)
+    const renewedManifest = '00000000-0000-4000-8000-000000000004'
+    await db.query('insert into recommendation_input_manifests(id,owner_id,decision_date,decision_cutoff,policy_version,content_hash,content,edition_key) values($1,$2,current_date,now(),$3,$4,$5,$6)', [renewedManifest,owner,'test','new',context,'renewed'])
+    const renew = () => db.query<{id:string}>('select publish_recommendation_batch($1,$2,$3,$4) id',[renewedManifest,[rec],{},'renewed'])
+    const renewed = (await renew()).rows[0].id
+    assert.equal((await renew()).rows[0].id,renewed)
+    const current = (await db.query<{horizon:string;retrospective:boolean;kind:string}>("select t.horizon,t.retrospective,t.kind from recommendation_evaluation_tasks t join recommendation_versions r on r.id=t.recommendation_id where r.batch_id=$1",[renewed])).rows
+    assert.equal(current.length,7)
+    assert.ok(current.every(task => task.kind === 'aging' && !task.retrospective))
+    assert.deepEqual(current.map(task=>task.horizon).sort(),['1w','2w','1m','2m','3m','6m','1y'].sort())
+    const anniversary = (await db.query<{date:string}>("select recommendation_checkpoint_date('2024-01-31T21:00:00Z','1m')::text date")).rows[0].date
+    assert.equal(anniversary,'2024-02-29')
     for (const table of [
       'recommendation_batches',
       'recommendation_versions',
