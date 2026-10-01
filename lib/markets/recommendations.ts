@@ -1,3 +1,4 @@
+import { readResearchAdvice } from './research-advice.ts'
 /** Published investment advice is an immutable, prospective experiment.
  * These functions never fetch data or place orders. */
 export const RECOMMENDATION_ACTIONS = [
@@ -298,6 +299,14 @@ export function gateRecommendation(
   )
   const increase = rec.action === 'buy' || rec.action === 'add'
   const reducing = rec.action === 'trim' || rec.action === 'sell'
+  const advice = readResearchAdvice(obj(name.research?.content).advice)
+  if (advice) {
+    if (increase && (advice.newEntryStance.value !== 'eligible' || advice.evidenceSufficiency.value !== 'sufficient')) reasons.push('Research does not establish sufficient evidence for eligible new risk')
+    if (rec.action === 'hold' && advice.existingPositionStance.value !== 'retain') reasons.push('Hold requires an affirmative existing-position retain stance')
+    if (rec.action === 'sell' && advice.existingPositionStance.value !== 'exit' && name.thesis?.status !== 'invalidated') reasons.push('Sell conflicts with the existing-position stance')
+    if (rec.action === 'trim' && !['reduce', 'exit'].includes(advice.existingPositionStance.value) && name.thesis?.status !== 'invalidated') reasons.push('Trim conflicts with the existing-position stance')
+  }
+  if (rec.action === 'hold' && rec.entry.targetWeightPct !== null && rec.entry.targetWeightPct !== name.currentWeightPct) reasons.push('Hold must preserve the frozen positive exposure; a reduction needs trim or sell')
   if (capitalAction) {
     // Shared macro/World gaps constrain adding risk, but cannot veto an
     // independently supported exit or hold in another instrument/account.

@@ -527,6 +527,7 @@ export interface EtfResearchSection {
 }
 
 export interface EtfResearchNote {
+  advice?: import('./research-advice.ts').ResearchAdvice | null
   id: string
   symbol: string
   version: number
@@ -884,6 +885,7 @@ export interface EquityResearchRevision {
 }
 
 export interface EquityResearchNote {
+  advice?: import('./research-advice.ts').ResearchAdvice | null
   evidenceAuthority?: typeof import('./evidence-authority.ts').PRIMARY_RESEARCH_AUTHORITY
   id: string
   companyMarketModelId?: string | null

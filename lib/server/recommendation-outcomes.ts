@@ -1,3 +1,4 @@
+import { AGING_CHECKPOINTS, agingEndpoint, agingSemantics, checkpointDate, type AgingCheckpoint } from '../markets/recommendation-aging.ts'
 import { forecastsAreApproved, forecastCategory, FORECAST_REVIEW_POLICY } from '../markets/forecast-review.ts'
 import { resolveNumericForecast } from '../markets/investment-learning.ts'
 import { companyForecastObservations, COMPANY_FORECAST_METRICS } from '../markets/forecast-metrics.ts'
@@ -257,10 +258,16 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
       })
       const calendar = await alpaca.fetchCalendar(issuedDate, today)
       // Current-day bars can still be forming or delayed. Use completed prior sessions.
-      const completed = calendar.filter((c) => c.date < today)
+      const completed = calendar.filter(c => agingEndpoint([c], today, now) !== null)
+      const aging = task.kind === 'aging'
+      const anniversary = aging ? checkpointDate(issued, task.horizon as AgingCheckpoint) : null
+      if (aging && !AGING_CHECKPOINTS.includes(task.horizon as AgingCheckpoint)) throw new Error('Unknown calendar checkpoint')
+      const checkpointEndpoint = anniversary ? agingEndpoint(calendar, anniversary, now) : null
       const after = completed.filter((c) => c.date > issuedDate)
       const horizon =
-        task.horizon === 'thesis_horizon'
+        aging
+          ? after.filter(c => checkpointEndpoint && c.date <= checkpointEndpoint).length
+          : task.horizon === 'thesis_horizon'
           ? after.filter(
               (c) =>
                 c.date <=
@@ -295,6 +302,7 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
         identities.verified,
         `${issuedDate}T00:00:00Z`,
         `${endpoint}T23:59:59Z`,
+        aging && ['iex','sip','delayed_sip'].includes(name.quote?.feed ?? '') ? name.quote!.feed as 'iex' | 'sip' | 'delayed_sip' : undefined,
       )
       const vintage = now.toISOString()
       const saved = await db.from('investment_price_vintages').upsert(
@@ -461,8 +469,11 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
           portfolioValue: name.portfolioValue,
         })
       }
+      const economicEvaluations = aging ? await db.from('recommendation_evaluations').select('horizon,content,as_of').eq('recommendation_id', row.data.id).eq('kind', 'thesis').lte('as_of', now.toISOString()).order('as_of', {ascending: false}) : null
+      if (economicEvaluations?.error) throw new Error(economicEvaluations.error.message)
       const content = {
         ...markout,
+        ...(aging ? { checkpoint: task.horizon, checkpointDate: anniversary, evaluatedSession: endpoint, scheduleRetrospective: task.retrospective === true, evaluatorVersion: task.evaluator_version ?? 'calendar-aging-v1', exposureSemantics: agingSemantics(rec.action), frozenQuantity: name.quantity, frozenWeightPct: name.currentWeightPct, economicForecastEvaluations: economicEvaluations?.data ?? [], forecastStatus: 'Economic claims are resolved independently by thesis tasks; price performance cannot resolve them', attributionLimits: ['Hypothetical returns are not reported execution', 'Broker position changes are not fill evidence', 'Missing observations remain unresolved'] } : {}),
         policy: {
           ...policy,
           benchmark: policy.benchmark,
@@ -494,12 +505,18 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
       await appendEvaluation(
         task.owner_id,
         row.data.id,
-        'markout',
+        aging ? 'aging' : 'markout',
         task.horizon,
         content,
         now,
       )
       if (markout.status !== 'resolved') throw new Error(markout.reason)
+      if (aging && agingSemantics(rec.action) === 'descriptive') {
+        const updated = await db.from('recommendation_evaluation_tasks').update({status: 'complete', last_checked_at: now.toISOString(), error: null}).eq('id', task.id)
+        if (updated.error) throw new Error(updated.error.message)
+        complete++
+        continue
+      }
       const target =
         rec.entry.targetWeightPct === null
           ? null
@@ -508,7 +525,7 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
         selectionReturn: markout.grossReturn,
         benchmarkReturn: markout.benchmarkReturn,
         timedReturn: entryRule.return,
-        baselineWeight: policy.baselineWeight,
+        baselineWeight: aging && name.owned && name.currentWeightPct !== null ? name.currentWeightPct / 100 : policy.baselineWeight,
         recommendedWeight: target,
         riskManagedReturn:
           ['sell', 'trim'].includes(rec.action) &&

@@ -1,3 +1,4 @@
+import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchAdvice, type ResearchAdvice } from '../markets/research-advice.ts'
 import { primaryResearchPacket, PRIMARY_RESEARCH_AUTHORITY } from '../markets/evidence-authority.ts'
 import type {
   CompanyPacket,
@@ -566,6 +567,7 @@ export async function materializeCompanyPacket(
 }
 
 interface ResearchGeneration {
+  advice?: ResearchAdvice | null
   formalRating: EquityResearchNote['formalRating']
   entryAction: EquityResearchNote['entryAction']
   investmentThesis: string
@@ -598,7 +600,7 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
   }
   const formalRating = output.formalRating as EquityResearchNote['formalRating']
   const entryAction = output.entryAction as EquityResearchNote['entryAction']
-  if (!['BUY', 'HOLD', 'SELL'].includes(formalRating)) throw new Error('Invalid formal rating')
+  if (!['BUY', 'HOLD', 'SELL', 'NOT_RATED'].includes(formalRating)) throw new Error('Invalid formal rating')
   if (!['buy_now', 'nibble', 'wait', 'add_on_weakness', 'avoid'].includes(entryAction)) throw new Error('Invalid entry action')
   const string = (key: string) => {
     if (typeof output[key] !== 'string' || !output[key]) throw new Error(`Missing ${key}`)
@@ -662,6 +664,7 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
     }
   })
   return {
+    advice: output.advice || allowedSourceIds ? validateResearchAdvice(output.advice, allowedSourceIds) : null,
     formalRating,
     entryAction,
     investmentThesis,
@@ -738,7 +741,8 @@ function researchPrompt(
     'Verdict must first state the company-and-market thesis in plain English, then cover ownership fit, current setup, behavior near highs and on weakness, entry action, better trigger, sizing, liquidity, and horizon. For a high-optionality or thin-data name, make clear that sizing and milestone evidence—not a fabricated valuation model—control the decision.',
     'Kill Criteria must contain 3-5 specific numeric thresholds or observable events—not vibes.',
     'When evidence is unavailable (TAM, 13F, short interest, options, geographic mix, unit economics, etc.), say “Not available in the current packet” and explain what source would be required.',
-    'Always return a directional formal rating of BUY, HOLD, or SELL for an identified tradable equity with a CompanyPacket; do not use NOT_RATED merely because the packet is incomplete or a fair value cannot be calculated. When the evidence is thin, make the best directional judgment from the available facts, keep unsupported valuation fields null, use wait or avoid for the practical action as appropriate, and set confidence to 15-40%. State the missing evidence and what would change the call. Reserve NOT_RATED only for an invalid identity, no credible company evidence, or a non-tradable instrument.',
+    RESEARCH_ADVICE_RULES,
+    'Formal rating is a compatibility summary. NOT_RATED is valid when the evidence is insufficient. Unsupported facts and valuation remain unavailable.',
     '',
     priorResearch ? `PRIOR RESEARCH VERSION ${priorResearch.version}:\n${JSON.stringify(priorResearch)}` : 'PRIOR RESEARCH: none',
     '',
@@ -877,6 +881,7 @@ function normalizeResearch(row: Record<string, unknown>): EquityResearchNote {
     symbol: String(row.symbol),
     version: Number(row.version),
     status: row.status as EquityResearchNote['status'],
+    advice: readResearchAdvice(content.advice),
     evidenceAuthority: content.evidenceAuthority as EquityResearchNote['evidenceAuthority'],
     formalRating: row.formal_rating as EquityResearchNote['formalRating'],
     entryAction: row.entry_action as EquityResearchNote['entryAction'],

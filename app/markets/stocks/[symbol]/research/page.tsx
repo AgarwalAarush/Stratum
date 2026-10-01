@@ -1,3 +1,4 @@
+import { ResearchAdvice } from '@/components/markets/ResearchAdvice'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Fragment } from 'react'
@@ -395,6 +396,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
             <div><span>Conviction</span><strong>{confidence?.toFixed(0)}%</strong><small>Evidence confidence</small></div>
           </section>
 
+          <ResearchAdvice advice={research.advice} />
           <section className="equity-research-revision" data-opinion-change={research.revision.opinionChange} aria-labelledby="research-revision-title">
             <header>
               <div>

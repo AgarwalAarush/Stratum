@@ -912,7 +912,8 @@ export async function recordRecommendationOwnerEvent(
         error: 'Owner outcome changed; append revised attribution',
       })
       .eq('recommendation_id', id)
-      .eq('kind', 'markout')
+      .in('kind', ['markout', 'aging'])
+      .lte('not_before', new Date().toISOString())
     if (refreshed.error) throw new Error(refreshed.error.message)
   }
 }
