@@ -1,3 +1,4 @@
+import { primaryResearchPacket, PRIMARY_RESEARCH_AUTHORITY } from '../markets/evidence-authority.ts'
 import type {
   CompanyMarketBusinessLine,
   CompanyMarketCausalLink,
@@ -275,6 +276,7 @@ function normalizeCompanyMarketModel(row: Record<string, unknown>): CompanyMarke
   return {
     id: String(row.id),
     symbol: String(row.symbol),
+    evidenceAuthority: content.evidenceAuthority as CompanyMarketModel['evidenceAuthority'],
     version: Number(row.version),
     status: row.status as CompanyMarketModel['status'],
     ...validateCompanyMarketModel(content),
@@ -318,7 +320,9 @@ export async function materializeCompanyMarketModel(
 ): Promise<CompanyMarketModel> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const priorModel = await fetchLatestCompanyMarketModel(ownerId, packet.symbol)
+  packet = primaryResearchPacket(packet)
+  const previous = await fetchLatestCompanyMarketModel(ownerId, packet.symbol)
+  const priorModel = previous?.evidenceAuthority?.version === 1 ? previous : null
   const version = await nextMarketModelVersion(ownerId, packet.symbol)
   const { data: row, error: createError } = await supabase.from('company_market_models').insert({
     symbol: packet.symbol,
@@ -340,7 +344,7 @@ export async function materializeCompanyMarketModel(
     const generatedAt = new Date().toISOString()
     const { error } = await supabase.from('company_market_models').update({
       status: 'complete',
-      content: result.data,
+      content: { ...result.data, evidenceAuthority: PRIMARY_RESEARCH_AUTHORITY },
       source_ids: result.data.sourceIds,
       provider: result.metadata.provider,
       model: result.metadata.model,
@@ -354,6 +358,7 @@ export async function materializeCompanyMarketModel(
       version,
       status: 'complete',
       ...result.data,
+      evidenceAuthority: PRIMARY_RESEARCH_AUTHORITY,
       provider: result.metadata.provider,
       model: result.metadata.model,
       dataAsOf: packet.dataAsOf,
