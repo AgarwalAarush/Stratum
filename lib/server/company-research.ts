@@ -780,14 +780,16 @@ export async function generateFullEquityResearch(
     if (error || !data) throw new Error('Originating World dossier is unavailable or mismatched')
     worldOrigin = data
   }
+  const independentBaseline = Boolean(priorResearch && priorResearch.evidenceAuthority?.version !== 1)
   const previousPacket = priorResearch ? await fetchResearchBaseline(ownerId, 'equity', priorResearch.id) : null
   const packet = await materializeCompanyPacket(symbol, ownerId, new Date(), worldOrigin)
-  const independentBaseline = needsIndependentResearch(priorResearch, previousPacket)
   const analysisPacket = primaryResearchPacket(packet)
-  const refresh = await recordResearchRefresh({ownerId,instrument:'equity',packet:analysisPacket,priorPacket:independentBaseline ? null : previousPacket ? primaryResearchPacket(previousPacket as object) : null,prior:independentBaseline ? null : priorResearch,reason:independentBaseline ? 'Initial independent primary-evidence coverage; legacy World context excluded' : reason,conditionsChanged: /kill|entry|invalidation/i.test(reason)})
+  const needsIndependent = needsIndependentResearch(priorResearch, previousPacket)
+  const refresh = await recordResearchRefresh({ownerId,instrument:'equity',packet:analysisPacket,priorPacket:needsIndependent ? null : previousPacket ? primaryResearchPacket(previousPacket as object) : null,prior:needsIndependent ? null : priorResearch,reason:needsIndependent ? 'Initial independent primary-evidence coverage; legacy World context excluded' : reason,conditionsChanged: /kill|entry|invalidation/i.test(reason)})
   if (priorResearch && refresh.kind !== 'full_research') { await onProgress?.(100, `Evidence ${refresh.kind}; retained research v${priorResearch.version}`); return priorResearch }
   await onProgress?.(45, 'Company packet assembled')
-  const priorMarketModel = priorResearch?.evidenceAuthority?.version === 1 ? await fetchLatestCompanyMarketModel(ownerId, symbol) : null
+  const previousMarketModel = await fetchLatestCompanyMarketModel(ownerId, symbol)
+  const priorMarketModel = previousMarketModel?.evidenceAuthority?.version === 1 ? previousMarketModel : null
   await onProgress?.(50, 'Preparing one research and business-model generation')
   const noteRecord = await beginResearchVersion({kind:'equity',ownerId,symbol,packetId:packet.id,dataAsOf:packet.dataAsOf,previousId:priorResearch?.id??null,extra:{company_market_model_id:null}})
   const version = noteRecord.version

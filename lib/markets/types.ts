@@ -796,6 +796,7 @@ export interface CompanyMarketFalsifier {
 }
 
 export interface CompanyMarketModel {
+  evidenceAuthority?: typeof import('./evidence-authority.ts').PRIMARY_RESEARCH_AUTHORITY
   id: string
   symbol: string
   version: number
