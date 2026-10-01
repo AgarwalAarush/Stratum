@@ -2,8 +2,9 @@
 
 `GET /api/markets/newspaper` exports the authenticated Stratum owner's persisted
 portfolio evidence and latest published recommendation edition. It is for a
-private local PDF. This feature is local-only under the existing deployment hold;
-it has not been merged, pushed, deployed, or enabled in production.
+private local PDF. The owner subsequently authorized its production release on
+October 1, 2026. It is released as a narrow backport onto the live UI release
+`137eb14`; the separate held backend releases on main remain unactivated.
 
 ## Authorization and consumption
 
@@ -14,9 +15,9 @@ bypass does not authorize this endpoint. No API key, bearer token, alternate
 owner, CORS grant, credential creation, or new persistent access is introduced.
 The proxy also protects `/api/markets/*`.
 
-Once this change is separately authorized for release, the user can sign in to
-Stratum normally and open `/api/markets/newspaper` in that same browser. The
-response downloads as `stratum-newspaper.json`. The user can supply that file
+The user can sign in to Stratum normally and open `/api/markets/newspaper` in
+that same browser. The response displays private JSON without forcing a file
+download. The user can save it locally as `stratum-newspaper.json` and supply it
 directly to the local newspaper process. This is the preferred consumption path:
 no newspaper credential or account access is needed. Keep the JSON and resulting
 PDF local/private and outside Git; do not upload them to an external service.
@@ -32,8 +33,8 @@ cookie from its private in-memory request context. This implementation does not
 read/export browser cookies, create credentials, or save a cookie jar. Arranging
 automated access, obtaining/transferring a session for a separate process,
 renewing authentication, or adding persistent credentials requires separate user
-approval. The user-provided JSON path avoids those actions. Production consumption
-is blocked by the intentional deployment hold, not by a missing new auth grant.
+approval. The user-provided JSON path avoids those actions. No new auth grant is
+needed to view the export through the existing owner session.
 
 ## JSON contract (schemaVersion 1)
 
@@ -88,7 +89,9 @@ Published action labels do not authorize trading.
 ## Errors and read-only boundary
 
 All handler responses carry `Cache-Control: private, no-store, max-age=0`,
-`Vary: Cookie`, and `X-Content-Type-Options: nosniff`. Next's route is dynamic with
+`Vary: Cookie`, `X-Content-Type-Options: nosniff`,
+`Cross-Origin-Resource-Policy: same-origin`, `Referrer-Policy: no-referrer`, and
+`X-Robots-Tag: noindex, noarchive`. Next's route is dynamic with
 `revalidate = 0` (Next's route validator rejects custom exports such as
 `CACHE_TTL_SECONDS`). No credentials or full brokerage account identifiers are
 in the output. Source URLs with embedded credentials or secret-like query keys
@@ -99,6 +102,7 @@ are suppressed and flagged.
 | 200 | Supported portfolio export; analysis may be unavailable with explicit flags |
 | 400 | Query parameters rejected; no alternate owner/account/all-users/refresh mode |
 | 401 | Missing/invalid/expired/unconfigured signed owner authentication |
+| 403 | Cross-origin or sibling-origin browser request |
 | 503 | Authoritative holdings read/projection failure; no partial holdings returned |
 | 405 | No mutation method is registered |
 
@@ -126,7 +130,7 @@ holdings and credentials are synthetic.
 node --test --experimental-strip-types tests/newspaper-export*.test.ts tests/portfolio-authority.test.ts tests/markets-auth.test.ts tests/recommendation-reads.test.ts tests/portfolio-confirmation.test.ts tests/multi-portfolios.test.ts
 ```
 
-Local verification on October 1, 2026:
+Initial local verification on October 1, 2026:
 
 - Focused suite: 38 passed.
 - Complete `npm test`: 776 passed, one existing skip, zero failures.
@@ -143,7 +147,43 @@ Local verification on October 1, 2026:
   external dependency symlink with a local copy, default Turbopack stalled during
   compilation and was stopped. Bounded `npm run build -- --webpack` failed on
   `fonts.googleapis.com` DNS lookup / IBM Plex and Instrument Serif downloads.
-  No production build success or live data verification is claimed.
+  This initial sandbox attempt was superseded by the successful release build below.
 
-This work contains no real holdings export, migrated data, credentials, push,
-merge, or deployment. The separate newspaper repository was not modified.
+The separate newspaper repository is not modified by this feature. Real export
+snapshots stay private and outside Git.
+
+## Production release and security verification
+
+On October 1, 2026, after explicit owner approval, the endpoint was released at
+`https://stratum.aarushagarwal.dev/api/markets/newspaper` from isolated production
+backport commit `039e87b8596fdeaae7ef5459782228f55a932613`, based on live UI commit
+`137eb145af467bc58856cc2f0b81a567c55543b0`. Vercel deployment
+`dpl_HEjUmKFpesdf3wW5xqFsoNSN6Rn3` was built as production without assigning the
+public domain, checked, then promoted. The alias API confirmed the production
+domain points to this deployment.
+
+- Exact production release: 751 tests passed, one existing skip, zero failures;
+  39 focused tests passed; scoped ESLint and `npm run build` passed.
+- The main-line feature suite passed 777 tests with one existing skip and zero
+  failures after cross-origin hardening.
+- The staged endpoint rejected anonymous requests with 401. The unchanged
+  Intelligence papers endpoint returned 200 with 20 items.
+- Live requests without authentication and with a forged session returned 401.
+  Runtime logs on the promoted deployment recorded 200 for the existing signed
+  owner browser's GET and 401 for the anonymous verification request.
+- The upload manifest contained no environment, OAuth-store, session-cookie,
+  credential, or real holdings export files. Only fictional test fixtures are
+  checked in.
+- The existing Vercel ignored-build command remains `exit 0`. The backend
+  releases held on main, migrations 006–008, workers, and backfills were not
+  activated by this narrow release. No authentication configuration changed.
+
+The signed request's response body could not be saved through the available
+in-app browser tool: JSON navigation was blocked by the client. A prior download
+attempt also stalled. Server 200 is evidence of successful authentication and
+route execution, but no live holdings values or snapshot body were independently
+inspected. The remaining safe handoff is for the owner to open the endpoint in
+an ordinary signed-in browser and save the JSON locally for the newspaper
+adapter. No session extraction, new access grant, or persistence workaround was
+used. The local consumer should send `Accept: application/json` when using
+previously authorized existing authentication.
