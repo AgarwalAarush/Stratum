@@ -4,10 +4,7 @@ import type { OverviewData } from '../../lib/types'
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  ArrowDown,
-  ArrowRight,
   ArrowSquareOut,
-  ArrowUp,
   CaretRight,
   Circuitry,
   Code,
@@ -42,12 +39,9 @@ interface IntelligenceRow {
   tag?: ItemTag
 }
 
-type SignalDirection = 'up' | 'down' | 'right'
-
 interface IntelligenceSignal {
   label: string
   status: string
-  direction: SignalDirection
 }
 
 interface IntelligenceCategory {
@@ -174,35 +168,19 @@ function sectionRows(sections: Record<string, SectionData>, sectionId: string): 
   return (sections[sectionId]?.items ?? []).map(itemToRow)
 }
 
-function includesAny(rows: IntelligenceRow[], terms: string[]): boolean {
-  const text = rows.map((row) => row.title.toLowerCase()).join(' ')
-  return terms.some((term) => text.includes(term))
-}
-
 function buildSignals(sections: Record<string, SectionData>): IntelligenceSignal[] {
   const papers = sectionRows(sections, 'papers')
   const infrastructure = sectionRows(sections, 'infra-hardware')
   const policy = sectionRows(sections, 'ai-policy-regulation')
   const repos = sectionRows(sections, 'repos')
   const security = sectionRows(sections, 'cybersecurity')
-
-  const infrastructureConstrained = includesAny(infrastructure, ['capacity', 'power', 'bottleneck', 'shortage', 'constraint'])
-  const policyTightening = includesAny(policy, ['regulation', 'rule', 'act', 'compliance', 'enforcement'])
-  const securityElevated = includesAny(security, ['attack', 'breach', 'threat', 'vulnerability', 'malware'])
-
   return [
-    { label: 'Frontier models', status: papers.length > 0 ? 'Advancing' : 'Monitoring', direction: papers.length > 0 ? 'up' : 'right' },
-    { label: 'Infrastructure', status: infrastructureConstrained ? 'Constrained' : infrastructure.length > 0 ? 'Active' : 'Monitoring', direction: infrastructureConstrained ? 'down' : infrastructure.length > 0 ? 'up' : 'right' },
-    { label: 'Policy', status: policyTightening ? 'Tightening' : policy.length > 0 ? 'Active' : 'Monitoring', direction: policyTightening ? 'right' : policy.length > 0 ? 'up' : 'right' },
-    { label: 'Open source', status: repos.length > 0 ? 'Gaining' : 'Monitoring', direction: repos.length > 0 ? 'up' : 'right' },
-    { label: 'Security', status: securityElevated ? 'Elevated' : security.length > 0 ? 'Active' : 'Monitoring', direction: securityElevated ? 'right' : security.length > 0 ? 'up' : 'right' },
+    { label: 'Research', status: `${papers.length} papers` },
+    { label: 'Infrastructure', status: `${infrastructure.length} items` },
+    { label: 'Policy', status: `${policy.length} items` },
+    { label: 'Open source', status: `${repos.length} repos` },
+    { label: 'Security', status: `${security.length} items` },
   ]
-}
-
-function SignalArrow({ direction }: { direction: SignalDirection }) {
-  if (direction === 'up') return <ArrowUp size={14} weight="bold" aria-hidden="true" />
-  if (direction === 'down') return <ArrowDown size={14} weight="bold" aria-hidden="true" />
-  return <ArrowRight size={14} weight="bold" aria-hidden="true" />
 }
 
 function IntelligenceColumn({
@@ -371,9 +349,6 @@ export function IntelligenceResearchDashboard({
     .slice(0, 5)
 
   const loadedSectionCount = Object.values(sections).filter((section) => section.items.length > 0).length
-  const sourceCoverage = totalSectionCount > 0
-    ? Math.round((loadedSectionCount / totalSectionCount) * 100)
-    : 0
   const signals = buildSignals(sections)
   const headline = makeHeadline(overviewBullets)
 
@@ -398,16 +373,15 @@ export function IntelligenceResearchDashboard({
         <p className="intelligence-eyebrow">Intelligence state</p>
         <h1 id="intelligence-state-title" className="intelligence-display">{headline}</h1>
         <div className="intelligence-state-meta">
-          <span>{isLoading ? 'Loading source coverage' : `${sourceCoverage}% source coverage`}</span>
-          <span>Sources current · {lastUpdatedLabel}</span>
+          <span>{isLoading ? 'Loading feed panels' : `${loadedSectionCount}/${totalSectionCount} feed panels with items`}</span>
+          <span>Latest feed retrieval · {lastUpdatedLabel}</span>
         </div>
       </section>
 
-      <section className="intelligence-signal-tape" aria-label="Intelligence signals">
+      <section className="intelligence-signal-tape" aria-label="Feed activity">
         {signals.map((signal) => (
-          <div key={signal.label} className={`intelligence-signal intelligence-signal-${signal.direction}`}>
+          <div key={signal.label} className="intelligence-signal">
             <strong>{signal.label}</strong>
-            <SignalArrow direction={signal.direction} />
             <span>{signal.status}</span>
           </div>
         ))}
