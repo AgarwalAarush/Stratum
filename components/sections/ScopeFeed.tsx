@@ -85,7 +85,7 @@ export function ScopeFeed({ scope, initialData }: ScopeFeedProps) {
       .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
 
     if (fetchedAt) return formatRelativeTime(fetchedAt)
-    return isLoading ? 'loading...' : 'just now'
+    return isLoading ? 'loading...' : 'unknown'
   }, [data, isLoading, scope.sections])
 
   const isAiResearchScope = scope.id === 'ai-research'

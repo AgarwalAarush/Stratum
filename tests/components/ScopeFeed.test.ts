@@ -132,7 +132,7 @@ test('Intelligence dashboard maps the four primary source groups', () => {
   assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'infra-hardware'\)/)
   assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'repos'\)/)
   assert.match(intelligenceDashboardSource, /intelligence-topic-grid-primary/)
-  assert.match(intelligenceDashboardSource, /source coverage/)
+  assert.match(intelligenceDashboardSource, /feed panels with items/)
 })
 
 test('Intelligence dashboard keeps company and technology feeds as standalone sections', () => {
