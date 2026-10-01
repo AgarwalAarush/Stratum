@@ -47,11 +47,30 @@ boundaries; absolute fallback dates use UTC consistently.
 The existing production hold described in `decision-loop-program.md` remains in
 effect. Current `main` includes Releases 2–5 and the foundation correction;
 migrations 202610010006–008 and matching worker activation remain pending.
-Vercel's held Git builds were verified as canceled. The production alias still
-points to commit `8361d2b96c02a70400df466a74a2ac9e67fead29`.
+Vercel's held Git builds were verified as canceled. After the owner authorized
+deployment, the UI was backported onto the live `8361d2b` release as commit
+`137eb145af467bc58856cc2f0b81a567c55543b0` on `codex/ui-production`.
 
 Automatic approval review rejected an unspecified deployment because it could
 activate the held backend releases without their matched prerequisites. This UI
-feature requires no migration or backfill itself, but deploying the current main
-branch requires the separately authorized coordinated rollout. A local build or
-Git merge does not establish production delivery.
+feature requires no migration or backfill itself. The isolated release changes
+eighteen frontend, formatting utility and focused test files; it contains no
+changes to server/data/market libraries, schemas, migrations, worker scripts or
+dependencies. Deploying the complete main branch still requires the separately
+authorized coordinated rollout.
+
+The exact release passed its production build, scoped lint (the same two existing
+test-helper warnings) and 740 tests: 739 passed, one skipped. Core Intelligence,
+Today, Research and World routes were rechecked at 1672 × 941 and 390 × 844.
+It was staged with production environment variables and without the live domain;
+the staged Intelligence page and real papers API returned HTTP 200 and twenty
+paper records. Local credentials were excluded from the upload.
+
+Vercel deployment `dpl_Fivfd3fCxa8PpegEmEQGNaiu78Nz` was then promoted to
+`stratum.aarushagarwal.dev`. The domain resolves to the intended `137eb14` commit.
+Live Intelligence rendering and mobile sizing passed; authenticated Markets Today
+and the sixty-report Research library loaded, and Research search filtered to
+one NVDA report. Screenshots remain outside Git. The ignored-build gate remains
+`exit 0`, and the preceding `dpl_8ErmGkLonaV2FvmoSEurMB1BsgXU` deployment is
+retained for rollback. No backend release, migration, worker or backfill was
+activated by this UI deployment.
