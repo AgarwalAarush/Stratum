@@ -8072,21 +8072,6 @@ html:has(.intelligence-shell) {
   transform: translateY(1px);
 }
 
-.intelligence-status-dot {
-  background: var(--market-green);
-  border-radius: 999px;
-  height: 7px;
-  margin-left: 2px;
-  width: 7px;
-}
-
-.intelligence-status-copy {
-  color: var(--market-text-dim);
-  font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
 .intelligence-mobile-menu-button {
   display: none;
 }
@@ -8220,22 +8205,6 @@ html:has(.intelligence-shell) {
   font-size: 11px;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-}
-
-.intelligence-signal-up svg {
-  color: var(--market-green);
-}
-
-.intelligence-signal-down svg {
-  color: var(--market-red);
-}
-
-.intelligence-signal-right svg {
-  color: #d88416;
-}
-
-[data-theme="dark"] .intelligence-signal-right svg {
-  color: #e5a343;
 }
 
 .intelligence-brief-grid {
@@ -8734,8 +8703,6 @@ html:has(.intelligence-shell) {
   }
 
   .intelligence-mode-switch,
-  .intelligence-status-copy,
-  .intelligence-status-dot,
   .intelligence-status .intelligence-icon-button:first-child {
     display: none;
   }
