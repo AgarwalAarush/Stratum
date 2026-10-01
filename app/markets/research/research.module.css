@@ -1,48 +1,14 @@
-.artifacts > a > div strong {
-  font-size: 20px;
-  font-family: var(--font-ibm-plex-sans), sans-serif;
-}
 
-.artifacts > a > div span {
-  font-size: 11px;
-  color: var(--market-text-muted);
-}
-
-.artifacts h2 {
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 1.5;
-  margin: 20px 0 24px;
-}
-
-.artifacts footer {
-  font-size: 10px;
-  flex-wrap: wrap;
-  margin-top: auto;
-}
-
-.coverage {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 32px;
-  padding: 20px 0 28px;
-  margin-bottom: 24px;
-  border-bottom: 1px solid var(--market-border);
-}
-
-.coverage h2,
-.coverage strong {
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.coverage p {
-  color: var(--market-text-muted);
-  font-size: 13px;
-  line-height: 1.6;
-  margin-top: 8px;
-}
-
-@media (max-width: 700px) {
-  .coverage { grid-template-columns: 1fr; gap: 20px; }
-}
+.deck { margin-top: 10px; font-size: 14px; line-height: 1.5; color: var(--market-text-dim); }
+.tools { display: flex; gap: 24px; overflow-x: auto; border-block: 1px solid var(--market-border); }
+.tools a { flex-shrink: 0; font-size: 13px; color: var(--market-text-dim); padding: 14px 0; border-bottom: 2px solid transparent; }
+.tools a:hover, .tools a[aria-current='page'] { color: var(--market-text); border-bottom-color: var(--market-accent); }
+.context { display: grid; grid-template-columns: 1.4fr 1fr; gap: 28px; padding: 16px 20px; margin-top: 18px; background: var(--market-surface-soft); border-radius: 4px; }
+.context :global(.research-queue) { margin: 0; align-self: center; border-bottom: 0; }
+.coverage { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+.coverage h2 { font-size: 13px; font-weight: 500; }
+.coverage strong { font-size: 14px; font-weight: 500; }
+.coverage p { color: var(--market-text-muted); font-size: 11px; line-height: 1.5; margin-top: 5px; }
+.unavailable { padding: 20px; margin-top: 20px; border-left: 2px solid var(--market-border-strong); background: var(--market-surface-soft); font-size: 14px; }
+@media (max-width: 900px) { .context { grid-template-columns: 1fr; gap: 12px; } }
+@media (max-width: 700px) { .tools { gap: 22px; } .context { padding: 14px 16px; } }

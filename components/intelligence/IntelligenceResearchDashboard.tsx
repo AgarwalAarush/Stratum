@@ -15,18 +15,20 @@ import {
   Shield,
   X,
 } from '@phosphor-icons/react'
-import type { FeedItem, ItemTag, SectionData } from '@/lib/types'
+import type { FeedItem, ItemTag, ScopeDef, SectionData } from '@/lib/types'
 import { getTag } from '@/lib/tags'
 import { formatRelativeTime } from '@/lib/utils'
 
 interface IntelligenceResearchDashboardProps {
   sections: Record<string, SectionData>
+  relativeTimeAsOf: string
   overviewArtifact?: OverviewData
   overviewBullets: string[]
   isLoading: boolean
   overviewLoading: boolean
   lastUpdatedLabel: string
   totalSectionCount: number
+  scope?: ScopeDef
 }
 
 interface IntelligenceRow {
@@ -37,11 +39,6 @@ interface IntelligenceRow {
   timestamp: number
   url: string
   tag?: ItemTag
-}
-
-interface IntelligenceSignal {
-  label: string
-  status: string
 }
 
 interface IntelligenceCategory {
@@ -82,41 +79,20 @@ function renderWithCitations(value: string): ReactNode {
   return <>{parts}</>
 }
 
-function stripCitations(value: string): string {
-  return value
-    .replace(/\[(\d+)\]\((https?:\/\/[^\s)]+)\)/g, '')
-    .replace(/^[\s•\-–—]+/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function makeHeadline(bullets: string[]): string {
-  const fallback = 'Tracking capability, infrastructure, and policy shifts'
-  const first = stripCitations(bullets[0] ?? '')
-  if (!first) return fallback
-
-  const firstSentence = first.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() ?? first
-  if (firstSentence.length <= 116) return firstSentence.replace(/[.!?]$/, '')
-
-  const clipped = firstSentence.slice(0, 113)
-  const wordBoundary = clipped.lastIndexOf(' ')
-  return `${clipped.slice(0, wordBoundary > 72 ? wordBoundary : 113).trim()}…`
-}
-
 function cleanTitle(value: string): string {
   return value
     .replace(/^[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F\u200D\s]+/gu, '')
     .trim()
 }
 
-function itemToRow(item: FeedItem): IntelligenceRow {
+function itemToRow(item: FeedItem, referenceTimeMs: number): IntelligenceRow {
   switch (item.type) {
     case 'paper':
       return {
         id: item.id,
         title: cleanTitle(item.title),
         source: item.id.startsWith('alphaxiv-') ? 'alphaXiv' : 'arXiv',
-        time: formatRelativeTime(item.publishedAt),
+        time: formatRelativeTime(item.publishedAt, referenceTimeMs),
         timestamp: new Date(item.publishedAt).getTime(),
         url: item.url,
         tag: getTag(item),
@@ -126,7 +102,7 @@ function itemToRow(item: FeedItem): IntelligenceRow {
         id: item.id,
         title: cleanTitle(item.title),
         source: item.source,
-        time: formatRelativeTime(item.publishedAt),
+        time: formatRelativeTime(item.publishedAt, referenceTimeMs),
         timestamp: new Date(item.publishedAt).getTime(),
         url: item.url,
         tag: getTag(item),
@@ -136,7 +112,7 @@ function itemToRow(item: FeedItem): IntelligenceRow {
         id: item.id,
         title: cleanTitle(`${item.owner}/${item.name} — ${item.description}`),
         source: 'GitHub',
-        time: `${item.starsPerDay.toLocaleString(undefined, { maximumFractionDigits: 1 })} est/day`,
+        time: `${item.starsPerDay.toLocaleString('en-US', { maximumFractionDigits: 1 })} est/day`,
         timestamp: 0,
         url: item.url,
         tag: getTag(item),
@@ -146,7 +122,7 @@ function itemToRow(item: FeedItem): IntelligenceRow {
         id: item.id,
         title: `${item.companyName} ${item.quarter}`,
         source: item.ticker,
-        time: formatRelativeTime(item.reportDate),
+        time: formatRelativeTime(item.reportDate, referenceTimeMs),
         timestamp: new Date(item.reportDate).getTime(),
         url: item.url,
         tag: getTag(item),
@@ -154,9 +130,9 @@ function itemToRow(item: FeedItem): IntelligenceRow {
     case 'news':
       return {
         id: item.id,
-        title: cleanTitle(item.title),
+        title: cleanTitle(item.title).replace(/ - ([^-]{1,45})$/, (suffix, publisher: string) => [item.publisher, item.canonicalSource, item.source].some((source) => source?.toLowerCase() === publisher.trim().toLowerCase()) ? '' : suffix),
         source: item.canonicalSource || item.publisher || item.source,
-        time: formatRelativeTime(item.publishedAt),
+        time: formatRelativeTime(item.publishedAt, referenceTimeMs),
         timestamp: new Date(item.publishedAt).getTime(),
         url: item.url,
         tag: getTag(item),
@@ -164,23 +140,8 @@ function itemToRow(item: FeedItem): IntelligenceRow {
   }
 }
 
-function sectionRows(sections: Record<string, SectionData>, sectionId: string): IntelligenceRow[] {
-  return (sections[sectionId]?.items ?? []).map(itemToRow)
-}
-
-function buildSignals(sections: Record<string, SectionData>): IntelligenceSignal[] {
-  const papers = sectionRows(sections, 'papers')
-  const infrastructure = sectionRows(sections, 'infra-hardware')
-  const policy = sectionRows(sections, 'ai-policy-regulation')
-  const repos = sectionRows(sections, 'repos')
-  const security = sectionRows(sections, 'cybersecurity')
-  return [
-    { label: 'Research', status: `${papers.length} papers` },
-    { label: 'Infrastructure', status: `${infrastructure.length} items` },
-    { label: 'Policy', status: `${policy.length} items` },
-    { label: 'Open source', status: `${repos.length} repos` },
-    { label: 'Security', status: `${security.length} items` },
-  ]
+function sectionRows(sections: Record<string, SectionData>, sectionId: string, referenceTimeMs: number): IntelligenceRow[] {
+  return (sections[sectionId]?.items ?? []).map((item) => itemToRow(item, referenceTimeMs))
 }
 
 function IntelligenceColumn({
@@ -198,6 +159,7 @@ function IntelligenceColumn({
       <h2 id={`${id}-title`}>
         {icon}
         <span>{title}</span>
+        <small className="intelligence-topic-count">{rows.length}</small>
       </h2>
 
       {visibleRows.length > 0 ? (
@@ -240,6 +202,7 @@ function CategoryDetailDialog({
   onClose: () => void
 }) {
   const open = category !== null
+  const dialogRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -249,6 +212,14 @@ function CategoryDetailDialog({
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
+      if (event.key === 'Tab') {
+        const controls = dialogRef.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])')
+        if (!controls?.length) return
+        const first = controls[0]
+        const last = controls[controls.length - 1]
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+      }
     }
 
     window.addEventListener('keydown', onKeyDown)
@@ -270,6 +241,7 @@ function CategoryDetailDialog({
       />
 
       <section
+        ref={dialogRef}
         className="intelligence-category-dialog"
         role="dialog"
         aria-modal="true"
@@ -277,7 +249,7 @@ function CategoryDetailDialog({
       >
         <header className="intelligence-category-header">
           <div>
-            <p>AI Research · {category.rows.length} current items</p>
+            <p>{category.rows.length} current source items</p>
             <h2 id="intelligence-category-title">
               {category.icon}
               <span>{category.title}</span>
@@ -321,12 +293,14 @@ function CategoryDetailDialog({
 
 export function IntelligenceResearchDashboard({
   sections,
+  relativeTimeAsOf,
   overviewArtifact,
   overviewBullets,
   isLoading,
   overviewLoading,
   lastUpdatedLabel,
   totalSectionCount,
+  scope,
 }: IntelligenceResearchDashboardProps) {
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const categoryTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -338,133 +312,110 @@ export function IntelligenceResearchDashboard({
     setActiveCategoryId(null)
     window.requestAnimationFrame(() => categoryTriggerRef.current?.focus())
   }, [])
-  const sourceStream = [
-    ...sectionRows(sections, 'ai-news-general').slice(0, 1),
-    ...sectionRows(sections, 'ai-policy-regulation').slice(0, 1),
-    ...sectionRows(sections, 'infra-hardware').slice(0, 1),
-    ...sectionRows(sections, 'cybersecurity').slice(0, 1),
-    ...sectionRows(sections, 'papers').slice(0, 1),
-  ]
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 5)
-
+  const referenceTimeMs = Date.parse(relativeTimeAsOf)
   const loadedSectionCount = Object.values(sections).filter((section) => section.items.length > 0).length
-  const signals = buildSignals(sections)
-  const headline = makeHeadline(overviewBullets)
 
   const topicColumns: IntelligenceCategory[] = [
-    { id: 'research-papers', title: 'Research Papers', viewLabel: 'papers', rows: sectionRows(sections, 'papers'), icon: <FileText size={18} aria-hidden="true" /> },
-    { id: 'policy-regulation', title: 'Policy & Regulation', viewLabel: 'policy', rows: sectionRows(sections, 'ai-policy-regulation'), icon: <Shield size={18} aria-hidden="true" /> },
-    { id: 'infrastructure', title: 'Infrastructure', viewLabel: 'infrastructure', rows: sectionRows(sections, 'infra-hardware'), icon: <HardDrives size={18} aria-hidden="true" /> },
-    { id: 'open-source', title: 'Open Source', viewLabel: 'open source', rows: sectionRows(sections, 'repos'), icon: <Code size={18} aria-hidden="true" /> },
+    { id: 'research-papers', title: 'Research Papers', viewLabel: 'papers', rows: sectionRows(sections, 'papers', referenceTimeMs), icon: <FileText size={18} aria-hidden="true" /> },
+    { id: 'policy-regulation', title: 'Policy & Regulation', viewLabel: 'policy', rows: sectionRows(sections, 'ai-policy-regulation', referenceTimeMs), icon: <Shield size={18} aria-hidden="true" /> },
+    { id: 'infrastructure', title: 'Infrastructure', viewLabel: 'infrastructure', rows: sectionRows(sections, 'infra-hardware', referenceTimeMs), icon: <HardDrives size={18} aria-hidden="true" /> },
+    { id: 'open-source', title: 'Open Source', viewLabel: 'open source', rows: sectionRows(sections, 'repos', referenceTimeMs), icon: <Code size={18} aria-hidden="true" /> },
   ]
 
   const companyTechnologyColumns: IntelligenceCategory[] = [
-    { id: 'venture-capital', title: 'Venture Capital', viewLabel: 'venture capital', rows: sectionRows(sections, 'venture-capital'), icon: <CurrencyCircleDollar size={18} aria-hidden="true" /> },
-    { id: 'startups', title: 'Startups', viewLabel: 'startups', rows: sectionRows(sections, 'startups'), icon: <RocketLaunch size={18} aria-hidden="true" /> },
-    { id: 'new-technology', title: 'New Technology', viewLabel: 'new technology', rows: sectionRows(sections, 'new-technology'), icon: <Circuitry size={18} aria-hidden="true" /> },
+    { id: 'venture-capital', title: 'Venture Capital', viewLabel: 'venture capital', rows: sectionRows(sections, 'venture-capital', referenceTimeMs), icon: <CurrencyCircleDollar size={18} aria-hidden="true" /> },
+    { id: 'startups', title: 'Startups', viewLabel: 'startups', rows: sectionRows(sections, 'startups', referenceTimeMs), icon: <RocketLaunch size={18} aria-hidden="true" /> },
+    { id: 'new-technology', title: 'New Technology', viewLabel: 'new technology', rows: sectionRows(sections, 'new-technology', referenceTimeMs), icon: <Circuitry size={18} aria-hidden="true" /> },
   ]
-  const categories = [...topicColumns, ...companyTechnologyColumns]
+  const isGlobalNews = scope?.id === 'global-news'
+  const categories: IntelligenceCategory[] = isGlobalNews
+    ? scope.sections.map((section) => ({ id: section.id, title: section.label, viewLabel: section.label.toLowerCase(), rows: sectionRows(sections, section.id, referenceTimeMs), icon: <FileText size={18} aria-hidden="true" /> }))
+    : [...topicColumns, ...companyTechnologyColumns,
+      { id: 'ai-news', title: 'AI News', viewLabel: 'AI news', rows: sectionRows(sections, 'ai-news-general', referenceTimeMs), icon: <FileText size={18} aria-hidden="true" /> },
+      { id: 'security', title: 'Security', viewLabel: 'security', rows: sectionRows(sections, 'cybersecurity', referenceTimeMs), icon: <Shield size={18} aria-hidden="true" /> },
+      { id: 'tech-events', title: 'Technology Events', viewLabel: 'technology events', rows: sectionRows(sections, 'tech-events', referenceTimeMs), icon: <Circuitry size={18} aria-hidden="true" /> },
+      { id: 'discussions', title: 'Discussions', viewLabel: 'discussions', rows: sectionRows(sections, 'discussions', referenceTimeMs), icon: <Code size={18} aria-hidden="true" /> },
+    ]
   const activeCategory = categories.find((category) => category.id === activeCategoryId) ?? null
+  const featuredCategory = categories[0]
+  const remainingCategories = categories.slice(1)
+  const seenUrls = new Set<string>()
+  const sourceStream = categories.flatMap((category) => category.rows.slice(0, 2).map((row) => ({ ...row, category: category.title })))
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .filter((row) => { if (seenUrls.has(row.url)) return false; seenUrls.add(row.url); return true })
+    .slice(0, 6)
+  const signalIds = isGlobalNews ? categories.slice(0, 5).map((category) => category.id) : ['research-papers', 'infrastructure', 'policy-regulation', 'open-source', 'security']
+  const signals = signalIds.flatMap((id) => categories.find((category) => category.id === id) ?? [])
+  const hasOverview = overviewBullets.length > 0
 
   return (
     <article className="intelligence-dashboard">
-      <section className="intelligence-state-hero" aria-labelledby="intelligence-state-title">
-        <p className="intelligence-eyebrow">Intelligence state</p>
-        <h1 id="intelligence-state-title" className="intelligence-display">{headline}</h1>
+      <header className="intelligence-state-hero">
+        <div>
+          <p className="intelligence-eyebrow">Intelligence / {isGlobalNews ? 'World affairs' : 'Technology'}</p>
+          <h1 className="intelligence-display">{isGlobalNews ? 'Global News' : 'AI Research'}</h1>
+          <p className="intelligence-deck">{isGlobalNews ? 'Politics, economies and the forces connecting them.' : 'Capability, infrastructure and policy. The sources behind the shifts.'}</p>
+        </div>
         <div className="intelligence-state-meta">
           <span>{isLoading ? 'Loading feed panels' : `${loadedSectionCount}/${totalSectionCount} feed panels with items`}</span>
           <span>Latest feed retrieval · {lastUpdatedLabel}</span>
         </div>
-      </section>
+      </header>
 
-      <section className="intelligence-signal-tape" aria-label="Feed activity">
+      <nav className="intelligence-signal-tape" aria-label="Browse source groups">
         {signals.map((signal) => (
-          <div key={signal.label} className="intelligence-signal">
-            <strong>{signal.label}</strong>
-            <span>{signal.status}</span>
+          <button key={signal.id} className="intelligence-signal" type="button" onClick={(event) => openCategory(signal.id, event.currentTarget)} aria-haspopup="dialog">
+            <strong>{signal.title}</strong><span>{signal.rows.length}</span>
+          </button>
+        ))}
+      </nav>
+
+      {hasOverview || overviewLoading ? (
+        <section className="intelligence-changes-panel" aria-labelledby="intelligence-changes-title">
+          <div className="intelligence-section-heading">
+            <h2 id="intelligence-changes-title">What changed</h2>
+            <span>{overviewLoading ? 'Loading synthesis' : overviewArtifact?.stale ? 'Last accepted analysis' : 'Source synthesis'}</span>
           </div>
-        ))}
-      </section>
-
-      <section className="intelligence-brief-grid">
-        <div className="intelligence-changes-panel">
-          <h2>What changed</h2>
-          {overviewArtifact?.readiness && !overviewLoading && (
-            <p className="font-mono text-[11px] text-text-muted" role="status">
-              {overviewArtifact.readiness}{overviewArtifact.stale ? ' · showing last accepted analysis' : ''}
-              {overviewArtifact.generatedAt ? ` · generated ${overviewArtifact.generatedAt}` : ''}
-              {overviewArtifact.errors?.length ? ` · ${overviewArtifact.errors.join('; ')}` : ''}
-            </p>
-          )}
           {overviewLoading ? (
-            <div className="intelligence-brief-skeleton" aria-label="Loading intelligence overview">
-              {Array.from({ length: 4 }).map((_, index) => <span key={index} />)}
-            </div>
-          ) : overviewBullets.length > 0 ? (
-            <ol>
-              {overviewBullets.slice(0, 4).map((bullet, index) => (
-                <li key={`${index}-${bullet.slice(0, 24)}`}>
-                  <p>{renderWithCitations(bullet)}</p>
-                  <span>Source synthesis · Current intelligence feeds</span>
-                </li>
-              ))}
-            </ol>
+            <div className="intelligence-brief-skeleton" aria-label="Loading intelligence overview">{Array.from({ length: 2 }).map((_, index) => <span key={index} />)}</div>
           ) : (
-            <p className="intelligence-panel-empty">The overview synthesis is not available yet. Live source items remain available at right.</p>
+            <>
+              <ol>{overviewBullets.slice(0, 2).map((bullet, index) => <li key={index}><p>{renderWithCitations(bullet)}</p></li>)}</ol>
+              {overviewBullets.length > 2 && <details className="intelligence-more-synthesis"><summary>Read all {overviewBullets.length} observations</summary><ol start={3}>{overviewBullets.slice(2).map((bullet, index) => <li key={index}>{renderWithCitations(bullet)}</li>)}</ol></details>}
+            </>
           )}
-        </div>
+          {overviewArtifact && <details className="intelligence-artifact-details"><summary>Analysis provenance{overviewArtifact.generatedAt ? ` · generated ${formatRelativeTime(overviewArtifact.generatedAt, referenceTimeMs)}` : ''}</summary><p>{overviewArtifact.readiness} · Generated {overviewArtifact.generatedAt ?? 'unknown'} · Sources through {overviewArtifact.dataAsOf ?? 'unknown'}{overviewArtifact.errors?.length ? ` · ${overviewArtifact.errors.join('; ')}` : ''}</p></details>}
+        </section>
+      ) : (
+        <section className="intelligence-synthesis-notice" role="status">
+          <FileText size={18} aria-hidden="true" /><div><strong>Synthesis unavailable</strong><span>Browse current source feeds below.</span></div>
+          {overviewArtifact?.readiness && <details><summary>{overviewArtifact.readiness} · Details</summary><p>{overviewArtifact.errors?.join('; ') || 'No accepted intelligence is available.'}</p></details>}
+        </section>
+      )}
 
+      <section className="intelligence-brief-grid" aria-label="Latest sources">
         <div className="intelligence-source-panel">
-          <h2>Source stream</h2>
+          <div className="intelligence-section-heading"><h2>Latest across the feeds</h2><span>Original sources</span></div>
           {sourceStream.length > 0 ? (
-            <ol>
-              {sourceStream.map((row, index) => (
-                <li key={`${row.id}-${index}`}>
-                  <span>{index + 1}</span>
-                  <a href={row.url} target="_blank" rel="noopener noreferrer">
-                    <strong>{row.title}</strong>
-                    <small>{row.source}</small>
-                  </a>
-                  {row.tag === 'breaking' && <em>Breaking</em>}
-                  <time>{row.time}</time>
-                  <CaretRight size={15} aria-hidden="true" />
-                </li>
-              ))}
-            </ol>
+            <ol>{sourceStream.map((row, index) => (
+              <li key={`${row.id}-${index}`}>
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <a href={row.url} target="_blank" rel="noopener noreferrer"><strong>{row.title}</strong><small>{row.category} · {row.source}{row.tag === 'breaking' ? ' · Breaking' : ''}</small></a>
+                <time>{row.time}</time><ArrowSquareOut size={15} aria-hidden="true" />
+              </li>
+            ))}</ol>
           ) : isLoading ? (
-            <div className="intelligence-source-skeleton" aria-label="Loading source stream">
-              {Array.from({ length: 5 }).map((_, index) => <span key={index} />)}
-            </div>
-          ) : (
-            <p className="intelligence-panel-empty">No current source items are available.</p>
-          )}
-          <a className="intelligence-view-all" href="#research-papers">
-            View the research brief <CaretRight size={14} aria-hidden="true" />
-          </a>
+            <div className="intelligence-source-skeleton" aria-label="Loading source stream">{Array.from({ length: 5 }).map((_, index) => <span key={index} />)}</div>
+          ) : <p className="intelligence-panel-empty">No current source items are available.</p>}
         </div>
+        {featuredCategory && <IntelligenceColumn {...featuredCategory} onView={openCategory} />}
       </section>
 
-      <section className="intelligence-topic-grid intelligence-topic-grid-primary" aria-label="Intelligence topic summaries">
-        {topicColumns.map((column) => (
-          <IntelligenceColumn key={column.id} {...column} onView={openCategory} />
-        ))}
+      <div className="intelligence-section-heading intelligence-topics-heading"><h2>Explore the sources</h2><span>{categories.length} source groups</span></div>
+      <section className="intelligence-topic-grid intelligence-topic-grid-primary intelligence-topic-grid-company" aria-label="Intelligence topic summaries">
+        {remainingCategories.map((column) => <IntelligenceColumn key={column.id} {...column} onView={openCategory} />)}
       </section>
-
-      <section
-        className="intelligence-topic-grid intelligence-topic-grid-company"
-        aria-label="Venture capital, startup, and technology intelligence"
-      >
-        {companyTechnologyColumns.map((column) => (
-          <IntelligenceColumn key={column.id} {...column} onView={openCategory} />
-        ))}
-      </section>
-
-      <CategoryDetailDialog
-        category={activeCategory}
-        lastUpdatedLabel={lastUpdatedLabel}
-        onClose={closeCategory}
-      />
+      <CategoryDetailDialog category={activeCategory} lastUpdatedLabel={lastUpdatedLabel} onClose={closeCategory} />
     </article>
   )
 }
