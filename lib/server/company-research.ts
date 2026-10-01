@@ -1,4 +1,4 @@
-import { needsIndependentResearch, primaryResearchPacket, PRIMARY_RESEARCH_AUTHORITY } from '../markets/evidence-authority.ts'
+import { primaryResearchPacket, PRIMARY_RESEARCH_AUTHORITY } from '../markets/evidence-authority.ts'
 import type {
   CompanyPacket,
   CompanyPacketSource,
@@ -769,15 +769,7 @@ export async function generateFullEquityResearch(
     if (error || !data) throw new Error('Originating World dossier is unavailable or mismatched')
     worldOrigin = data
   }
-  let previousPacket: unknown = null
-  if (priorResearch) {
-    const previous = await supabase.from('equity_research_notes').select('company_packet_id').eq('id',priorResearch.id).eq('owner_id',ownerId).single()
-    if (previous.error) throw new Error(`Prior research lineage unavailable: ${previous.error.message}`)
-    const evidence = await supabase.from('company_packets').select('packet').eq('id',previous.data.company_packet_id).eq('owner_id',ownerId).single()
-    if (evidence.error) throw new Error(`Prior research evidence unavailable: ${evidence.error.message}`)
-    previousPacket = evidence.data.packet
-  }
-  const independentBaseline = needsIndependentResearch(priorResearch, previousPacket)
+  const independentBaseline = Boolean(priorResearch && priorResearch.evidenceAuthority?.version !== 1)
   const packet = await materializeCompanyPacket(symbol, ownerId, new Date(), worldOrigin)
   const analysisPacket = primaryResearchPacket(packet)
   await onProgress?.(45, 'Company packet assembled')
