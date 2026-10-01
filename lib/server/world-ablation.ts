@@ -1,6 +1,7 @@
-import { resolve } from 'node:path'
+import { resolve, join } from 'node:path'
+import { readFile, writeFile } from 'node:fs/promises'
 import type { DecisionContext, Recommendation } from '../markets/recommendations.ts'
-import { selectAblationQuestions, validateAblationAnswers } from '../markets/world-ablation.ts'
+import { rebuiltResearchSchema, selectAblationQuestions, validateAblationAnswers } from '../markets/world-ablation.ts'
 import { frozenPrimaryPacket } from '../markets/frozen-primary-evidence.ts'
 import { withDecisionInputs } from './decision-inputs.ts'
 import { runCodexJson } from './codex-exec.ts'
@@ -26,8 +27,15 @@ export async function runWorldAblation(context: DecisionContext, recommendations
         // No prior report, business model, accepted thesis, recommendation,
         // portfolio or price expectation can carry World influence between arms.
         const clean = {...context, world: withWorld ? context.world : [], names: [], portfolio: null, market: null, universe: [], evidence}
-        const result = await withDecisionInputs(clean, input => runCodexJson({
-          schemaPath: resolve(company ? 'schemas/world-ablation-equity.schema.json' : 'schemas/world-ablation-etf.schema.json'), cwd: input.directory, webSearch: false,
+        const result = await withDecisionInputs(clean, async input => {
+          const [researchSchema, answerSchema] = await Promise.all([
+            readFile(resolve(company ? 'schemas/company-research-bundle.schema.json' : 'schemas/etf-research.schema.json'),'utf8'),
+            readFile(resolve('schemas/world-ablation.schema.json'),'utf8'),
+          ])
+          const schemaPath = join(input.directory,'rebuilt-research-schema.json')
+          await writeFile(schemaPath,JSON.stringify(rebuiltResearchSchema(JSON.parse(researchSchema),JSON.parse(answerSchema),company)),{mode:0o600})
+          return runCodexJson({
+          schemaPath, cwd: input.directory, webSearch: false,
           timeoutMs: 12*60_000, model: selectMarketModel('hypothesis_analysis').model,
           prompt: `Rebuild research from the supplied primary packet. No previous report or original forecast probability is available. ${withWorld ? 'World context is a fallible analytical hypothesis, never independent source fact.' : 'Use primary evidence alone.'} Produce the rebuilt report and estimate this exact question in the same response. Do not change its period, unit, threshold or deadline. answers cite frozen evidence IDs; research cites packet source IDs. No capital action or external fetch. QUESTION ${JSON.stringify(question)}\n${company ? `${companyMarketModelPrompt(frozen.packet as import('../markets/types.ts').CompanyPacket, null, 'shadow primary rebuild')}\n${researchPrompt(frozen.packet as import('../markets/types.ts').CompanyPacket, null, null, 'shadow primary rebuild')}` : etfResearchPrompt(frozen.packet as import('../markets/types.ts').EtfResearchPacket, null, 'shadow primary rebuild')}\n${input.prompt}`,
           validate: value => {
@@ -37,7 +45,7 @@ export async function runWorldAblation(context: DecisionContext, recommendations
             const answers = validateAblationAnswers(v, [question.key], new Set(evidence.map(e => e.id)))
             return {research, marketModel, answers}
           },
-        }))
+        })})
         arms.push(result.data.answers[0])
         metadata.push(result.metadata)
         rebuiltResearch.push({questionKey: question.key, arm: withWorld ? 'world' : 'primary_only', primaryPacketHash: contentHash(frozen.packet), capturedAt: frozen.capturedAt, cutoff: context.cutoff, research: result.data.research, marketModel: result.data.marketModel})

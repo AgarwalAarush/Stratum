@@ -3,6 +3,13 @@ import { forecastsAreApproved, forecastCategory } from './forecast-review.ts'
 
 export const WORLD_ABLATION_POLICY = 'world-context-ablation-v2'
 
+/** Compose existing checked-in contracts; a research schema change must reach
+ * shadow arms without maintaining another copy of the entire report schema. */
+export function rebuiltResearchSchema(research: Record<string, unknown>, answers: Record<string, unknown>, company: boolean): Record<string, unknown> {
+  const schema = company ? structuredClone(research) : {type:'object',additionalProperties:false,required:['research'],properties:{research:structuredClone(research)}}
+  return {...schema,required:[...(schema.required as string[]),'answers'],properties:{...(schema.properties as Record<string,unknown>),answers:(answers.properties as Record<string,unknown>).answers}}
+}
+
 /** This measures incremental explicit World context given identical company
  * research. It cannot measure World information already embedded in research. */
 // Legacy helper is retained for historical readers; new arms rebuild primary research.
