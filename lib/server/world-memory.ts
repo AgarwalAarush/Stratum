@@ -283,18 +283,12 @@ export async function compileWorldBaseline(scopeType: WorldBaseline['scopeType']
   const priorContent = current ? record(current.content) : {}
   const priorChanges = strings(priorContent.changes)
   const diff = content.changes.filter((item) => !priorChanges.includes(item)).slice(0, 8)
-  const version = Number(current?.version ?? 0) + 1
   const now = new Date().toISOString()
   const markdown = baselineMarkdown(scopeType, scopeKey, content)
-  const supabase = getSupabaseClient()!
-  const { data, error } = await supabase.from('world_baselines').insert({
-    scope_type: scopeType, scope_key: scopeKey, version, content, markdown,
-    observation_ids: observations.map((item) => item.id), source_ids: observations.map((item) => item.documentId), diff,
-    data_as_of: observations[0]?.ingestedAt ?? now, generated_at: now,
-    freshness: observations.length === 0 ? 'stale' : 'fresh',
-  }).select('*').single()
-  if (error || !data) throw new Error(`Unable to persist world baseline: ${error?.message ?? 'unknown error'}`)
-  return normalizeBaseline(data as RecordValue)
+  return { id: `computed:${scopeType}:${scopeKey}`, scopeType, scopeKey, version: Number(current?.version ?? 0), content, markdown,
+    observationIds: observations.map(item => item.id), sourceIds: observations.map(item => item.documentId), diff,
+    dataAsOf: observations[0]?.ingestedAt ?? now, generatedAt: now, freshness: observations.length ? 'fresh' : 'stale' }
+
 }
 
 async function fetchLatestBaselineRow(scopeType: WorldBaseline['scopeType'], scopeKey: string): Promise<RecordValue | null> {
@@ -359,41 +353,7 @@ async function fetchMarketHypothesesInternal(ownerId?: string): Promise<MarketHy
 }
 
 export async function correlateDomainHypothesis(ownerId: string, domainId: string): Promise<MarketHypothesis | null> {
-  const pack = getMarketDomainPack(domainId)
-  if (!pack || !(await isMarketDomainActive(domainId))) return null
-  const observations = await loadRecentObservations(pack.id, 240)
-  const normalized = observations.map(({ row, document, entityIds }) => normalizeObservation(row, document, entityIds))
-  const requiredMechanisms = pack.mechanisms.filter((mechanism) => mechanism.required).map((mechanism) => mechanism.id)
-  const matched = pack.mechanisms.flatMap((mechanism) => normalized.filter((item) => item.mechanism === mechanism.id).slice(0, 2))
-  const mechanisms = new Set(matched.map((item) => item.mechanism))
-  const minimumMechanisms = minimumMechanismsForDomainHypothesis(domainId)
-  if (mechanisms.size < minimumMechanisms) return null
-  const primaryCount = new Set(matched.filter((item) => item.source.sourceTier === 'primary' || item.source.sourceTier === 'regulatory').map((item) => item.documentId)).size
-  const independentCount = new Set(matched.filter((item) => item.source.sourceTier === 'independent').map((item) => item.documentId)).size
-  const unresolvedNodes = requiredMechanisms.filter((item) => !mechanisms.has(item))
-  const confidence = Math.min(90, 45 + mechanisms.size * 12 + Math.min(10, primaryCount * 4) + Math.min(6, independentCount * 3))
-  const existing = (await fetchMarketHypothesesInternal(ownerId)).find((item) => item.scope === pack.id && !['rejected', 'archived'].includes(item.status))
-  const supabase = getSupabaseClient()!
-  const payload = {
-    owner_id: ownerId,
-    title: pack.hypothesisTemplate.title,
-    status: existing?.status === 'active' ? 'active' : confidence >= 65 ? 'proposed' : 'forming',
-    scope: pack.id, horizon: pack.hypothesisTemplate.horizon,
-    core_mechanism: pack.hypothesisTemplate.coreMechanism,
-    causal_graph: pack.hypothesisTemplate.causalGraph, confidence, unresolved_nodes: unresolvedNodes,
-    counter_thesis: pack.hypothesisTemplate.counterThesis,
-    updated_at: new Date().toISOString(),
-  }
-  const { data, error } = existing
-    ? await supabase.from('market_hypotheses').update(payload).eq('id', existing.id).select('*').single()
-    : await supabase.from('market_hypotheses').insert(payload).select('*').single()
-  if (error || !data) throw new Error(`Unable to persist ${pack.id} hypothesis: ${error?.message ?? 'unknown error'}`)
-  const { error: evidenceError } = await supabase.from('market_hypothesis_evidence').upsert(matched.map((item) => ({
-    hypothesis_id: data.id, observation_id: item.id, role: 'supporting', causal_node: item.mechanism, weight: Math.round((item.confidence + item.materiality) / 2), explanation: item.assertion,
-  })), { onConflict: 'hypothesis_id,observation_id,causal_node' })
-  if (evidenceError) throw new Error(`Unable to persist hypothesis evidence: ${evidenceError.message}`)
-  const evidence: MarketHypothesisEvidence[] = matched.map((item) => ({ observationId: item.id, role: 'supporting', causalNode: item.mechanism, weight: Math.round((item.confidence + item.materiality) / 2), explanation: item.assertion }))
-  return normalizeHypothesis(data as RecordValue, evidence)
+  throw new Error('Unsupported capability: legacy belief writer retired; use Git World investigation')
 }
 
 /** Shared deterministic entry gate for every declared market domain. */
@@ -414,53 +374,7 @@ export async function correlateAiPowerHypothesis(ownerId: string): Promise<Marke
  * manufacture an exposure. Each side must remain independently sourced.
  */
 export async function correlateCrossDomainHypotheses(ownerId: string): Promise<number> {
-  const hypotheses = await fetchMarketHypothesesInternal(ownerId)
-  const byDomain = new Map(hypotheses.filter((item) => !['rejected', 'archived'].includes(item.status)).map((item) => [item.scope, item]))
-  const supabase = getSupabaseClient()!
-  const hypothesisIds = hypotheses.map((item) => item.id)
-  const { data: researchRows, error: researchError } = hypothesisIds.length > 0
-    ? await supabase.from('market_hypothesis_research_versions').select('hypothesis_id,version,status,critique').in('hypothesis_id', hypothesisIds).order('version', { ascending: false })
-    : { data: [], error: null }
-  if (researchError) throw new Error(`Unable to load cross-domain research readiness: ${researchError.message}`)
-  const validatedResearchByHypothesis = new Map<string, boolean>()
-  for (const row of researchRows ?? []) {
-    const hypothesisId = String(row.hypothesis_id)
-    if (validatedResearchByHypothesis.has(hypothesisId)) continue
-    const critique = record(row.critique)
-    validatedResearchByHypothesis.set(hypothesisId, row.status === 'complete' && critique.verdict === 'pass')
-  }
-  let linked = 0
-  for (const from of byDomain.values()) {
-    const pack = getMarketDomainPack(from.scope)
-    if (!pack || from.confidence < 65 || from.unresolvedNodes.length > 1) continue
-    for (const template of pack.crossDomainLinks) {
-      const to = byDomain.get(template.toDomainId)
-      if (!to || to.confidence < 65 || to.unresolvedNodes.length > 1) continue
-      const [fromEvidence, toEvidence] = await Promise.all([
-        supabase.from('market_hypothesis_evidence').select('observation_id,causal_node').eq('hypothesis_id', from.id).in('causal_node', template.fromMechanisms),
-        supabase.from('market_hypothesis_evidence').select('observation_id,causal_node').eq('hypothesis_id', to.id).in('causal_node', template.toMechanisms),
-      ])
-      if (fromEvidence.error || toEvidence.error) throw new Error(`Unable to load cross-domain evidence: ${fromEvidence.error?.message ?? toEvidence.error?.message}`)
-      const sourceObservationIds = [...new Set([...(fromEvidence.data ?? []).map((item) => String(item.observation_id)), ...(toEvidence.data ?? []).map((item) => String(item.observation_id))])]
-      if (sourceObservationIds.length < 2) continue
-      const confidence = Math.min(85, Math.round((from.confidence + to.confidence) / 2))
-      // A shared transmission mechanism can be worth retaining before it is
-      // decision-ready, but it is not active until both bounded analyst/critic
-      // loops pass. This prevents a preliminary correlation from looking like
-      // validated cross-domain causality.
-      const status = validatedResearchByHypothesis.get(from.id) === true && validatedResearchByHypothesis.get(to.id) === true
-        ? 'active'
-        : 'forming'
-      const { error } = await supabase.from('market_hypothesis_cross_domain_links').upsert({
-        owner_id: ownerId, from_hypothesis_id: from.id, to_hypothesis_id: to.id, link_id: template.id,
-        relationship: template.relationship, explanation: template.explanation, source_observation_ids: sourceObservationIds,
-        confidence, status, updated_at: new Date().toISOString(),
-      }, { onConflict: 'owner_id,from_hypothesis_id,to_hypothesis_id,link_id' })
-      if (error) throw new Error(`Unable to persist cross-domain hypothesis link: ${error.message}`)
-      linked += 1
-    }
-  }
-  return linked
+  throw new Error('Unsupported capability: legacy belief writer retired; use Git World investigation')
 }
 
 export interface HypothesisPromotionEvidence {
@@ -517,148 +431,7 @@ export function marketHypothesisPromotionEligible(
 }
 
 export async function promoteEligibleMarketHypothesis(ownerId: string, hypothesisId?: string): Promise<MarketThesisVersion | null> {
-  const existing = hypothesisId ? (await fetchMarketHypothesesInternal(ownerId)).find((item) => item.id === hypothesisId) ?? null : null
-  const hypothesis = existing
-    ? await correlateDomainHypothesis(ownerId, existing.scope)
-    : (await Promise.all((await fetchActiveMarketDomainPacks()).map((pack) => correlateDomainHypothesis(ownerId, pack.id)))).find((item): item is MarketHypothesis => item !== null) ?? null
-  if (!hypothesis) return null
-  const supabase = getSupabaseClient()!
-  const { data: evidenceRows, error: evidenceError } = await supabase
-    .from('market_hypothesis_evidence')
-    .select('causal_node,role,world_observations(observed_at,published_at,ingested_at,world_documents(*))')
-    .eq('hypothesis_id', hypothesis.id)
-  if (evidenceError) throw new Error(`Unable to load market thesis evidence: ${evidenceError.message}`)
-  const promotionEvidence = (evidenceRows ?? []).flatMap((row) => {
-    if (row.role !== 'supporting') return []
-    const observation = record(row.world_observations)
-    const document = record(observation.world_documents)
-    const freshnessCandidates = [
-      iso(observation.ingested_at),
-      iso(observation.published_at),
-      iso(observation.observed_at),
-    ].filter((value): value is string => Boolean(value))
-    const observedAt = freshnessCandidates.sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? null
-    return [{
-      causalNode: String(row.causal_node),
-      sourceTier: document.source_tier as WorldSourceTier,
-      observedAt,
-      publisher: document.publisher === null || document.publisher === undefined ? null : String(document.publisher),
-    }]
-  })
-  if (!marketHypothesisPromotionEligible(hypothesis, promotionEvidence)) return null
-  const { data: priorRows, error: priorError } = await supabase.from('market_thesis_versions').select('*').eq('hypothesis_id', hypothesis.id).order('version', { ascending: false }).limit(1)
-  if (priorError) throw new Error(`Unable to inspect prior market thesis: ${priorError.message}`)
-  const prior = priorRows?.[0] as RecordValue | undefined
-  const { data: researchRows, error: researchError } = await supabase
-    .from('market_hypothesis_research_versions')
-    .select('*')
-    .eq('hypothesis_id', hypothesis.id)
-    .eq('status', 'complete')
-    .order('version', { ascending: false })
-    .limit(1)
-  if (researchError) throw new Error(`Unable to load validated market research: ${researchError.message}`)
-  const researchRow = researchRows?.[0] as RecordValue | undefined
-  // The deterministic evidence gate is necessary but not sufficient. A
-  // publishable market thesis must also have a completed analyst/critic pass.
-  if (!researchRow) return null
-  const { normalizeResearchVersion } = await import('./market-thesis-research.ts')
-  const research = normalizeResearchVersion(researchRow)
-  if (!research.content || research.critique?.verdict !== 'pass') return null
-  const researchContent = research.content
-  if (prior && String(prior.research_version_id ?? '') === research.id) {
-    const [predictionResult, exposureResult] = await Promise.all([
-      supabase.from('market_thesis_predictions').select('*').eq('market_thesis_version_id', prior.id),
-      supabase.from('market_thesis_exposures').select('*').eq('market_thesis_version_id', prior.id),
-    ])
-    if (predictionResult.error || exposureResult.error) throw new Error(`Unable to load existing market thesis: ${predictionResult.error?.message ?? exposureResult.error?.message}`)
-    return normalizeThesis(prior, (predictionResult.data ?? []) as RecordValue[], (exposureResult.data ?? []) as RecordValue[])
-  }
-  const ledger = (evidenceRows ?? []).flatMap((row) => {
-    const observation = record(row.world_observations)
-    const document = record(observation.world_documents)
-    return document.id ? [{ documentId: String(document.id), label: String(document.title), url: String(document.canonical_url), tier: document.source_tier as WorldSourceTier }] : []
-  })
-  const sourceLedger = ledger.filter((item) => research.sourceIds.includes(item.documentId))
-  const version = Number(prior?.version ?? 0) + 1
-  const now = new Date().toISOString()
-  const content = {
-    whyNow: researchContent.whyNow,
-    economics: `${researchContent.economics.valueChain} ${researchContent.economics.scarcityRentCapture}`,
-    economicCapture: researchContent.economics.capture,
-    expectations: `${researchContent.expectations.currentNarrative} ${researchContent.expectations.whatAppearsPriced} Variant view: ${researchContent.expectations.variantView}`,
-    falsifiers: researchContent.falsifiers.map((item) => `${item.condition}: ${item.thesisImpact}`),
-    counterThesis: researchContent.counterThesis.statement,
-    sourceLedger,
-  }
-  // Thesis confidence is the validated research confidence. Correlation
-  // confidence on the hypothesis row remains a separate formation signal.
-  const publishedConfidence = Math.round(researchContent.confidence)
-  const { data, error } = await supabase.from('market_thesis_versions').insert({
-    hypothesis_id: hypothesis.id, version, state: 'active', title: hypothesis.title, content, confidence: publishedConfidence,
-    research_version_id: research.id, data_as_of: research.dataAsOf, generated_at: now,
-    revision_diff: prior ? research.revisionDiff : ['Initial promotion after source-backed analyst and critic validation.'],
-  }).select('*').single()
-  if (error || !data) throw new Error(`Unable to promote market thesis: ${error?.message ?? 'unknown error'}`)
-  // Consumers read the same causal contract for legacy market theses and
-  // World nodes. This is a projection only: it does not alter the thesis or
-  // bypass the separate owner thesis/capital decision boundary.
-  const { projectMarketThesisCausalModel } = await import('./causal-model.ts')
-  await projectMarketThesisCausalModel(data as RecordValue, hypothesis as unknown as RecordValue)
-  const predictions = researchContent.predictions.map((item) => ({
-    prediction: item.prediction, expected_direction: `Confirm: ${item.confirmation}; disconfirm: ${item.disconfirmation}`,
-    deadline: predictionDeadlineFromHorizon(item.horizon, new Date(now)), evidence_needed: item.leadingIndicator, result: 'pending',
-  }))
-  const { data: predictionRows, error: predictionError } = await supabase.from('market_thesis_predictions').insert(predictions.map((item) => ({ ...item, market_thesis_version_id: data.id }))).select('*')
-  if (predictionError) throw new Error(`Unable to persist market thesis predictions: ${predictionError.message}`)
-  const genericExposureRows = researchContent.economics.beneficiaries
-    .map((entityName) => entityName.trim())
-    .filter((entityName) => entityName.length > 0 && !/^(none|no beneficiary)\b/i.test(entityName))
-    .map((entityName) => ({
-      market_thesis_version_id: data.id, value_chain_layer: researchContent.economics.valueChain, entity_name: entityName,
-      symbol: null, role: 'beneficiary', mechanism: researchContent.economics.scarcityRentCapture,
-      materiality: publishedConfidence, confidence: publishedConfidence, verification_status: 'unverified',
-      resolution_method: null, resolution_reason: 'Value-chain layer only; no public security was resolved.', source_ids: researchContent.economics.sourceIds,
-    }))
-  const requestedSymbols = researchContent.economics.companyCandidates.flatMap((candidate) => candidate.symbol ? [candidate.symbol] : [])
-  const requestedNames = researchContent.economics.companyCandidates.flatMap((candidate) => candidate.symbol ? [] : [candidate.companyName])
-  const assetResult = requestedSymbols.length > 0
-    ? await supabase.from('market_assets').select('symbol,name').in('symbol', requestedSymbols).eq('active', true).eq('tradable', true)
-    : { data: [], error: null }
-  const namedAssetResult = requestedNames.length > 0
-    ? await supabase.from('market_assets').select('symbol,name').in('name', requestedNames).eq('active', true).eq('tradable', true)
-    : { data: [], error: null }
-  if (assetResult.error || namedAssetResult.error) throw new Error(`Unable to verify market-exposure symbols: ${assetResult.error?.message ?? namedAssetResult.error?.message}`)
-  const activeAssets = new Map((assetResult.data ?? []).map((asset) => [String(asset.symbol), String(asset.name)]))
-  const activeAssetsByName = new Map((namedAssetResult.data ?? []).map((asset) => [String(asset.name).toLocaleLowerCase(), { symbol: String(asset.symbol), name: String(asset.name) }]))
-  const companyExposureRows = researchContent.economics.companyCandidates.flatMap((candidate) => {
-    const namedAsset = candidate.symbol ? null : activeAssetsByName.get(candidate.companyName.toLocaleLowerCase())
-    const resolvedSymbol = candidate.symbol ?? namedAsset?.symbol ?? null
-    const assetName = candidate.symbol ? activeAssets.get(candidate.symbol) : namedAsset?.name
-    if (!resolvedSymbol || !assetName) return []
-    return [{
-      market_thesis_version_id: data.id, value_chain_layer: researchContent.economics.valueChain,
-      entity_name: assetName || candidate.companyName, symbol: resolvedSymbol, role: candidate.role, mechanism: candidate.mechanism,
-      materiality: candidate.materiality, confidence: candidate.confidence, verification_status: 'needs_company_research',
-      resolution_method: 'analyst_source_candidate',
-      resolution_reason: `The bounded market-research artifact named ${candidate.companyName}; ${resolvedSymbol} was verified against the active tradable asset registry${candidate.symbol ? ' from the supplied symbol' : ' by exact issuer name'}. Company-level economics remain unverified until independent research.`,
-      source_ids: candidate.sourceIds,
-    }]
-  })
-  const exposureRows = [...genericExposureRows, ...companyExposureRows]
-  const { data: persistedExposures, error: exposureError } = exposureRows.length > 0
-    ? await supabase.from('market_thesis_exposures').insert(exposureRows).select('*')
-    : { data: [], error: null }
-  if (exposureError) throw new Error(`Unable to persist market thesis exposures: ${exposureError.message}`)
-  const unresolvedNodes = [...new Set([
-    ...hypothesis.unresolvedNodes,
-    ...(researchContent.evidenceGaps.some((gap) => /economic capture|rent capture|scarcity rent/i.test(gap)) ? ['economic_capture'] : []),
-  ])].slice(0, 8)
-  await supabase.from('market_hypotheses').update({
-    status: 'active',
-    unresolved_nodes: unresolvedNodes,
-    updated_at: now,
-  }).eq('id', hypothesis.id)
-  return normalizeThesis(data as RecordValue, (predictionRows ?? []) as RecordValue[], (persistedExposures ?? []) as RecordValue[])
+  throw new Error('Unsupported capability: legacy belief writer retired; use Git World investigation')
 }
 
 function normalizeThesis(
@@ -728,7 +501,7 @@ export async function fetchMarketThesisWorkspace(ownerId: string): Promise<Marke
   const supabase = getSupabaseClient()
   if (!supabase) return { baseline: null, hypotheses: [], theses: [], frontiers: [], crossDomainLinks: [] }
   const [baselineRow, hypothesisResult] = await Promise.all([
-    fetchLatestBaselineRow('global', 'global'),
+    compileWorldBaseline('global', 'global'),
     supabase.from('market_hypotheses').select('*').eq('owner_id', ownerId).order('updated_at', { ascending: false }).limit(80),
   ])
   if (hypothesisResult.error) throw new Error(`Unable to load market thesis workspace: ${hypothesisResult.error.message}`)
@@ -814,7 +587,7 @@ export async function fetchMarketThesisWorkspace(ownerId: string): Promise<Marke
     companyThesesByMarketVersion.get(item.id) ?? [],
   ))
   return {
-    baseline: baselineRow ? normalizeBaseline(baselineRow) : null,
+    baseline: baselineRow,
     hypotheses: (hypothesisResult.data ?? []).map((item) => {
       const hypothesis = normalizeHypothesis(item as RecordValue)
       return { ...hypothesis, latestResearch: latestResearchByHypothesis.get(hypothesis.id) ?? null }
@@ -828,11 +601,7 @@ export async function fetchMarketThesisWorkspace(ownerId: string): Promise<Marke
 }
 
 export async function setMarketThesisAction(ownerId: string, hypothesisId: string, action: 'freeze' | 'reject' | 'archive' | 'reactivate'): Promise<void> {
-  const supabase = getSupabaseClient()
-  if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const status = action === 'reject' ? 'rejected' : action === 'archive' ? 'archived' : action === 'reactivate' ? 'active' : 'proposed'
-  const { error } = await supabase.from('market_hypotheses').update({ status, updated_at: new Date().toISOString() }).eq('id', hypothesisId).eq('owner_id', ownerId)
-  if (error) throw new Error(`Unable to update market thesis: ${error.message}`)
+  throw new Error('Unsupported capability: legacy belief writer retired; use Git World investigation')
 }
 
 export async function fetchMarketThesisDetail(ownerId: string, hypothesisId: string): Promise<{ hypothesis: MarketHypothesis; theses: MarketThesisVersion[] } | null> {
@@ -844,55 +613,11 @@ export async function fetchMarketThesisDetail(ownerId: string, hypothesisId: str
 
 /** Test-only fixture data. Production ingestion must archive real source bytes first. */
 export async function seedAiPowerDemoObservations(ownerId: string): Promise<{ observations: number; hypothesis: MarketHypothesis | null; thesis: MarketThesisVersion | null }> {
-  const now = new Date().toISOString()
-  const sources: WorldObservationInput[] = [
-    {
-      title: 'AI and data-center power demand source packet', canonicalUrl: 'https://www.eia.gov/electricity/', publisher: 'U.S. Energy Information Administration', sourceTier: 'regulatory', body: 'Source packet queued for EIA electricity demand and generation evidence.', publishedAt: now,
-      assertion: 'AI and data-center build-outs require sustained regional electricity demand assessment rather than nameplate capacity alone.', kind: 'fact', domain: 'ai-power', mechanism: 'data_center_load', entities: [{ kind: 'industry', name: 'AI infrastructure' }, { kind: 'industry', name: 'Data centers' }], confidence: 75, materiality: 78, novelty: 70,
-    },
-    {
-      title: 'Firm capacity and generation source packet', canonicalUrl: 'https://www.eia.gov/electricity/', publisher: 'U.S. Energy Information Administration', sourceTier: 'regulatory', body: 'Source packet queued for firm-capacity and dispatchability evidence.', publishedAt: now,
-      assertion: 'The ability to serve large, continuous load depends on deliverable firm capacity, not aggregate nameplate generation alone.', kind: 'fact', domain: 'ai-power', mechanism: 'firm_capacity_constraint', entities: [{ kind: 'industry', name: 'Electric power generation' }], confidence: 76, materiality: 82, novelty: 64,
-    },
-    {
-      title: 'PJM interconnection source packet', canonicalUrl: 'https://www.pjm.com/planning/services-requests/interconnection-queues', publisher: 'PJM Interconnection', sourceTier: 'regulatory', body: 'Source packet queued for interconnection queue and transmission timing evidence.', publishedAt: now,
-      assertion: 'Interconnection timing can delay otherwise announced generation and load-serving capacity in constrained regions.', kind: 'fact', domain: 'ai-power', mechanism: 'interconnection_constraint', entities: [{ kind: 'regulator', name: 'PJM Interconnection' }], confidence: 78, materiality: 80, novelty: 68,
-    },
-    {
-      title: 'Grid equipment supply source packet', canonicalUrl: 'https://www.energy.gov/', publisher: 'U.S. Department of Energy', sourceTier: 'regulatory', body: 'Source packet queued for transformer, switchgear, and turbine supply-chain evidence.', publishedAt: now,
-      assertion: 'Long lead-time electrical equipment can slow the conversion of announced power investment into deliverable capacity.', kind: 'fact', domain: 'ai-power', mechanism: 'equipment_lead_time', entities: [{ kind: 'industry', name: 'Electrical equipment' }], confidence: 72, materiality: 74, novelty: 62,
-    },
-  ]
-  for (const source of sources) await ingestWorldObservation(source)
-  const hypothesis = await correlateAiPowerHypothesis(ownerId)
-  const thesis = await promoteEligibleMarketHypothesis(ownerId, hypothesis?.id)
-  return { observations: sources.length, hypothesis, thesis }
+  throw new Error('Unsupported capability: legacy belief writer retired; use Git World investigation')
 }
 
 export async function runMarketWorldCycle(options: { baseline?: WorldBaseline } = {}): Promise<{ baselineId: string; hypotheses: number; crossDomainLinks: number; promoted: number }> {
-  // A coordinated cycle compiles its baseline immediately after source
-  // ingestion, then passes that immutable result here. Other callers retain
-  // the standalone behavior without being able to observe a half-cycle.
-  const baseline = options.baseline ?? await compileWorldBaseline('global', 'global')
-  const supabase = getSupabaseClient()!
-  const { data: owners, error } = await supabase.from('market_users').select('id').limit(20)
-  if (error) throw new Error(`Unable to load market thesis owners: ${error.message}`)
-  let hypotheses = 0
-  let crossDomainLinks = 0
-  let promoted = 0
-  const activePacks = await fetchActiveMarketDomainPacks()
-  for (const owner of owners ?? []) {
-    for (const pack of activePacks) {
-      const hypothesis = await correlateDomainHypothesis(owner.id, pack.id)
-      if (hypothesis) hypotheses += 1
-      if (hypothesis && isMarketAutoThesisEnabled()) {
-        const thesis = await promoteEligibleMarketHypothesis(owner.id, hypothesis.id)
-        if (thesis) promoted += 1
-      }
-    }
-    crossDomainLinks += await correlateCrossDomainHypotheses(owner.id)
-  }
-  return { baselineId: baseline.id, hypotheses, crossDomainLinks, promoted }
+  throw new Error('Unsupported capability: legacy belief writer retired; use Git World investigation')
 }
 
 export function isMarketWorldModelEnabled(environment: NodeJS.ProcessEnv = process.env): boolean {

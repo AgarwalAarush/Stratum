@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAllowedMarketUser } from '@/lib/auth/markets-session'
 import { enqueueAgentJob } from '@/lib/server/agent-jobs'
-import { setMarketThesisAction } from '@/lib/server/world-memory'
+import { fetchMarketThesisDetail } from '@/lib/server/world-memory'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,15 +19,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       : null
     if (!action) return NextResponse.json({ error: 'Unsupported market thesis action' }, { status: 400 })
     if (action === 'request_deepening') {
-      const job = await enqueueAgentJob('deepen-market-hypothesis', {
+      const legacy = await fetchMarketThesisDetail(user.id,id)
+      if (!legacy) return NextResponse.json({error:'Unknown legacy hypothesis'}, {status:404})
+      const job = await enqueueAgentJob('run-world-thinker', {
+        trigger: 'manual', legacyHypothesisId: id,
         ownerId: user.id,
         hypothesisId: id,
         reason: 'user-requested deepening',
       })
       return NextResponse.json({ queued: true, jobId: job.id })
     }
-    if (user.id !== 'local-development-user') await setMarketThesisAction(user.id, id, action)
-    return NextResponse.json({ success: true, action })
+    return NextResponse.json({ error: 'Legacy beliefs are preserved as read-only history. Review their imported World node to change the current belief.' }, {status:409})
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to update market thesis' }, { status: 400 })
   }

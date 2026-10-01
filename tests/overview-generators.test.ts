@@ -32,7 +32,7 @@ test('weekly overview generates and persists OpenAI structured content', { concu
   const originalKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   process.env.OPENAI_API_KEY = 'test-key'
-  global.fetch = (async () => openAITextResponse('# Weekly signal\n\nInfrastructure demand strengthened.')) as typeof fetch
+  global.fetch = (async () => openAITextResponse('# Weekly signal\n\nInfrastructure demand strengthened [1].')) as typeof fetch
   t.after(() => {
     process.env.OPENAI_API_KEY = originalKey
     global.fetch = originalFetch
@@ -42,7 +42,7 @@ test('weekly overview generates and persists OpenAI structured content', { concu
   const result = await generateWeeklyOverview({
     now: new Date('2026-07-15T12:00:00Z'),
     loadData: async () => ({
-      dailies: [{ date: '2026-07-06', bullets: ['AI infrastructure accelerated.'] }],
+      dailies: [{ date: '2026-07-06', bullets: ['AI infrastructure accelerated.'], sources: [{ id:'1',title:'Issuer reports new infrastructure orders',url:'https://example.com/orders',publishedAt:'2026-07-01T12:00:00Z',availableAt:'2026-07-01T12:00:00Z',retrievedAt:'2026-07-01T12:00:00Z',section:'issuer' }] }],
       globalNewsDailies: [{ date: '2026-07-06', bullets: ['Trade policy tightened.'] }],
     }),
     persist: async (...args) => { persisted.push(args) },
@@ -51,14 +51,14 @@ test('weekly overview generates and persists OpenAI structured content', { concu
   assert.equal(result.success, true)
   assert.equal(result.date, '2026-07-06')
   assert.match(result.content ?? '', /Weekly signal/)
-  assert.deepEqual(persisted[0], ['weekly', '# Weekly signal\n\nInfrastructure demand strengthened.', '2026-07-06', '2026-07-06', '2026-07-12'])
+  assert.deepEqual(persisted[0].slice(0,5), ['weekly', '# Weekly signal\n\nInfrastructure demand strengthened [1](https://example.com/orders).', '2026-07-06', '2026-07-06', '2026-07-12'])
 })
 
 test('monthly overview generates and persists OpenAI structured content', { concurrency: false }, async (t) => {
   const originalKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch
   process.env.OPENAI_API_KEY = 'test-key'
-  global.fetch = (async () => openAITextResponse('# Strategic trajectory\n\nAI spending accelerated while policy risk broadened.')) as typeof fetch
+  global.fetch = (async () => openAITextResponse('# Strategic trajectory\n\nAI spending accelerated while policy risk broadened [1].')) as typeof fetch
   t.after(() => {
     process.env.OPENAI_API_KEY = originalKey
     global.fetch = originalFetch
@@ -68,9 +68,9 @@ test('monthly overview generates and persists OpenAI structured content', { conc
   const result = await generateMonthlyOverview({
     now: new Date('2026-07-15T12:00:00Z'),
     loadData: async () => ({
-      dailies: [{ date: '2026-07-01', bullets: ['AI infrastructure accelerated.'] }],
+      dailies: [{ date: '2026-07-01', bullets: ['AI infrastructure accelerated.'], sources: [{ id:'1',title:'Issuer reports new infrastructure orders',url:'https://example.com/orders',publishedAt:'2026-07-01T12:00:00Z',availableAt:'2026-07-01T12:00:00Z',retrievedAt:'2026-07-01T12:00:00Z',section:'issuer' }] }],
       globalNewsDailies: [{ date: '2026-07-01', bullets: ['Trade policy tightened.'] }],
-      weeklies: [{ date: '2026-07-06', content: 'Infrastructure demand strengthened.' }],
+      weeklies: [{ date: '2026-07-06', content: 'Infrastructure demand strengthened [1].' }],
       previousMonthly: null,
     }),
     persist: async (...args) => { persisted.push(args) },
@@ -79,5 +79,11 @@ test('monthly overview generates and persists OpenAI structured content', { conc
   assert.equal(result.success, true)
   assert.equal(result.date, '2026-07-15')
   assert.match(result.content ?? '', /Strategic trajectory/)
-  assert.deepEqual(persisted[0], ['monthly', '# Strategic trajectory\n\nAI spending accelerated while policy risk broadened.', '2026-07-15', '2026-06-15', '2026-07-15'])
+  assert.deepEqual(persisted[0].slice(0,5), ['monthly', '# Strategic trajectory\n\nAI spending accelerated while policy risk broadened [1](https://example.com/orders).', '2026-07-15', '2026-06-15', '2026-07-15'])
+})
+
+test('periodic synthesis refuses earlier prose without underlying source records', {concurrency:false},async t => {
+ const original = process.env.OPENAI_API_KEY;process.env.OPENAI_API_KEY='test';t.after(()=>{process.env.OPENAI_API_KEY=original})
+ const result=await generateMonthlyOverview({loadData:async()=>({dailies:[],globalNewsDailies:[],weeklies:[{date:'2026-09-28',content:'Unsupported certainty'}]}),persist:async()=>{throw new Error('Must not publish')}})
+ assert.equal(result.success,false);assert.match(result.error ?? '',/underlying source evidence/)
 })

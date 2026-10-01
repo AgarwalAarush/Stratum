@@ -1,7 +1,5 @@
 import type { OverviewData } from '../types.ts'
-import { AI_MODELS } from '../ai/config.ts'
-import { generateOpenAIJson } from '../server/openai-responses.ts'
-import { runCodexJson } from '../server/codex-exec.ts'
+import { generateCitedBriefing, expandBriefingCitations } from './cited-briefing.ts'
 
 export interface IntelligenceSourceItem { title: string; url: string; publishedAt?: string }
 export interface IntelligenceSection { label: string; fetch: () => Promise<IntelligenceSourceItem[]> }
@@ -30,7 +28,6 @@ export async function synthesizeDailyIntelligence(sections: IntelligenceSection[
   }
   const sources = [...byUrl.values()].map((source, index) => ({ ...source, id: String(index + 1) }))
   if (!sources.length) return { ...empty('blocked', 'No usable source headlines were collected'), sourceCoverage: coverage }
-  const prompt = `Write a concise ${topic} intelligence update from the following observed headlines. Headlines are limited evidence, not verified article content. Separate tentative implications from observed events; do not invent numerical facts or current conditions. Use only these sources. Produce up to 12 useful bullets, fewer when evidence is sparse. Every bullet must cite at least one source as [n]. No generic filler.\n${sources.map(s => `[${s.id}] [${s.section}] ${s.title}\n${s.url}`).join('\n')}`
   const schema = { type: 'object', properties: { bullets: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 12 } }, required: ['bullets'], additionalProperties: false }
   const validate = (value: unknown) => {
     const bullets = (value as { bullets?: unknown } | null)?.bullets
@@ -42,11 +39,11 @@ export async function synthesizeDailyIntelligence(sections: IntelligenceSection[
     return { bullets: bullets as string[] }
   }
   try {
-    const result = options.provider === 'codex'
-      ? await runCodexJson({ prompt, schemaPath: 'schemas/daily-intelligence.schema.json', model: AI_MODELS.dailyOverview, validate })
-      : await generateOpenAIJson({ apiKey: process.env.OPENAI_API_KEY!, model: AI_MODELS.dailyOverview, input: prompt, schemaName: 'daily_intelligence', schema, maxOutputTokens: 2048, validate })
+    const result = await generateCitedBriefing({ cadence: 'daily', topic, sources, provider: options.provider,
+      instructions: 'Produce up to 12 useful bullets, fewer when evidence is sparse. No generic filler.',
+      schema, schemaPath: 'schemas/daily-intelligence.schema.json', validate, claims: data => data.bullets })
     const dates = sources.flatMap(s => s.publishedAt ? [s.publishedAt] : []).sort()
-    return { bullets: result.data.bullets.map(b => b.replace(/\[(\d+)\]/g, (_, n) => `[${n}](${sources[Number(n) - 1].url})`)),
+    return { bullets: result.data.bullets.map(b => expandBriefingCitations(b, sources)),
       fetchedAt: stamp, generatedAt: stamp, dataAsOf: dates.at(-1) ?? null,
       readiness: coverage.every(c => c.status === 'complete') ? 'complete' : 'partial',
       errors: coverage.filter(c => c.status !== 'complete').map(c => `${c.source}: ${c.status}`), sourceCoverage: coverage, sources, generation: result.metadata }

@@ -11,9 +11,7 @@ function dateLabel(value: string) {
 }
 
 function actionLabel(hypothesis: MarketHypothesis): { action: Action; label: string } {
-  if (hypothesis.status === 'archived' || hypothesis.status === 'rejected') return { action: 'reactivate', label: 'Reactivate' }
-  if (hypothesis.status === 'active') return { action: 'freeze', label: 'Freeze revisions' }
-  return { action: 'request_deepening', label: 'Deepen research' }
+  return { action: 'request_deepening', label: 'Review in World' }
 }
 
 function countLabel(value: number, singular: string, plural = `${singular}s`) {

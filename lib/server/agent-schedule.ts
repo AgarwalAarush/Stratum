@@ -9,6 +9,7 @@ import {
   isWeekdayAfterMarketClose,
   newYorkClockParts,
 } from '../markets/market-clock.ts'
+import { getSupabaseClient } from './supabase.ts'
 import { isMarketWorldModelEnabled } from './world-memory.ts'
 import { reconcileRecommendationEvidence } from './recommendation-preparation.ts'
 
@@ -24,6 +25,8 @@ export interface AgentScheduleOptions {
   includeNewsletter?: boolean
   includeRobinhood?: boolean
   includeWorldThinker?: boolean
+  hasEligibleThesisMonitors?: boolean
+  hasLabeledWorldBenchmark?: boolean
   /** Resolved by the worker from durable active-domain state before ingestion. */
   worldSourceAdapters?: WorldSourceAdapterSchedule[]
 }
@@ -103,14 +106,15 @@ export function buildDueAgentJobs(
       }))
     }
   }
-  jobs.push(scheduledJob('monitor-investment-theses', now, { cadenceMinutes: monitorCadence }))
+  if (options.hasEligibleThesisMonitors === true) jobs.push(scheduledJob('monitor-investment-theses', now, { cadenceMinutes: monitorCadence }))
+  jobs.push(scheduledJob('scan-research-refreshes', now))
   const newYork = newYorkClockParts(now)
   if (options.includeWorldThinker === true) {
     jobs.push(scheduledJob('refresh-world-events', now))
     if ((newYork.hour === 6 || newYork.hour === 18) && newYork.minute < 10) {
       jobs.push(scheduledJob('run-world-thinker', now, { trigger: 'scheduled' }))
     }
-    if (newYork.weekday === 'Sun' && newYork.hour === 20 && newYork.minute < 10) {
+    if (options.hasLabeledWorldBenchmark === true && newYork.weekday === 'Sun' && newYork.hour === 20 && newYork.minute < 10) {
       jobs.push(scheduledJob('refresh-world-benchmark', now))
     }
   }
@@ -140,14 +144,6 @@ export function buildDueAgentJobs(
       // referral remains outside governed evidence until a human starts a
       // separate candidate/contract review.
       jobs.push(scheduledJob('scan-intelligence-source-referrals', now))
-    }
-    if (newYork.hour % 6 === 0 && newYork.minute < 10) {
-      // The orchestrator is the sole 6h research control plane. It auto-accepts
-      // eligible proposals, then enqueues bounded child jobs (scout, collect,
-      // critic, prediction eval) under explicit cost caps.
-      // The coordinated cycles run their own planner after their fresh
-      // source-to-hypothesis chain has completed.
-      if (newYork.hour !== 6 && newYork.hour !== 18) jobs.push(scheduledJob('orchestrate-market-research', now))
     }
     // The coordinated post-close cycle already performs the weekly correlation
     // pass on Sundays, so do not run a competing standalone correlation job.
@@ -179,6 +175,12 @@ export async function enqueueDueAgentJobs(
   lastScheduledKeys = new Map<AgentJobType, string>(),
   options: AgentScheduleOptions = {},
 ): Promise<Array<ScheduledAgentJob & { id: string; deduplicated: boolean }>> {
+  const db = getSupabaseClient();
+  if (db && options.hasEligibleThesisMonitors === undefined) {
+    const consumers = await db.from('investment_theses').select('id').eq('status', 'accepted').limit(1);
+    if (consumers.error) throw new Error(`Unable to inspect thesis monitor consumers: ${consumers.error.message}`);
+    options = { ...options, hasEligibleThesisMonitors: Boolean(consumers.data?.length) };
+  }
   const enqueued = []
   for (const job of buildDueAgentJobs(now, options)) {
     if (lastScheduledKeys.get(job.jobType) === job.dedupeKey) continue
