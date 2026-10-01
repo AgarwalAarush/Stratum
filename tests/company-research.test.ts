@@ -24,6 +24,7 @@ const sectionIds = [
 
 function validResearch() {
   return {
+    advice: { version: 1, businessView: {value:'constructive',reason:'Positive operating evidence.',sourceIds:['source-1'],changeConditions:['Margins deteriorate materially.']}, evidenceSufficiency:{value:'sufficient',reason:'Current primary sources support the opinion.',sourceIds:['source-1'],changeConditions:['Fresh disclosures contradict the premise.']}, newEntryStance:{value:'wait',reason:'Await an attractive valuation.',sourceIds:['source-1'],changeConditions:['Price reaches the entry ceiling.']}, existingPositionStance:{value:'retain',reason:'Retain the current positive exposure.',sourceIds:['source-1'],changeConditions:['Operating leverage fails.']} },
     formalRating: 'HOLD',
     entryAction: 'wait',
     investmentThesis: 'The company can compound earnings as improving product mix drives durable operating leverage that consensus does not price.',
@@ -85,7 +86,7 @@ test('equity research validator requires the fixed 15-section contract', () => {
 
   const notRated = validResearch()
   notRated.formalRating = 'NOT_RATED'
-  assert.throws(() => validateEquityResearch(notRated), /Invalid formal rating/)
+  assert.equal(validateEquityResearch(notRated).formalRating, 'NOT_RATED')
 })
 
 test('research packet includes quarterly evidence, SEC filings, and skill-aligned generation rules', async () => {

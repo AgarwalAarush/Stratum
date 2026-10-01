@@ -1,3 +1,4 @@
+import { ResearchAdvice } from '@/components/markets/ResearchAdvice'
 import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -59,7 +60,8 @@ export function EtfResearchReport({
         </section>
       ) : (
         <>
-          <section className="equity-research-executive-strip" aria-label="ETF research decision summary">
+          <ResearchAdvice advice={research.advice} />
+      <section className="equity-research-executive-strip" aria-label="ETF research decision summary">
             <div><span>Formal rating</span><strong data-rating={research.formalRating}>{research.formalRating}</strong><small>Fund-level view</small></div>
             <div><span>Entry decision</span><strong>{formatEntryAction(research.entryAction)}</strong><small>What to do today</small></div>
             <div><span>Current price</span><strong>{money(stock.price)}</strong><small>{percent(stock.dailyChange)} today</small></div>

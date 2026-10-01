@@ -181,7 +181,7 @@ test('evidenced exits and holds do not invent economic forecasts; new risk still
   assert.equal(gateRecommendation({...sell,sourceIds:[]},c).action,'no_trade')
   assert.equal(gateRecommendation({...sell,action:'hold'},c).action,'no_trade')
   const holding = {...c,names:[{...c.names[0],thesis:{status:'accepted'},research:{id:'research',content:{formalRating:'HOLD'}}}]}
-  assert.equal(gateRecommendation({...sell,action:'hold'},holding).action,'hold')
+  assert.equal(gateRecommendation({...sell,action:'hold',entry:{...sell.entry,targetWeightPct:5}},holding).action,'hold')
   assert.equal(gateRecommendation(sell,holding).action,'no_trade')
   assert.equal(gateRecommendation({...sell,action:'hold'}, {...holding,names:[{...holding.names[0],research:{id:'research',content:{formalRating:'NOT_RATED'}}}]}).action,'no_trade')
   assert.equal(gateRecommendation({...recommendation(),forecasts:[]},context).action,'no_trade')

@@ -1,3 +1,4 @@
+import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchAdvice } from '../markets/research-advice.ts'
 import { randomUUID } from 'node:crypto'
 import { parseStateStreetHoldings } from './etf-workbook.ts'
 import { fetchVanEckFund } from './vaneck-holdings.ts'
@@ -76,6 +77,7 @@ function record(value: unknown): Record<string, unknown> {
 }
 
 function number(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
 }
@@ -429,6 +431,7 @@ export async function materializeEtfResearchPacket(symbolInput: string, ownerId:
 }
 
 interface EtfResearchGeneration {
+  advice?: import('../markets/research-advice.ts').ResearchAdvice | null
   formalRating: EtfResearchNote['formalRating']
   entryAction: EtfResearchNote['entryAction']
   investmentThesis: string
@@ -475,6 +478,7 @@ export function validateEtfResearch(value: unknown, packet?: EtfResearchPacket):
   })
   if (normalizedChanges.length === 0) throw new Error('ETF research revision must contain at least one material evidence change')
   return {
+    advice: output.advice || packet ? validateResearchAdvice(output.advice, packet?.sources.map(s => s.id)) : null,
     formalRating, entryAction, investmentThesis: requiredString('investmentThesis'), keyDebate: requiredString('keyDebate'),
     fastestKillSignal: requiredString('fastestKillSignal'), confidence,
     revision: {
@@ -500,6 +504,7 @@ function etfResearchPrompt(packet: EtfResearchPacket, prior: EtfResearchNote | n
     'Use only the facts and source IDs in the ETF research packet. Never invent holdings, weights, benchmark rules, flows, NAV, AUM, valuation, or citations.',
     'The issuer holdings snapshot is authoritative for what the fund owns. Distinguish issuer facts, constituent look-through inference, and analyst view.',
     'Assess exposure, top-holding concentration, portfolio construction, benchmark/rebalance mechanics, price setup, catalysts, risks, and the practical entry decision. For look-through fundamentals, state when the current packet lacks constituent financial evidence rather than inventing it.',
+    RESEARCH_ADVICE_RULES,
     'Use BUY/HOLD/SELL separately from today\'s entry action. Use NOT_RATED or wait when fund-level evidence is inadequate.',
     'Return exactly these 12 sections in schema order: Fund Snapshot; Portfolio Exposure; Top Holdings; Index & Rebalance; Fundamentals Look-through; Valuation & Setup; Catalysts; Bull Case; Base Case; Bear Case; Risk Factors; Verdict.',
     'Write 1,400-2,100 words. Prefix each factual, analytical, or estimate paragraph with **FACT:**, **VIEW:** or **ESTIMATE:**. Attach source IDs through sections and sourceIds, never in prose.',
@@ -516,6 +521,7 @@ function normalizeEtfResearch(row: Record<string, unknown>): EtfResearchNote {
   const changes = Array.isArray(revision.changes) ? revision.changes.map(record) : []
   return {
     id: String(row.id), symbol: String(row.symbol), version: Number(row.version), status: row.status as EtfResearchNote['status'],
+    advice: readResearchAdvice(content.advice),
     formalRating: row.formal_rating as EtfResearchNote['formalRating'], entryAction: row.entry_action as EtfResearchNote['entryAction'],
     investmentThesis: String(content.investmentThesis ?? ''), keyDebate: String(content.keyDebate ?? ''), fastestKillSignal: String(content.fastestKillSignal ?? ''),
     confidence: Number(content.confidence ?? 0),

@@ -15,29 +15,95 @@
     "confidence",
     "revision",
     "sections",
-    "sourceIds"
+    "sourceIds",
+    "advice"
   ],
   "properties": {
-    "formalRating": { "enum": ["BUY", "HOLD", "SELL"] },
-    "entryAction": { "enum": ["buy_now", "nibble", "wait", "add_on_weakness", "avoid"] },
-    "investmentThesis": { "type": "string", "minLength": 1 },
-    "keyDebate": { "type": "string", "minLength": 1 },
-    "mispricing": { "type": "string", "minLength": 1 },
-    "fastestKillSignal": { "type": "string", "minLength": 1 },
-    "fairValue": { "type": ["number", "null"] },
-    "entryZoneLow": { "type": ["number", "null"] },
-    "entryZoneHigh": { "type": ["number", "null"] },
-    "confidence": { "type": "number", "minimum": 0, "maximum": 100 },
+    "formalRating": {
+      "enum": [
+        "BUY",
+        "HOLD",
+        "SELL",
+        "NOT_RATED"
+      ]
+    },
+    "entryAction": {
+      "enum": [
+        "buy_now",
+        "nibble",
+        "wait",
+        "add_on_weakness",
+        "avoid"
+      ]
+    },
+    "investmentThesis": {
+      "type": "string",
+      "minLength": 1
+    },
+    "keyDebate": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mispricing": {
+      "type": "string",
+      "minLength": 1
+    },
+    "fastestKillSignal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "fairValue": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "entryZoneLow": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "entryZoneHigh": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
     "revision": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["priorVersion", "opinionChange", "summary", "changes"],
+      "required": [
+        "priorVersion",
+        "opinionChange",
+        "summary",
+        "changes"
+      ],
       "properties": {
-        "priorVersion": { "type": ["integer", "null"], "minimum": 1 },
-        "opinionChange": {
-          "enum": ["initial", "more_constructive", "less_constructive", "unchanged"]
+        "priorVersion": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
         },
-        "summary": { "type": "string", "minLength": 1 },
+        "opinionChange": {
+          "enum": [
+            "initial",
+            "more_constructive",
+            "less_constructive",
+            "unchanged"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
         "changes": {
           "type": "array",
           "minItems": 1,
@@ -45,7 +111,12 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["field", "previous", "current", "explanation"],
+            "required": [
+              "field",
+              "previous",
+              "current",
+              "explanation"
+            ],
             "properties": {
               "field": {
                 "enum": [
@@ -58,9 +129,16 @@
                   "evidence"
                 ]
               },
-              "previous": { "type": "string" },
-              "current": { "type": "string" },
-              "explanation": { "type": "string", "minLength": 1 }
+              "previous": {
+                "type": "string"
+              },
+              "current": {
+                "type": "string"
+              },
+              "explanation": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           }
         }
@@ -73,7 +151,12 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "title", "content", "sourceIds"],
+        "required": [
+          "id",
+          "title",
+          "content",
+          "sourceIds"
+        ],
         "properties": {
           "id": {
             "enum": [
@@ -94,12 +177,202 @@
               "kill_criteria"
             ]
           },
-          "title": { "type": "string", "minLength": 1 },
-          "content": { "type": "string", "minLength": 1 },
-          "sourceIds": { "type": "array", "items": { "type": "string" } }
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         }
       }
     },
-    "sourceIds": { "type": "array", "items": { "type": "string" } }
+    "sourceIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "advice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "businessView",
+        "evidenceSufficiency",
+        "newEntryStance",
+        "existingPositionStance"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "enum": [
+            1
+          ]
+        },
+        "businessView": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "reason",
+            "sourceIds",
+            "changeConditions"
+          ],
+          "properties": {
+            "value": {
+              "enum": [
+                "constructive",
+                "mixed",
+                "adverse",
+                "undetermined"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 8
+            },
+            "sourceIds": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
+            "changeConditions": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 8
+              }
+            }
+          }
+        },
+        "evidenceSufficiency": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "reason",
+            "sourceIds",
+            "changeConditions"
+          ],
+          "properties": {
+            "value": {
+              "enum": [
+                "sufficient",
+                "limited",
+                "insufficient"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 8
+            },
+            "sourceIds": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
+            "changeConditions": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 8
+              }
+            }
+          }
+        },
+        "newEntryStance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "reason",
+            "sourceIds",
+            "changeConditions"
+          ],
+          "properties": {
+            "value": {
+              "enum": [
+                "eligible",
+                "wait",
+                "avoid",
+                "undetermined"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 8
+            },
+            "sourceIds": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
+            "changeConditions": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 8
+              }
+            }
+          }
+        },
+        "existingPositionStance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "reason",
+            "sourceIds",
+            "changeConditions"
+          ],
+          "properties": {
+            "value": {
+              "enum": [
+                "retain",
+                "reduce",
+                "exit",
+                "undetermined"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 8
+            },
+            "sourceIds": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
+            "changeConditions": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 8
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
