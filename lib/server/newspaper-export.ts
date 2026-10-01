@@ -11,7 +11,6 @@ const privateHeaders = {
   'Cross-Origin-Resource-Policy': 'same-origin',
   'Referrer-Policy': 'no-referrer',
   'X-Robots-Tag': 'noindex, noarchive',
-  'Content-Disposition': 'attachment; filename="stratum-newspaper.json"',
 }
 
 type Dependencies = {

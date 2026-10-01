@@ -76,7 +76,7 @@ test('export preserves broker amounts and separate capture/quote dates, projecti
   assert.equal(response.headers.get('Cross-Origin-Resource-Policy'), 'same-origin')
   assert.equal(response.headers.get('Referrer-Policy'), 'no-referrer')
   assert.equal(response.headers.get('X-Robots-Tag'), 'noindex, noarchive')
-  assert.match(response.headers.get('Content-Disposition')!, /attachment/)
+  assert.equal(response.headers.get('Content-Disposition'), null, 'Private JSON is not automatically persisted as a browser download')
   const data = await response.json()
   assert.equal(data.schemaVersion, 1)
   assert.equal(data.exportedAt, now.toISOString())
