@@ -1,5 +1,6 @@
 'use client'
 import Link from 'next/link'
+import { RecommendationTimelines } from './RecommendationTimelines'
 import { RecommendationStatus } from './RecommendationStatus'
 import { RecommendationRefresh } from './RecommendationRefresh'
 import { ManualPortfolioConfirmation } from './ManualPortfolioConfirmation'
@@ -37,7 +38,7 @@ const stamp = (v: unknown) =>
         timeZone: 'America/Los_Angeles',
       })
     : 'Unavailable'
-const actionLabel = (s: string) => s === 'no_trade' ? 'Wait — evidence incomplete' : s.replaceAll('_', ' ')
+const actionLabel = (s: string) => s === 'no_trade' ? 'No trade' : s.replaceAll('_', ' ')
 export function RecommendationsWorkspace({
   initialData,
 }: {
@@ -150,10 +151,11 @@ export function RecommendationsWorkspace({
         <section className="py-8">
           <h2 className="text-xl">Did the recommendation work—and why?</h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
-            5, 10 and 20 trading-session markouts diagnose selection and
-            timing. Economic forecasts are assessed separately from price.
+            Seven calendar checkpoints track each issued version. Historical 5, 10 and 20 trading-session diagnostics retain their original meaning. Economic forecasts are assessed separately from price.
             Unfilled entries, missing data and owner overrides remain visible.
           </p>
+          <RecommendationTimelines learning={learning} accounts={data?.accounts ?? []} />
+          <details className="mt-6"><summary className="cursor-pointer text-sm">Historical diagnostic assessments</summary>
           {learning.evaluations.length ? (
             <div className="mt-6 space-y-4">
               {learning.evaluations.map((e) => (
@@ -182,6 +184,7 @@ export function RecommendationsWorkspace({
               after the required market sessions have elapsed.
             </p>
           )}
+          </details>
           <div className="mt-8">
             <h3 className="font-medium">Forecast review</h3>
             <p className="mt-2 text-sm text-[var(--text-muted)]">Only forecasts that passed review are eligible. Operating outcomes and market returns are assessed separately.</p>
@@ -207,7 +210,7 @@ export function RecommendationsWorkspace({
           <div className="mt-8 border-t border-[var(--border)] pt-6 text-sm">
             <h3 className="font-medium">Controlled learning</h3>
             <p className="mt-2 max-w-3xl leading-6 text-[var(--text-muted)]">
-              Confidence is calibrated against resolved forecasts, counting
+              Forecast probabilities are scored against resolved observations, counting
               repeated daily recommendations as one episode. Process changes
               require a registered comparison, prospective evidence and owner
               review. Old recommendations and probabilities remain unchanged.
@@ -218,7 +221,7 @@ export function RecommendationsWorkspace({
                   record(record(c.content).calibration).independentEpisodes ??
                     0,
                 )}{' '}
-                independent episodes ·{' '}
+                economic episodes; correlation remains ·{' '}
                 {String(
                   record(record(c.content).calibration).reason ??
                     'Gathering evidence',

@@ -1,6 +1,7 @@
+import { FORECAST_RESOLUTION_POLICY } from '../markets/forecast-metrics.ts'
 import { getSupabaseClient } from './supabase.ts'
-import { FORECAST_REVIEW_POLICY, forecastsAreApproved } from '../markets/forecast-review.ts'
-import type { DecisionContext } from '../markets/recommendations.ts'
+import { forecastsAreApproved } from '../markets/forecast-review.ts'
+import type { DecisionContext, Recommendation } from '../markets/recommendations.ts'
 import { AsyncTtlCache } from './async-ttl-cache.ts'
 
 type Row = Record<string, unknown>
@@ -76,21 +77,41 @@ export async function fetchRecommendationLearning(ownerId: string) {
   const client = database()
   const signal = AbortSignal.timeout(10_000)
   const [evaluations, cohorts, forecasts, shadowRuns, shadowEvaluations] = await Promise.all([
-    client.from('recommendation_evaluations').select('id,kind,horizon,content,as_of').eq('owner_id', ownerId)
+    client.from('recommendation_evaluations').select('id,recommendation_id,kind,horizon,content,as_of').eq('owner_id', ownerId)
       .order('created_at', { ascending: false }).limit(100).abortSignal(signal),
-    client.from('recommendation_cohort_reviews').select('id,content').eq('policy_version', FORECAST_REVIEW_POLICY)
+    client.from('recommendation_cohort_reviews').select('id,content').eq('policy_version', FORECAST_RESOLUTION_POLICY)
       .eq('owner_id', ownerId).order('created_at', { ascending: false }).limit(4).abortSignal(signal),
     client.from('recommendation_forecasts').select('*,recommendation_versions!inner(content)').eq('owner_id', ownerId)
       .order('deadline').limit(100).abortSignal(signal),
     client.from('recommendation_shadow_runs').select('id').eq('owner_id', ownerId)
       .order('created_at', { ascending: false }).limit(100).abortSignal(signal),
-    client.from('recommendation_shadow_evaluations').select('id,content').eq('evaluator_version', `shadow-calibration-${FORECAST_REVIEW_POLICY}`)
+    client.from('recommendation_shadow_evaluations').select('id,content').eq('evaluator_version', `shadow-calibration-${FORECAST_RESOLUTION_POLICY}`)
       .eq('owner_id', ownerId).order('created_at', { ascending: false }).limit(30).abortSignal(signal),
   ])
   for (const response of [evaluations, cohorts, forecasts, shadowRuns, shadowEvaluations]) {
     if (response.error) throw new Error('Track record is temporarily unavailable')
   }
+  const versions = await client.from('recommendation_versions').select('id,symbol,portfolio_id,issued_at,content,recommendation_batches(manifest_id)')
+    .eq('owner_id', ownerId).order('issued_at',{ascending:false}).limit(60).abortSignal(signal)
+  if (versions.error) throw new Error('Recommendation timeline is temporarily unavailable')
+  const ids = (versions.data ?? []).map(v => v.id)
+  const manifestIds = [...new Set((versions.data ?? []).map(v => (v.recommendation_batches as unknown as Row).manifest_id))]
+  const [tasks, outcomes, events, manifests] = ids.length ? await Promise.all([
+    client.from('recommendation_evaluation_tasks').select('*').eq('owner_id',ownerId).in('recommendation_id',ids).eq('kind','aging').abortSignal(signal),
+    client.from('recommendation_evaluations').select('id,recommendation_id,kind,horizon,content,as_of').eq('owner_id',ownerId).in('recommendation_id',ids).order('created_at',{ascending:false}).limit(1500).abortSignal(signal),
+    client.from('recommendation_owner_events').select('id,recommendation_id,event_type,recorded_at,rationale,details').eq('owner_id',ownerId).in('recommendation_id',ids).order('recorded_at',{ascending:false}).limit(500).abortSignal(signal),
+    client.from('recommendation_input_manifests').select('id,cutoff:content->cutoff,gaps:content->gaps').eq('owner_id',ownerId).in('id',manifestIds).abortSignal(signal),
+  ]) : [{data:[],error:null},{data:[],error:null},{data:[],error:null},{data:[],error:null}]
+  for (const r of [tasks,outcomes,events,manifests]) if (r.error) throw new Error('Recommendation timeline is temporarily unavailable')
+  const timelines = (versions.data ?? []).map(v => {
+    const manifest = manifests.data?.find(m => m.id === (v.recommendation_batches as unknown as Row).manifest_id)
+    return {id:v.id,symbol:v.symbol,portfolioId:v.portfolio_id,issuedAt:v.issued_at,recommendation:v.content as Recommendation,
+      tasks:(tasks.data ?? []).filter(t => t.recommendation_id === v.id), evaluations:(outcomes.data ?? []).filter(e => e.recommendation_id === v.id),
+      ownerEvents:(events.data ?? []).filter(e => e.recommendation_id === v.id),
+      coverage:{cutoff:manifest?.cutoff, citedSources:(v.content as Recommendation).sourceIds.length, editionGaps:manifest?.gaps ?? []}}
+  })
   return {
+    timelines, timelineCoverage:'Latest 60 immutable issued versions; up to 1,500 recent assessments and 500 owner reports. Citation counts describe references, not proof of source completeness.',
     evaluations: evaluations.data ?? [], cohorts: cohorts.data ?? [],
     forecasts: (forecasts.data ?? []).filter(forecast => forecastsAreApproved((forecast.recommendation_versions as unknown as Row).content))
       .map(forecast => { const copy = { ...forecast }; delete copy.recommendation_versions; return copy }),
