@@ -1,5 +1,7 @@
 'use client'
 
+import type { OverviewData } from '../../lib/types'
+
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowDown,
@@ -22,6 +24,7 @@ import { formatRelativeTime } from '@/lib/utils'
 
 interface IntelligenceResearchDashboardProps {
   sections: Record<string, SectionData>
+  overviewArtifact?: OverviewData
   overviewBullets: string[]
   isLoading: boolean
   overviewLoading: boolean
@@ -340,6 +343,7 @@ function CategoryDetailDialog({
 
 export function IntelligenceResearchDashboard({
   sections,
+  overviewArtifact,
   overviewBullets,
   isLoading,
   overviewLoading,
@@ -412,6 +416,13 @@ export function IntelligenceResearchDashboard({
       <section className="intelligence-brief-grid">
         <div className="intelligence-changes-panel">
           <h2>What changed</h2>
+          {overviewArtifact?.readiness && !overviewLoading && (
+            <p className="font-mono text-[11px] text-text-muted" role="status">
+              {overviewArtifact.readiness}{overviewArtifact.stale ? ' · showing last accepted analysis' : ''}
+              {overviewArtifact.generatedAt ? ` · generated ${overviewArtifact.generatedAt}` : ''}
+              {overviewArtifact.errors?.length ? ` · ${overviewArtifact.errors.join('; ')}` : ''}
+            </p>
+          )}
           {overviewLoading ? (
             <div className="intelligence-brief-skeleton" aria-label="Loading intelligence overview">
               {Array.from({ length: 4 }).map((_, index) => <span key={index} />)}

@@ -1,8 +1,10 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import type { OverviewData } from '../../lib/types'
 
 interface AIOverviewProps {
+  artifact?: OverviewData
   title?: string
   bullets: string[]
   isLoading: boolean
@@ -45,7 +47,7 @@ function parseBulletWithCitations(bullet: string): ReactNode {
   return <>{parts}</>
 }
 
-export function AIOverview({ title = 'AI Overview', bullets, isLoading }: AIOverviewProps) {
+export function AIOverview({ title = 'AI Overview', bullets, isLoading, artifact }: AIOverviewProps) {
   return (
     <section className="border-b border-border flex flex-col">
       <header className="w-full h-[var(--section-header-height)] shrink-0 flex items-center justify-between px-6 py-2 border-b border-border">
@@ -65,6 +67,14 @@ export function AIOverview({ title = 'AI Overview', bullets, isLoading }: AIOver
       </header>
 
       <div className="px-6 py-4">
+        {!isLoading && artifact?.readiness && (
+          <p className="font-mono text-[11px] text-text-muted mb-3" role="status">
+            {artifact.readiness}{artifact.stale ? ' · showing last accepted analysis' : ''}
+            {artifact.generatedAt ? ` · generated ${artifact.generatedAt}` : ''}
+            {artifact.dataAsOf ? ` · sources through ${artifact.dataAsOf}` : ' · source publication time unavailable'}
+            {artifact.errors?.length ? ` · ${artifact.errors.join('; ')}` : ''}
+          </p>
+        )}
         {isLoading ? (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-8 gap-y-2.5">
             {Array.from({ length: 4 }).map((_, i) => (

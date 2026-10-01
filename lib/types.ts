@@ -98,6 +98,15 @@ export interface SectionData {
 }
 
 export interface OverviewData {
+  readiness?: 'complete' | 'partial' | 'blocked' | 'failed'
+  generatedAt?: string | null
+  dataAsOf?: string | null
+  errors?: string[]
+  sourceCoverage?: Array<{ source: string; status: 'complete' | 'partial' | 'failed'; count: number }>
+  sources?: Array<{ id: string; title: string; url: string; publishedAt: string | null; availableAt: string; retrievedAt: string; section: string }>
+  generation?: import('./ai/config.ts').GenerationMetadata
+  stale?: boolean
+
   bullets: string[]
   fetchedAt: string
 }

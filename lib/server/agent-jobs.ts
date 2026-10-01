@@ -1,4 +1,7 @@
 import { lastCompletedSession } from '../markets/market-sessions.ts'
+import { generateAIOverview } from '../data/overview.ts'
+import { generateGlobalNewsOverview } from '../data/global-news-overview.ts'
+import { saveDailyOverview, saveGlobalNewsDailyOverview } from '../data/overview-persistence.ts'
 import { captureShadowPolicies, evaluateShadowPolicies } from './investment-shadow.ts'
 import { dependencyReadiness, parseRecommendationDependencies } from '../markets/recommendation-preparation.ts'
 import { prepareDailyRecommendations } from './recommendation-preparation.ts'
@@ -86,6 +89,7 @@ export const AGENT_JOB_TYPES = [
   'refresh-fmp-intelligence',
   'fetch-stock-price-history',
   'generate-market-memo',
+  'generate-daily-overview',
   'generate-morning-brief',
   'generate-weekly-overview',
   'generate-monthly-overview',
@@ -169,6 +173,7 @@ export function parseAgentJobType(value: unknown): AgentJobType {
 
 export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), payload: Record<string, unknown> = {}): string {
   if (['generate-daily-recommendations','evaluate-recommendation-outcomes','review-recommendation-cohort','send-investment-newsletter'].includes(jobType)) return `${jobType}:${now.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })}`
+  if (jobType === 'generate-daily-overview') return `${jobType}:${now.toISOString().slice(0, 10)}:${String(payload.scope ?? 'ai-research')}`
   if (jobType === 'refresh-world-events') {
     const bucket = new Date(now)
     bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
@@ -1341,6 +1346,14 @@ async function executeJob(
       : (await fetchLatestSnapshotMeta())?.id
     if (!snapshotId) throw new Error('No completed market snapshot is available')
     return materializeMarketMemo(snapshotId, { synthesize: job.payload.synthesize !== false })
+  }
+
+  if (job.job_type === 'generate-daily-overview') {
+    const global = job.payload.scope === 'global-news'
+    const data = await (global ? generateGlobalNewsOverview : generateAIOverview)({ provider: 'codex' })
+    await (global ? saveGlobalNewsDailyOverview : saveDailyOverview)(data)
+    if (['blocked', 'failed'].includes(data.readiness ?? '')) throw new Error(data.errors?.join('; ') ?? 'Intelligence generation unavailable')
+    return data
   }
 
   if (job.job_type === 'generate-morning-brief') {

@@ -76,9 +76,9 @@ export async function fetchScopeFeedPayload(scopeId: string): Promise<ScopeFeedP
     await readSection(sectionResponse(scope.id, section.id)),
   ] as const))
   const overviewPromise: Promise<OverviewData | null> = scope.id === 'ai-research'
-    ? readOverview(aiOverview(topicRequest('ai-research-overview')))
+    ? readOverview(aiOverview())
     : scope.id === 'global-news'
-      ? readOverview(globalOverview(topicRequest('global-news-overview')))
+      ? readOverview(globalOverview())
       : Promise.resolve(null)
   const [sectionEntries, overview] = await Promise.all([sectionEntriesPromise, overviewPromise])
   return { sections: Object.fromEntries(sectionEntries), overview }

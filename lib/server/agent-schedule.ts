@@ -79,6 +79,9 @@ export function buildDueAgentJobs(
       tradingDate: newYorkClockParts(now).date,
     }))
   }
+  if (options.includeCodex !== false && now.getUTCHours() >= 12) {
+    for (const scope of ['ai-research', 'global-news']) jobs.push({ jobType: 'generate-daily-overview', payload: { scope }, dedupeKey: `generate-daily-overview:${now.toISOString().slice(0, 10)}:${scope}` })
+  }
   const intelligenceCadence = fmpIntelligenceCadenceMinutes(now)
   const monitorCadence = isUsMarketRefreshWindow(now) ? 5 : intelligenceCadence
   if (isUsMarketRefreshWindow(now)) {

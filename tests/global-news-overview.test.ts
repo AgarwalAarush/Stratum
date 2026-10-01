@@ -21,14 +21,15 @@ function openAIResponse(bullets: string[]): Response {
   }), { status: 200, headers: { 'Content-Type': 'application/json' } })
 }
 
-test('global news overview returns fallback bullets without an OpenAI key', { concurrency: false }, async (t) => {
+test('global news overview reports blocked evidence without an OpenAI key', { concurrency: false }, async (t) => {
   const originalKey = process.env.OPENAI_API_KEY
   process.env.OPENAI_API_KEY = ''
   t.after(() => { process.env.OPENAI_API_KEY = originalKey })
 
   const result = await generateGlobalNewsOverview()
-  assert.ok(result.bullets.length >= 6)
-  assert.match(result.bullets.join(' '), /Geopolitical|European Union/)
+  assert.deepEqual(result.bullets, [])
+  assert.equal(result.readiness, 'blocked')
+  assert.equal(result.generatedAt, null)
 })
 
 test('global news overview uses structured OpenAI output and expands citations', { concurrency: false }, async (t) => {
