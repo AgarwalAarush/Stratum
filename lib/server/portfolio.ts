@@ -328,6 +328,8 @@ function calculateBrokeragePortfolioSummary(
       currentPrice,
       currentValue,
       unrealizedPnl: currentValue === null ? null : currentValue - totalCost,
+      quoteAsOf: position.currentPrice === null ? null : position.quoteAsOf,
+      quoteSource: position.currentPrice === null ? null : 'robinhood' as const,
     }
   }).sort((left, right) => right.totalCost - left.totalCost)
   const investedCost = holdings.reduce((total, holding) => total + holding.totalCost, 0)
@@ -473,7 +475,11 @@ async function fetchAuthoritativePortfolioState(ownerId: string) {
   const portfolios = accounts.map(normalizePortfolioAccount).map(account => {
     const capture = captures.find(c => c.portfolio_id === account.id)
     const snapshot = capture ? normalizeBrokerageSnapshot(capture) : null
-    if (account.kind === 'brokerage' && capture && !snapshot) throw new Error('Invalid successful brokerage capture')
+    if (account.kind === 'brokerage' && capture && (!snapshot
+      || !Array.isArray(capture.brokerage_position_snapshots)
+      || snapshot.positions.length !== capture.brokerage_position_snapshots.length)) {
+      throw new Error('Invalid successful brokerage capture')
+    }
     if (account.kind === 'brokerage' && snapshot) return calculateBrokeragePortfolioSummary(account, snapshot, new Map())
     const confirmation = confirmations.find(c => c.portfolio_id === account.id)
     if (account.kind === 'manual' && confirmation) {

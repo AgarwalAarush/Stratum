@@ -85,6 +85,10 @@ test('broker-only holdings and empty successful captures override corrected ledg
     )
     assert.equal(result[0].dataSource, 'robinhood')
     assert.equal(result[0].totalValue, 1000)
+    assert.equal(result[0].holdings[0].quoteAsOf, '2026-09-04T20:00:00Z')
+    assert.equal(result[0].holdings[0].quoteSource, 'robinhood')
+    positions = [{ symbol: 'BROKEN', quantity: 7, cost_basis_per_share: null }]
+    await assert.rejects(fetchAuthoritativePortfolios(owner), /Invalid successful brokerage capture/)
     positions = []
     assert.deepEqual(
       (await fetchAuthoritativePortfolios(owner))[0].holdings,

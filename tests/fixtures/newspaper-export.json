@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "exportedAt": "2026-10-01T13:00:00.000Z",
+  "privacy": "private-owner-only",
+  "portfolios": [
+    {
+      "id": "fictional-personal",
+      "name": "Illustrative Personal",
+      "kind": "brokerage",
+      "dataSource": "robinhood",
+      "dataAsOf": "2026-10-01T12:15:00Z",
+      "confirmedAt": null,
+      "capitalAsOf": "2026-10-01T12:15:00Z",
+      "capitalBasis": "broker_cash",
+      "cashBalance": 300,
+      "availableAllocation": null,
+      "allocationBudget": null,
+      "investedCost": 630,
+      "marketValue": 700,
+      "totalValue": 1000,
+      "unrealizedPnl": 70,
+      "holdings": [
+        {
+          "symbol": "EXAMPLE",
+          "quantity": 7,
+          "costBasisPerShare": 90,
+          "totalCost": 630,
+          "currentPrice": 100,
+          "currentValue": 700,
+          "unrealizedPnl": 70,
+          "quoteAsOf": "2026-10-01T12:14:59Z",
+          "quoteSource": "robinhood",
+          "freshness": {
+            "status": "fresh",
+            "asOf": "2026-10-01T12:14:59Z",
+            "maxAgeSeconds": 86400
+          },
+          "readiness": {
+            "ready": true,
+            "flags": []
+          }
+        }
+      ],
+      "freshness": {
+        "status": "fresh",
+        "asOf": "2026-10-01T12:15:00Z",
+        "maxAgeSeconds": 86400
+      },
+      "capitalFreshness": {
+        "status": "fresh",
+        "asOf": "2026-10-01T12:15:00Z",
+        "maxAgeSeconds": 86400
+      },
+      "readiness": {
+        "ready": true,
+        "flags": []
+      }
+    }
+  ],
+  "analysis": {
+    "status": "published",
+    "edition": {
+      "id": "fictional-edition",
+      "decisionDate": "2026-10-01",
+      "publishedAt": "2026-10-01T12:15:00Z",
+      "summary": "Illustrative fixture only. Never use as live data.",
+      "dataAsOf": "2026-10-01T12:00:00Z",
+      "policy": "illustrative-fixture",
+      "gaps": []
+    },
+    "recommendations": [
+      {
+        "id": "fictional-recommendation",
+        "symbol": "EXAMPLE",
+        "portfolioId": "fictional-personal",
+        "action": "hold",
+        "reason": "Illustrative published analysis for adapter development.",
+        "thesis": "Fictional thesis",
+        "counterThesis": "Fictional risk",
+        "mechanism": "Fictional mechanism",
+        "expectations": "Fictional expectation",
+        "horizonDays": 30,
+        "expiresAt": "2026-10-02T12:00:00Z",
+        "risks": [
+          "Illustrative risk"
+        ],
+        "invalidation": [
+          "Illustrative invalidation"
+        ],
+        "confidence": 70,
+        "entry": {
+          "trigger": null,
+          "condition": "Illustrative condition",
+          "maxPrice": null,
+          "targetWeightPct": null
+        },
+        "exit": "Illustrative exit condition",
+        "reassessWhen": "Illustrative catalyst",
+        "sourceIds": [
+          "fictional-source"
+        ],
+        "dimensions": {
+          "thesisQuality": "Illustrative",
+          "valuation": "Illustrative",
+          "timing": "Illustrative",
+          "portfolioFit": "Illustrative"
+        },
+        "alternative": "Illustrative alternative",
+        "gateReasons": [],
+        "expired": false
+      }
+    ],
+    "sources": [
+      {
+        "id": "fictional-source",
+        "url": "https://example.com/illustrative",
+        "asOf": "2026-10-01T12:00:00Z",
+        "availableAt": "2026-10-01T12:00:00Z",
+        "retrievedAt": "2026-10-01T12:10:00Z",
+        "feed": "Illustrative"
+      }
+    ],
+    "freshness": {
+      "status": "fresh",
+      "asOf": "2026-10-01T12:00:00Z",
+      "maxAgeSeconds": 86400
+    },
+    "readiness": {
+      "ready": true,
+      "flags": []
+    }
+  },
+  "readiness": {
+    "ready": true,
+    "flags": []
+  },
+  "errors": []
+}

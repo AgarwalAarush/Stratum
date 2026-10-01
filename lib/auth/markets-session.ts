@@ -12,11 +12,16 @@ export interface MarketsUser {
   id: string
 }
 
-export const getAllowedMarketUser = cache(async (): Promise<MarketsUser | null> => {
-  if (marketsAuthBypassEnabled()) return { id: MARKETS_OWNER_ID }
+/** Sensitive exports require a real signed session even in local development. */
+export const getAuthenticatedMarketUser = cache(async (): Promise<MarketsUser | null> => {
   const cookieStore = await cookies()
   const valid = await verifyMarketsSessionToken(cookieStore.get(MARKETS_SESSION_COOKIE)?.value)
   return valid ? { id: MARKETS_OWNER_ID } : null
+})
+
+export const getAllowedMarketUser = cache(async (): Promise<MarketsUser | null> => {
+  if (marketsAuthBypassEnabled()) return { id: MARKETS_OWNER_ID }
+  return getAuthenticatedMarketUser()
 })
 
 export async function requireAllowedMarketUser(): Promise<MarketsUser> {
