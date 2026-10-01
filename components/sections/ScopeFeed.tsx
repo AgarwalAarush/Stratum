@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 import dynamic from 'next/dynamic'
 import type { OverviewData, ScopeDef, SectionData } from '@/lib/types'
@@ -21,6 +21,7 @@ const GlobalNewsMap = dynamic(
 interface ScopeFeedProps {
   scope: ScopeDef
   initialData?: ScopeFeedPayload
+  relativeTimeAsOf: string
 }
 
 export const SCOPE_REFRESH_INTERVAL_MS = 3_600_000
@@ -58,7 +59,13 @@ async function fetchScope(scopeId: string): Promise<ScopeFeedPayload> {
   }
 }
 
-export function ScopeFeed({ scope, initialData }: ScopeFeedProps) {
+export function ScopeFeed({ scope, initialData, relativeTimeAsOf }: ScopeFeedProps) {
+  const [referenceTimeMs, setReferenceTimeMs] = useState(() => Date.parse(relativeTimeAsOf))
+  useEffect(() => {
+    const timer = window.setInterval(() => setReferenceTimeMs(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const referenceTime = new Date(referenceTimeMs).toISOString()
   const swrKey = useMemo(
     () => `scope:${scope.id}`,
     [scope.id],
@@ -84,9 +91,9 @@ export function ScopeFeed({ scope, initialData }: ScopeFeedProps) {
       .filter((value): value is string => Boolean(value))
       .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
 
-    if (fetchedAt) return formatRelativeTime(fetchedAt)
-    return isLoading ? 'loading...' : 'just now'
-  }, [data, isLoading, scope.sections])
+    if (fetchedAt) return formatRelativeTime(fetchedAt, referenceTimeMs)
+    return isLoading ? 'loading...' : 'unknown'
+  }, [data, isLoading, scope.sections, referenceTimeMs])
 
   const isAiResearchScope = scope.id === 'ai-research'
   const isGlobalNewsScope = scope.id === 'global-news'
@@ -133,6 +140,7 @@ export function ScopeFeed({ scope, initialData }: ScopeFeedProps) {
       {isAiResearchScope ? (
         <IntelligenceResearchDashboard
           sections={data ?? {}}
+          relativeTimeAsOf={referenceTime}
           overviewArtifact={overviewData}
           overviewBullets={overviewData?.bullets ?? []}
           isLoading={isLoading}
@@ -140,6 +148,11 @@ export function ScopeFeed({ scope, initialData }: ScopeFeedProps) {
           lastUpdatedLabel={lastUpdatedLabel}
           totalSectionCount={scope.sections.length}
         />
+      ) : isGlobalNewsScope ? (
+        <>
+          <IntelligenceResearchDashboard scope={scope} relativeTimeAsOf={referenceTime} sections={data ?? {}} overviewArtifact={globalNewsOverviewData} overviewBullets={globalNewsOverviewData?.bullets ?? []} isLoading={isLoading} overviewLoading={globalNewsOverviewLoading} lastUpdatedLabel={lastUpdatedLabel} totalSectionCount={scope.sections.length} />
+          <details className="intelligence-map-disclosure"><summary>Geographic context · Open the world map</summary><GlobalNewsMap /></details>
+        </>
       ) : (
         <div className="intelligence-legacy-feed">
           <AIOverview

@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 
 test('research library is authenticated, versioned, and source-backed', async () => {
   const source = await readFile(new URL('../app/markets/research/page.tsx', import.meta.url), 'utf8')
+  const libraryGrid = await readFile(new URL('../components/markets/ResearchLibraryGrid.tsx', import.meta.url), 'utf8')
   const route = await readFile(new URL('../app/api/markets/research/route.ts', import.meta.url), 'utf8')
   const report = await readFile(new URL('../app/markets/stocks/[symbol]/research/page.tsx', import.meta.url), 'utf8')
   const action = await readFile(new URL('../components/markets/ResearchActionButton.tsx', import.meta.url), 'utf8')
@@ -34,7 +35,7 @@ test('research library is authenticated, versioned, and source-backed', async ()
   assert.match(queue, /controller.abort\(\)/)
   assert.doesNotMatch(queue, /setInterval|currentIds.map/)
   assert.match(progress, /strokeDashoffset: 100 - progress/)
-  assert.match(source, /formatMarketDate\(note\.generatedAt\)/)
+  assert.match(libraryGrid, /formatMarketDate\(note\.generatedAt\)/)
   assert.match(queue, /formatMarketDateTime\(job\.updatedAt\)/)
   assert.match(dateFormatting, /America\/New_York/)
   assert.match(worker, /Synthesizing 15-section analysis/)

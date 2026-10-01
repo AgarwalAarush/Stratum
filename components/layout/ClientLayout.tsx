@@ -79,8 +79,6 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
                     <button type="button" className="intelligence-icon-button" onClick={refresh} aria-label="Refresh intelligence sources">
                         <ArrowClockwise size={17} className={isRefreshing ? 'intelligence-refreshing' : ''} aria-hidden="true" />
                     </button>
-                    <span className="intelligence-status-dot" aria-hidden="true" />
-                    <span className="intelligence-status-copy">Updated just now</span>
                     <button
                         type="button"
                         className="intelligence-mobile-menu-button"
@@ -121,6 +119,8 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
                 <button type="button" className="intelligence-subnav-link" onClick={() => { setIsIntelligenceBriefingsOpen(true); setIsMobileNavOpen(false) }}>
                     Weekly Briefs
                 </button>
+                <button type="button" className="intelligence-subnav-link intelligence-mobile-action" onClick={() => { setIsSettingsOpen(true); setIsMobileNavOpen(false) }}>Settings</button>
+                <button type="button" className="intelligence-subnav-link intelligence-mobile-action" onClick={() => { void refresh(); setIsMobileNavOpen(false) }}>Refresh sources</button>
             </nav>
 
             <main className="intelligence-main">{children}</main>

@@ -68,8 +68,8 @@ export default async function MarketsWorldPage() {
       <header className="world-header">
         <div>
           <p className="markets-eyebrow">World intelligence</p>
-          <h1 className="markets-display world-title">A living model of what matters.</h1>
-          <p className="world-deck">Material change, causal transmission, and company investigations—kept separate from thesis acceptance and capital decisions.</p>
+          <h1 className="markets-display world-title">World</h1>
+          <p className="world-deck">Material change, causal connections and questions worth investigating.</p>
         </div>
         <div className="world-header-actions">
           <WorldRefreshAction />
@@ -121,7 +121,7 @@ export default async function MarketsWorldPage() {
           <div className="world-section-heading"><p className="markets-eyebrow">Current stance</p><span>{shortCommit(world.commit)}</span></div>
           <h2>{world.current?.title ?? 'Awaiting the first projection'}</h2>
           <p>{world.current?.summary ?? 'The repository is ready, but no validated World Thinker commit has been projected.'}</p>
-          {world.current?.body ? <WorldMarkdown className="world-current-body">{world.current.body}</WorldMarkdown> : null}
+          {world.current?.body ? <details className="world-current-details"><summary>Read the full assessment</summary><WorldMarkdown className="world-current-body">{world.current.body}</WorldMarkdown></details> : null}
           <dl className="world-current-meta">
             <div><dt>Last run</dt><dd>{world.health.lastRunStatus === 'rejected' ? 'Rejected by evidence review' : world.health.lastRunStatus ?? 'None'}</dd></div>
             <div><dt>Run started</dt><dd>{formatTime(world.health.lastRunAt)}</dd></div>

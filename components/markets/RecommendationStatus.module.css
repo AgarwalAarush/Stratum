@@ -2,8 +2,8 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 20px 32px;
-  padding: 22px 24px;
+  gap: 16px 28px;
+  padding: 18px 20px;
   background: color-mix(in srgb, #a37a3a 7%, var(--bg));
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -50,11 +50,11 @@
 .reasons {
   flex-basis: 100%;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: 26px 40px;
   margin-top: 0;
   border-top: 1px solid var(--border);
-  padding-top: 25px;
+  padding-top: 16px;
 }
 .reasonHead {
   display: flex;

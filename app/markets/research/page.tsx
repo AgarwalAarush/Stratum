@@ -1,14 +1,12 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { MarketsFeedPage } from '@/components/markets/MarketsFeedPage'
-import { MarketsIntentLink } from '@/components/markets/MarketsIntentLink'
+import { ResearchLibraryGrid } from '@/components/markets/ResearchLibraryGrid'
 import { ResearchQueue } from '@/components/markets/ResearchQueue'
 import { requireAllowedMarketUser } from '@/lib/auth/markets-session'
 import { fetchFinanceReports } from '@/lib/data/finance-reports'
 import { fetchPersistedFmpMarketItems } from '@/lib/data/fmp-intelligence'
-import { formatMarketDate } from '@/lib/markets/format-date'
 import { mergeMarketNews } from '@/lib/markets/news'
-import { formatEntryAction } from '@/lib/markets/research-presentation'
 import { fetchEquityResearchLibrary, fetchEtfResearchLibrary } from '@/lib/server/research-library'
 import { cachedFetchWithFallback } from '@/lib/server/cache'
 import { fetchPortfolioResearchCoverage } from '@/lib/server/portfolio-research-seeding'
@@ -33,26 +31,18 @@ async function ResearchLibrary({ ownerId }: { ownerId: string }) {
   return (
     <div className="markets-research-library">
       <header className="market-explore-heading">
-        <div><p className="markets-eyebrow">Immutable research versions</p><h1 className="markets-display">Research</h1></div>
-        <span>{library ? `${notes.length} generated artifacts` : 'Library unavailable'}</span>
+        <div><p className="markets-eyebrow">Immutable research versions</p><h1 className="markets-display">Research</h1><p className={styles.deck}>The investment questions, evidence and versions behind your decisions.</p></div>
+        <span>{library ? `${notes.length} saved reports` : 'Library unavailable'}</span>
       </header>
-      <details className="mb-6 text-sm">
-        <summary className="cursor-pointer text-[var(--text-muted)]">Research tools</summary>
-        <nav aria-label="Research tools" className="mt-3 flex flex-wrap gap-x-6 gap-y-3">
-          {[["candidates", "Candidate scout"], ["explore", "Explore"], ["screener", "Screener"], ["theses", "Theses"], ["review", "Review queue"], ["biotech", "Biotech"]].map(([path,label]) => <Link key={path} href={`/markets/${path}`} className="underline underline-offset-4">{label}</Link>)}
-        </nav>
-      </details>
-      <Suspense fallback={<SectionLoading label="Research queue" />}><QueueSection ownerId={ownerId} /></Suspense>
-      <Suspense fallback={<SectionLoading label="Portfolio coverage" />}><CoverageSection ownerId={ownerId} /></Suspense>
-      <section className={`research-artifact-grid ${styles.artifacts}`}>
-        {!library ? <p role="alert">Saved research could not be loaded. Use Refresh to try again.</p> : notes.length === 0 ? <p>No full research artifacts yet. Promote a Candidate Scout brief or generate one from a Stock Viewer.</p> : notes.map((note) => (
-          <MarketsIntentLink key={note.id} href={`/markets/stocks/${note.symbol}/research`}>
-            <div><strong>{note.symbol}</strong><span>v{note.version}</span></div>
-            <h2>{note.keyDebate || `${note.status} research version`}</h2>
-            <footer><span>{note.formalRating}</span><span>{formatEntryAction(note.entryAction)}</span><time dateTime={note.generatedAt}>{formatMarketDate(note.generatedAt)}</time></footer>
-          </MarketsIntentLink>
-        ))}
-      </section>
+      <nav aria-label="Research tools" className={styles.tools}>
+        <a href="#research-library-title" aria-current="page">Library</a>
+        {[["candidates", "Candidate scout"], ["explore", "Explore"], ["screener", "Screener"], ["theses", "Theses"], ["review", "Review queue"], ["biotech", "Biotech"]].map(([path,label]) => <Link key={path} href={`/markets/${path}`}>{label}</Link>)}
+      </nav>
+      <div className={styles.context}>
+        <Suspense fallback={<SectionLoading label="Portfolio coverage" />}><CoverageSection ownerId={ownerId} /></Suspense>
+        <Suspense fallback={<SectionLoading label="Research queue" />}><QueueSection ownerId={ownerId} /></Suspense>
+      </div>
+      {library ? <ResearchLibraryGrid notes={notes} /> : <p className={styles.unavailable} role="alert">Saved research could not be loaded. Use Refresh to try again.</p>}
       <Suspense fallback={<SectionLoading label="Supporting evidence" />}><SupportingEvidence /></Suspense>
     </div>
   )
@@ -70,7 +60,7 @@ async function CoverageSection({ ownerId }: { ownerId: string }) {
   return <section className={styles.coverage} aria-labelledby="portfolio-research-title">
     <div>
       <h2 id="portfolio-research-title">Portfolio-first coverage</h2>
-      <p>Owned first · Watchlists second · Peers are research leads, not recommendations</p>
+      <p>Owned first, then watchlists. Peers remain research leads.</p>
     </div>
     <div>
       <strong>{coverage.ownedSymbols.filter((symbol) => coverage.coveredSymbols.includes(symbol)).length}/{coverage.ownedSymbols.length} owned researched</strong>

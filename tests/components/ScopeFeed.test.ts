@@ -127,21 +127,21 @@ test('AI Research renders the live intelligence dashboard', () => {
 })
 
 test('Intelligence dashboard maps the four primary source groups', () => {
-  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'papers'\)/)
-  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'ai-policy-regulation'\)/)
-  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'infra-hardware'\)/)
-  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'repos'\)/)
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'papers', referenceTimeMs\)/)
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'ai-policy-regulation', referenceTimeMs\)/)
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'infra-hardware', referenceTimeMs\)/)
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'repos', referenceTimeMs\)/)
   assert.match(intelligenceDashboardSource, /intelligence-topic-grid-primary/)
-  assert.match(intelligenceDashboardSource, /source coverage/)
+  assert.match(intelligenceDashboardSource, /feed panels with items/)
 })
 
 test('Intelligence dashboard keeps company and technology feeds as standalone sections', () => {
   assert.match(intelligenceDashboardSource, /id: 'venture-capital', title: 'Venture Capital'/)
-  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'venture-capital'\)/)
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'venture-capital', referenceTimeMs\)/)
   assert.match(intelligenceDashboardSource, /id: 'startups', title: 'Startups'/)
-  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'startups'\)/)
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'startups', referenceTimeMs\)/)
   assert.match(intelligenceDashboardSource, /id: 'new-technology', title: 'New Technology'/)
-  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'new-technology'\)/)
+  assert.match(intelligenceDashboardSource, /sectionRows\(sections, 'new-technology', referenceTimeMs\)/)
   assert.match(intelligenceDashboardSource, /intelligence-topic-grid-company/)
 })
 

@@ -3,6 +3,13 @@ import assert from 'node:assert/strict'
 
 import { formatRelativeTime, formatFutureTime } from '../lib/utils.ts'
 
+test('relative ages share a fixed server and browser reference across minute boundaries', () => {
+  const reference = Date.parse('2026-10-01T18:42:00Z')
+  assert.equal(formatRelativeTime('2026-10-01T18:00:59Z', reference), '41m ago')
+  assert.equal(formatRelativeTime('2026-10-01T18:00:59Z', reference + 60_000), '42m ago')
+  assert.equal(formatRelativeTime('2026-09-20T00:30:00Z', reference), 'Sep 20')
+})
+
 test('formatRelativeTime handles "just now" for very recent times', () => {
   const now = new Date()
   const justNow = new Date(now.getTime() - 30 * 1000) // 30 seconds ago
