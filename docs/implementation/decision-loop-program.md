@@ -101,8 +101,12 @@ credentials, corpus and World repositories are outside release-directory cleanup
 2. Review and merge one release at a time. Before migration 006, run
    `scripts/deploy-macserver-release.sh CHECKOUT --stage-only` on macserver. It
    installs, checks and builds the immutable origin/main release without moving
-   the active worker or initializing World state.
-3. Dry-run and apply only the matching migration. Activate the verified staged
+   the active worker or initializing World state. Use the deployment tooling from
+   the complete program branch; the older release script lacks staging support.
+3. Drain and pause the old worker before migration 006 so it cannot consume the
+   newly backfilled tasks under legacy semantics. Keep dispatch durable during
+   the short activation window. Dry-run and apply only the matching migration.
+   Activate the verified staged
    build with `--activate-only`, then deploy the matching frontend. An absent
    marker, changed tracked source or changed build ID blocks activation.
 4. Verify immutable publication, duplicate safety, seven checkpoints, policy/feed
