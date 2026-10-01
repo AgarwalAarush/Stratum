@@ -26,6 +26,8 @@ export interface FetchedGovernedDocument {
 }
 
 export interface WorldSourceCollectionResult {
+  errors?: string[]
+  readiness?: 'complete' | 'partial' | 'blocked'
   captured: number
   rejected: number
   failed: number
@@ -252,7 +254,7 @@ async function persistCapturedDocument(target: GovernedSourceFetchTarget, fetche
  * or make a market inference. */
 export async function collectGovernedWorldSourceDocuments(options: { now?: Date; fetchImpl?: typeof fetch; limit?: number } = {}): Promise<WorldSourceCollectionResult> {
   const targets = (await fetchCollectionTargets(options.now ?? new Date())).slice(0, Math.max(1, Math.min(50, options.limit ?? 24)))
-  const output: WorldSourceCollectionResult = { captured: 0, rejected: 0, failed: 0, captureIds: [] }
+  const output: WorldSourceCollectionResult = { captured: 0, rejected: 0, failed: 0, captureIds: [], errors: [] }
   for (const target of targets) {
     try {
       const fetched = await fetchGovernedSourceDocument(target, { fetchImpl: options.fetchImpl })
@@ -261,10 +263,12 @@ export async function collectGovernedWorldSourceDocuments(options: { now?: Date;
       output.captureIds.push(result.captureId)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      output.errors!.push(message.slice(0, 500))
       const rejected = /outside the active source contract|Response MIME type|permitted redirects/.test(message)
       output[rejected ? 'rejected' : 'failed'] += 1
       output.captureIds.push(await persistCapture(target, { status: rejected ? 'rejected' : 'failed', error: message }))
     }
   }
+  output.readiness = output.failed || output.rejected ? (output.captured ? 'partial' : 'blocked') : 'complete'
   return output
 }

@@ -48,17 +48,19 @@ async function record(kind: 'backup' | 'verify' | 'restore_drill', status: 'runn
 }
 
 export async function backupMarketCorpus(): Promise<{ configured: boolean; output?: string }> {
-  if (!process.env.RESTIC_REPOSITORY || !process.env.RESTIC_PASSWORD_FILE) throw new Error('Offsite corpus backup is not configured')
   const runId = await record('backup', 'running')
   try {
+  if (!process.env.RESTIC_REPOSITORY || !process.env.RESTIC_PASSWORD_FILE) throw new Error('Offsite corpus backup is not configured')
     const root = corpusRoot()
     const disk = await inspectCorpusDisk()
     await exportInvestmentLedger(root)
     const output = await runRestic(['backup', '--tag', 'stratum-market-corpus', '--exclude', '.env*', '--exclude', '*oauth*', '--exclude', 'secrets', '--exclude', '*password*', root])
     // Only a successful current backup is allowed to prune older snapshots.
-    const retention = await runRestic([
+    const db = getSupabaseClient()
+    const verified = await db?.from('market_corpus_backup_runs').select('id').eq('kind', 'verify').eq('status', 'succeeded').gte('finished_at', new Date(Date.now() - 7 * 86400000).toISOString()).limit(1)
+    const retention = verified?.data?.length ? await runRestic([
       'forget', '--tag', 'stratum-market-corpus', '--keep-daily', '30', '--keep-weekly', '12', '--keep-monthly', '12', '--prune',
-    ])
+    ]) : 'Retention blocked until a recent restore drill succeeds'
     const combinedOutput = `${output}\n${retention}`
     await record('backup', 'succeeded', { runId, byteCount: disk.managedBytes, output: { text: combinedOutput } })
     return { configured: true, output: combinedOutput }
@@ -69,9 +71,9 @@ export async function backupMarketCorpus(): Promise<{ configured: boolean; outpu
 }
 
 export async function verifyMarketCorpusBackup(): Promise<{ configured: boolean; output?: string }> {
-  if (!process.env.RESTIC_REPOSITORY || !process.env.RESTIC_PASSWORD_FILE) throw new Error('Offsite corpus backup is not configured')
   const runId = await record('verify', 'running')
   try {
+  if (!process.env.RESTIC_REPOSITORY || !process.env.RESTIC_PASSWORD_FILE) throw new Error('Offsite corpus backup is not configured')
     const output = await runRestic(['check', '--read-data-subset=2.5%'])
     // Read actual bytes from the repository into a new scratch directory. Never
     // restore over the live worker. This verifies files, not a Postgres recovery.

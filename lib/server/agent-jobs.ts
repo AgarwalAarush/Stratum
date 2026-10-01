@@ -1,8 +1,10 @@
+import { lastCompletedSession } from '../markets/market-sessions.ts'
 import { captureShadowPolicies, evaluateShadowPolicies } from './investment-shadow.ts'
 import { dependencyReadiness, parseRecommendationDependencies } from '../markets/recommendation-preparation.ts'
 import { prepareDailyRecommendations } from './recommendation-preparation.ts'
 import { AgentJobPool } from './agent-job-pool.ts'
-import { startAttemptWatchdog } from './worker-watchdog.ts'
+import { runIsolatedAgentAttempt } from './isolated-agent-attempt.ts'
+import { blockingFingerprint, blockingReason } from './agent-blocking.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { captureInvestmentMacro } from './investment-macro.ts'
 import { generateDailyRecommendations } from './recommendations.ts'
@@ -12,7 +14,6 @@ import { generateMorningBrief } from '../data/morning-brief.ts'
 import { generateMonthlyOverview, generateWeeklyOverview } from '../data/overview-generators.ts'
 import { saveMorningBrief } from '../data/overview-persistence.ts'
 import { syncFmpMarketIntelligence } from '../data/fmp-intelligence.ts'
-import { lastCompletedSession } from '../markets/market-sessions.ts'
 import { marketMemoSlot } from '../markets/market-clock.ts'
 import { getAlpacaClient } from './alpaca.ts'
 import { materializeCrossAssetSnapshot } from './cross-asset.ts'
@@ -745,6 +746,27 @@ async function runMarketThesisCycle(
   }
 }
 
+export async function executeAgentJob(job: AgentJobRecord, reportProgress: (progress: number, phase: string) => Promise<void> = async () => {}): Promise<unknown> {
+  const before = getFmpUsageSnapshot()
+  return outputWithUsage(await executeJob(job, reportProgress), before, getFmpUsageSnapshot())
+}
+
+export async function resumeBlockedAgentJobs(): Promise<number> {
+  const db = getSupabaseClient()
+  if (!db) return 0
+  const rows = await db.from('agent_jobs').select('id,blocked_on').eq('status', 'blocked').limit(100)
+  if (rows.error) throw new Error(rows.error.message)
+  let resumed = 0
+  for (const row of rows.data ?? []) {
+    const state = row.blocked_on as { reason: string; fingerprint: string }
+    if (!state?.reason || state.fingerprint === await blockingFingerprint(state.reason)) continue
+    const changed = await db.from('agent_jobs').update({ status: 'queued', blocked_on: null, attempts: 0, run_after: new Date().toISOString() }).eq('id', row.id).eq('status', 'blocked')
+    if (changed.error) throw new Error(changed.error.message)
+    resumed++
+  }
+  return resumed
+}
+
 async function executeJob(
   job: AgentJobRecord,
   reportProgress: (progress: number, phase: string) => Promise<void> = async () => {},
@@ -1392,21 +1414,11 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
       },
     }).eq('id', run.id).eq('status', 'running')
   }
-  const fmpUsageBefore = getFmpUsageSnapshot()
-  const stopWatchdog = startAttemptWatchdog(agentJobStaleAfterMs(job.job_type) - 60_000, () => {
-    console.error(JSON.stringify({ event: 'worker_attempt_deadline_exceeded', workerId, jobId: job.id, jobType: job.job_type }))
-    // Exit before stale recovery can release a still-executing attempt. The
-    // daemon restarts us and recoverInterruptedAgentJobs preserves its history.
-    process.exit(1)
-  })
 
   try {
     if (preparationError) throw preparationError
-    const output = outputWithUsage(
-      await executeJob(job, reportProgress),
-      fmpUsageBefore,
-      getFmpUsageSnapshot(),
-    )
+    const output = await runIsolatedAgentAttempt(job, agentJobStaleAfterMs(job.job_type) - 60_000, reportProgress)
+    if (output && typeof output === 'object' && (output as { readiness?: string }).readiness === 'blocked') throw new Error((output as { errors?: string[] }).errors?.join('; ') ?? 'Source collection is blocked; no usable evidence was captured')
     const transition = await supabase.rpc('finish_agent_attempt', {
       p_job_id:job.id,p_run_id:run.id,p_worker_id:workerId,p_success:true,p_output:output,
       p_error:null,p_duration_ms:Date.now()-startedAt,p_run_after:null,
@@ -1414,15 +1426,15 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
     if(transition.error) throw new Error(`Unable to persist job transition: ${transition.error.message}`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    const reason = blockingReason(message)
+    const blocked = reason ? { readiness: 'blocked', reason, fingerprint: await blockingFingerprint(reason) } : null
     const transition = await supabase.rpc('finish_agent_attempt', {
-      p_job_id:job.id,p_run_id:run.id,p_worker_id:workerId,p_success:false,p_output:null,
+      p_job_id:job.id,p_run_id:run.id,p_worker_id:workerId,p_success:false,p_output:blocked,
       p_error:message.includes('<!DOCTYPE')?'Database gateway unavailable':message.slice(0,2000),
       p_duration_ms:Date.now()-startedAt,
       p_run_after:new Date(Date.now()+Math.min(30,2**job.attempts)*60_000).toISOString(),
     })
     if(transition.error) throw new Error(`Unable to persist job transition: ${transition.error.message}`)
-  } finally {
-    stopWatchdog()
   }
 
   return true

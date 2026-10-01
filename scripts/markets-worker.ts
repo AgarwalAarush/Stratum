@@ -1,7 +1,8 @@
+import { execFileSync } from 'node:child_process'
 import { writeWorkerLocalHealth, safeWorkerError } from '../lib/server/worker-local-health.ts'
 import { workerProgressState } from '../lib/server/worker-watchdog.ts'
 import { hostname } from 'node:os'
-import { enqueueAgentJob, processAgentJobs, processOneAgentJob, recoverInterruptedAgentJobs, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
+import { enqueueAgentJob, resumeBlockedAgentJobs, processAgentJobs, processOneAgentJob, recoverInterruptedAgentJobs, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
 import { enqueueDueAgentJobs } from '../lib/server/agent-schedule.ts'
 import { recordWorkerHeartbeat } from '../lib/server/worker-heartbeat.ts'
 import type { AgentJobType } from '../lib/server/agent-jobs.ts'
@@ -9,6 +10,9 @@ import { workerJobConcurrency } from '../lib/server/market-model-policy.ts'
 import { isRobinhoodPortfolioSyncConfigured } from '../lib/server/robinhood-portfolio-sync.ts'
 import { ensureDeclaredMarketDomainPacks } from '../lib/server/world-source-control.ts'
 import { ensureWorldCoverageFrontiers } from '../lib/server/world-coverage.ts'
+
+// Derive release identity from the checkout, rather than carrying an old env value.
+process.env.STRATUM_RELEASE_SHA = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 5_000)
 const SCHEDULER_INTERVAL_MS = Number(process.env.WORKER_SCHEDULER_INTERVAL_MS ?? 60_000)
@@ -169,6 +173,7 @@ async function main() {
     try {
       await maintenance()
       if (Date.now() >= nextRecoveryAt) {
+        await resumeBlockedAgentJobs()
         const recovered = await recoverStaleAgentJobs()
         if (recovered > 0) console.info(JSON.stringify({ level: 'info', workerId, event: 'stale_jobs_recovered', count: recovered }))
         nextRecoveryAt = Date.now() + 60_000

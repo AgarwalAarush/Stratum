@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DEFAULT_MARKET_DATA_ROOT } from './world-corpus.ts'
@@ -23,7 +24,7 @@ export async function writeWorkerLocalHealth(state: {
   )
   await mkdir(directory, { recursive: true, mode: 0o700 })
   const target = join(directory, 'worker.json'),
-    temporary = `${target}.${process.pid}.tmp`
+    temporary = `${target}.${process.pid}.${randomUUID()}.tmp`
   await writeFile(
     temporary,
     JSON.stringify({
