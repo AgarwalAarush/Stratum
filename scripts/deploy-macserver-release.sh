@@ -65,3 +65,14 @@ else
   echo "Release is staged, but no running system worker was found to restart." >&2
 fi
 echo "Deployed $revision at $active_link. The prior release worktree is retained for rollback."
+
+# Automatic retention requires a separately approved policy and fresh worker
+# health for this exact release. Failure leaves rollback directories intact.
+if [[ -n "${STRATUM_RELEASE_RETENTION_APPROVAL_FILE:-}" ]]; then
+  for retention_wait in {1..12}; do
+    if node --experimental-strip-types scripts/worker-release-retention.ts --automatic; then
+      break
+    fi
+    sleep 5
+  done
+fi
