@@ -94,12 +94,13 @@ test('export preserves broker amounts and separate capture/quote dates, projecti
 test('cross-origin and sibling-origin browser requests cannot trigger private data reads', async () => {
   let reads = 0
   const deps = { ...dependencies(), portfolios: async () => { reads++; return [portfolio()] } }
-  for (const headers of [
+  const browserHeaders: Record<string, string>[] = [
     { Origin: 'https://attacker.example' },
     { Origin: 'null' },
     { 'Sec-Fetch-Site': 'cross-site' },
     { 'Sec-Fetch-Site': 'same-site' },
-  ]) {
+  ]
+  for (const headers of browserHeaders) {
     const response = await serveNewspaperExport(new Request(request().url, { headers }), deps)
     assert.equal(response.status, 403)
     assert.equal(response.headers.get('Access-Control-Allow-Origin'), null)
