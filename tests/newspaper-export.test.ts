@@ -73,6 +73,9 @@ test('export preserves broker amounts and separate capture/quote dates, projecti
   } })
   assert.equal(response.status, 200)
   assert.equal(response.headers.get('Vary'), 'Cookie')
+  assert.equal(response.headers.get('Cross-Origin-Resource-Policy'), 'same-origin')
+  assert.equal(response.headers.get('Referrer-Policy'), 'no-referrer')
+  assert.equal(response.headers.get('X-Robots-Tag'), 'noindex, noarchive')
   assert.match(response.headers.get('Content-Disposition')!, /attachment/)
   const data = await response.json()
   assert.equal(data.schemaVersion, 1)
@@ -86,6 +89,26 @@ test('export preserves broker amounts and separate capture/quote dates, projecti
   assert.equal(data.portfolios[0].holdings[0].quantity, 7)
   assert.equal(data.portfolios[0].holdings[0].unrealizedPnl, 70)
   assert.doesNotMatch(JSON.stringify(data), /do-not-export/)
+})
+
+test('cross-origin and sibling-origin browser requests cannot trigger private data reads', async () => {
+  let reads = 0
+  const deps = { ...dependencies(), portfolios: async () => { reads++; return [portfolio()] } }
+  for (const headers of [
+    { Origin: 'https://attacker.example' },
+    { Origin: 'null' },
+    { 'Sec-Fetch-Site': 'cross-site' },
+    { 'Sec-Fetch-Site': 'same-site' },
+  ]) {
+    const response = await serveNewspaperExport(new Request(request().url, { headers }), deps)
+    assert.equal(response.status, 403)
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), null)
+    assert.doesNotMatch(await response.text(), /Personal|EXAMPLE/)
+  }
+  assert.equal(reads, 0)
+  assert.equal((await serveNewspaperExport(new Request(request().url, {
+    headers: { Origin: 'https://stratum.example', 'Sec-Fetch-Site': 'same-origin' },
+  }), deps)).status, 200)
 })
 
 test('missing holdings fails closed; unavailable analysis preserves holdings with explicit failure and no raw errors', async () => {

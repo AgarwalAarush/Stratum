@@ -8,6 +8,9 @@ const privateHeaders = {
   'Cache-Control': 'private, no-store, max-age=0',
   'Vary': 'Cookie',
   'X-Content-Type-Options': 'nosniff',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'Referrer-Policy': 'no-referrer',
+  'X-Robots-Tag': 'noindex, noarchive',
   'Content-Disposition': 'attachment; filename="stratum-newspaper.json"',
 }
 
@@ -26,6 +29,13 @@ export async function serveNewspaperExport(request: Request, dependencies: Depen
   let user
   try { user = await dependencies.authenticate() } catch { return json({ error: 'Unauthorized' }, 401) }
   if (!user || user.id !== MARKETS_OWNER_ID) return json({ error: 'Unauthorized' }, 401)
+  const origin = new URL(request.url).origin
+  const requestOrigin = request.headers.get('origin')
+  const fetchSite = request.headers.get('sec-fetch-site')
+  if ((requestOrigin !== null && requestOrigin !== origin)
+    || fetchSite === 'cross-site' || fetchSite === 'same-site') {
+    return json({ error: 'Cross-origin export is not allowed' }, 403)
+  }
   if (new URL(request.url).search) return json({ error: 'Export does not accept query parameters' }, 400)
   const now = dependencies.now?.() ?? new Date()
   try {
