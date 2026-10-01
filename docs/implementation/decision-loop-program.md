@@ -2,6 +2,8 @@
 
 Status on October 1, 2026: Release 1 application and worker changes are deployed;
 its primary-collection acceptance gate remains blocked by corpus disk capacity.
+Final handoff review also found an indirect shadow boundary gap; the draft includes
+the correction, which must be applied to the foundation before that gate can pass.
 Releases 2–5 are draft work pending that prerequisite and matching rollout.
 Passing tests establish contracts and mechanics, not investment efficacy.
 
@@ -46,7 +48,11 @@ observations. The short-research baseline receives only the same frozen primary
 packet. World comparison v2 rebuilds both arms before probability estimation and
 stores their primary-packet hash, cutoff, generated research and metadata. Prior
 research, business models, owner theses, dossiers and outcome prose are removed
-before generation. Only the candidate receives frozen World analytical context.
+before generation. Only the candidate receives frozen World analytical context. Registered shadow
+trials separately freeze pre-issuance World projections into their own run; those
+fallible hypotheses never enter the canonical capital manifest. Latest invalidations
+suppress old active beliefs. A missing or over-bound projection capture is an
+explicit comparison gap, not an empty successful trial.
 Without eligible frozen World context the comparison records an exclusion. Old
 v1 records remain readable, but its contaminated design cannot collect new runs.
 
@@ -56,6 +62,15 @@ once per group in 500-row batches, and filter each task to its own endpoint.
 Missing identity or feed continuity remains a gap. Price dependencies cannot
 prevent independent economic tasks from being assessed. Calendars still come from
 the exchange; retrospective schedules never become prospective evidence.
+
+The draft strips raw shadow economics and exposure claims from company-generation
+and canonical packet projections. World retains question/document nominations and
+immutable original lineage. A World-influenced legacy report cannot authorize a
+capital decision until it has an independently reconstructed primary-evidence
+baseline. Unrelated legacy reports remain eligible. New research records the
+boundary contract, and a legacy comparison is computed after generation so the old
+shadow narrative does not anchor the new model. This correction is a foundation
+prerequisite, not evidence that the currently deployed indirect boundary passed.
 
 ## Reviewed operational gates
 
@@ -72,7 +87,8 @@ credentials, corpus and World repositories are outside release-directory cleanup
 
 ## Matched rollout
 
-1. Complete approved release retention; verify disk guard recovery and usable
+1. Apply and verify the indirect shadow-handoff foundation correction, then
+   complete approved release retention; verify disk guard recovery and usable
    primary captures, including a failed-topic coverage record. Recheck the Release
    1 gate with persisted records and the production UI.
 2. Review and merge one release at a time. Before migration 006, run
