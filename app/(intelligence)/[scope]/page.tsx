@@ -29,7 +29,7 @@ export default async function ScopePage({ params }: PageProps) {
   // fallback data. The initial paint therefore contains real feed content
   // rather than waiting for a browser-side fan-out of section requests.
   const initialData = await fetchScopeFeedPayload(scope.id)
-  return <ScopeFeed scope={scope} initialData={initialData ?? undefined} />
+  return <ScopeFeed scope={scope} initialData={initialData ?? undefined} relativeTimeAsOf={new Date().toISOString()} />
 }
 
 export function generateStaticParams() {

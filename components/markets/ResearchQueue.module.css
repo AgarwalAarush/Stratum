@@ -1,10 +1,10 @@
 .disclosure {
-  border-top: 1px solid var(--market-border);
+  border-top: 0;
 }
 
 .summary {
   cursor: pointer;
-  padding: 18px 0;
+  padding: 10px 0;
   font-size: 14px;
   font-weight: 500;
 }

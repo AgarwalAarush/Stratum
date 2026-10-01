@@ -119,6 +119,8 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
                 <button type="button" className="intelligence-subnav-link" onClick={() => { setIsIntelligenceBriefingsOpen(true); setIsMobileNavOpen(false) }}>
                     Weekly Briefs
                 </button>
+                <button type="button" className="intelligence-subnav-link intelligence-mobile-action" onClick={() => { setIsSettingsOpen(true); setIsMobileNavOpen(false) }}>Settings</button>
+                <button type="button" className="intelligence-subnav-link intelligence-mobile-action" onClick={() => { void refresh(); setIsMobileNavOpen(false) }}>Refresh sources</button>
             </nav>
 
             <main className="intelligence-main">{children}</main>
