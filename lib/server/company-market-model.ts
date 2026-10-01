@@ -17,7 +17,7 @@ import type {
 import { runCodexJson } from './codex-exec.ts'
 import { getSupabaseClient } from './supabase.ts'
 
-type CompanyMarketModelGeneration = Omit<CompanyMarketModel,
+export type CompanyMarketModelGeneration = Omit<CompanyMarketModel,
   'id' | 'symbol' | 'version' | 'status' | 'provider' | 'model' | 'dataAsOf' | 'generatedAt' | 'error'>
 
 const EVIDENCE_STATUSES = new Set<CompanyMarketEvidenceStatus>([
@@ -240,7 +240,7 @@ export function validateCompanyMarketModel(
   return model
 }
 
-function companyMarketModelPrompt(
+export function companyMarketModelPrompt(
   packet: CompanyPacket,
   priorModel: CompanyMarketModel | null,
   reason: string,
@@ -317,6 +317,7 @@ export async function materializeCompanyMarketModel(
   packet: CompanyPacket,
   ownerId: string,
   reason = 'manual',
+  projection?: {data: CompanyMarketModelGeneration; metadata: import('../ai/config.ts').GenerationMetadata},
 ): Promise<CompanyMarketModel> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
@@ -335,7 +336,7 @@ export async function materializeCompanyMarketModel(
   if (createError || !row) throw new Error(`Unable to create company market model: ${createError?.message ?? 'unknown error'}`)
   try {
     const allowedSourceIds = new Set(packet.sources.map((source) => source.id))
-    const result = await runCodexJson({
+    const result = projection ?? await runCodexJson({
       prompt: companyMarketModelPrompt(packet, priorModel, reason),
       schemaPath: 'schemas/company-market-model.schema.json',
       validate: (value) => validateCompanyMarketModel(value, allowedSourceIds),

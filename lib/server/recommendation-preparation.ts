@@ -1,3 +1,4 @@
+import { decisionContextSignature } from '../markets/decision-refresh.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { recommendationResearchTargets } from '../markets/recommendation-preparation.ts'
 import { isRobinhoodPortfolioSyncConfigured } from './robinhood-portfolio-sync.ts'
@@ -49,21 +50,13 @@ export async function reconcileRecommendationEvidence(enqueue: Enqueue, ownerId 
     .order('published_at',{ascending:false}).limit(1).abortSignal(signal).maybeSingle()
   if (batch.error) throw new Error(batch.error.message)
   if (!batch.data) return null
-  const manifest = await db.from('recommendation_input_manifests').select('cutoff:content->cutoff,universe:content->universe')
+  const manifest = await db.from('recommendation_input_manifests').select('content')
     .eq('id',batch.data.manifest_id).eq('owner_id',ownerId).abortSignal(signal).single()
   if (manifest.error) throw new Error(manifest.error.message)
-  const cutoff = String(manifest.data.cutoff)
-  const universe = manifest.data.universe as unknown as Array<{symbol:string;selected:boolean}>
-  const symbols = universe.filter(n=>n.selected).map(n=>n.symbol)
-  const responses = await Promise.all([
-    db.from('equity_research_notes').select('id,symbol').eq('owner_id',ownerId).eq('status','complete').gt('generated_at',cutoff).in('symbol',symbols).limit(100).abortSignal(signal),
-    db.from('etf_research_notes').select('id,symbol').eq('owner_id',ownerId).eq('status','complete').gt('generated_at',cutoff).in('symbol',symbols).limit(100).abortSignal(signal),
-    db.from('brokerage_sync_runs').select('id').eq('owner_id',ownerId).eq('status','succeeded').gt('captured_at',cutoff).limit(30).abortSignal(signal),
-    db.from('portfolio_confirmations').select('id').eq('owner_id',ownerId).gt('confirmed_at',cutoff).limit(30).abortSignal(signal),
-  ])
-  for (const response of responses) if (response.error) throw new Error(response.error.message)
-  const ids = responses.flatMap(r=>r.data!.map(item=>item.id)).sort()
-  if (!ids.length) return null
-  const editionKey = `evidence:${contentHash(ids).slice(0,24)}`
+  const current=await assembleDecisionContext(ownerId,new Date(),'semantic-probe',{persist:false})
+  const previous=record(manifest.data.content)
+  const signature=decisionContextSignature(current)
+  if (Array.isArray(previous.names) && decisionContextSignature(previous as unknown as import('../markets/recommendations.ts').DecisionContext)===signature) return null
+  const editionKey=`evidence:${signature.slice(0,24)}`
   return enqueue('generate-daily-recommendations',{ownerId,editionKey},`recommendation-evidence:${ownerId}:${editionKey}`)
 }
