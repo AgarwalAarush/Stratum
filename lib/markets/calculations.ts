@@ -11,6 +11,7 @@ const RETURN_LOOKBACK_TOLERANCE_DAYS = 7
 export interface ScreenerHistoryMetrics {
   symbol: string
   barCount: number
+  historyThrough?: string | null
   averageVolume: number | null
   fiftyDayAverage: number | null
   yearLow: number | null

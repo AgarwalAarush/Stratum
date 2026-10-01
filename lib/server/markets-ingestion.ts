@@ -1,4 +1,5 @@
-import { calculateScreenerRow, calculateScreenerRowFromCachedHistory, calculateScreenerRowFromMetrics, type CachedScreenerHistory, type ScreenerHistoryMetrics } from '../markets/calculations.ts'
+import { lastCompletedSession, nextCalendarDate } from '../markets/market-sessions.ts'
+import { calculateScreenerRowFromMetrics, type CachedScreenerHistory, type ScreenerHistoryMetrics } from '../markets/calculations.ts'
 import type { MarketAsset, MarketDailyBar, MarketFeed, ScreenerRow } from '../markets/types.ts'
 import { getAlpacaClient, type AlpacaClient } from './alpaca.ts'
 import { GICS_CONSTITUENTS_URL, parseGicsConstituents } from './market-leadership.ts'
@@ -7,29 +8,14 @@ import { getSupabaseClient } from './supabase.ts'
 const DATABASE_BATCH_SIZE = 500
 const DATABASE_PAGE_SIZE = 1_000
 const MARKET_LOOKBACK_DAYS = 380
-const INCREMENTAL_LOOKBACK_DAYS = 8
-const HISTORY_QUERY_SYMBOL_BATCH_SIZE = 40
 const HISTORY_CACHE_BARS_PER_SYMBOL = 300
 const REQUIRED_HISTORY_BARS = 252
 
 type SupabaseServiceClient = NonNullable<ReturnType<typeof getSupabaseClient>>
 
-interface DailyBarRow {
-  symbol: string
-  trading_date: string
-  open: number | string
-  high: number | string
-  low: number | string
-  close: number | string
-  volume: number | string
-  trade_count: number | string | null
-  vwap: number | string | null
-  feed: Exclude<MarketFeed, 'illustrative'>
-  source_as_of: string
-}
-
 interface ScreenerHistoryMetricRow {
   symbol: string
+  history_through: string | null
   bar_count: number | string
   average_volume: number | string | null
   fifty_day_average: number | string | null
@@ -59,11 +45,6 @@ interface CachedScreenerHistoryRow {
   fifty_two_week_position: number | string
 }
 
-let historyCacheFeed: Exclude<MarketFeed, 'illustrative'> | null = null
-let historyBackfillDate: string | null = null
-const historyCache = new Map<string, MarketDailyBar[]>()
-const historyBackfilledSymbols = new Set<string>()
-const historyRefreshDateByFeed = new Map<Exclude<MarketFeed, 'illustrative'>, string>()
 
 function batches<T>(items: T[], size = DATABASE_BATCH_SIZE): T[][] {
   const result: T[][] = []
@@ -84,7 +65,8 @@ function newYorkDate(timestamp: string): string {
   return `${part('year')}-${part('month')}-${part('day')}`
 }
 
-function finiteMetric(value: number | string | null): number | null {
+export function finiteMetric(value: number | string | null | undefined): number | null {
+  if (value == null || value === '') return null
   const number = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(number) ? number : null
 }
@@ -95,7 +77,7 @@ export async function loadScreenerHistoryMetrics(
   feed: Exclude<MarketFeed, 'illustrative'>,
   asOf: string,
 ): Promise<Map<string, ScreenerHistoryMetrics>> {
-  const { data, error } = await supabase.rpc('screener_history_metrics', {
+  const { data, error } = await supabase.rpc('screener_history_metrics_v2', {
     p_symbols: symbols,
     p_feed: feed,
     p_as_of: newYorkDate(asOf),
@@ -110,6 +92,7 @@ export async function loadScreenerHistoryMetrics(
     if (!row.symbol || !Number.isFinite(barCount) || averageVolume === null || fiftyDayAverage === null || yearLow === null || yearHigh === null) return []
     const metric: ScreenerHistoryMetrics = {
       symbol: row.symbol,
+      historyThrough: row.history_through,
       barCount,
       averageVolume,
       fiftyDayAverage,
@@ -189,8 +172,40 @@ async function loadCachedScreenerHistory(
   }))
 }
 
-function hasUsableScreenerHistory(metrics: ReadonlyMap<string, ScreenerHistoryMetrics>): boolean {
-  return [...metrics.values()].some((metric) => metric.barCount >= 50)
+function hasUsableScreenerHistory(metrics: ReadonlyMap<string, ScreenerHistoryMetrics>, symbols: string[]): boolean {
+  return symbols.every(symbol => (metrics.get(symbol)?.barCount ?? 0) >= 50)
+}
+
+export interface HistoryCursor { symbol: string; history_through: string | null; bar_count: number }
+export function historySyncStart(cursor: HistoryCursor | undefined, completed: string): string | null {
+  if (cursor?.history_through && cursor.history_through >= completed) return null
+  const anchor = cursor?.history_through ?? completed
+  const days = cursor?.history_through ? 8 : MARKET_LOOKBACK_DAYS
+  return new Date(Date.parse(`${anchor}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10)
+}
+
+/** Synchronization is independent of the compact metrics/cached screener path. */
+export async function synchronizeDailyHistory(client: AlpacaClient, supabase: SupabaseServiceClient,
+  symbols: string[], feed: Exclude<MarketFeed, 'illustrative'>, completed: string): Promise<number> {
+  let fetchedCount = 0
+  for (const symbolBatch of batches(symbols, 100)) {
+    const cursors = await supabase.rpc('market_history_cursors', { p_symbols: symbolBatch, p_feed: feed })
+    if (cursors.error) throw new Error(`Unable to read daily history cursors: ${cursors.error.message}`)
+    const bySymbol = new Map<string, HistoryCursor>((cursors.data ?? []).map((r: HistoryCursor) => [r.symbol, r]))
+    const groups = new Map<string, string[]>()
+    for (const symbol of symbolBatch) {
+      const start = historySyncStart(bySymbol.get(symbol), completed)
+      if (start) groups.set(start, [...(groups.get(start) ?? []), symbol])
+    }
+    for (const [start, pending] of groups) {
+      const result = await client.fetchDailyBars(pending, start, nextCalendarDate(completed), feed)
+      if (result.feed !== feed) throw new Error(`History feed changed from ${feed} to ${result.feed}; retaining the previous snapshot`)
+      const bars = result.data.filter(bar => bar.tradingDate <= completed)
+      await persistDailyBars(supabase, bars)
+      fetchedCount += bars.length
+    }
+  }
+  return fetchedCount
 }
 
 export function mergeMarketDailyBars(
@@ -221,49 +236,6 @@ export function symbolsNeedingHistoryBackfill(
     !attemptedSymbols.has(symbol) && (cache.get(symbol)?.length ?? 0) < REQUIRED_HISTORY_BARS)
 }
 
-function normalizeDailyBarRow(row: DailyBarRow): MarketDailyBar {
-  return {
-    symbol: row.symbol,
-    tradingDate: row.trading_date,
-    open: Number(row.open),
-    high: Number(row.high),
-    low: Number(row.low),
-    close: Number(row.close),
-    volume: Number(row.volume),
-    tradeCount: row.trade_count === null ? null : Number(row.trade_count),
-    vwap: row.vwap === null ? null : Number(row.vwap),
-    feed: row.feed,
-    asOf: row.source_as_of,
-  }
-}
-
-async function loadPersistedDailyBars(
-  supabase: SupabaseServiceClient,
-  symbols: string[],
-  feed: Exclude<MarketFeed, 'illustrative'>,
-  start: string,
-): Promise<MarketDailyBar[]> {
-  const result: MarketDailyBar[] = []
-  for (const symbolBatch of batches(symbols, HISTORY_QUERY_SYMBOL_BATCH_SIZE)) {
-    for (let from = 0; ; from += DATABASE_PAGE_SIZE) {
-      const { data, error } = await supabase
-        .from('market_bars_daily')
-        .select('symbol,trading_date,open,high,low,close,volume,trade_count,vwap,feed,source_as_of')
-        .in('symbol', symbolBatch)
-        .eq('feed', feed)
-        .gte('trading_date', start)
-        .order('symbol', { ascending: true })
-        .order('trading_date', { ascending: false })
-        .range(from, from + DATABASE_PAGE_SIZE - 1)
-      if (error) throw new Error(`Unable to load persisted daily market bars: ${error.message}`)
-      const page = (data ?? []) as DailyBarRow[]
-      result.push(...page.map(normalizeDailyBarRow))
-      if (page.length < DATABASE_PAGE_SIZE) break
-    }
-  }
-  return result
-}
-
 async function persistDailyBars(
   supabase: SupabaseServiceClient,
   bars: MarketDailyBar[],
@@ -281,96 +253,12 @@ async function persistDailyBars(
       vwap: bar.vwap,
       feed: bar.feed,
       source_as_of: bar.asOf,
+      retrieved_at: new Date().toISOString(),
     })), { onConflict: 'symbol,trading_date,feed' })
     if (error) throw new Error(`Unable to persist daily market bars: ${error.message}`)
   }
 }
 
-async function loadScreenerHistory(
-  client: AlpacaClient,
-  supabase: SupabaseServiceClient,
-  symbols: string[],
-  feed: Exclude<MarketFeed, 'illustrative'>,
-  now: Date,
-): Promise<{ bars: MarketDailyBar[]; feed: Exclude<MarketFeed, 'illustrative'>; fetchedBarCount: number }> {
-  if (historyCacheFeed !== feed) {
-    historyCache.clear()
-    historyCacheFeed = feed
-    historyBackfillDate = null
-    historyBackfilledSymbols.clear()
-  }
-
-  const start = new Date(now)
-  start.setUTCDate(start.getUTCDate() - MARKET_LOOKBACK_DAYS)
-  const missingFromCache = symbols.filter((symbol) => !historyCache.has(symbol))
-  if (missingFromCache.length > 0) {
-    const persisted = await loadPersistedDailyBars(supabase, missingFromCache, feed, isoDate(start))
-    const persistedBySymbol = new Map<string, MarketDailyBar[]>()
-    for (const bar of persisted) {
-      persistedBySymbol.set(bar.symbol, [...(persistedBySymbol.get(bar.symbol) ?? []), bar])
-    }
-    for (const symbol of missingFromCache) {
-      historyCache.set(symbol, mergeMarketDailyBars([], persistedBySymbol.get(symbol) ?? []))
-    }
-  }
-
-  const today = isoDate(now)
-  if (historyBackfillDate !== today) {
-    historyBackfillDate = today
-    historyBackfilledSymbols.clear()
-  }
-  const historyRefreshDue = historyRefreshDateByFeed.get(feed) !== today
-  const backfillSymbols = historyRefreshDue
-    ? symbolsNeedingHistoryBackfill(symbols, historyCache, historyBackfilledSymbols)
-    : []
-  const fetched: MarketDailyBar[] = []
-  let resultFeed = feed
-
-  if (backfillSymbols.length > 0) {
-    const backfill = await client.fetchDailyBars(backfillSymbols, isoDate(start), today, feed)
-    appendMarketDailyBars(fetched, backfill.data)
-    for (const symbol of backfillSymbols) historyBackfilledSymbols.add(symbol)
-    resultFeed = backfill.feed
-  }
-
-  if (resultFeed === feed && historyRefreshDue && backfillSymbols.length < symbols.length) {
-    const incrementalStart = new Date(now)
-    incrementalStart.setUTCDate(incrementalStart.getUTCDate() - INCREMENTAL_LOOKBACK_DAYS)
-    const incremental = await client.fetchDailyBars(symbols, isoDate(incrementalStart), today, feed)
-    appendMarketDailyBars(fetched, incremental.data)
-    resultFeed = incremental.feed
-  }
-
-  if (fetched.length > 0) await persistDailyBars(supabase, fetched)
-  if (resultFeed !== feed) {
-    historyCache.clear()
-    historyCacheFeed = resultFeed
-    historyBackfillDate = null
-    historyBackfilledSymbols.clear()
-    const fetchedBySymbol = new Map<string, MarketDailyBar[]>()
-    for (const bar of fetched) {
-      fetchedBySymbol.set(bar.symbol, [...(fetchedBySymbol.get(bar.symbol) ?? []), bar])
-    }
-    for (const symbol of symbols) {
-      historyCache.set(symbol, mergeMarketDailyBars([], fetchedBySymbol.get(symbol) ?? []))
-    }
-  } else {
-    const fetchedBySymbol = new Map<string, MarketDailyBar[]>()
-    for (const bar of fetched) {
-      fetchedBySymbol.set(bar.symbol, [...(fetchedBySymbol.get(bar.symbol) ?? []), bar])
-    }
-    for (const [symbol, updates] of fetchedBySymbol) {
-      historyCache.set(symbol, mergeMarketDailyBars(historyCache.get(symbol) ?? [], updates))
-    }
-    historyRefreshDateByFeed.set(feed, today)
-  }
-
-  return {
-    bars: symbols.flatMap((symbol) => historyCache.get(symbol) ?? []),
-    feed: resultFeed,
-    fetchedBarCount: fetched.length,
-  }
-}
 
 export function newestTimestamp(rows: Array<{ asOf: string }>, fallback: string): string {
   if (rows.length === 0) return fallback
@@ -484,67 +372,54 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
   } catch {
     historyMetrics = new Map()
   }
-  let cachedHistory = new Map<string, CachedScreenerHistory>()
-  let historyResult: Awaited<ReturnType<typeof loadScreenerHistory>> | null = null
   // Alpaca can return delayed-SIP snapshots even where our durable daily bars
   // are IEX. Never blend those feeds: explicitly re-fetch the snapshots on
   // IEX when it is the only feed with usable persisted history.
-  if (!hasUsableScreenerHistory(historyMetrics) && feed === 'delayed_sip') {
+  if (!hasUsableScreenerHistory(historyMetrics, symbols) && feed === 'delayed_sip') {
     let iexMetrics = new Map<string, ScreenerHistoryMetrics>()
     try {
       iexMetrics = await loadScreenerHistoryMetrics(supabase, symbols, 'iex', dataAsOf)
     } catch {
       // The compact reduction may be statement-limited on a large archive.
     }
-    if (hasUsableScreenerHistory(iexMetrics) || (cachedHistory = await loadCachedScreenerHistory(supabase, 'iex')).size > 0) {
+    if (hasUsableScreenerHistory(iexMetrics, symbols) || (await loadCachedScreenerHistory(supabase, 'iex')).size > 0) {
       snapshotsResult = await client.fetchSnapshots(symbols, 'iex')
       feed = snapshotsResult.feed
       dataAsOf = newestTimestamp(snapshotsResult.data, now.toISOString())
       historyMetrics = iexMetrics
     }
   }
-  // A fresh database has no compact metrics yet. Preserve the existing
-  // bootstrap path, but do not reload an established full bar archive on each
-  // routine refresh.
-  if (!hasUsableScreenerHistory(historyMetrics) && cachedHistory.size === 0) {
-    historyResult = await loadScreenerHistory(client, supabase, symbols, feed, now)
-    if (historyResult.feed !== feed) {
-      snapshotsResult = await client.fetchSnapshots(symbols, historyResult.feed)
-      feed = snapshotsResult.feed
-      historyResult = await loadScreenerHistory(client, supabase, symbols, feed, now)
-    }
-    if (historyResult.feed !== feed) throw new Error(`Alpaca returned inconsistent feeds: ${feed} and ${historyResult.feed}`)
-    historyMetrics = await loadScreenerHistoryMetrics(supabase, symbols, feed, newestTimestamp(snapshotsResult.data, now.toISOString()))
+  const calendarStart = new Date(now.getTime() - 14 * 86_400_000).toISOString().slice(0, 10)
+  const completed = lastCompletedSession(await client.fetchCalendar(calendarStart, isoDate(now)), now)
+  if (!completed) throw new Error('No completed exchange session is available for history synchronization')
+  const fetchedBarCount = await synchronizeDailyHistory(client, supabase, symbols, feed, completed.date)
+  historyMetrics = new Map()
+  for (const batch of batches(symbols, 100)) {
+    const metrics = await loadScreenerHistoryMetrics(supabase, batch, feed, `${nextCalendarDate(completed.date)}T16:00:00Z`)
+    for (const [symbol, metric] of metrics) historyMetrics.set(symbol, metric)
   }
-  if (cachedHistory.size > 0) {
-    await fillScreenerHistoryGaps(supabase, symbols, feed, dataAsOf, historyMetrics, cachedHistory)
-  }
+  // Cached history is useful for diagnosis, but cannot make obsolete indicators fresh.
   const { data: snapshotRecord, error: snapshotError } = await supabase
     .from('market_snapshots')
-    .insert({ feed, status: 'building', data_as_of: dataAsOf })
+    .insert({ feed, status: 'building', data_as_of: dataAsOf, history_through: completed.date })
     .select('id')
     .single()
   if (snapshotError || !snapshotRecord) throw new Error(`Unable to create market snapshot: ${snapshotError?.message ?? 'unknown error'}`)
 
   try {
     const assetsBySymbol = new Map<string, MarketAsset>(assets.map((asset) => [asset.symbol, asset]))
-    const barsBySymbol = new Map<string, MarketDailyBar[]>()
-    for (const bar of historyResult?.bars ?? []) barsBySymbol.set(bar.symbol, [...(barsBySymbol.get(bar.symbol) ?? []), bar])
 
     const rows: ScreenerRow[] = snapshotsResult.data.flatMap((snapshot) => {
       const asset = assetsBySymbol.get(snapshot.symbol)
-      if (!asset) return []
-      const row = historyMetrics.get(snapshot.symbol)
-        ? calculateScreenerRowFromMetrics(asset, snapshot, historyMetrics.get(snapshot.symbol)!)
-        : cachedHistory.get(snapshot.symbol)
-          ? calculateScreenerRowFromCachedHistory(asset, snapshot, cachedHistory.get(snapshot.symbol)!)
-        : calculateScreenerRow(asset, snapshot, barsBySymbol.get(snapshot.symbol) ?? [])
+      if (!asset || historyMetrics.get(snapshot.symbol)?.historyThrough !== completed.date) return []
+      const row = calculateScreenerRowFromMetrics(asset, snapshot, historyMetrics.get(snapshot.symbol)!)
       if (!row) return []
       const classification = taxonomyBySymbol.get(row.symbol)
       return [{
         ...row,
         sector: classification?.sector ?? 'Unclassified',
         subIndustry: classification?.subIndustry ?? 'Unclassified',
+        history: { through: completed.date, feed, barCount: historyMetrics.get(snapshot.symbol)!.barCount, windows: { liquidity: 20, movingAverage: 50, year: 252 }, completeness: historyMetrics.get(snapshot.symbol)!.barCount >= 252 ? 'complete' : 'partial' },
       }]
     })
     if (rows.length === 0) throw new Error('No screener rows had sufficient market history')
@@ -573,6 +448,7 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
         sub_industry: row.subIndustry,
         tradable: row.tradable,
         data_as_of: row.asOf,
+        history_provenance: row.history,
       })))
       if (error) throw new Error(`Unable to persist screener rows: ${error.message}`)
     }
@@ -585,7 +461,7 @@ export async function materializeAlpacaScreener(options: MaterializeMarketsOptio
       feed,
       rowCount: rows.length,
       dataAsOf,
-      fetchedBarCount: historyResult?.fetchedBarCount ?? 0,
+      fetchedBarCount,
     }
   } catch (error) {
     await supabase.from('market_snapshots').update({

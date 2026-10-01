@@ -12,6 +12,7 @@ import { generateMorningBrief } from '../data/morning-brief.ts'
 import { generateMonthlyOverview, generateWeeklyOverview } from '../data/overview-generators.ts'
 import { saveMorningBrief } from '../data/overview-persistence.ts'
 import { syncFmpMarketIntelligence } from '../data/fmp-intelligence.ts'
+import { lastCompletedSession } from '../markets/market-sessions.ts'
 import { marketMemoSlot } from '../markets/market-clock.ts'
 import { getAlpacaClient } from './alpaca.ts'
 import { materializeCrossAssetSnapshot } from './cross-asset.ts'
@@ -861,7 +862,12 @@ async function executeJob(
       : null
     if (!clock.isOpen && !coverageSymbol) {
       const latest = await fetchLatestSnapshotMeta()
-      if (!shouldRefreshClosedMarket(latest)) {
+      const now = new Date()
+      const calendar = await client.fetchCalendar(new Date(now.getTime() - 14 * 86_400_000).toISOString().slice(0, 10), now.toISOString().slice(0, 10))
+      const completed = lastCompletedSession(calendar, now)
+      // A recently published intraday snapshot must not suppress final-session ingestion.
+      const finalSessionCaptured = latest && completed && latest.history_through === completed.date
+      if (!shouldRefreshClosedMarket(latest) && finalSessionCaptured) {
         return { skipped: 'market_closed_recent_snapshot', nextOpen: clock.nextOpen }
       }
     }
