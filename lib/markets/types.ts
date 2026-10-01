@@ -1045,6 +1045,9 @@ export interface PortfolioHolding {
   currentPrice: number | null
   currentValue: number | null
   unrealizedPnl: number | null
+  /** Broker observation time, independent of account capture time. */
+  quoteAsOf?: string | null
+  quoteSource?: 'robinhood' | null
 }
 
 export interface PortfolioAccountSummary {

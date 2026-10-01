@@ -5,6 +5,34 @@ import { AsyncTtlCache } from './async-ttl-cache.ts'
 
 type Row = Record<string, unknown>
 type SourceReference = Pick<DecisionContext['evidence'][number], 'id' | 'url' | 'asOf' | 'availableAt'>
+
+/** Newspaper reads only an accepted edition and its frozen source ledger.
+ * No jobs, delivery/outbox, drafts, owner events, or generation are involved. */
+export async function fetchPublishedNewspaperAnalysis(ownerId: string) {
+  const client = database()
+  const signal = AbortSignal.timeout(10_000)
+  const batch = await client.from('recommendation_batches')
+    .select('id,manifest_id,decision_date,published_at,summary')
+    .eq('owner_id', ownerId).not('published_at', 'is', null)
+    .order('published_at', { ascending: false }).order('id').limit(1)
+    .abortSignal(signal).maybeSingle()
+  if (batch.error) throw new Error('Unable to read published edition')
+  if (!batch.data) return null
+  const [versions, manifest] = await Promise.all([
+    client.from('recommendation_versions').select('id,content')
+      .eq('owner_id', ownerId).eq('batch_id', batch.data.id)
+      .order('symbol').order('id').limit(1_000).abortSignal(signal),
+    client.from('recommendation_input_manifests')
+      .select('cutoff:content->cutoff,policy:content->policy,gaps:content->gaps,evidence:content->evidence')
+      .eq('owner_id', ownerId).eq('id', batch.data.manifest_id)
+      .abortSignal(signal).single(),
+  ])
+  if (versions.error || manifest.error) throw new Error('Unable to read published evidence')
+  // Refuse a potentially truncated PostgREST result instead of publishing
+  // partial advice as a complete edition.
+  if ((versions.data?.length ?? 0) >= 1_000) throw new Error('Published edition exceeds export bound')
+  return { batch: batch.data, versions: versions.data ?? [], manifest: manifest.data }
+}
 const evidenceCache = new AsyncTtlCache<SourceReference[]>({ maxEntries: 16 })
 function database() {
   const client = getSupabaseClient()
