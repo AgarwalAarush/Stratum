@@ -677,6 +677,8 @@ export interface CompanyPacket {
   researchEvidence?: CompanyResearchEvidence[]
   /** Parent market models are context only; company research must independently verify exposure. */
   marketTheses?: Array<{
+    authority?: 'shadow'
+    mayAuthorizeCapital?: false
     hypothesisId: string
     title: string
     version: number
@@ -791,6 +793,7 @@ export interface CompanyMarketFalsifier {
 }
 
 export interface CompanyMarketModel {
+  evidenceAuthority?: typeof import('./evidence-authority.ts').PRIMARY_RESEARCH_AUTHORITY
   id: string
   symbol: string
   version: number
@@ -883,6 +886,7 @@ export interface EquityResearchRevision {
 
 export interface EquityResearchNote {
   advice?: import('./research-advice.ts').ResearchAdvice | null
+  evidenceAuthority?: typeof import('./evidence-authority.ts').PRIMARY_RESEARCH_AUTHORITY
   id: string
   companyMarketModelId?: string | null
   symbol: string

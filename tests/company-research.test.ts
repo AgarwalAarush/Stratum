@@ -135,7 +135,7 @@ test('research packet includes quarterly evidence, SEC filings, and skill-aligne
   assert.match(source, /Do not call employee withholding or warrant exercises a share repurchase/)
   assert.match(source, /Do not confuse product revenue categories with reportable operating segments/)
   assert.match(source, /Kill Criteria must contain 3-5 specific numeric thresholds/)
-  assert.match(source, /materializeCompanyMarketModel\(packet, ownerId, reason\)/)
+  assert.match(source, /materializeCompanyMarketModel\(analysisPacket, ownerId, reason\)/)
   assert.match(source, /company_market_model_id: marketModel\.id/)
   assert.match(source, /COMPANY MARKET MODEL VERSION/)
   assert.match(source, /Financial statements are one important proof and risk input/)
