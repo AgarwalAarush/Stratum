@@ -9,7 +9,8 @@ import type { DecisionContext } from '../markets/recommendations.ts'
  * exact, disposable projection of that frozen record, never a fresh fetch. */
 export async function withDecisionInputs<T>(
   context: DecisionContext,
-  consume: (input: { directory: string; criticSchemaPath: string; prompt: string; manifestHash: string; indexBytes: number }) => Promise<T>,
+  consume: (input: { directory: string; criticSchemaPath: string | null; prompt: string; manifestHash: string; indexBytes: number }) => Promise<T>,
+  options: { includeCriticSchema?: boolean } = {},
 ): Promise<T> {
   const directory = await mkdtemp(join(tmpdir(), 'stratum-decision-inputs-'))
   const save = async (file: string, value: unknown) => {
@@ -17,8 +18,8 @@ export async function withDecisionInputs<T>(
     return file
   }
   try {
-    const reviewSchema = recommendationCriticSchema(JSON.parse(await readFile(resolve('schemas/recommendation-critic.schema.json'),'utf8')),context.names)
-    const criticSchemaPath = join(directory,await save('critic-schema.json',reviewSchema))
+    const reviewSchema = options.includeCriticSchema === false ? null : recommendationCriticSchema(JSON.parse(await readFile(resolve('schemas/recommendation-critic.schema.json'),'utf8')),context.names)
+    const criticSchemaPath = reviewSchema ? join(directory,await save('critic-schema.json',reviewSchema)) : null
     const manifest = JSON.stringify(context)
     const manifestHash = createHash('sha256').update(manifest).digest('hex')
     await save('manifest.json', context)

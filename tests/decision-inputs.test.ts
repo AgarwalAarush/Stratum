@@ -81,3 +81,13 @@ test('failed generator/critic also removes the temporary private evidence', asyn
   }), /critic failed/)
   await assert.rejects(stat(directory), {code: 'ENOENT'})
 })
+
+test('blinded primary-evidence projections do not require capital decision names',async()=>{
+  const context={id:'blind',ownerId:'owner',date:'2026-10-01',cutoff:'2026-10-01',policy:'shadow-only',codeVersion:'fixture',portfolio:null,market:null,world:[],names:[],gaps:[],universe:[],evidence:[]} as DecisionContext
+  await withDecisionInputs(context,async input=>{
+    assert.equal(input.criticSchemaPath,null)
+    const manifest=JSON.parse(await readFile(join(input.directory,'manifest.json'),'utf8'))
+    assert.deepEqual(manifest.names,[])
+    assert.deepEqual(manifest.world,[])
+  },{includeCriticSchema:false})
+})

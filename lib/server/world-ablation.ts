@@ -10,11 +10,18 @@ import { contentHash } from './recommendations.ts'
 import { researchPrompt, validateEquityResearch } from './company-research.ts'
 import { etfResearchPrompt, validateEtfResearch } from './etf-research.ts'
 import { companyMarketModelPrompt, validateCompanyMarketModel } from './company-market-model.ts'
+import { currentWorldVersions } from '../markets/evidence-authority.ts'
+import { getSupabaseClient } from './supabase.ts'
 
 export async function runWorldAblation(context: DecisionContext, recommendations: Recommendation[]) {
   const questions = selectAblationQuestions(recommendations, context.cutoff)
   const comparisons = [], exclusions = [], metadata = [], rebuiltResearch = []
-  const world = context.evidence.filter(e => e.kind === 'causal_model' && e.availableAt && Date.parse(e.availableAt) <= Date.parse(context.cutoff))
+  // Freeze fallible World hypotheses separately for this registered shadow trial.
+  // They never enter or mutate the canonical recommendation manifest.
+  const db = getSupabaseClient()
+  const captured = db && questions.length ? await db.from('causal_model_versions').select('*').eq('source_kind','world_node').lte('created_at',context.cutoff).lte('as_of',context.cutoff).order('created_at',{ascending:false}).limit(1001) : null
+  const bounded = captured && !captured.error && captured.data.length < 1001
+  const world = bounded ? currentWorldVersions(captured.data,context.cutoff).filter(row => ['active','monitoring','shadow'].includes(String(row.state))).map(row => ({id:`shadow-world:${row.id}`,kind:'shadow_comparison_context',value:{...row,authority:'shadow',mayAuthorizeCapital:false},asOf:String(row.as_of),availableAt:String(row.created_at),retrievedAt:new Date().toISOString(),url:null,feed:null,hash:contentHash(row)})) : []
   for (const question of questions) {
     if (!world.length) {exclusions.push({question, reason: 'No frozen World analytical context: no meaningful ablation is available'}); continue}
     try {
@@ -26,7 +33,7 @@ export async function runWorldAblation(context: DecisionContext, recommendations
         const evidence = [{...context.evidence.find(e => e.id === frozen.evidenceId)!, value: frozen.packet}, ...(withWorld ? world : [])]
         // No prior report, business model, accepted thesis, recommendation,
         // portfolio or price expectation can carry World influence between arms.
-        const clean = {...context, world: withWorld ? context.world : [], names: [], portfolio: null, market: null, universe: [], evidence}
+        const clean = {...context, world: withWorld ? world.map(e => e.value) : [], names: [], portfolio: null, market: null, universe: [], evidence}
         const result = await withDecisionInputs(clean, async input => {
           const [researchSchema, answerSchema] = await Promise.all([
             readFile(resolve(company ? 'schemas/company-research-bundle.schema.json' : 'schemas/etf-research.schema.json'),'utf8'),
@@ -45,7 +52,7 @@ export async function runWorldAblation(context: DecisionContext, recommendations
             const answers = validateAblationAnswers(v, [question.key], new Set(evidence.map(e => e.id)))
             return {research, marketModel, answers}
           },
-        })})
+        })},{includeCriticSchema:false})
         arms.push(result.data.answers[0])
         metadata.push(result.metadata)
         rebuiltResearch.push({questionKey: question.key, arm: withWorld ? 'world' : 'primary_only', primaryPacketHash: contentHash(frozen.packet), capturedAt: frozen.capturedAt, cutoff: context.cutoff, research: result.data.research, marketModel: result.data.marketModel})
@@ -54,6 +61,6 @@ export async function runWorldAblation(context: DecisionContext, recommendations
       else comparisons.push({question, baseline: arms[0], candidate: arms[1]})
     } catch (error) {exclusions.push({question, reason: error instanceof Error ? error.message : String(error)})}
   }
-  return {comparisons, exclusions, questions, metadata, rebuiltResearch, modelCalls: metadata.length,
+  return {comparisons, exclusions, questions, metadata, rebuiltResearch, frozenWorldEvidence:world, worldCaptureGap:bounded ? null : captured?.error?.message ?? 'World comparison capture unavailable or exceeds its explicit 1,000-version bound', modelCalls: metadata.length,
     method: 'world-context-ablation-v2: independently rebuilt research from identical hashed frozen primary packets; prior research, models, World dossiers and owner thesis removed before generation. Only candidate receives frozen World analytical hypotheses. Question selection may reflect existing coverage; this is not a capital-action or causal alpha trial.'}
 }

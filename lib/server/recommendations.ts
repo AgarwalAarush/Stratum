@@ -1,5 +1,5 @@
 import { renewUnchangedRecommendation } from '../markets/decision-refresh.ts'
-import { canonicalCausalVersions } from '../markets/evidence-authority.ts'
+import { canonicalCausalVersions, canonicalResearchNote, primaryResearchPacket } from '../markets/evidence-authority.ts'
 import { RECOMMENDATION_REVIEW_RULES } from '../markets/recommendation-critic.ts'
 import { recommendationDisplayContext } from '../markets/recommendation-display.ts'
 import { admitDiscoveryCandidates, hasValidatedSystemThesis } from '../markets/decision-admission.ts'
@@ -313,6 +313,7 @@ export async function assembleDecisionContext(
       const isFund = Boolean(note?.etf_research_packet_id) || /\b(?:ETF|exchange[- ]traded fund)\b/i.test(String(asset?.name ?? ''))
       const packet = [...packets, ...fundPackets].find((r) => r.id === ((note ? checkByNote.get(String(note.id))?.packet_id ?? note.company_packet_id : null) ?? (note ? checkByNote.get(String(note.id))?.packet_id ?? note.etf_research_packet_id : null))),
         packetContent = record(packet?.packet)
+      const canonicalNote = canonicalResearchNote(note, packetContent)
       const thesis =
         theses.find(
           (t) =>
@@ -329,7 +330,7 @@ export async function assembleDecisionContext(
           : null
       const researchCheck = note ? checkByNote.get(String(note.id)) : null
       const sourceIds = [`portfolio:${portfolioId}`]
-      if (researchCheck) sourceIds.push(addEvidence(`research-check:${researchCheck.id}`, 'research_revalidation', researchCheck.content, researchCheck.created_at, researchCheck.created_at))
+      if (researchCheck && canonicalNote) sourceIds.push(addEvidence(`research-check:${researchCheck.id}`, 'research_revalidation', researchCheck.content, researchCheck.created_at, researchCheck.created_at))
       if (q)
         sourceIds.push(
           addEvidence(
@@ -342,12 +343,12 @@ export async function assembleDecisionContext(
             snapshot?.feed,
           ),
         )
-      if (note)
+      if (canonicalNote)
         sourceIds.push(
           addEvidence(
             `research:${note.id}`,
             'research',
-            note,
+            canonicalNote,
             note.data_as_of,
             note.generated_at,
           ),
@@ -357,7 +358,7 @@ export async function assembleDecisionContext(
           addEvidence(
             `packet:${packet.id}`,
             isFund ? 'etf_packet' : 'company_packet',
-            packet,
+            { ...packet, packet: primaryResearchPacket(packetContent) },
             packet.data_as_of,
             packet.generated_at,
           ),
@@ -374,6 +375,7 @@ export async function assembleDecisionContext(
         )
       const quality = record(packetContent.evidenceQuality)
       const nameGaps: string[] = []
+      if (note && !canonicalNote) nameGaps.push('Research requires independent primary-evidence reconstruction; legacy shadow context excluded')
       if (
         thesis?.reviewed_at &&
         Date.parse(String(thesis.reviewed_at)) > Date.parse(cutoff)
@@ -393,7 +395,7 @@ export async function assembleDecisionContext(
       const limitations = Array.isArray(quality.missing) ? quality.missing.map(String) : []
       nameGaps.push(...limitations.filter(g => !['earnings transcripts','consensus estimates'].includes(g)).map(g => `Missing ${isFund ? 'fund' : 'company'} evidence: ${g}`))
       if (isFund && (!Number.isFinite(Date.parse(String(packet?.data_as_of))) || Date.parse(cutoff) - Date.parse(String(packet?.data_as_of)) > 7 * 86400000)) nameGaps.push('ETF holdings are older than seven days or undated')
-      const systemThesisValidated = thesis?.status !== 'invalidated' && hasValidatedSystemThesis(note, quality, cutoff)
+      const systemThesisValidated = thesis?.status !== 'invalidated' && hasValidatedSystemThesis(canonicalNote, quality, cutoff)
       if (
         !['robinhood', 'manual_snapshot'].includes(p.dataSource) ||
         (p.confirmedAt !== undefined && Date.parse(p.confirmedAt) > Date.parse(cutoff)) ||
@@ -490,7 +492,7 @@ export async function assembleDecisionContext(
         cash: p.cashBalance,
         capitalBasis: p.allocationBudget ? 'owner_budget' : 'broker_cash',
         quote: price,
-        research: note,
+        research: canonicalNote,
         thesis,
         sources: [...sourceIds, ...causalLinks],
         gaps: nameGaps,
@@ -635,6 +637,7 @@ export async function generateDailyRecommendations(
     )
   } else {
     await withDecisionInputs(analysisContext, async (input) => {
+      if (!input.criticSchemaPath) throw new Error('Recommendation critic schema is required')
       const generated = await runCodexJson({
         schemaPath: resolve('schemas/daily-recommendations.schema.json'),
         cwd: input.directory,

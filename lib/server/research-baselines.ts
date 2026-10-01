@@ -20,7 +20,7 @@ export async function runSimpleBaseline(context: DecisionContext, recs: Recommen
       else {
         const result = await withDecisionInputs({...context, world: [], portfolio: null, market: null, names: [], universe: [], evidence: [{...context.evidence.find(e => e.id === frozen.evidenceId)!, value: frozen.packet}]}, input => runCodexJson({cwd: input.directory, webSearch: false, schemaPath: resolve('schemas/world-ablation.schema.json'), model: AI_MODELS.articleSummary, timeoutMs: 3*60_000,
           prompt: `Make one short, cited estimate of this exact economic question from the frozen primary packet. No full report, World memory, prior research or original probability. Return null if insufficient. Do not fetch anything. QUESTION ${JSON.stringify(question)}\n${input.prompt}`,
-          validate: v => validateAblationAnswers(v, [question.key], new Set([frozen.evidenceId]))}))
+          validate: v => validateAblationAnswers(v, [question.key], new Set([frozen.evidenceId]))}),{includeCriticSchema:false})
         candidate = result.data[0]; metadata.push(result.metadata)
       }
       if (candidate.probability === null) exclusions.push({question, baseline, candidate})
