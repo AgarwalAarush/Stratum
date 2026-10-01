@@ -1,6 +1,7 @@
 import { beginResearchVersion, publishResearchVersion, failResearchVersion } from './research-lifecycle.ts'
 import { fetchResearchBaseline, recordResearchRefresh } from './research-refresh.ts'
 import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchAdvice, type ResearchAdvice } from '../markets/research-advice.ts'
+import { needsIndependentResearch, primaryResearchPacket, PRIMARY_RESEARCH_AUTHORITY } from '../markets/evidence-authority.ts'
 import type {
   CompanyPacket,
   CompanyPacketSource,
@@ -98,6 +99,7 @@ async function loadCompanyMarketTheses(ownerId: string, symbol: string): Promise
     if (!version) return []
     const content = record(version.content)
     return [{
+      authority: 'shadow' as const, mayAuthorizeCapital: false as const,
       hypothesisId: version.hypothesis_id,
       title: hypothesisById.get(version.hypothesis_id) ?? 'Market thesis',
       version: Number(version.version), state: version.state as 'active' | 'weakened' | 'invalidated' | 'archived',
@@ -706,7 +708,7 @@ function researchPrompt(
     'Act as a senior company and market research analyst. Create an institutional-quality equity research note for a 12-month decision and 1-2 year ownership lens. The supplied CompanyMarketModel is the required causal foundation for the report: begin with what the company actually sells, who needs it, the market/value-chain bottleneck it serves, and the change that can expand or erode its opportunity. Financial statements are one important proof and risk input, not the report’s organizing principle.',
     'Use only facts and source IDs present in the CompanyPacket. Never invent a current price, estimate, event, source, or citation.',
     'CompanyPacket.evidenceQuality lists missing components; retrieval time is not publication time. Explain how gaps restrict action readiness. A formal opinion alone never authorizes a portfolio recommendation.',
-    'If worldOrigin is present, it is the originating investigation dossier, not independently verified company evidence. Explicitly answer every decisive_question and test transmission_mechanism, capture_mechanism, capture_conditions, falsifiers and expectations_question. State confirmed, rejected or unresolved for each link. Do not cite dossier source IDs unless also present in packet.sources.',
+    'worldOrigin contains only shadow question nominations and document leads. Independently answer relevant questions from packet sources. Questions are not assertions, evidence, or authority for capital decisions. Do not cite a lead unless independently collected into packet.sources.',
     'Use the CompanyMarketModel as an analytical scaffold, not as a new source. Its factual claims remain supported only by the underlying CompanyPacket source IDs attached to them. Preserve its evidence-status distinctions and explicitly identify unsupported inference or unresolved evidence gaps.',
     'The report must explain the model’s causal chain from external change through the binding constraint or enabling capability, customer behavior, company volume/pricing/mix, monetization, and shareholder outcome. If a link is weak or unverified, make that weakness decision-relevant rather than silently closing the gap.',
     'CompanyPacket.researchEvidence is a bounded company-and-industry research pack. It is useful for framing product, AI, market, competition, and moat—but a discovery item is only a lead, independent reporting needs attribution, and primary or regulatory evidence is preferred for company claims and numbers. Do not elevate an article excerpt into an unsupported fact.',
@@ -768,12 +770,16 @@ export async function generateFullEquityResearch(
     if (error || !data) throw new Error('Originating World dossier is unavailable or mismatched')
     worldOrigin = data
   }
+  const independentBaseline = Boolean(priorResearch && priorResearch.evidenceAuthority?.version !== 1)
   const previousPacket = priorResearch ? await fetchResearchBaseline(ownerId, 'equity', priorResearch.id) : null
   const packet = await materializeCompanyPacket(symbol, ownerId, new Date(), worldOrigin)
-  const refresh = await recordResearchRefresh({ownerId,instrument:'equity',packet,priorPacket:previousPacket,prior:priorResearch,reason,conditionsChanged: /kill|entry|invalidation/i.test(reason)})
+  const analysisPacket = primaryResearchPacket(packet)
+  const needsIndependent = needsIndependentResearch(priorResearch, previousPacket)
+  const refresh = await recordResearchRefresh({ownerId,instrument:'equity',packet:analysisPacket,priorPacket:needsIndependent ? null : previousPacket ? primaryResearchPacket(previousPacket as object) : null,prior:needsIndependent ? null : priorResearch,reason:needsIndependent ? 'Initial independent primary-evidence coverage; legacy World context excluded' : reason,conditionsChanged: /kill|entry|invalidation/i.test(reason)})
   if (priorResearch && refresh.kind !== 'full_research') { await onProgress?.(100, `Evidence ${refresh.kind}; retained research v${priorResearch.version}`); return priorResearch }
   await onProgress?.(45, 'Company packet assembled')
-  const priorMarketModel = await fetchLatestCompanyMarketModel(ownerId, symbol)
+  const previousMarketModel = await fetchLatestCompanyMarketModel(ownerId, symbol)
+  const priorMarketModel = previousMarketModel?.evidenceAuthority?.version === 1 ? previousMarketModel : null
   await onProgress?.(50, 'Preparing one research and business-model generation')
   const noteRecord = await beginResearchVersion({kind:'equity',ownerId,symbol,packetId:packet.id,dataAsOf:packet.dataAsOf,previousId:priorResearch?.id??null,extra:{company_market_model_id:null}})
   const version = noteRecord.version
@@ -781,7 +787,7 @@ export async function generateFullEquityResearch(
   try {
     await onProgress?.(72, 'Synthesizing 15-section analysis')
     const bundle = await runCodexJson({
-      prompt: `Produce research and its company market model together in one response. Build marketModel first from primary evidence, then write research with that causal representation. This model is a compatibility projection of the same generation, never new evidence.\n${companyMarketModelPrompt(packet, priorMarketModel, reason)}\n${researchPrompt(packet, priorMarketModel, priorResearch, reason)}`,
+      prompt: `Produce research and its company market model together in one response. Build marketModel first from primary evidence, then write research with that causal representation. This model is a compatibility projection of the same generation, never new evidence.\n${companyMarketModelPrompt(analysisPacket, priorMarketModel, reason)}\n${researchPrompt(analysisPacket, priorMarketModel, independentBaseline ? null : priorResearch, reason)}`,
       schemaPath: 'schemas/company-research-bundle.schema.json',
       validate: value => { const v=record(value); return {research:validateEquityResearch(v.research, packet.sources.map(s=>s.id)),marketModel:validateCompanyMarketModel(v.marketModel,new Set(packet.sources.map(s=>s.id)))} },
       timeoutMs: 20 * 60 * 1_000,
@@ -790,7 +796,14 @@ export async function generateFullEquityResearch(
     const result = {data: bundle.data.research, metadata: bundle.metadata}
     await onProgress?.(90, 'Validating and publishing research')
     const generatedAt = new Date().toISOString()
-    const content = { ...result.data, reason, worldContextOrigin: packet.worldOrigin ?? null }
+    if (independentBaseline && priorResearch) {
+      // Compare only after generation, so legacy shadow conclusions cannot anchor it.
+      const fields = [['formal_rating','formalRating'],['entry_action','entryAction'],['fair_value','fairValue'],['investment_thesis','investmentThesis'],['key_debate','keyDebate']] as const
+      const changes = fields.filter(([,key]) => String(priorResearch[key]) !== String(result.data[key])).map(([field,key]) => ({field,previous:String(priorResearch[key]),current:String(result.data[key]),explanation:'Independent primary-evidence reconstruction replaced the legacy World-influenced baseline.'}))
+      const rank = {SELL:0,NOT_RATED:1,HOLD:2,BUY:3}
+      result.data.revision = {priorVersion:priorResearch.version,opinionChange:result.data.formalRating === 'NOT_RATED' || priorResearch.formalRating === 'NOT_RATED' ? 'initial' : rank[result.data.formalRating] > rank[priorResearch.formalRating] ? 'more_constructive' : rank[result.data.formalRating] < rank[priorResearch.formalRating] ? 'less_constructive' : 'unchanged',summary:'Reconstructed from primary evidence without legacy World conclusions; differences below are a post-generation comparison, not an inferred economic outcome.',changes}
+    }
+    const content = { ...result.data, reason, evidenceAuthority: PRIMARY_RESEARCH_AUTHORITY, worldContextOrigin: analysisPacket.worldOrigin ?? null }
     await publishResearchVersion({kind:'equity',id:noteRecord.id,content,sources:packet.sources,metadata:result.metadata,generatedAt,extra:{company_market_model_id:marketModel.id}})
     await onProgress?.(100, 'Research complete')
     const note: EquityResearchNote = {
@@ -799,6 +812,7 @@ export async function generateFullEquityResearch(
       symbol,
       version,
       status: 'complete',
+      evidenceAuthority: PRIMARY_RESEARCH_AUTHORITY,
       ...result.data,
       provider: result.metadata.provider,
       model: result.metadata.model,
@@ -831,6 +845,7 @@ function normalizeResearch(row: Record<string, unknown>): EquityResearchNote {
     version: Number(row.version),
     status: row.status as EquityResearchNote['status'],
     advice: readResearchAdvice(content.advice),
+    evidenceAuthority: content.evidenceAuthority as EquityResearchNote['evidenceAuthority'],
     formalRating: row.formal_rating as EquityResearchNote['formalRating'],
     entryAction: row.entry_action as EquityResearchNote['entryAction'],
     investmentThesis: String(content.investmentThesis ?? content.mispricing ?? ''),
