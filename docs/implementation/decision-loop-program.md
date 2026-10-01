@@ -15,6 +15,12 @@ release. Restore the original command only when deployment is authorized and the
 matching migration/worker activation sequence is ready. GitHub merging alone is
 not safe as a deployment gate for this project.
 
+The owner subsequently authorized the app UI deployment. A UI-only backport
+`137eb14` based on the existing live `8361d2b` release was promoted separately;
+see `app-ui-refinement.md` for deployment and browser evidence. This does not
+activate Releases 2–5 or the PR 42 backend corrections. The Git build gate and
+their migration/worker/backfill prerequisites remain unchanged.
+
 ## Release boundaries
 
 | Release | Implemented changes | Delivery and remaining gate |
