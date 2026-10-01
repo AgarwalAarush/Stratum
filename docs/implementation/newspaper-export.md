@@ -165,7 +165,8 @@ domain points to this deployment.
 - Exact production release: 751 tests passed, one existing skip, zero failures;
   39 focused tests passed; scoped ESLint and `npm run build` passed.
 - The main-line feature suite passed 777 tests with one existing skip and zero
-  failures after cross-origin hardening.
+  failures on the final JSON-response revision. Its scoped ESLint and production
+  `npm run build` also passed with network access for existing font downloads.
 - The staged endpoint rejected anonymous requests with 401. The unchanged
   Intelligence papers endpoint returned 200 with 20 items.
 - Live requests without authentication and with a forged session returned 401.
