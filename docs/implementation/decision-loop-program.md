@@ -3,7 +3,8 @@
 Status on October 1, 2026: Release 1 application and worker changes are deployed;
 its primary-collection acceptance gate remains blocked by corpus disk capacity.
 Final handoff review also found an indirect shadow boundary gap; the draft includes
-the correction, which must be applied to the foundation before that gate can pass.
+the correction in draft PR 42, which must be applied to the foundation before
+that gate can pass. The later draft branches include that correction.
 Releases 2–5 are draft work pending that prerequisite and matching rollout.
 Passing tests establish contracts and mechanics, not investment efficacy.
 
@@ -15,7 +16,7 @@ Passing tests establish contracts and mechanics, not investment efficacy.
 | 2 | Four cited advice dimensions shared across research, validation and presentation; seven immutable calendar checkpoints; retrospective backfill; original legacy evaluators retained | Draft PR 38. Migration 202610010006 pending. Actual recommendation backfill and live seven-task publication require the matched worker. |
 | 3 | Shared unchanged/reprice/revalidate/full classifier; deterministic repricing; short condition checks; combined company/model generation; shared company/ETF lifecycle; semantic recommendation editions | Draft PR 39. Migration 202610010007 pending. Price-only server replay performs no model invocation. Live cost/latency replay remains outstanding. |
 | 4 | Git World authority, computed baselines, retired legacy writers, original prediction resolver retained, bounded analyst/critic work, four daily slots with one in five reserved across days, evidence-based shared briefing synthesis | Draft PR 40. Migration 202610010008 pending. Six legacy beliefs passed read-only import validation; apply only after legacy writers are stopped. Benchmark/replay evidence remains unlabeled and cannot demonstrate learning. |
-| 5 | Exact forecast resolution contracts, issuer-matched measured feedback in research, explicit feedback review, targeted decisive-premise revalidation, economic episode/correlation controls, primary-evidence and short-research baselines, independently rebuilt World arms, batched outcome price retrieval, named timeline UI | Draft implementation. Depends on migrations 006–008 and aligned frontend/worker. No efficacy or policy-promotion claim. |
+| 5 | Exact forecast resolution contracts, issuer-matched measured feedback in research, explicit feedback review, targeted decisive-premise revalidation, economic episode/correlation controls, primary-evidence and short-research baselines, independently rebuilt World arms, batched outcome price retrieval, named timeline UI | Draft PR 41. Depends on migrations 006–008 and aligned frontend/worker. No efficacy or policy-promotion claim. |
 
 ## Contracts and preservation
 
@@ -65,12 +66,18 @@ the exchange; retrospective schedules never become prospective evidence.
 
 The draft strips raw shadow economics and exposure claims from company-generation
 and canonical packet projections. World retains question/document nominations and
-immutable original lineage. A World-influenced legacy report cannot authorize a
+immutable original lineage. A known World-influenced legacy report cannot authorize a
 capital decision until it has an independently reconstructed primary-evidence
 baseline. Unrelated legacy reports remain eligible. New research records the
 boundary contract, and a legacy comparison is computed after generation so the old
-shadow narrative does not anchor the new model. This correction is a foundation
-prerequisite, not evidence that the currently deployed indirect boundary passed.
+shadow narrative does not anchor the new model. Whenever full research is warranted,
+untagged prior prose is excluded from generation; an ordinary price-only update
+does not force an otherwise unaffected legacy report to regenerate. This correction
+is a foundation
+prerequisite, not evidence that the correction is deployed. A non-persisting local
+assembly against production covered 39 account/security names and 19 company
+packets with no raw shadow packet/note leaks and no additional independent-research
+gaps in the currently selected records; historical influence remains unproven.
 
 ## Reviewed operational gates
 
@@ -115,8 +122,11 @@ forecasts, evaluations and policy versions; corrections append new records.
 
 ## Verification evidence and limits
 
-The full local suite currently passes with one pre-existing skip; the production
-build and quiet lint pass. Fixture coverage includes exchange early closes and
+The final local suite passes with 764 tests and one pre-existing skip; the production
+build and quiet lint pass. Standalone TypeScript checking still reports historical
+test-fixture errors (including incomplete ProcessEnv and older domain fixtures);
+no application, library or component type errors remain in the production build.
+Fixture coverage includes exchange early closes and
 DST, weekends, month ends, leap years, splits, missing data, owner corrections,
 duplicate publication, price-only replay, unsupported source identities, contrary
 feedback, and the observed zero-position/retain contradiction.
@@ -124,6 +134,7 @@ feedback, and the observed zero-position/retain contradiction.
 Local desktop (1672 × 941) and mobile (390 × 844) checks exercised timeline
 security/checkpoint filters, seven disclosures, frozen evidence limits and
 hypothetical attribution using read-only production records. The pending migration
-means these real versions honestly render `Not scheduled` in the draft UI. No
+means these real versions honestly render `Not scheduled` in the draft UI. The
+production migration dry-run confirms only 006–008 remain pending. No
 scheduled checkpoint, new research conclusion, backup recovery, model-quality gain,
 or live later-release deployment is inferred from local verification.
