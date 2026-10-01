@@ -9,6 +9,7 @@ interface OverviewRow {
   period_start: string | null
   period_end: string | null
   created_at: string
+  artifact_metadata?: OverviewData
 }
 
 export async function saveDailyOverview(data: OverviewData): Promise<void> { await saveDailyIntelligence('daily', data) }
@@ -44,13 +45,13 @@ export async function fetchLatestDailyIntelligence(type: 'daily' | 'daily:global
 export async function fetchGlobalNewsDailyOverviews(
   startDate: string,
   endDate: string,
-): Promise<Array<{ date: string; bullets: string[] }>> {
+): Promise<Array<{ date: string; bullets: string[]; sources?: OverviewData['sources']; sourceCoverage?: OverviewData['sourceCoverage'] }>> {
   const supabase = getSupabaseClient()
   if (!supabase) return []
 
   const { data, error } = await supabase
     .from('overviews')
-    .select('date, content')
+    .select('date, content, artifact_metadata')
     .eq('type', 'daily:global-news')
     .not('artifact_metadata', 'is', null)
     .gte('date', startDate)
@@ -62,19 +63,20 @@ export async function fetchGlobalNewsDailyOverviews(
   return (data as OverviewRow[]).map((row) => ({
     date: row.date,
     bullets: JSON.parse(row.content) as string[],
+    sources: row.artifact_metadata?.sources, sourceCoverage: row.artifact_metadata?.sourceCoverage,
   }))
 }
 
 export async function fetchDailyOverviews(
   startDate: string,
   endDate: string,
-): Promise<Array<{ date: string; bullets: string[] }>> {
+): Promise<Array<{ date: string; bullets: string[]; sources?: OverviewData['sources']; sourceCoverage?: OverviewData['sourceCoverage'] }>> {
   const supabase = getSupabaseClient()
   if (!supabase) return []
 
   const { data, error } = await supabase
     .from('overviews')
-    .select('date, content')
+    .select('date, content, artifact_metadata')
     .eq('type', 'daily')
     .not('artifact_metadata', 'is', null)
     .gte('date', startDate)
@@ -86,6 +88,7 @@ export async function fetchDailyOverviews(
   return (data as OverviewRow[]).map((row) => ({
     date: row.date,
     bullets: JSON.parse(row.content) as string[],
+    sources: row.artifact_metadata?.sources, sourceCoverage: row.artifact_metadata?.sourceCoverage,
   }))
 }
 
@@ -168,11 +171,12 @@ export async function saveOverview(
   date: string,
   periodStart: string,
   periodEnd: string,
+  metadata?: OverviewData,
 ): Promise<void> {
   const supabase = getSupabaseClient()
-  if (!supabase) return
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
 
-  await supabase
+  const { error } = await supabase
     .from('overviews')
     .upsert(
       {
@@ -181,9 +185,11 @@ export async function saveOverview(
         date,
         period_start: periodStart,
         period_end: periodEnd,
+        ...(metadata ? {artifact_metadata: metadata} : {}),
       },
       { onConflict: 'type,date' },
     )
+  if (error) throw new Error(`Unable to persist periodic briefing: ${error.message}`)
 }
 
 export async function persistFeedItems(

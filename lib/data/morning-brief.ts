@@ -1,7 +1,5 @@
 import type { MorningBriefData } from '../types.ts'
-import { AI_MODELS } from '../ai/config.ts'
-import { generateOpenAIJson } from '../server/openai-responses.ts'
-import { runCodexJson } from '../server/codex-exec.ts'
+import { generateCitedBriefing } from './cited-briefing.ts'
 import { fetchNewsItemsByTopic } from './rss.ts'
 import { fetchArxivPapers } from './arxiv.ts'
 import { fetchTrendingRepos } from './repos.ts'
@@ -313,14 +311,14 @@ Generate a structured morning brief as JSON matching this exact schema:
   "sections": [
     {
       "title": "Section Name (e.g. AI & Research, Finance & Markets, Policy & Security, Infrastructure & Ecosystem)",
-      "bullets": ["3-5 analytical bullets with [n] citations"]
+      "bullets": ["Useful analytical bullets with [n] citations"]
     }
   ],
-  "watchList": ["3-5 forward-looking items to watch (upcoming earnings, conferences, policy deadlines, etc.)"]
+  "watchList": ["Optional forward-looking items to watch (upcoming earnings, conferences, policy deadlines, etc.)"]
 }
 
 Requirements:
-- 3-5 thematic sections with 3-5 bullets each
+- Up to 5 thematic sections with up to 5 bullets each; omit empty themes
 - Bullets should be analytical and draw connections, not just restate headlines
 - Use metadata details (star counts, EPS, categories) to add quantitative depth
 - Citations as [n] using the headline numbers, placed at the end of relevant clauses
@@ -335,34 +333,28 @@ Requirements:
           headline: { type: 'string' },
           sections: {
             type: 'array',
-            minItems: 3,
+            minItems: 1,
             maxItems: 5,
             items: {
               type: 'object',
               properties: {
                 title: { type: 'string' },
-                bullets: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 5 },
+                bullets: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 5 },
               },
               required: ['title', 'bullets'],
               additionalProperties: false,
             },
           },
-          watchList: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 5 },
+          watchList: { type: 'array', items: { type: 'string' }, minItems: 0, maxItems: 5 },
         },
         required: ['headline', 'sections', 'watchList'],
         additionalProperties: false,
       }
-    const result = options.provider === 'codex'
-      ? await runCodexJson({ prompt, schemaPath: 'schemas/morning-brief.schema.json', validate: validateMorningBrief })
-      : await generateOpenAIJson({
-        apiKey: apiKey!,
-        model: AI_MODELS.morningBrief,
-        input: prompt,
-        schemaName: 'stratum_morning_brief',
-        schema,
-        maxOutputTokens: 3_072,
-        validate: validateMorningBrief,
-      })
+    const result = await generateCitedBriefing({ cadence: 'daily', topic: 'morning intelligence',
+      sources: sourceIndex.map(({ n, ...source }) => ({ ...source, id: String(n) })),
+      comparison: yesterdayBlock + worldBlock, instructions: prompt, provider: options.provider,
+      schema, schemaPath: 'schemas/morning-brief.schema.json', validate: validateMorningBrief,
+      claims: data => [...data.sections.flatMap(s => s.bullets), ...data.watchList] })
     const parsed = result.data
 
     if (!parsed.sections.length || parsed.sections.some(section => !section.bullets.length || section.bullets.some(bullet => { const refs = [...bullet.matchAll(/\[(\d+)\]/g)].map(m => Number(m[1])); return !refs.length || refs.some(n => !sourceIndex.some(source => source.n === n)) }))) throw new Error('Morning brief requires valid source citations for every bullet')
@@ -398,6 +390,6 @@ Requirements:
       fetchedAt: now,
     }
   } catch (error) {
-    return unavailableBrief('failed', error instanceof Error ? error.message : String(error))
+    return { ...unavailableBrief('failed', error instanceof Error ? error.message : String(error)), sourceCoverage, sources: sourceIndex.map(({ n, ...source }) => ({ ...source, id: String(n) })) }
   }
 }
