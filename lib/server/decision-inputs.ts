@@ -45,7 +45,7 @@ export async function withDecisionInputs<T>(
       projection: 'frozen-files-v1', manifest: 'manifest.json', manifestHash,
       id: context.id, ownerId: context.ownerId, date: context.date,
       cutoff: context.cutoff, policy: context.policy, codeVersion: context.codeVersion,
-      gaps: context.gaps, portfolio: context.portfolio, market: context.market,
+      gaps: context.gaps, portfolio: context.portfolio, market: context.market, world: {file:'manifest.json',field:'world',authority:'Only frozen canonical models; absence is explicit, never fill from live World memory'},
       universeCount: context.universe.length, names, evidence,
     })
     const indexBytes = Buffer.byteLength(index)

@@ -1,6 +1,7 @@
 export const AI_PROVIDER = 'openai' as const
 
 export const AI_MODELS = {
+  portfolioTradeReview: process.env.OPENAI_PORTFOLIO_REVIEW_MODEL ?? process.env.OPENAI_ARTICLE_SUMMARY_MODEL ?? 'gpt-5.6-luna',
   articleSummary: process.env.OPENAI_ARTICLE_SUMMARY_MODEL ?? 'gpt-5.6-luna',
   // Source scouting only produces non-authoritative candidates. Keep it on the
   // cheapest configured tier; promotion still requires a tested contract.
