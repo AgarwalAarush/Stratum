@@ -1013,7 +1013,7 @@ async function executeJob(
       if (supabase) await supabase.from('world_opportunity_leads').update({ status: 'researched', research_note_id: note.id, updated_at: new Date().toISOString() }).eq('id', worldOpportunityLeadId)
 
     }
-    return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf, worldOpportunityLeadId }
+    return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf, worldOpportunityLeadId, coverage: note.coverageDiagnostics ?? null }
   }
 
   if (job.job_type === 'generate-etf-research') {

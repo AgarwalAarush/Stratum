@@ -24,7 +24,8 @@
         "sections",
         "sourceIds",
         "advice",
-        "feedbackReview"
+        "feedbackReview",
+        "coverageReview"
       ],
       "properties": {
         "formalRating": {
@@ -401,6 +402,96 @@
               "type": "array",
               "items": {
                 "type": "string"
+              }
+            }
+          }
+        },
+        "coverageReview": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version",
+            "topics",
+            "actionJustifications"
+          ],
+          "properties": {
+            "version": {
+              "type": "integer",
+              "enum": [
+                1
+              ]
+            },
+            "topics": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "topicId",
+                  "status",
+                  "sectionIds",
+                  "sourceIds",
+                  "investmentImplication",
+                  "limitations"
+                ],
+                "properties": {
+                  "topicId": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "addressed",
+                      "unresolved"
+                    ]
+                  },
+                  "sectionIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "sourceIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "investmentImplication": {
+                    "type": "string"
+                  },
+                  "limitations": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "actionJustifications": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "hold",
+                "trim",
+                "sell"
+              ],
+              "properties": {
+                "hold": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "trim": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "sell": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
               }
             }
           }

@@ -1,3 +1,4 @@
+import { hasDecisiveCoverageGap, type ResearchCoverage } from './research-coverage.ts'
 import { COMPANY_FORECAST_METRICS } from './forecast-metrics.ts'
 import { readResearchAdvice } from './research-advice.ts'
 /** Published investment advice is an immutable, prospective experiment.
@@ -311,6 +312,15 @@ export function gateRecommendation(
   const increase = rec.action === 'buy' || rec.action === 'add'
   const reducing = rec.action === 'trim' || rec.action === 'sell'
   const advice = readResearchAdvice(obj(name.research?.content).advice)
+  const packetEvidence = context.evidence.find(e => e.kind === 'company_packet' && name.sources.includes(e.id))
+  const coverage = obj(obj(packetEvidence?.value).packet).researchCoverage as ResearchCoverage | undefined
+  if (coverage && hasDecisiveCoverageGap(coverage)) {
+    if (increase) reasons.push('Decisive company research coverage remains unresolved')
+    if (['hold','trim','sell'].includes(rec.action)) {
+      const justification=obj(obj(obj(name.research?.content).coverageReview).actionJustifications)[rec.action]
+      if(typeof justification!=='string' || justification.trim().length<40) reasons.push('Company research coverage gap requires an independently supported action justification')
+    }
+  }
   if (advice) {
     if (increase && (advice.newEntryStance.value !== 'eligible' || advice.evidenceSufficiency.value !== 'sufficient')) reasons.push('Research does not establish sufficient evidence for eligible new risk')
     if (rec.action === 'hold' && advice.existingPositionStance.value !== 'retain') reasons.push('Hold requires an affirmative existing-position retain stance')
