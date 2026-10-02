@@ -7,17 +7,16 @@ import { ManualPortfolioConfirmation } from './ManualPortfolioConfirmation'
 import {
   ForecastReview,
   LearningRegistrationForm,
-  ManualExecutionRecord,
 } from './RecommendationLearningControls'
 import { useState } from 'react'
 import useSWR from 'swr'
 import { CaretDown, ArrowLeft, ArrowClockwise } from '@phosphor-icons/react'
 import styles from './RecommendationsWorkspace.module.css'
 import { useRouter } from 'next/navigation'
-import { decisionActionLabel, decisionHeadline, decisionIsBlocked, readableDecisionText, isActionableCapitalChange } from '@/lib/markets/recommendation-display'
+import { decisionActionLabel, decisionIsBlocked, isActionableCapitalChange } from '@/lib/markets/recommendation-display'
 import type { fetchRecommendationActions, fetchRecommendationEvidence, fetchRecommendationLearning } from '@/lib/server/recommendation-reads'
+import { RecommendationMemo } from './RecommendationMemo'
 import type {
-  DecisionContext,
   Recommendation,
 } from '@/lib/markets/recommendations'
 type Data = Awaited<ReturnType<typeof fetchRecommendationActions>>
@@ -243,7 +242,7 @@ export function RecommendationsWorkspace({
 }
 function DecisionRow({ row, data }: { row: Data['recommendations'][number]; data: Data }) {
   const rec = row.content as Recommendation
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(isActionableCapitalChange(rec, Date.parse(data.viewedAt)))
   const { data: details, error, mutate } = useSWR<Awaited<ReturnType<typeof fetchRecommendationEvidence>>>(
     expanded ? `/api/markets/recommendations?view=evidence&batch=${data.latest!.id}&read=${data.viewedAt}` : null,
     fetchView,
@@ -251,11 +250,6 @@ function DecisionRow({ row, data }: { row: Data['recommendations'][number]; data
   )
   const expired = !(Date.parse(rec.expiresAt) > Date.parse(data.viewedAt))
   const portfolioName = data.accounts.find(account => account.id === rec.portfolioId)?.name ?? 'Recorded portfolio'
-  const context = {
-    ...data.context,
-    names: [{ portfolioId: rec.portfolioId, portfolioName, symbol: rec.symbol }],
-    evidence: details?.evidence ?? [],
-  } as DecisionContext
   return <div className={styles.decisionRow}>
     <button className={styles.rowButton} aria-expanded={expanded} aria-controls={`decision-${row.id}`} onClick={() => setExpanded(value => !value)}>
       <span className={styles.symbol}>{rec.symbol}</span>
@@ -267,222 +261,10 @@ function DecisionRow({ row, data }: { row: Data['recommendations'][number]; data
     {expanded && <div id={`decision-${row.id}`} className={styles.rowDetails}>
       {!details && !error && <p role="status">Loading sources and responses…</p>}
       {error && <p role="alert">Source details are unavailable. <button className={styles.textButton} onClick={() => void mutate()}>Try again</button></p>}
-      <DecisionCard row={row} context={context} viewedAt={data.viewedAt} events={details?.events.filter(event => event.recommendation_id === row.id) ?? []} />
+      <RecommendationMemo id={row.id} rec={rec} portfolioName={portfolioName} viewedAt={data.viewedAt} evidence={details} onSaved={() => void mutate()} />
     </div>}
   </div>
 }
-function DecisionCard({
-  row,
-  context,
-  events,
-  viewedAt,
-}: {
-  row: Record<string, unknown>
-  context?: DecisionContext
-  viewedAt: string
-  events: Record<string, unknown>[]
-}) {
-  const expired =
-    Date.parse(String((row.content as Recommendation).expiresAt)) <=
-    Date.parse(viewedAt)
-  const rec = row.content as Recommendation,
-    router = useRouter()
-  const [rationale, setRationale] = useState(''),
-    [status, setStatus] = useState(''),
-    [pending, setPending] = useState(false)
-  async function respond(eventType: string) {
-    setPending(true)
-    setStatus('')
-    try {
-      const response = await fetch('/api/markets/recommendations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recommendationId: row.id,
-          eventType,
-          rationale,
-          requestId: crypto.randomUUID(),
-        }),
-      })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error)
-      setStatus('Response appended to the recommendation.')
-      setRationale('')
-      router.refresh()
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : 'Unable to save')
-    } finally {
-      setPending(false)
-    }
-  }
-  return (
-    <article className="border-b border-[var(--border)] py-6">
-      <p className="mb-3 text-xs text-[var(--text-muted)]">
-        {context?.names.find(
-          (n) => n.portfolioId === rec.portfolioId && n.symbol === rec.symbol,
-        )?.portfolioName ?? 'Portfolio recorded in evidence'}{' '}
-
-      </p>
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div className="flex items-baseline gap-4">
-          <Link
-            className="font-mono text-xl"
-            href={`/markets/stocks/${rec.symbol}`}
-          >
-            {rec.symbol}
-          </Link>
-          <span className="border border-[var(--border)] px-2 py-1 text-[11px] uppercase tracking-wider">
-            {decisionActionLabel(rec)}
-          </span>
-        </div>
-        <span className="text-xs text-[var(--text-muted)]">
-          {decisionIsBlocked(rec) ? 'Review incomplete' : `${rec.horizonDays}-day horizon · ${rec.confidence}% confidence`}
-        </span>
-      </div>
-      {expired ? (
-        <p
-          role="status"
-          className="mt-4 border border-[var(--border)] p-3 text-sm font-medium"
-        >
-          This recommendation has expired. Obtain a new evaluation before
-          acting.
-        </p>
-      ) : null}
-      <p className="mt-4 max-w-4xl text-base leading-7">{decisionHeadline(rec)}</p>
-      <details className="mt-4">
-        <summary className="cursor-pointer text-sm underline underline-offset-4">Reasoning & next steps</summary>
-      {decisionIsBlocked(rec) && <div className="mt-5 border-l-2 border-[var(--border)] pl-4 text-sm leading-6">
-        <p className="font-medium">Draft reasoning — not approved</p>
-        <p className="mt-2">{readableDecisionText(rec.reason)}</p>
-        <p className="mt-2 text-[var(--text-muted)]">The original proposal remains available for review. Its forecasts are excluded from learning scores.</p>
-      </div>}
-      <div className="mt-5 grid gap-5 text-sm leading-6 md:grid-cols-2">
-        <div>
-          <h3 className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
-            Thesis
-          </h3>
-          <p className="mt-2">{rec.thesis}</p>
-        </div>
-        <div>
-          <h3 className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
-            Counter-thesis
-          </h3>
-          <p className="mt-2">{rec.counterThesis}</p>
-        </div>
-        <div>
-          <h3 className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
-            Entry / exposure
-          </h3>
-          <p className="mt-2">{rec.entry.condition}</p>
-          {rec.entry.targetWeightPct !== null && (
-            <p>Target portfolio weight: {rec.entry.targetWeightPct}%</p>
-          )}
-        </div>
-        <div>
-          <h3 className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
-            Invalidation / exit
-          </h3>
-          <p className="mt-2">{rec.invalidation.join(' ')}</p>
-          <p>{rec.exit}</p>
-        </div>
-      </div>
-      <details className="mt-5 border-t border-[var(--border)] pt-4">
-        <summary className="cursor-pointer text-xs">
-          Evidence, confidence and alternatives
-        </summary>
-        <div className="mt-4 space-y-3 text-sm leading-6">
-          <p>{rec.mechanism}</p>
-          <p>Expectations: {rec.expectations}</p>
-          <p>Alternative: {rec.alternative}</p>
-          <p>Narrative confidence: {rec.confidence}% · not calibrated</p>
-          <p>Reassess: {rec.reassessWhen}</p>
-          <p>Advice expires: {stamp(rec.expiresAt)}</p>
-          {Object.entries(rec.dimensions).map(([key, value]) => (
-            <p key={key}>
-              {(
-                {
-                  thesisQuality: 'Thesis quality',
-                  valuation: 'Valuation',
-                  timing: 'Entry timing',
-                  portfolioFit: 'Portfolio fit',
-                } as Record<string, string>
-              )[key] ?? key}
-              : {value}
-            </p>
-          ))}
-          {rec.sourceIds.map((id) => {
-            const source = context?.evidence.find((e) => e.id === id)
-            return (
-              <p className="break-words text-xs" key={id}>
-                {source?.url ? (
-                  <a
-                    href={source.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline"
-                  >
-                    {id}
-                  </a>
-                ) : (
-                  id
-                )}{' '}
-                · source as of {stamp(source?.asOf)} · available{' '}
-                {stamp(source?.availableAt)}
-              </p>
-            )
-          })}
-        </div>
-      </details>
-      <ManualExecutionRecord recommendationId={String(row.id)} />
-      <details className="mt-4 border-t border-[var(--border)] pt-4">
-        <summary className="cursor-pointer text-xs">
-          Record your response {events.length ? `(${events.length})` : ''}
-        </summary>
-        <label className="mt-4 block text-xs">
-          Your reasoning
-          <textarea
-            className="mt-2 block min-h-20 w-full border border-[var(--border)] bg-transparent p-3 text-sm"
-            value={rationale}
-            onChange={(e) => setRationale(e.target.value)}
-            placeholder="What did you decide, and why?"
-          />
-        </label>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {['acknowledged', 'accepted', 'delayed', 'rejected'].map(
-            (event) => (
-              <button
-                disabled={pending || rationale.trim().length < 3}
-                onClick={() => respond(event)}
-                key={event}
-                className="border border-[var(--border)] px-3 py-2 text-xs capitalize disabled:opacity-40"
-              >
-                {
-                  {
-                    acknowledged: 'Reviewed',
-                    accepted: 'Accept',
-                    delayed: 'Wait',
-                    rejected: 'Reject',
-                  }[event]
-                }
-              </button>
-            ),
-          )}
-        </div>
-        <p role="status" className="mt-3 text-xs">
-          {status}
-        </p>
-        {events.map((e) => (
-          <p className="mt-2 text-xs" key={String(e.id)}>
-            {String(e.event_type)} · {String(e.rationale)} ·{' '}
-            {stamp(e.recorded_at)}
-          </p>
-        ))}
-      </details>
-      </details>
-    </article>
-  )
-}
-
 function OutcomeDetails({ content }: { content: Record<string, unknown> }) {
   const percent = (value: unknown) =>
     typeof value === 'number' && Number.isFinite(value)

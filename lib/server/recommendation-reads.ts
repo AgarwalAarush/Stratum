@@ -2,6 +2,7 @@ import { FORECAST_RESOLUTION_POLICY } from '../markets/forecast-metrics.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { forecastsAreApproved } from '../markets/forecast-review.ts'
 import type { DecisionContext, Recommendation } from '../markets/recommendations.ts'
+import { frozenDecisionMemo } from '../markets/recommendation-memo.ts'
 import { AsyncTtlCache } from './async-ttl-cache.ts'
 
 type Row = Record<string, unknown>
@@ -34,7 +35,7 @@ export async function fetchPublishedNewspaperAnalysis(ownerId: string) {
   if ((versions.data?.length ?? 0) >= 1_000) throw new Error('Published edition exceeds export bound')
   return { batch: batch.data, versions: versions.data ?? [], manifest: manifest.data }
 }
-const evidenceCache = new AsyncTtlCache<SourceReference[]>({ maxEntries: 16 })
+const evidenceCache = new AsyncTtlCache<{evidence:SourceReference[]; memos:ReturnType<typeof frozenDecisionMemo>}>({ maxEntries: 16 })
 function database() {
   const client = getSupabaseClient()
   if (!client) throw new Error('Recommendations unavailable')
@@ -84,11 +85,12 @@ export async function fetchRecommendationEvidence(ownerId: string, batchId: stri
   if (batch.error) throw new Error('Assessment unavailable')
   const [evidence, events] = await Promise.all([
     evidenceCache.get(`${ownerId}:${batch.data.manifest_id}`, 3_600_000, async () => {
-      const manifest = await client.from('recommendation_input_manifests').select('evidence:content->evidence')
+      const manifest = await client.from('recommendation_input_manifests').select('evidence:content->evidence,names:content->names')
         .eq('owner_id', ownerId).eq('id', batch.data.manifest_id).abortSignal(signal).single()
       if (manifest.error) throw new Error('Unable to load source details')
       const sources = manifest.data.evidence as unknown as DecisionContext['evidence']
-      return sources.map(({ id, url, asOf, availableAt }) => ({ id, url, asOf, availableAt }))
+      return {evidence:sources.map(({ id, url, asOf, availableAt }) => ({ id, url, asOf, availableAt })),
+        memos:frozenDecisionMemo({names:(manifest.data.names ?? []) as unknown as DecisionContext['names'],evidence:sources})}
     }),
     client.from('recommendation_owner_events').select('id,recommendation_id,event_type,rationale,recorded_at,recommendation_versions!inner(batch_id)')
       .eq('owner_id', ownerId).eq('recommendation_versions.batch_id', batchId)
@@ -96,7 +98,8 @@ export async function fetchRecommendationEvidence(ownerId: string, batchId: stri
   ])
   if (events.error) throw new Error('Unable to load source details')
   return {
-    evidence: evidence ?? [],
+    evidence: evidence?.evidence ?? [],
+    memos: evidence?.memos ?? [],
     events: events.data ?? [],
   }
 }
