@@ -246,7 +246,7 @@ Every completed change must be committed as a coherent, reviewable unit. Do not 
 - Preserve existing worktree changes and attribute them to a separate commit only after verifying their intent and behavior.
 - Before each commit, run the focused tests and lint checks for the changed files. At major milestones, also run the complete test suite and `npm run build`.
 - Do not knowingly commit a new failing relevant check. If the repository has unrelated baseline failures, record them and prove the changed surface passes independently.
-- For visual changes, verify the affected routes in a browser at the reference desktop viewport and a mobile viewport. Check content, interactions, responsiveness, console errors, and framework error overlays.
+- For visual changes, verify the affected routes in a browser at the reference laptop viewport. The owner cares about laptop use; mobile design and verification are not acceptance requirements unless explicitly requested. Check content, interactions, responsiveness at laptop sizes, console errors, and framework error overlays.
 - Database migrations and the application behavior that depends on them belong in the same logical feature commit unless a backward-compatible preparatory migration must deploy first.
 - **Default completion rule:** When a change is intended for the product (rather than explicitly local-only, exploratory, or draft work), finish the full delivery path in the same task: apply every required Supabase migration, run the relevant worker/backfill if the schema change requires one, merge the verified feature branch into `main`, push `main`, deploy production, and verify the affected live route and data path. Report any step that cannot be completed as a concrete blocker; do not describe a local commit as delivered.
 - Before merging, confirm `main` has not advanced in a conflicting way. Keep migrations and the behavior that requires them together, and do not merge or deploy around a failed migration, missing production environment variable, or failed live verification.
@@ -259,7 +259,7 @@ Every completed change must be committed as a coherent, reviewable unit. Do not 
 - Implement the references as semantic, responsive application UI. Never ship the screenshots as page backgrounds.
 - The root URL redirects to `/markets`; existing Intelligence routes remain available, with `/ai-research` as the Intelligence entry point.
 - Markets uses a dedicated full-width shell. Intelligence keeps the current sidebar shell for this milestone. Both modes must expose a working Intelligence / Markets switch.
-- The visual acceptance target is 1672 by 941 in light mode. Mobile acceptance uses a 390-pixel-wide viewport. Dark mode must remain usable even when exact screenshot parity is evaluated in light mode.
+- The laptop visual acceptance target is 1672 by 941 in light mode. Dark mode must remain usable even when exact screenshot parity is evaluated in light mode. Mobile acceptance is not required unless explicitly requested.
 - Illustrative data must always be labeled `Illustrative`. Live responses must expose their actual Alpaca feed and data timestamp; never present mock or fallback data as live.
 
 ## Key conventions
