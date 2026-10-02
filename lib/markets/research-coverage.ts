@@ -7,6 +7,10 @@ export interface ResearchDocument {
   extractionStatus: 'readable' | 'failed'; contentHash: string | null
   text: string | null; error: string | null; quality: 'primary' | 'regulatory' | 'independent'
 }
+/** Only durable evidence fields enter a packet; HTML navigation links are collector internals. */
+export function researchDocumentEvidence(d: ResearchDocument): ResearchDocument {
+  return {sourceId:d.sourceId,url:d.url,publishedAt:d.publishedAt,capturedAt:d.capturedAt,extractionStatus:d.extractionStatus,contentHash:d.contentHash,text:d.text,error:d.error,quality:d.quality}
+}
 export interface ResearchCoverageTopic {
   id: string; title: string; importance: string; decisive: boolean
   sourceIds: string[]; quotes: Array<{sourceId: string; quote: string}>; unresolvedQuestions: string[]

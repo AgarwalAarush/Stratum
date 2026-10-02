@@ -1025,64 +1025,64 @@
         "sourceIds": {
           "$ref": "#/$defs/sourceIds"
         }
-      },
-      "$defs": {
-        "sourceIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "evidenceStatus": {
-          "enum": [
-            "observed",
-            "company_claim",
-            "analyst_inference",
-            "unverified"
-          ]
-        },
-        "forces": {
-          "type": "array",
-          "minItems": 2,
-          "maxItems": 8,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "name",
-              "direction",
-              "mechanism",
-              "horizon",
-              "evidenceStatus",
-              "sourceIds"
-            ],
-            "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1
-              },
-              "direction": {
-                "enum": [
-                  "tailwind",
-                  "headwind",
-                  "mixed"
-                ]
-              },
-              "mechanism": {
-                "type": "string",
-                "minLength": 1
-              },
-              "horizon": {
-                "type": "string",
-                "minLength": 1
-              },
-              "evidenceStatus": {
-                "$ref": "#/$defs/evidenceStatus"
-              },
-              "sourceIds": {
-                "$ref": "#/$defs/sourceIds"
-              }
-            }
+      }
+    }
+  },
+  "$defs": {
+    "sourceIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidenceStatus": {
+      "enum": [
+        "observed",
+        "company_claim",
+        "analyst_inference",
+        "unverified"
+      ]
+    },
+    "forces": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "direction",
+          "mechanism",
+          "horizon",
+          "evidenceStatus",
+          "sourceIds"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "direction": {
+            "enum": [
+              "tailwind",
+              "headwind",
+              "mixed"
+            ]
+          },
+          "mechanism": {
+            "type": "string",
+            "minLength": 1
+          },
+          "horizon": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidenceStatus": {
+            "$ref": "#/$defs/evidenceStatus"
+          },
+          "sourceIds": {
+            "$ref": "#/$defs/sourceIds"
           }
         }
       }
