@@ -10,7 +10,7 @@ Clear trade reports use deterministic parsing. Ambiguous reports use structured 
 
 The server validates the report against the recommendation, actual fill time and current owner holdings. It signs an expiring confirmation preview. Confirmation invokes `record_reviewed_recommendation_trade`, which locks the portfolio and atomically appends an idempotent transaction and recommendation outcome. Manual snapshots also append a new shares/cash confirmation. Private brokerage snapshots remain authoritative; the ledger report waits for broker reconciliation to change broker holdings. No order-placement integration is involved.
 
-Migration: `202610020001_reviewed_recommendation_trades.sql`. Optional fast extraction model: `OPENAI_PORTFOLIO_TRADE_REVIEW_MODEL`, centrally configured in `lib/ai/config.ts`; no Vercel OpenAI credential is required for the private-worker path.
+Migration: `202610020001_reviewed_recommendation_trades.sql`. Optional fast extraction model: `OPENAI_PORTFOLIO_REVIEW_MODEL`, centrally configured in `lib/ai/config.ts`; no Vercel OpenAI credential is required for the private-worker path.
 
 ## October 1 delivery
 
