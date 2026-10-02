@@ -1,15 +1,16 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { reviewRecommendationTrade } from '@/lib/server/recommendation-trade'
 import styles from './RecommendationMemo.module.css'
-type Preview=Awaited<ReturnType<typeof reviewRecommendationTrade>>
+type Preview=Exclude<Awaited<ReturnType<typeof reviewRecommendationTrade>>,{queued:true}>
 export function RecommendationReview({recommendationId,symbol,events,disabled,onSaved}:{recommendationId:string;symbol:string;events:Record<string,unknown>[];disabled:boolean;onSaved:()=>void}) {
   const router=useRouter()
   const latest=events.find(e=>['accepted','delayed','rejected'].includes(String(e.event_type)))
   const [choice,setChoice]=useState(String(latest?.event_type??''))
   const [saved,setSaved]=useState(String(latest?.event_type??''))
   const [note,setNote]=useState(''),[instruction,setInstruction]=useState(''),[time,setTime]=useState('')
+  const [job,setJob]=useState<{id:string;started:number;phase:string}|null>(null)
   const [preview,setPreview]=useState<Preview|null>(null),[pending,setPending]=useState(''),[message,setMessage]=useState(''),[error,setError]=useState('')
   async function post(url:string,body:unknown) {
     const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
@@ -22,9 +23,17 @@ export function RecommendationReview({recommendationId,symbol,events,disabled,on
   }
   async function review() {
     setPending('review');setError('');setMessage('')
-    try {setPreview(await post('/api/markets/recommendations/trade',{action:'review',recommendationId,instruction,occurredAt:new Date(time).toISOString()}))}
+    try {const result=await post('/api/markets/recommendations/trade',{action:'review',recommendationId,instruction,occurredAt:new Date(time).toISOString()});if(result.queued){setJob({id:result.jobId,started:Date.now(),phase:'Waiting for Codex review'});}else{setPreview(result)}}
     catch(e){setError(e instanceof Error?e.message:'Unable to review trade')}finally{setPending('')}
   }
+  useEffect(()=>{
+    if(!job) return
+    let cancelled=false
+    const interval=setInterval(async()=>{
+      try {const response=await fetch(`/api/markets/recommendations/trade?job=${job.id}`);const data=await response.json();if(!response.ok) throw new Error(data.error);if(cancelled)return;if(data.queued){setMessage(`${data.phase||'Reviewing'} · ${Math.round((Date.now()-job.started)/1000)}s elapsed`)}else{setPreview(data);setJob(null);setMessage('Review ready. Confirm the actual trade details below.')}}catch(e){if(!cancelled){setError(e instanceof Error?e.message:'Review failed');setJob(null)}}
+    },3000)
+    return()=>{cancelled=true;clearInterval(interval)}
+  },[job])
   async function confirm() {
     setPending('confirm');setError('')
     try {const result=await post('/api/markets/recommendations/trade',{action:'confirm',token:preview!.token});setPreview(null);setInstruction('');setMessage(result.brokerage?'Trade saved to your ledger. Broker holdings will reconcile on the next sync.':'Trade saved. Your portfolio has been updated.');onSaved();router.refresh()}
@@ -38,9 +47,9 @@ export function RecommendationReview({recommendationId,symbol,events,disabled,on
     <label>A note on your decision <span>(optional)</span><textarea value={note} maxLength={2000} onChange={e=>setNote(e.target.value)} placeholder="What matters to you in this decision?" /></label>
     <button className={styles.primary} disabled={!choice||!!pending||(disabled&&choice==='accepted')} onClick={decide}>{pending==='decision'?'Saving…':'Save decision'}</button>
     {saved==='accepted'&&<section className={styles.trade}><h3>What did you actually do?</h3><p>Acceptance saves your intent. Record the actual fill when you have it.</p>
-      <label>Completed trade<textarea value={instruction} maxLength={2000} onChange={e=>{setInstruction(e.target.value);setPreview(null)}} placeholder={`Sold 0.5 shares of ${symbol} at $400 with $0 fees`} /></label>
-      <label>Actual fill time <span>(your local time)</span><input type="datetime-local" value={time} onChange={e=>{setTime(e.target.value);setPreview(null)}} /></label>
-      <button className={styles.secondary} disabled={!!pending||!instruction.trim()||!time} onClick={review}>{pending==='review'?'Reviewing your report…':'Review portfolio update'}</button>
+      <label>Completed trade<textarea value={instruction} maxLength={2000} onChange={e=>{setInstruction(e.target.value);setPreview(null);setJob(null)}} placeholder={`Sold 0.5 shares of ${symbol} at $400 with $0 fees`} /></label>
+      <label>Actual fill time <span>(your local time)</span><input type="datetime-local" value={time} onChange={e=>{setTime(e.target.value);setPreview(null);setJob(null)}} /></label>
+      <button className={styles.secondary} disabled={!!pending||!!job||!instruction.trim()||!time} onClick={review}>{job?'Codex is reviewing…':pending==='review'?'Reviewing your report…':'Review portfolio update'}</button>
       {preview&&<div className={styles.preview}><h4>Confirm the recorded trade</h4><p>{preview.portfolioName} · {preview.trade.action==='sell'?'Sold':'Bought'} {preview.trade.quantity} {preview.trade.symbol} at {money(preview.trade.pricePerShare)}</p>
         <dl><div><dt>Fees</dt><dd>{money(preview.trade.fees)}</dd></div><div><dt>Fill time</dt><dd>{new Date(preview.occurredAt).toLocaleString()}</dd></div><div><dt>Shares</dt><dd>{preview.heldShares} → {preview.resultingShares}</dd></div><div><dt>Cash effect</dt><dd>{money(preview.cashChange)}</dd></div></dl>
         <p>{preview.brokerage?'This updates the transaction ledger. Robinhood remains authoritative for broker holdings.':'This updates your portfolio shares and cash.'}</p><p className={styles.small}>{preview.reviewer} · No order is placed.</p>

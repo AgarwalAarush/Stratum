@@ -30,7 +30,7 @@ test('reviewed trade atomically records ledger and outcome, retries once, and ro
  assert.equal((await db.query('select * from recommendation_owner_events')).rows.length,1)
  await db.query('insert into portfolio_confirmations(owner_id,portfolio_id,as_of,content) values($1,$2,$3,$4)',[owner,portfolio,new Date(now.getTime()-1000).toISOString(),JSON.stringify({asOf:new Date(now.getTime()-1000).toISOString(),cash:400,positions:[{symbol:'TSLA',quantity:3,costBasisPerShare:80}]})])
  await call('00000000-0000-4000-8000-000000000009',{...trade,action:'sell',quantity:1,previousQuantity:3,previousCash:400})
- const capture=await db.query<{content:{cash:number;positions:{quantity:number}[]}}> ('select content from portfolio_confirmations order by confirmed_at desc limit 1')
+ const capture=await db.query<{content:{cash:number;positions:{quantity:number}[]}}> ("select content from portfolio_confirmations where request_id='00000000-0000-4000-8000-000000000009'")
  assert.equal(capture.rows[0].content.cash,499);assert.equal(capture.rows[0].content.positions[0].quantity,2)
 
  }finally{await db.close()}
