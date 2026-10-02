@@ -62,9 +62,9 @@ export async function collectSecFilingDocuments<T extends {url:string;form?:stri
   let earningsFound=false
   for(const {f,i} of eightKs){
     const doc=await capture({url:f.url,sourceId:`sec-filing-${i+1}`,publishedAt:f.publishedAt})
-    if(selected.has(i))documents.push(doc)
+    documents.push(doc)
     if(doc.text && /Item\s*2\.02|Results of Operations and Financial Condition/i.test(doc.text)){
-      if(!selected.has(i))documents.push(doc);selected.add(i);earningsFound=true
+      selected.add(i);earningsFound=true
       const exhibits=doc.links.filter(l=>/99[.\-_]?\d|ex(?:hibit)?99/i.test(l.label+' '+l.url)).slice(0,3)
       for(const [n,link]of exhibits.entries()){const attachment=await capture({url:link.url,sourceId:`sec-filing-${i+1}-exhibit-${n+1}`,publishedAt:f.publishedAt});documents.push(attachment)}
       break
