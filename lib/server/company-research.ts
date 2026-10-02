@@ -31,7 +31,7 @@ import { isEtfInstrument } from './etf-research.ts'
 import { companyMarketModelPrompt, fetchLatestCompanyMarketModel, validateCompanyMarketModel, materializeCompanyMarketModel } from './company-market-model.ts'
 import { collectSecFilingDocuments } from './research-documents.ts'
 import { collectCompanyResearchCoverage } from './company-research-coverage.ts'
-import { withCompanyResearchSchema } from './company-research-output.ts'
+import { completeResearchSourceLedgers, withCompanyResearchSchema } from './company-research-output.ts'
 import { RESEARCH_COVERAGE_RULES, researchCoverageDiagnostics, readableCompanySourceIds, validateCoverageReview, type ResearchDocument, type ResearchCoverage, type ResearchCoverageReview } from '../markets/research-coverage.ts'
 
 const RESEARCH_SECTION_IDS: EquityResearchSectionId[] = [
@@ -812,7 +812,7 @@ export async function generateFullEquityResearch(
     const bundle = await withCompanyResearchSchema(packet, schemaPath => runCodexJson({
       prompt: companyResearchBundlePrompt(analysisPacket, priorMarketModel, independentBaseline ? null : priorResearch, reason),
       schemaPath,
-      validate: value => { const v=record(value); return {research:validateEquityResearch(v.research, readableCompanySourceIds(packet), packet.outcomeFeedback, packet.researchCoverage),marketModel:validateCompanyMarketModel(v.marketModel,new Set(readableCompanySourceIds(packet)))} },
+      validate: value => { const v=record(completeResearchSourceLedgers(value)); return {research:validateEquityResearch(v.research, readableCompanySourceIds(packet), packet.outcomeFeedback, packet.researchCoverage),marketModel:validateCompanyMarketModel(v.marketModel,new Set(readableCompanySourceIds(packet)))} },
       timeoutMs: 20 * 60 * 1_000,
     }))
     const marketModel = await materializeCompanyMarketModel(packet, ownerId, reason, {data: bundle.data.marketModel, metadata: bundle.metadata})
