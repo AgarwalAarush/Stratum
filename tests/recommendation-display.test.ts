@@ -1,6 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { decisionActionLabel, recommendationDisplayContext, decisionHeadline, readableDecisionText } from '../lib/markets/recommendation-display.ts'
+import { decisionActionLabel, recommendationDisplayContext, decisionHeadline, readableDecisionText, readableDecisionMarkdown } from '../lib/markets/recommendation-display.ts'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { researchMemoMarkdown } from '../lib/markets/research-presentation.ts'
 import type { Recommendation } from '../lib/markets/recommendations.ts'
 import { renderInvestmentNewsletter } from '../lib/markets/investment-newsletter.ts'
 
@@ -8,6 +13,17 @@ test('a blocked assessment is distinct from an affirmative wait or hold', () => 
   assert.equal(decisionActionLabel({action:'no_trade',gateReasons:['Missing evidence']}),'Blocked')
   assert.equal(decisionActionLabel({action:'no_trade',gateReasons:[]}),'Wait')
   assert.equal(decisionActionLabel({action:'hold',gateReasons:[]}),'hold')
+})
+
+test('decision Markdown renders emphasis and lists instead of literal asterisks or internal evidence labels',()=>{
+ const raw='**VIEW:** GRID supports **grid modernization**. [research:00000000-0000-4000-8000-000000000001]\n\n- Observe deployment\n- Compare *rival capabilities*\n\n[Issuer](https://example.org)'
+ const markdown=researchMemoMarkdown(readableDecisionMarkdown(raw))
+ const html=renderToStaticMarkup(createElement(ReactMarkdown,{remarkPlugins:[remarkGfm]},markdown))
+ assert.match(html,/<strong>grid modernization<\/strong>/)
+ assert.match(html,/<em>rival capabilities<\/em>/)
+ assert.match(html,/<ul>/)
+ assert.match(html,/<a href="https:\/\/example.org">Issuer<\/a>/)
+ for(const literal of ['**','VIEW:','00000000'])assert.ok(!html.includes(literal))
 })
 
 test('browser projection retains source dates and account identity without serializing raw research', () => {
