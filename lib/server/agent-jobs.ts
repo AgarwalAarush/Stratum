@@ -1039,7 +1039,7 @@ async function executeJob(
         trigger: 'company_research', worldOpportunityLeadId, researchNoteId: note.id, symbol,
       }, `run-world-thinker:company-research:${worldOpportunityLeadId}:${note.id}`)
     }
-    return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf, worldOpportunityLeadId }
+    return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf, worldOpportunityLeadId, coverage: note.coverageDiagnostics ?? null }
   }
 
   if (job.job_type === 'generate-etf-research') {

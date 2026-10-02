@@ -485,6 +485,7 @@ export interface EtfHolding {
 }
 
 export interface EtfResearchPacket {
+  outcomeFeedback?: import('./research-feedback.ts').ResearchFeedback
   evidenceQuality?: { checkedAt: string; missing: string[]; coveredWeight: number; priceAsOf: string; holdingsAsOf: string }
   id: string
   symbol: string
@@ -527,6 +528,8 @@ export interface EtfResearchSection {
 }
 
 export interface EtfResearchNote {
+  feedbackReview?: import('./research-feedback.ts').FeedbackReview | null
+  advice?: import('./research-advice.ts').ResearchAdvice | null
   id: string
   symbol: string
   version: number
@@ -622,6 +625,9 @@ export interface CompanyFinancialReconciliation {
 }
 
 export interface CompanyPacket {
+  researchDocuments?: import('./research-coverage.ts').ResearchDocument[]
+  researchCoverage?: import('./research-coverage.ts').ResearchCoverage
+  outcomeFeedback?: import('./research-feedback.ts').ResearchFeedback
   worldOrigin?: Record<string, unknown> | null
   evidenceQuality?: { checkedAt: string; missing: string[]; sourceDates: Array<{ id: string; asOf: string }>; priceAsOf: string }
 
@@ -676,6 +682,8 @@ export interface CompanyPacket {
   researchEvidence?: CompanyResearchEvidence[]
   /** Parent market models are context only; company research must independently verify exposure. */
   marketTheses?: Array<{
+    authority?: 'shadow'
+    mayAuthorizeCapital?: false
     hypothesisId: string
     title: string
     version: number
@@ -790,6 +798,7 @@ export interface CompanyMarketFalsifier {
 }
 
 export interface CompanyMarketModel {
+  evidenceAuthority?: typeof import('./evidence-authority.ts').PRIMARY_RESEARCH_AUTHORITY
   id: string
   symbol: string
   version: number
@@ -881,6 +890,11 @@ export interface EquityResearchRevision {
 }
 
 export interface EquityResearchNote {
+  coverageDiagnostics?: import('./research-coverage.ts').ResearchCoverageDiagnostics | null
+  coverageReview?: import('./research-coverage.ts').ResearchCoverageReview | null
+  evidenceAuthority?: typeof import('./evidence-authority.ts').PRIMARY_RESEARCH_AUTHORITY
+  feedbackReview?: import('./research-feedback.ts').FeedbackReview | null
+  advice?: import('./research-advice.ts').ResearchAdvice | null
   id: string
   companyMarketModelId?: string | null
   symbol: string
@@ -909,7 +923,7 @@ export interface EquityResearchNote {
 export interface ResearchJobStatus {
   id: string
   symbol: string
-  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'blocked' | 'cancelled'
   progress: number
   phase: string
   error: string | null

@@ -1,0 +1,91 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "conclusion",
+    "summary",
+    "sourceIds",
+    "conditions",
+    "feedbackReview",
+    "materialChange"
+  ],
+  "properties": {
+    "conclusion": {
+      "enum": [
+        "supported",
+        "needs_research",
+        "insufficient"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 8
+    },
+    "sourceIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "conditions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "feedbackReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changedConclusion",
+        "explanation",
+        "sourceIds"
+      ],
+      "properties": {
+        "changedConclusion": {
+          "type": "boolean"
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "sourceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "materialChange": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason",
+        "sourceIds"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "results_guidance",
+            "corporate_fund_change",
+            "decisive_premise",
+            "blocking_answer"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "sourceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -24,6 +24,7 @@ const sectionIds = [
 
 function validResearch() {
   return {
+    advice: { version: 1, businessView: {value:'constructive',reason:'Positive operating evidence.',sourceIds:['source-1'],changeConditions:['Margins deteriorate materially.']}, evidenceSufficiency:{value:'sufficient',reason:'Current primary sources support the opinion.',sourceIds:['source-1'],changeConditions:['Fresh disclosures contradict the premise.']}, newEntryStance:{value:'wait',reason:'Await an attractive valuation.',sourceIds:['source-1'],changeConditions:['Price reaches the entry ceiling.']}, existingPositionStance:{value:'retain',reason:'Retain the current positive exposure.',sourceIds:['source-1'],changeConditions:['Operating leverage fails.']} },
     formalRating: 'HOLD',
     entryAction: 'wait',
     investmentThesis: 'The company can compound earnings as improving product mix drives durable operating leverage that consensus does not price.',
@@ -73,7 +74,7 @@ test('equity research validator requires the fixed 15-section contract', () => {
 
   const thin = validResearch()
   thin.sections = thin.sections.map((section) => ({ ...section, content: 'Too thin.' }))
-  assert.throws(() => validateEquityResearch(thin), /1,600-3,000 words/)
+  assert.equal(validateEquityResearch(thin).sections.length, 15)
 
   const question = validResearch()
   question.investmentThesis = 'Can margins expand?'
@@ -85,7 +86,7 @@ test('equity research validator requires the fixed 15-section contract', () => {
 
   const notRated = validResearch()
   notRated.formalRating = 'NOT_RATED'
-  assert.throws(() => validateEquityResearch(notRated), /Invalid formal rating/)
+  assert.equal(validateEquityResearch(notRated).formalRating, 'NOT_RATED')
 })
 
 test('research packet includes quarterly evidence, SEC filings, and skill-aligned generation rules', async () => {
@@ -107,9 +108,10 @@ test('research packet includes quarterly evidence, SEC filings, and skill-aligne
   assert.match(source, /earning-call-transcript/)
   assert.match(source, /management commentary, not audited fact/)
   assert.match(source, /Treat the prior report as the analytical baseline/)
-  assert.match(source, /previous_research_note_id/)
+  const lifecycle = await readFile(new URL('../lib/server/research-lifecycle.ts', import.meta.url),'utf8')
+  assert.match(lifecycle, /previous_research_note_id/)
   assert.match(source, /forwardPriceToEarnings/)
-  assert.match(source, /1,800-2,500 total words/)
+  assert.match(source, /Do not pad prose/)
   assert.match(source, /Write an investor memo, not an audit workpaper/)
   assert.match(source, /affirmative, falsifiable ownership belief/)
   assert.match(source, /prefix each distinct claim paragraph with \*\*FACT:\*\*/)
@@ -134,9 +136,9 @@ test('research packet includes quarterly evidence, SEC filings, and skill-aligne
   assert.match(source, /Do not call employee withholding or warrant exercises a share repurchase/)
   assert.match(source, /Do not confuse product revenue categories with reportable operating segments/)
   assert.match(source, /Kill Criteria must contain 3-5 specific numeric thresholds/)
-  assert.match(source, /materializeCompanyMarketModel\(packet, ownerId, reason\)/)
-  assert.match(source, /company_market_model_id: marketModel\.id/)
-  assert.match(source, /COMPANY MARKET MODEL VERSION/)
+  assert.match(source, /materializeCompanyMarketModel\(packet, ownerId, reason, \{data: bundle\.data\.marketModel/)
+  assert.match(source, /company_market_model_id:\s*marketModel\.id/)
+  assert.match(source, /PRIOR COMPANY MARKET MODEL VERSION/)
   assert.match(source, /Financial statements are one important proof and risk input/)
   assert.match(source, /Do not repeat the same revenue, cash-flow, or multiple discussion/)
   assert.match(source, /Name material supported operating assets and capabilities/)
@@ -162,7 +164,7 @@ test('SEC filing excerpts retain targeted business and related-party evidence be
 })
 
 test('SEC filing ingestion extracts HTML embedded in an EDGAR document wrapper', async () => {
-  const source = await readFile(new URL('../lib/server/company-research.ts', import.meta.url), 'utf8')
+  const source = await readFile(new URL('../lib/server/research-documents.ts', import.meta.url), 'utf8')
   assert.match(source, /raw\.search\(\/<!doctype html\|<html\/i\)/)
   assert.match(source, /lastIndexOf\('\<\/html\>'\)/)
 })

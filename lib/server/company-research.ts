@@ -1,3 +1,9 @@
+import { feedbackSources, loadResearchFeedback } from './research-feedback.ts'
+import { needsIndependentResearch, primaryResearchPacket, PRIMARY_RESEARCH_AUTHORITY } from '../markets/evidence-authority.ts'
+import { FEEDBACK_RULES, validateFeedbackReview, type ResearchFeedback, type FeedbackReview } from '../markets/research-feedback.ts'
+import { beginResearchVersion, publishResearchVersion, failResearchVersion } from './research-lifecycle.ts'
+import { fetchResearchBaseline, recordResearchRefresh } from './research-refresh.ts'
+import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchNarrative, validateResearchAdvice, type ResearchAdvice } from '../markets/research-advice.ts'
 import type {
   CompanyPacket,
   CompanyPacketSource,
@@ -22,8 +28,10 @@ import { proposeStockThesis } from './theses.ts'
 import { collectCompanyResearchEvidence } from './company-research-evidence.ts'
 import { fetchSecLiquidityFacts } from './sec-financials.ts'
 import { isEtfInstrument } from './etf-research.ts'
-import { materializeCompanyMarketModel } from './company-market-model.ts'
-import { parseHTML } from 'linkedom'
+import { companyMarketModelPrompt, fetchLatestCompanyMarketModel, validateCompanyMarketModel, materializeCompanyMarketModel } from './company-market-model.ts'
+import { collectSecFilingDocuments } from './research-documents.ts'
+import { collectCompanyResearchCoverage } from './company-research-coverage.ts'
+import { RESEARCH_COVERAGE_RULES, researchCoverageDiagnostics, readableCompanySourceIds, validateCoverageReview, type ResearchDocument, type ResearchCoverage, type ResearchCoverageReview } from '../markets/research-coverage.ts'
 
 const RESEARCH_SECTION_IDS: EquityResearchSectionId[] = [
   'snapshot',
@@ -95,6 +103,7 @@ async function loadCompanyMarketTheses(ownerId: string, symbol: string): Promise
     if (!version) return []
     const content = record(version.content)
     return [{
+      authority: 'shadow' as const, mayAuthorizeCapital: false as const,
       hypothesisId: version.hypothesis_id,
       title: hypothesisById.get(version.hypothesis_id) ?? 'Market thesis',
       version: Number(version.version), state: version.state as 'active' | 'weakened' | 'invalidated' | 'archived',
@@ -226,28 +235,9 @@ export function compactSecFilingText(value: string, maximumLength = 45_000): str
     .slice(0, maximumLength)
 }
 
-async function fetchSecFilingExcerpt(url: string): Promise<string | null> {
-  const response = await fetch(url, {
-    signal: AbortSignal.timeout(15_000),
-    headers: {
-      Accept: 'text/html',
-      'User-Agent': process.env.SEC_API_USER_AGENT?.trim() || 'Stratum/0.3 (aarushagarwal.dev)',
-    },
-  })
-  if (!response.ok) return null
-  const raw = await response.text()
-  const htmlStart = raw.search(/<!doctype html|<html/i)
-  const htmlEnd = raw.toLowerCase().lastIndexOf('</html>')
-  const html = htmlStart >= 0
-    ? raw.slice(htmlStart, htmlEnd >= htmlStart ? htmlEnd + '</html>'.length : undefined)
-    : raw
-  const { document } = parseHTML(html)
-  for (const element of Array.from(document.querySelectorAll('script, style, noscript, svg'))) element.remove()
-  return compactSecFilingText(document.body?.textContent ?? '')
-}
-
 async function fetchRecentSecFilings(
   cikValue: unknown,
+  documents: ResearchDocument[],
 ): Promise<CompanyFilingEvidence[]> {
   const cik = String(cikValue ?? '').replace(/\D/g, '')
   if (!cik) return []
@@ -278,16 +268,9 @@ async function fetchRecentSecFilings(
     })
     if (filings.length >= 20) break
   }
-  const selected = new Set<number>()
-  for (const form of ['10-K', '10-Q', '424B4', 'S-1', 'S-1/A', '8-K']) {
-    const index = filings.findIndex((filing) => filing.form === form)
-    if (index >= 0) selected.add(index)
-    if (selected.size >= 6) break
-  }
-  const excerpts = await Promise.all([...selected].map(async (index) =>
-    [index, await fetchSecFilingExcerpt(filings[index]!.url).catch(() => null)] as const))
-  for (const [index, excerpt] of excerpts) filings[index]!.excerpt = excerpt
-  return filings
+  const captured = await collectSecFilingDocuments(filings)
+  documents.push(...captured.documents)
+  return captured.filings.map(f => ({...f, excerpt:f.excerpt ? compactSecFilingText(f.excerpt) : null}))
 }
 
 async function nextVersion(table: 'company_packets' | 'equity_research_notes', ownerId: string, symbol: string): Promise<number> {
@@ -342,6 +325,7 @@ export async function materializeCompanyPacket(
     ? String(profile.industry ?? 'Classification pending')
     : stock.subIndustry
   const ratiosRaw = records(ratiosResult)[0] ?? record(ratiosResult)
+  const researchDocuments: ResearchDocument[] = []
   const [
     incomeQuarterlyResult,
     balanceQuarterlyResult,
@@ -361,7 +345,7 @@ export async function materializeCompanyPacket(
     request<unknown>('grades-consensus').catch(() => []),
     request<unknown>('revenue-product-segmentation', { period: 'annual', limit: 6 }).catch(() => []),
     request<unknown>('revenue-geographic-segmentation', { period: 'annual', limit: 6 }).catch(() => []),
-    fetchRecentSecFilings(profile.cik).catch(() => []),
+    fetchRecentSecFilings(profile.cik, researchDocuments).catch(() => []),
     fetchRecentEarningsTranscripts(request).catch(() => []),
     fetchSecLiquidityFacts(profile.cik).catch(() => []),
   ])
@@ -470,9 +454,16 @@ export async function materializeCompanyPacket(
   const peers = (Array.isArray(peerRecord.peersList) ? peerRecord.peersList : peersPayload.map((item) => item.symbol))
     .filter((item): item is string => typeof item === 'string')
     .slice(0, 20)
+  for (const document of researchDocuments) {
+    if (!sources.some(source => source.id === document.sourceId)) sources.push({id:document.sourceId,label:'Earnings update attachment',url:document.url,source:'SEC EDGAR',asOf:document.publishedAt ?? document.capturedAt})
+  }
   const version = await nextVersion('company_packets', ownerId, symbol)
   const generatedAt = now.toISOString()
+  const outcomeFeedback = await loadResearchFeedback(ownerId, symbol, generatedAt)
+  sources.push(...feedbackSources(outcomeFeedback))
   const packet: CompanyPacket = {
+    researchDocuments,
+    outcomeFeedback,
     worldOrigin: worldOrigin ? { ...worldOrigin, authority: 'shadow', mayAuthorizeCapital: false } : null,
     evidenceQuality: {
       checkedAt: generatedAt, priceAsOf: stock.asOf,
@@ -564,6 +555,9 @@ export async function materializeCompanyPacket(
 }
 
 interface ResearchGeneration {
+  coverageReview?: ResearchCoverageReview | null
+  feedbackReview?: FeedbackReview | null
+  advice?: ResearchAdvice | null
   formalRating: EquityResearchNote['formalRating']
   entryAction: EquityResearchNote['entryAction']
   investmentThesis: string
@@ -579,7 +573,7 @@ interface ResearchGeneration {
   sourceIds: string[]
 }
 
-export function validateEquityResearch(value: unknown, allowedSourceIds?: readonly string[]): ResearchGeneration {
+export function validateEquityResearch(value: unknown, allowedSourceIds?: readonly string[], feedback?: ResearchFeedback, coverage?: ResearchCoverage): ResearchGeneration {
   const output = record(value)
   const sections = Array.isArray(output.sections) ? output.sections.map(record) : []
   const ids = sections.map((section) => section.id)
@@ -596,7 +590,7 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
   }
   const formalRating = output.formalRating as EquityResearchNote['formalRating']
   const entryAction = output.entryAction as EquityResearchNote['entryAction']
-  if (!['BUY', 'HOLD', 'SELL'].includes(formalRating)) throw new Error('Invalid formal rating')
+  if (!['BUY', 'HOLD', 'SELL', 'NOT_RATED'].includes(formalRating)) throw new Error('Invalid formal rating')
   if (!['buy_now', 'nibble', 'wait', 'add_on_weakness', 'avoid'].includes(entryAction)) throw new Error('Invalid entry action')
   const string = (key: string) => {
     if (typeof output[key] !== 'string' || !output[key]) throw new Error(`Missing ${key}`)
@@ -605,11 +599,6 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
   const rawConfidence = Number(output.confidence)
   const confidence = rawConfidence > 0 && rawConfidence <= 1 ? rawConfidence * 100 : rawConfidence
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 100) throw new Error('Invalid confidence')
-  const wordCount = sections.reduce((total, section) =>
-    total + String(section.content ?? '').trim().split(/\s+/).filter(Boolean).length, 0)
-  if (wordCount < 1_600 || wordCount > 3_000) {
-    throw new Error(`Equity research must contain 1,600-3,000 words of analysis; received ${wordCount}`)
-  }
   const investmentThesis = string('investmentThesis')
   if (investmentThesis.includes('?')) {
     throw new Error('Investment thesis must be an affirmative statement, not a question')
@@ -643,8 +632,8 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
   const revisionChanges = Array.isArray(revisionRecord.changes)
     ? revisionRecord.changes.map(record)
     : []
-  if (revisionChanges.length < 1 || revisionChanges.length > 8) {
-    throw new Error('Research revision must contain 1-8 material changes')
+  if (revisionChanges.length > 8) {
+    throw new Error('Research revision may contain at most eight changes')
   }
   const changes = revisionChanges.map((change) => {
     const field = change.field as EquityResearchRevisionChange['field']
@@ -659,7 +648,13 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
       explanation: change.explanation,
     }
   })
+  const advice = output.advice || allowedSourceIds ? validateResearchAdvice(output.advice, Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []) : null
+  validateResearchNarrative(advice, sections.filter(s => s.id === 'verdict').map(s => String(s.content ?? '')).join('\n'))
+  const coverageReview = coverage ? validateCoverageReview(output.coverageReview, coverage, sections as unknown as EquityResearchSection[], Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : [], advice) : null
   return {
+    coverageReview,
+    feedbackReview: feedback ? validateFeedbackReview(output.feedbackReview, feedback) : null,
+    advice,
     formalRating,
     entryAction,
     investmentThesis,
@@ -686,9 +681,9 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
   }
 }
 
-function researchPrompt(
+export function researchPrompt(
   packet: CompanyPacket,
-  marketModel: CompanyMarketModel,
+  marketModel: CompanyMarketModel | null,
   priorResearch: EquityResearchNote | null,
   reason: string,
 ): string {
@@ -697,7 +692,7 @@ function researchPrompt(
         `This is a refresh of research version ${priorResearch.version}, triggered by "${reason}". Treat the prior report as the analytical baseline.`,
         'Preserve conclusions and section analysis that remain supported. Revise only where the new CompanyPacket adds, removes, or contradicts material evidence.',
         'Compare the new formal rating, entry action, fair value, thesis, key debate, and kill criteria against the prior report. Do not manufacture a change when the evidence is unchanged.',
-        `Set revision.priorVersion to ${priorResearch.version}. Set revision.opinionChange to more_constructive, less_constructive, or unchanged. Summarize the net opinion change in plain English and list 1-8 material changes. If nothing material changed, use one evidence change explaining what was refreshed and why the opinion stayed unchanged.`,
+        `Set revision.priorVersion to ${priorResearch.version}. Set revision.opinionChange to more_constructive, less_constructive, or unchanged. Summarize the net opinion change in plain English and list only supported changes, up to eight. If nothing material changed, use an empty changes array and explain the unchanged conclusion in the summary.`,
       ]
     : [
         'This is the initial report. Set revision.priorVersion to null, revision.opinionChange to initial, and include one evidence change explaining the initial evidence baseline.',
@@ -706,7 +701,7 @@ function researchPrompt(
     'Act as a senior company and market research analyst. Create an institutional-quality equity research note for a 12-month decision and 1-2 year ownership lens. The supplied CompanyMarketModel is the required causal foundation for the report: begin with what the company actually sells, who needs it, the market/value-chain bottleneck it serves, and the change that can expand or erode its opportunity. Financial statements are one important proof and risk input, not the report’s organizing principle.',
     'Use only facts and source IDs present in the CompanyPacket. Never invent a current price, estimate, event, source, or citation.',
     'CompanyPacket.evidenceQuality lists missing components; retrieval time is not publication time. Explain how gaps restrict action readiness. A formal opinion alone never authorizes a portfolio recommendation.',
-    'If worldOrigin is present, it is the originating investigation dossier, not independently verified company evidence. Explicitly answer every decisive_question and test transmission_mechanism, capture_mechanism, capture_conditions, falsifiers and expectations_question. State confirmed, rejected or unresolved for each link. Do not cite dossier source IDs unless also present in packet.sources.',
+    'worldOrigin contains only shadow question nominations and document leads. Independently answer relevant questions from packet sources. Questions are not assertions, evidence, or authority for capital decisions. Do not cite a lead unless independently collected into packet.sources.',
     'Use the CompanyMarketModel as an analytical scaffold, not as a new source. Its factual claims remain supported only by the underlying CompanyPacket source IDs attached to them. Preserve its evidence-status distinctions and explicitly identify unsupported inference or unresolved evidence gaps.',
     'The report must explain the model’s causal chain from external change through the binding constraint or enabling capability, customer behavior, company volume/pricing/mix, monetization, and shareholder outcome. If a link is weak or unverified, make that weakness decision-relevant rather than silently closing the gap.',
     'CompanyPacket.researchEvidence is a bounded company-and-industry research pack. It is useful for framing product, AI, market, competition, and moat—but a discovery item is only a lead, independent reporting needs attribution, and primary or regulatory evidence is preferred for company claims and numbers. Do not elevate an article excerpt into an unsupported fact.',
@@ -718,7 +713,7 @@ function researchPrompt(
     'The other executive fields must state quantified Mispricing, Fastest Kill Signal, and today’s practical Entry Decision.',
     'Return confidence as a whole-number percentage from 0 to 100, not as a decimal fraction.',
     'Return exactly the 15 schema sections in schema order: Snapshot; Business Model & Moat; Financial Profile; Market & Competition; Growth Drivers; Management & Capital Allocation; Valuation; Catalysts; Bull Case; Base Case; Bear Case; Risk Factors; Sentiment & Positioning; Verdict; Kill Criteria.',
-    'Write 1,800-2,500 total words across those sections. Lead every section with its conclusion and bold the single most important number or claim.',
+    'Use the length justified by evidence. Lead each section with its conclusion; an explicit evidence gap can be brief. Do not pad prose or repeat facts to meet a quota.',
     'Write an investor memo, not an audit workpaper: favor clear analytical prose and short connective paragraphs over a stream of labeled bullets. Use bullets only for catalysts, scenario assumptions, risks, and concrete decision rules.',
     'Keep factual, consensus, and analyst thinking distinct through natural attribution: write “reported data show” or “the latest filing shows” for facts, “consensus expects” for market expectations, “our view” for analysis, and “in our base case” for assumptions. For auditability, prefix each distinct claim paragraph with **FACT:**, **CONSENSUS:**, **VIEW:** or **ESTIMATE:**. The application strips these internal markers in its default memo view and exposes them only in Evidence mode.',
     'Attach supporting CompanyPacket source IDs only through each section sourceIds array and the report sourceIds array. Never print bracketed source IDs inside prose. Never imply a claim is sourced if the supporting source is absent.',
@@ -736,11 +731,15 @@ function researchPrompt(
     'Verdict must first state the company-and-market thesis in plain English, then cover ownership fit, current setup, behavior near highs and on weakness, entry action, better trigger, sizing, liquidity, and horizon. For a high-optionality or thin-data name, make clear that sizing and milestone evidence—not a fabricated valuation model—control the decision.',
     'Kill Criteria must contain 3-5 specific numeric thresholds or observable events—not vibes.',
     'When evidence is unavailable (TAM, 13F, short interest, options, geographic mix, unit economics, etc.), say “Not available in the current packet” and explain what source would be required.',
-    'Always return a directional formal rating of BUY, HOLD, or SELL for an identified tradable equity with a CompanyPacket; do not use NOT_RATED merely because the packet is incomplete or a fair value cannot be calculated. When the evidence is thin, make the best directional judgment from the available facts, keep unsupported valuation fields null, use wait or avoid for the practical action as appropriate, and set confidence to 15-40%. State the missing evidence and what would change the call. Reserve NOT_RATED only for an invalid identity, no credible company evidence, or a non-tradable instrument.',
+    RESEARCH_COVERAGE_RULES,
+    'When coverageReview is required, every topic must be substantively discussed in the mapped report sections, including facts that strengthen the opposing case. Supporting source IDs must have readable content. Prior judgments are revisable and do not override new product evidence.',
+    FEEDBACK_RULES,
+    RESEARCH_ADVICE_RULES,
+    'Formal rating is a compatibility summary. NOT_RATED is valid when the evidence is insufficient. Unsupported facts and valuation remain unavailable.',
     '',
     priorResearch ? `PRIOR RESEARCH VERSION ${priorResearch.version}:\n${JSON.stringify(priorResearch)}` : 'PRIOR RESEARCH: none',
     '',
-    `COMPANY MARKET MODEL VERSION ${marketModel.version}:\n${JSON.stringify(marketModel)}`,
+    marketModel ? `PRIOR COMPANY MARKET MODEL VERSION ${marketModel.version}:\n${JSON.stringify(marketModel)}` : 'Build the business-model representation in the same response before writing research.',
     '',
     JSON.stringify(packet),
   ].join('\n')
@@ -767,73 +766,72 @@ export async function generateFullEquityResearch(
     if (error || !data) throw new Error('Originating World dossier is unavailable or mismatched')
     worldOrigin = data
   }
+  const independentBaseline = Boolean(priorResearch && priorResearch.evidenceAuthority?.version !== 1)
+  const previousPacket = priorResearch ? await fetchResearchBaseline(ownerId, 'equity', priorResearch.id) : null
   const packet = await materializeCompanyPacket(symbol, ownerId, new Date(), worldOrigin)
+  const baseline = record(previousPacket)
+  if (baseline.researchCoverage) {
+    packet.researchCoverage = baseline.researchCoverage as ResearchCoverage
+    for (const document of packet.researchCoverage.documents) {
+      if (!packet.sources.some(source => source.id === document.sourceId)) packet.sources.push({id:document.sourceId,label:document.url.split('/').at(-1) || 'Company research document',url:document.url,source:document.quality,asOf:document.publishedAt ?? document.capturedAt})
+    }
+    // Freeze the reused coverage on this new packet even when no report is regenerated.
+    const reused = await supabase.from('company_packets').update({packet,source_ids:packet.sources.map(s=>s.id)}).eq('id',packet.id).eq('owner_id',ownerId)
+    if (reused.error) throw new Error(`Unable to persist reused research coverage: ${reused.error.message}`)
+  }
+  let analysisPacket = primaryResearchPacket(packet)
+  const needsIndependent = needsIndependentResearch(priorResearch, previousPacket)
+  const refresh = await recordResearchRefresh({ownerId,instrument:'equity',packet:analysisPacket,priorPacket:needsIndependent ? null : previousPacket ? primaryResearchPacket(previousPacket as object) : null,prior:needsIndependent ? null : priorResearch,reason:needsIndependent ? 'Initial independent primary-evidence coverage; legacy World context excluded' : reason,conditionsChanged: /kill|entry|invalidation/i.test(reason)})
+  if (record(analysisPacket).researchRefresh) Object.assign(packet,{researchRefresh:record(analysisPacket).researchRefresh})
+  if (priorResearch && refresh.kind !== 'full_research') { await onProgress?.(100, `Evidence ${refresh.kind}; retained research v${priorResearch.version}`); return priorResearch }
   await onProgress?.(45, 'Company packet assembled')
-  await onProgress?.(50, 'Building company market model')
-  const marketModel = await materializeCompanyMarketModel(packet, ownerId, reason)
-  await onProgress?.(65, 'Company market model assembled')
-  const version = await nextVersion('equity_research_notes', ownerId, symbol)
-  const notePayload = {
-    symbol,
-    owner_id: ownerId,
-    company_packet_id: packet.id,
-    company_market_model_id: marketModel.id,
-    version,
-    status: 'running',
-    data_as_of: packet.dataAsOf,
+  packet.researchCoverage = await collectCompanyResearchCoverage(packet,{onProgress})
+  for (const document of packet.researchCoverage.documents) {
+    if (!packet.sources.some(source => source.id === document.sourceId)) packet.sources.push({id:document.sourceId,label:document.url.split('/').at(-1) || 'Company research document',url:document.url,source:document.quality,asOf:document.publishedAt ?? document.capturedAt})
   }
-  let createResult = await supabase.from('equity_research_notes').insert({
-    ...notePayload,
-    previous_research_note_id: priorResearch?.id ?? null,
-  }).select('id').single()
-  if (createResult.error?.message.includes('previous_research_note_id')) {
-    createResult = await supabase.from('equity_research_notes').insert(notePayload).select('id').single()
-  }
-  const { data: noteRecord, error: createError } = createResult
-  if (createError || !noteRecord) throw new Error(`Unable to create research version: ${createError?.message ?? 'unknown error'}`)
+  packet.generatedAt = new Date().toISOString()
+  const persisted = await supabase.from('company_packets').update({packet,source_ids:packet.sources.map(s=>s.id),generated_at:packet.generatedAt}).eq('id',packet.id).eq('owner_id',ownerId)
+  if (persisted.error) throw new Error(`Unable to freeze research coverage: ${persisted.error.message}`)
+  // Stored capture remains complete. Pass bounded passages, including every verified
+  // topic quote, to synthesis so long filings cannot displace product evidence.
+  analysisPacket = primaryResearchPacket({...packet,sources:packet.sources.filter(s=>readableCompanySourceIds(packet).includes(s.id)),researchDocuments:undefined,researchCoverage:{...packet.researchCoverage,documents:packet.researchCoverage.documents.map(d=>({...d,text:d.text ? [d.text.slice(0,12_000),...packet.researchCoverage!.topics.flatMap(t=>t.quotes.filter(q=>q.sourceId===d.sourceId).map(q=>q.quote))].join('\n') : null}))}})
+  const previousMarketModel = await fetchLatestCompanyMarketModel(ownerId, symbol)
+  const priorMarketModel = previousMarketModel?.evidenceAuthority?.version === 1 ? previousMarketModel : null
+  await onProgress?.(50, 'Preparing one research and business-model generation')
+  const noteRecord = await beginResearchVersion({kind:'equity',ownerId,symbol,packetId:packet.id,dataAsOf:packet.dataAsOf,previousId:priorResearch?.id??null,extra:{company_market_model_id:null}})
+  const version = noteRecord.version
+
   try {
     await onProgress?.(72, 'Synthesizing 15-section analysis')
-    const result = await runCodexJson({
-      prompt: researchPrompt(packet, marketModel, priorResearch, reason),
-      schemaPath: 'schemas/equity-research.schema.json',
-      validate: value => validateEquityResearch(value, packet.sources.map(s => s.id)),
+    const bundle = await runCodexJson({
+      prompt: `Produce research and its company market model together in one response. Build marketModel first from primary evidence, then write research with that causal representation. This model is a compatibility projection of the same generation, never new evidence.\n${companyMarketModelPrompt(analysisPacket, priorMarketModel, reason)}\n${researchPrompt(analysisPacket, priorMarketModel, independentBaseline ? null : priorResearch, reason)}`,
+      schemaPath: 'schemas/company-research-bundle.schema.json',
+      validate: value => { const v=record(value); return {research:validateEquityResearch(v.research, readableCompanySourceIds(packet), packet.outcomeFeedback, packet.researchCoverage),marketModel:validateCompanyMarketModel(v.marketModel,new Set(readableCompanySourceIds(packet)))} },
       timeoutMs: 20 * 60 * 1_000,
     })
+    const marketModel = await materializeCompanyMarketModel(packet, ownerId, reason, {data: bundle.data.marketModel, metadata: bundle.metadata})
+    const result = {data: bundle.data.research, metadata: bundle.metadata}
     await onProgress?.(90, 'Validating and publishing research')
     const generatedAt = new Date().toISOString()
-    const content = { ...result.data, reason }
-    if (packet.sources.length > 0) {
-      const used = new Set(result.data.sourceIds)
-      const { error: sourceError } = await supabase.from('equity_research_sources').insert(
-        packet.sources.filter((source) => used.has(source.id)).map((source) => ({
-          research_note_id: noteRecord.id,
-          source_id: source.id,
-          label: source.label,
-          url: source.url,
-          source: source.source,
-          source_as_of: source.asOf,
-        })),
-      )
-      if (sourceError) throw new Error(`Unable to persist research sources: ${sourceError.message}`)
+    if (independentBaseline && priorResearch) {
+      // Compare only after generation, so legacy shadow conclusions cannot anchor it.
+      const fields = [['formal_rating','formalRating'],['entry_action','entryAction'],['fair_value','fairValue'],['investment_thesis','investmentThesis'],['key_debate','keyDebate']] as const
+      const changes = fields.filter(([,key]) => String(priorResearch[key]) !== String(result.data[key])).map(([field,key]) => ({field,previous:String(priorResearch[key]),current:String(result.data[key]),explanation:'Independent primary-evidence reconstruction replaced the legacy World-influenced baseline.'}))
+      const rank = {SELL:0,NOT_RATED:1,HOLD:2,BUY:3}
+      result.data.revision = {priorVersion:priorResearch.version,opinionChange:result.data.formalRating === 'NOT_RATED' || priorResearch.formalRating === 'NOT_RATED' ? 'initial' : rank[result.data.formalRating] > rank[priorResearch.formalRating] ? 'more_constructive' : rank[result.data.formalRating] < rank[priorResearch.formalRating] ? 'less_constructive' : 'unchanged',summary:'Reconstructed from primary evidence without legacy World conclusions; differences below are a post-generation comparison, not an inferred economic outcome.',changes}
     }
-    const { error } = await supabase.from('equity_research_notes').update({
-      status: 'complete',
-      formal_rating: result.data.formalRating,
-      entry_action: result.data.entryAction,
-      content,
-      provider: result.metadata.provider,
-      model: result.metadata.model,
-      generated_at: generatedAt,
-      error: null,
-    }).eq('id', noteRecord.id).eq('status', 'running')
-    if (error) throw new Error(`Unable to publish research version: ${error.message}`)
-    await onProgress?.(100, 'Research complete')
+    const coverageDiagnostics = researchCoverageDiagnostics(packet.researchCoverage)
+    const content = { ...result.data, coverageDiagnostics, reason, evidenceAuthority: PRIMARY_RESEARCH_AUTHORITY, worldContextOrigin: analysisPacket.worldOrigin ?? null }
+    await publishResearchVersion({kind:'equity',id:noteRecord.id,content,sources:packet.sources,metadata:result.metadata,generatedAt,extra:{company_market_model_id:marketModel.id}})
+    await onProgress?.(100, `Research complete; coverage ${coverageDiagnostics.status}, ${coverageDiagnostics.attempts} passes, ${Math.round(coverageDiagnostics.durationMs/1000)} seconds`)
     const note: EquityResearchNote = {
       id: noteRecord.id,
+      coverageDiagnostics,
       companyMarketModelId: marketModel.id,
       symbol,
       version,
       status: 'complete',
+      evidenceAuthority: PRIMARY_RESEARCH_AUTHORITY,
       ...result.data,
       provider: result.metadata.provider,
       model: result.metadata.model,
@@ -850,7 +848,7 @@ export async function generateFullEquityResearch(
     return note
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    await supabase.from('equity_research_notes').update({ status: 'failed', error: message }).eq('id', noteRecord.id)
+    await failResearchVersion('equity',noteRecord.id,message)
     throw error
   }
 }
@@ -865,6 +863,11 @@ function normalizeResearch(row: Record<string, unknown>): EquityResearchNote {
     symbol: String(row.symbol),
     version: Number(row.version),
     status: row.status as EquityResearchNote['status'],
+    coverageDiagnostics: content.coverageDiagnostics as EquityResearchNote['coverageDiagnostics'] ?? null,
+    coverageReview: content.coverageReview as ResearchCoverageReview | undefined ?? null,
+    feedbackReview: content.feedbackReview as FeedbackReview | undefined ?? null,
+    evidenceAuthority: content.evidenceAuthority as EquityResearchNote['evidenceAuthority'],
+    advice: readResearchAdvice(content.advice),
     formalRating: row.formal_rating as EquityResearchNote['formalRating'],
     entryAction: row.entry_action as EquityResearchNote['entryAction'],
     investmentThesis: String(content.investmentThesis ?? content.mispricing ?? ''),

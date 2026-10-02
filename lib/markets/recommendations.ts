@@ -1,3 +1,4 @@
+import { hasDecisiveCoverageGap, type ResearchCoverage } from './research-coverage.ts'
 /** Published investment advice is an immutable, prospective experiment.
  * These functions never fetch data or place orders. */
 export const RECOMMENDATION_ACTIONS = [
@@ -298,6 +299,15 @@ export function gateRecommendation(
   )
   const increase = rec.action === 'buy' || rec.action === 'add'
   const reducing = rec.action === 'trim' || rec.action === 'sell'
+  const packetEvidence = context.evidence.find(e => e.kind === 'company_packet' && name.sources.includes(e.id))
+  const coverage = obj(obj(packetEvidence?.value).packet).researchCoverage as ResearchCoverage | undefined
+  if (coverage && hasDecisiveCoverageGap(coverage)) {
+    if (increase) reasons.push('Decisive company research coverage remains unresolved')
+    if (['hold','trim','sell'].includes(rec.action)) {
+      const justification=obj(obj(obj(name.research?.content).coverageReview).actionJustifications)[rec.action]
+      if(typeof justification!=='string' || justification.trim().length<40) reasons.push('Company research coverage gap requires an independently supported action justification')
+    }
+  }
   if (capitalAction) {
     // Shared macro/World gaps constrain adding risk, but cannot veto an
     // independently supported exit or hold in another instrument/account.
