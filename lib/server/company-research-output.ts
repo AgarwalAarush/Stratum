@@ -7,6 +7,42 @@ import type {CompanyPacket} from '../markets/types.ts'
 type Schema = Record<string, unknown>
 const object = (value: unknown) => value as Schema
 
+/** The root ledger is a derived index of citations already attached to claims.
+ * Keep unknown IDs so publication validation still rejects them. */
+export function completeResearchSourceLedgers(value: unknown): unknown {
+  if(!value || typeof value!=='object' || Array.isArray(value))return value
+  const bundle=structuredClone(value) as Schema
+  for(const key of ['research','marketModel']){
+    const raw=bundle[key]
+    if(!raw || typeof raw!=='object' || Array.isArray(raw))continue
+    const report=object(raw)
+    if(!Array.isArray(report.sourceIds))continue
+    if(key==='research' && Array.isArray(report.sections)){
+      const coverage=report.coverageReview && typeof report.coverageReview==='object' ? object(report.coverageReview) : {}
+      for(const row of Array.isArray(coverage.topics)?coverage.topics:[]){
+        if(!row || typeof row!=='object')continue
+        const mapping=object(row)
+        if(!Array.isArray(mapping.sourceIds) || !Array.isArray(mapping.sectionIds))continue
+        for(const section of report.sections){
+          if(!section || typeof section!=='object')continue
+          const target=object(section)
+          if(mapping.sectionIds.includes(target.id) && Array.isArray(target.sourceIds))target.sourceIds=[...new Set([...target.sourceIds,...mapping.sourceIds])]
+        }
+      }
+    }
+    const cited=new Set<unknown>(report.sourceIds)
+    const visit=(node:unknown):void=>{
+      if(!node || typeof node!=='object')return
+      for(const [field,child] of Object.entries(node)){
+        if(field==='sourceIds' && Array.isArray(child))child.forEach(id=>cited.add(id))
+        else visit(child)
+      }
+    }
+    visit(report);report.sourceIds=[...cited]
+  }
+  return bundle
+}
+
 /** Constrain generation to the same captured IDs that validation accepts. */
 export function companyResearchOutputSchema(template: Schema, packet: CompanyPacket): Schema {
   const schema=structuredClone(template), allowed=readableCompanySourceIds(packet)
