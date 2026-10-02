@@ -71,7 +71,7 @@ function sourceTitle(source: WorldSourceRegistryEntry, body: Buffer, mimeType: s
   }
 }
 
-async function extractedText(body: Buffer, mimeType: string): Promise<{ text: string; complete: boolean }> {
+export async function extractedText(body: Buffer, mimeType: string): Promise<{ text: string; complete: boolean }> {
   if (mimeType.includes('pdf')) {
     try {
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs') as {

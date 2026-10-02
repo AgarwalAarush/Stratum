@@ -21,3 +21,23 @@ test('price-only evidence writes a refresh check without invoking a model or cha
  assert.equal(decision.kind,'reprice');assert.equal(writes.length,1);assert.equal(writes[0].research_note_id,'frozen-note')
  assert.equal(writes[0].classification,'reprice');assert.equal(report.id,'frozen-note');assert.equal(report.version,1)
 })
+
+test('held refresh migration falls back to the new packet without mutating historical evidence',async t=>{
+ const env={url:process.env.SUPABASE_URL,key:process.env.SUPABASE_SERVICE_ROLE_KEY}
+ process.env.SUPABASE_URL='https://refresh-packet-test.supabase.co';process.env.SUPABASE_SERVICE_ROLE_KEY='test-key'
+ t.after(()=>{process.env.SUPABASE_URL=env.url;process.env.SUPABASE_SERVICE_ROLE_KEY=env.key})
+ const coverage={version:1,status:'partial',topics:[]}
+ const baseline={id:'historical',symbol:'ABC',company:{cik:'issuer'},priceHistory:{latestPrice:100},sources:[],researchCoverage:coverage}
+ const packet={...baseline,id:'new-packet',priceHistory:{latestPrice:110}} as unknown as CompanyPacket
+ let saved:Record<string,unknown>|null=null
+ t.mock.method(globalThis,'fetch',async(input:RequestInfo|URL,init?:RequestInit)=>{
+  const url=new URL(String(input))
+  if(url.pathname.endsWith('research_refresh_checks'))return Response.json({code:'PGRST205',message:"Could not find the table 'public.research_refresh_checks' in the schema cache"},{status:404})
+  assert.ok(url.pathname.endsWith('company_packets'));assert.equal(init?.method,'PATCH');assert.equal(url.searchParams.get('id'),'eq.new-packet');assert.equal(url.searchParams.get('owner_id'),'eq.owner')
+  saved=JSON.parse(String(init?.body));return Response.json([])
+ })
+ const decision=await recordResearchRefresh({ownerId:'owner',instrument:'equity',priorPacket:baseline,packet,prior:{id:'old-note',generatedAt:new Date().toISOString()} as EquityResearchNote,reason:'price refresh'})
+ assert.equal(decision.kind,'reprice');assert.ok(saved)
+ const frozen=(saved as unknown as {packet:CompanyPacket & {researchRefresh:{researchNoteId:string}}}).packet
+ assert.equal(frozen.researchRefresh.researchNoteId,'old-note');assert.deepEqual(frozen.researchCoverage,coverage);assert.ok(!('researchRefresh' in baseline))
+})

@@ -15154,3 +15154,5 @@ body:has(.equity-research-note) {
 
 .intelligence-mobile-action { display: none; }
 @media (max-width: 767px) { .intelligence-subnav-open .intelligence-mobile-action { display: flex; } }
+
+[data-research-presentation]:not(.evidence-mode) .research-coverage-evidence { display: none; }

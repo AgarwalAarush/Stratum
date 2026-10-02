@@ -25,6 +25,7 @@ import type {
   CompanySegmentPeriod,
   EquityResearchSection,
 } from '@/lib/markets/types'
+import { fetchResearchBaseline } from '@/lib/server/research-refresh'
 import { fetchStockViewerData } from '@/lib/server/markets-repository'
 import { fetchLatestEtfResearch, fetchLatestEtfResearchPacket } from '@/lib/server/etf-research'
 
@@ -355,6 +356,8 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
   }
   const research = stock.researchNote
   const packet = stock.companyPacket
+  const researchPacket = research?.status === 'complete' ? await fetchResearchBaseline(user.id, 'equity', research.id) as CompanyPacket : null
+  const coverage = researchPacket?.researchCoverage
   const chartPoints = financialPoints(packet)
   const estimates = estimateRows(packet)
   const sources = packet?.sources.filter((source) => research?.sourceIds.includes(source.id)) ?? []
@@ -573,6 +576,23 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
                   )
                 })}
               </div>
+
+              <section className="equity-research-sources research-coverage-evidence" aria-labelledby="research-coverage-title">
+                <header><p className="markets-eyebrow">Research coverage</p><h2 id="research-coverage-title">Material investment questions</h2></header>
+                {coverage && research.coverageReview ? <>
+                  <p>Collection {coverage.status} · {coverage.attempts} search passes · {Math.round(coverage.durationMs / 1000)} seconds. Unresolved questions limit the conclusions below.</p>
+                  {coverage.topics.map(topic => {
+                    const review = research.coverageReview?.topics.find(row => row.topicId === topic.id)
+                    return <div key={topic.id} className="py-4 border-b border-[var(--border)]">
+                      <h3>{topic.title} · {review?.status ?? 'Unresolved'}</h3>
+                      <p>{review?.investmentImplication ?? topic.importance}</p>
+                      {review?.limitations ? <p>{review.limitations}</p> : null}
+                      {topic.unresolvedQuestions.map(question => <p key={question}>Unresolved: {question}</p>)}
+                    </div>
+                  })}
+                  {!coverage.topics.length ? <p>The coverage search failed. This report cannot establish complete background research.</p> : null}
+                </> : <p>Legacy report: material-topic coverage was not verified. Refresh to run the coverage check.</p>}
+              </section>
 
               <section className="equity-research-sources" aria-labelledby="research-sources-title">
                 <header><p className="markets-eyebrow">Evidence ledger</p><h2 id="research-sources-title">Sources used in version {research.version}</h2></header>

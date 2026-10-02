@@ -625,6 +625,8 @@ export interface CompanyFinancialReconciliation {
 }
 
 export interface CompanyPacket {
+  researchDocuments?: import('./research-coverage.ts').ResearchDocument[]
+  researchCoverage?: import('./research-coverage.ts').ResearchCoverage
   outcomeFeedback?: import('./research-feedback.ts').ResearchFeedback
   worldOrigin?: Record<string, unknown> | null
   evidenceQuality?: { checkedAt: string; missing: string[]; sourceDates: Array<{ id: string; asOf: string }>; priceAsOf: string }
@@ -888,6 +890,8 @@ export interface EquityResearchRevision {
 }
 
 export interface EquityResearchNote {
+  coverageDiagnostics?: import('./research-coverage.ts').ResearchCoverageDiagnostics | null
+  coverageReview?: import('./research-coverage.ts').ResearchCoverageReview | null
   evidenceAuthority?: typeof import('./evidence-authority.ts').PRIMARY_RESEARCH_AUTHORITY
   feedbackReview?: import('./research-feedback.ts').FeedbackReview | null
   advice?: import('./research-advice.ts').ResearchAdvice | null

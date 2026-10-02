@@ -29,7 +29,9 @@ import { collectCompanyResearchEvidence } from './company-research-evidence.ts'
 import { fetchSecLiquidityFacts } from './sec-financials.ts'
 import { isEtfInstrument } from './etf-research.ts'
 import { companyMarketModelPrompt, fetchLatestCompanyMarketModel, validateCompanyMarketModel, materializeCompanyMarketModel } from './company-market-model.ts'
-import { parseHTML } from 'linkedom'
+import { collectSecFilingDocuments } from './research-documents.ts'
+import { collectCompanyResearchCoverage } from './company-research-coverage.ts'
+import { RESEARCH_COVERAGE_RULES, researchCoverageDiagnostics, readableCompanySourceIds, validateCoverageReview, type ResearchDocument, type ResearchCoverage, type ResearchCoverageReview } from '../markets/research-coverage.ts'
 
 const RESEARCH_SECTION_IDS: EquityResearchSectionId[] = [
   'snapshot',
@@ -233,28 +235,9 @@ export function compactSecFilingText(value: string, maximumLength = 45_000): str
     .slice(0, maximumLength)
 }
 
-async function fetchSecFilingExcerpt(url: string): Promise<string | null> {
-  const response = await fetch(url, {
-    signal: AbortSignal.timeout(15_000),
-    headers: {
-      Accept: 'text/html',
-      'User-Agent': process.env.SEC_API_USER_AGENT?.trim() || 'Stratum/0.3 (aarushagarwal.dev)',
-    },
-  })
-  if (!response.ok) return null
-  const raw = await response.text()
-  const htmlStart = raw.search(/<!doctype html|<html/i)
-  const htmlEnd = raw.toLowerCase().lastIndexOf('</html>')
-  const html = htmlStart >= 0
-    ? raw.slice(htmlStart, htmlEnd >= htmlStart ? htmlEnd + '</html>'.length : undefined)
-    : raw
-  const { document } = parseHTML(html)
-  for (const element of Array.from(document.querySelectorAll('script, style, noscript, svg'))) element.remove()
-  return compactSecFilingText(document.body?.textContent ?? '')
-}
-
 async function fetchRecentSecFilings(
   cikValue: unknown,
+  documents: ResearchDocument[],
 ): Promise<CompanyFilingEvidence[]> {
   const cik = String(cikValue ?? '').replace(/\D/g, '')
   if (!cik) return []
@@ -285,16 +268,9 @@ async function fetchRecentSecFilings(
     })
     if (filings.length >= 20) break
   }
-  const selected = new Set<number>()
-  for (const form of ['10-K', '10-Q', '424B4', 'S-1', 'S-1/A', '8-K']) {
-    const index = filings.findIndex((filing) => filing.form === form)
-    if (index >= 0) selected.add(index)
-    if (selected.size >= 6) break
-  }
-  const excerpts = await Promise.all([...selected].map(async (index) =>
-    [index, await fetchSecFilingExcerpt(filings[index]!.url).catch(() => null)] as const))
-  for (const [index, excerpt] of excerpts) filings[index]!.excerpt = excerpt
-  return filings
+  const captured = await collectSecFilingDocuments(filings)
+  documents.push(...captured.documents)
+  return captured.filings.map(f => ({...f, excerpt:f.excerpt ? compactSecFilingText(f.excerpt) : null}))
 }
 
 async function nextVersion(table: 'company_packets' | 'equity_research_notes', ownerId: string, symbol: string): Promise<number> {
@@ -349,6 +325,7 @@ export async function materializeCompanyPacket(
     ? String(profile.industry ?? 'Classification pending')
     : stock.subIndustry
   const ratiosRaw = records(ratiosResult)[0] ?? record(ratiosResult)
+  const researchDocuments: ResearchDocument[] = []
   const [
     incomeQuarterlyResult,
     balanceQuarterlyResult,
@@ -368,7 +345,7 @@ export async function materializeCompanyPacket(
     request<unknown>('grades-consensus').catch(() => []),
     request<unknown>('revenue-product-segmentation', { period: 'annual', limit: 6 }).catch(() => []),
     request<unknown>('revenue-geographic-segmentation', { period: 'annual', limit: 6 }).catch(() => []),
-    fetchRecentSecFilings(profile.cik).catch(() => []),
+    fetchRecentSecFilings(profile.cik, researchDocuments).catch(() => []),
     fetchRecentEarningsTranscripts(request).catch(() => []),
     fetchSecLiquidityFacts(profile.cik).catch(() => []),
   ])
@@ -477,11 +454,15 @@ export async function materializeCompanyPacket(
   const peers = (Array.isArray(peerRecord.peersList) ? peerRecord.peersList : peersPayload.map((item) => item.symbol))
     .filter((item): item is string => typeof item === 'string')
     .slice(0, 20)
+  for (const document of researchDocuments) {
+    if (!sources.some(source => source.id === document.sourceId)) sources.push({id:document.sourceId,label:'Earnings update attachment',url:document.url,source:'SEC EDGAR',asOf:document.publishedAt ?? document.capturedAt})
+  }
   const version = await nextVersion('company_packets', ownerId, symbol)
   const generatedAt = now.toISOString()
   const outcomeFeedback = await loadResearchFeedback(ownerId, symbol, generatedAt)
   sources.push(...feedbackSources(outcomeFeedback))
   const packet: CompanyPacket = {
+    researchDocuments,
     outcomeFeedback,
     worldOrigin: worldOrigin ? { ...worldOrigin, authority: 'shadow', mayAuthorizeCapital: false } : null,
     evidenceQuality: {
@@ -574,6 +555,7 @@ export async function materializeCompanyPacket(
 }
 
 interface ResearchGeneration {
+  coverageReview?: ResearchCoverageReview | null
   feedbackReview?: FeedbackReview | null
   advice?: ResearchAdvice | null
   formalRating: EquityResearchNote['formalRating']
@@ -591,7 +573,7 @@ interface ResearchGeneration {
   sourceIds: string[]
 }
 
-export function validateEquityResearch(value: unknown, allowedSourceIds?: readonly string[], feedback?: ResearchFeedback): ResearchGeneration {
+export function validateEquityResearch(value: unknown, allowedSourceIds?: readonly string[], feedback?: ResearchFeedback, coverage?: ResearchCoverage): ResearchGeneration {
   const output = record(value)
   const sections = Array.isArray(output.sections) ? output.sections.map(record) : []
   const ids = sections.map((section) => section.id)
@@ -668,7 +650,9 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
   })
   const advice = output.advice || allowedSourceIds ? validateResearchAdvice(output.advice, Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []) : null
   validateResearchNarrative(advice, sections.filter(s => s.id === 'verdict').map(s => String(s.content ?? '')).join('\n'))
+  const coverageReview = coverage ? validateCoverageReview(output.coverageReview, coverage, sections as unknown as EquityResearchSection[], Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : [], advice) : null
   return {
+    coverageReview,
     feedbackReview: feedback ? validateFeedbackReview(output.feedbackReview, feedback) : null,
     advice,
     formalRating,
@@ -747,6 +731,8 @@ export function researchPrompt(
     'Verdict must first state the company-and-market thesis in plain English, then cover ownership fit, current setup, behavior near highs and on weakness, entry action, better trigger, sizing, liquidity, and horizon. For a high-optionality or thin-data name, make clear that sizing and milestone evidence—not a fabricated valuation model—control the decision.',
     'Kill Criteria must contain 3-5 specific numeric thresholds or observable events—not vibes.',
     'When evidence is unavailable (TAM, 13F, short interest, options, geographic mix, unit economics, etc.), say “Not available in the current packet” and explain what source would be required.',
+    RESEARCH_COVERAGE_RULES,
+    'When coverageReview is required, every topic must be substantively discussed in the mapped report sections, including facts that strengthen the opposing case. Supporting source IDs must have readable content. Prior judgments are revisable and do not override new product evidence.',
     FEEDBACK_RULES,
     RESEARCH_ADVICE_RULES,
     'Formal rating is a compatibility summary. NOT_RATED is valid when the evidence is insufficient. Unsupported facts and valuation remain unavailable.',
@@ -783,11 +769,32 @@ export async function generateFullEquityResearch(
   const independentBaseline = Boolean(priorResearch && priorResearch.evidenceAuthority?.version !== 1)
   const previousPacket = priorResearch ? await fetchResearchBaseline(ownerId, 'equity', priorResearch.id) : null
   const packet = await materializeCompanyPacket(symbol, ownerId, new Date(), worldOrigin)
-  const analysisPacket = primaryResearchPacket(packet)
+  const baseline = record(previousPacket)
+  if (baseline.researchCoverage) {
+    packet.researchCoverage = baseline.researchCoverage as ResearchCoverage
+    for (const document of packet.researchCoverage.documents) {
+      if (!packet.sources.some(source => source.id === document.sourceId)) packet.sources.push({id:document.sourceId,label:document.url.split('/').at(-1) || 'Company research document',url:document.url,source:document.quality,asOf:document.publishedAt ?? document.capturedAt})
+    }
+    // Freeze the reused coverage on this new packet even when no report is regenerated.
+    const reused = await supabase.from('company_packets').update({packet,source_ids:packet.sources.map(s=>s.id)}).eq('id',packet.id).eq('owner_id',ownerId)
+    if (reused.error) throw new Error(`Unable to persist reused research coverage: ${reused.error.message}`)
+  }
+  let analysisPacket = primaryResearchPacket(packet)
   const needsIndependent = needsIndependentResearch(priorResearch, previousPacket)
   const refresh = await recordResearchRefresh({ownerId,instrument:'equity',packet:analysisPacket,priorPacket:needsIndependent ? null : previousPacket ? primaryResearchPacket(previousPacket as object) : null,prior:needsIndependent ? null : priorResearch,reason:needsIndependent ? 'Initial independent primary-evidence coverage; legacy World context excluded' : reason,conditionsChanged: /kill|entry|invalidation/i.test(reason)})
+  if (record(analysisPacket).researchRefresh) Object.assign(packet,{researchRefresh:record(analysisPacket).researchRefresh})
   if (priorResearch && refresh.kind !== 'full_research') { await onProgress?.(100, `Evidence ${refresh.kind}; retained research v${priorResearch.version}`); return priorResearch }
   await onProgress?.(45, 'Company packet assembled')
+  packet.researchCoverage = await collectCompanyResearchCoverage(packet,{onProgress})
+  for (const document of packet.researchCoverage.documents) {
+    if (!packet.sources.some(source => source.id === document.sourceId)) packet.sources.push({id:document.sourceId,label:document.url.split('/').at(-1) || 'Company research document',url:document.url,source:document.quality,asOf:document.publishedAt ?? document.capturedAt})
+  }
+  packet.generatedAt = new Date().toISOString()
+  const persisted = await supabase.from('company_packets').update({packet,source_ids:packet.sources.map(s=>s.id),generated_at:packet.generatedAt}).eq('id',packet.id).eq('owner_id',ownerId)
+  if (persisted.error) throw new Error(`Unable to freeze research coverage: ${persisted.error.message}`)
+  // Stored capture remains complete. Pass bounded passages, including every verified
+  // topic quote, to synthesis so long filings cannot displace product evidence.
+  analysisPacket = primaryResearchPacket({...packet,sources:packet.sources.filter(s=>readableCompanySourceIds(packet).includes(s.id)),researchDocuments:undefined,researchCoverage:{...packet.researchCoverage,documents:packet.researchCoverage.documents.map(d=>({...d,text:d.text ? [d.text.slice(0,12_000),...packet.researchCoverage!.topics.flatMap(t=>t.quotes.filter(q=>q.sourceId===d.sourceId).map(q=>q.quote))].join('\n') : null}))}})
   const previousMarketModel = await fetchLatestCompanyMarketModel(ownerId, symbol)
   const priorMarketModel = previousMarketModel?.evidenceAuthority?.version === 1 ? previousMarketModel : null
   await onProgress?.(50, 'Preparing one research and business-model generation')
@@ -799,7 +806,7 @@ export async function generateFullEquityResearch(
     const bundle = await runCodexJson({
       prompt: `Produce research and its company market model together in one response. Build marketModel first from primary evidence, then write research with that causal representation. This model is a compatibility projection of the same generation, never new evidence.\n${companyMarketModelPrompt(analysisPacket, priorMarketModel, reason)}\n${researchPrompt(analysisPacket, priorMarketModel, independentBaseline ? null : priorResearch, reason)}`,
       schemaPath: 'schemas/company-research-bundle.schema.json',
-      validate: value => { const v=record(value); return {research:validateEquityResearch(v.research, packet.sources.map(s=>s.id), packet.outcomeFeedback),marketModel:validateCompanyMarketModel(v.marketModel,new Set(packet.sources.map(s=>s.id)))} },
+      validate: value => { const v=record(value); return {research:validateEquityResearch(v.research, readableCompanySourceIds(packet), packet.outcomeFeedback, packet.researchCoverage),marketModel:validateCompanyMarketModel(v.marketModel,new Set(readableCompanySourceIds(packet)))} },
       timeoutMs: 20 * 60 * 1_000,
     })
     const marketModel = await materializeCompanyMarketModel(packet, ownerId, reason, {data: bundle.data.marketModel, metadata: bundle.metadata})
@@ -813,11 +820,13 @@ export async function generateFullEquityResearch(
       const rank = {SELL:0,NOT_RATED:1,HOLD:2,BUY:3}
       result.data.revision = {priorVersion:priorResearch.version,opinionChange:result.data.formalRating === 'NOT_RATED' || priorResearch.formalRating === 'NOT_RATED' ? 'initial' : rank[result.data.formalRating] > rank[priorResearch.formalRating] ? 'more_constructive' : rank[result.data.formalRating] < rank[priorResearch.formalRating] ? 'less_constructive' : 'unchanged',summary:'Reconstructed from primary evidence without legacy World conclusions; differences below are a post-generation comparison, not an inferred economic outcome.',changes}
     }
-    const content = { ...result.data, reason, evidenceAuthority: PRIMARY_RESEARCH_AUTHORITY, worldContextOrigin: analysisPacket.worldOrigin ?? null }
+    const coverageDiagnostics = researchCoverageDiagnostics(packet.researchCoverage)
+    const content = { ...result.data, coverageDiagnostics, reason, evidenceAuthority: PRIMARY_RESEARCH_AUTHORITY, worldContextOrigin: analysisPacket.worldOrigin ?? null }
     await publishResearchVersion({kind:'equity',id:noteRecord.id,content,sources:packet.sources,metadata:result.metadata,generatedAt,extra:{company_market_model_id:marketModel.id}})
-    await onProgress?.(100, 'Research complete')
+    await onProgress?.(100, `Research complete; coverage ${coverageDiagnostics.status}, ${coverageDiagnostics.attempts} passes, ${Math.round(coverageDiagnostics.durationMs/1000)} seconds`)
     const note: EquityResearchNote = {
       id: noteRecord.id,
+      coverageDiagnostics,
       companyMarketModelId: marketModel.id,
       symbol,
       version,
@@ -854,6 +863,8 @@ function normalizeResearch(row: Record<string, unknown>): EquityResearchNote {
     symbol: String(row.symbol),
     version: Number(row.version),
     status: row.status as EquityResearchNote['status'],
+    coverageDiagnostics: content.coverageDiagnostics as EquityResearchNote['coverageDiagnostics'] ?? null,
+    coverageReview: content.coverageReview as ResearchCoverageReview | undefined ?? null,
     feedbackReview: content.feedbackReview as FeedbackReview | undefined ?? null,
     evidenceAuthority: content.evidenceAuthority as EquityResearchNote['evidenceAuthority'],
     advice: readResearchAdvice(content.advice),
