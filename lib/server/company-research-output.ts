@@ -16,6 +16,9 @@ export function companyResearchOutputSchema(template: Schema, packet: CompanyPac
     for(const [key,child] of Object.entries(value)){
       if(key==='sourceIds' && child && typeof child==='object'){
         const field=object(child)
+        // Shared array definitions are constrained at their definition; adding
+        // items beside a $ref is rejected by the native structured-output API.
+        if(field.$ref)continue
         field.items={$ref:'#/$defs/capturedSourceId'}
         if(!allowed.length)field.maxItems=0
       } else restrictSources(child)

@@ -174,5 +174,8 @@ test('generation schema constrains citations and partial advice before synthesis
  assert.equal(at(schema,[...root,'advice','properties','evidenceSufficiency','properties','sourceIds','minItems']),1)
  assert.deepEqual(at(schema,[...root,'advice','properties','evidenceSufficiency','properties','sourceIds','items']),{$ref:'#/$defs/capturedSourceId'})
  assert.deepEqual(at(schema,['$defs','capturedSourceId','enum']),['primary'])
+ assert.deepEqual(at(schema,['$defs','sourceIds','items']),{$ref:'#/$defs/capturedSourceId'})
+ function refs(value:unknown):void{if(!value||typeof value!=='object')return;const fields=value as Record<string,unknown>;if(fields.$ref)assert.deepEqual(Object.keys(fields),['$ref']);for(const child of Object.values(fields))refs(child)}
+ refs(schema)
  assert.equal(at(template,[...root,'advice','properties','evidenceSufficiency','properties','sourceIds','items','enum']),undefined)
 })
