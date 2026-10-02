@@ -41,7 +41,8 @@ export async function collectCompanyResearchCoverage(packet:CompanyPacket,option
     try{
       const result=await discover(attempt?`${base}\nFOCUSED RETRY: Keep the original topic IDs and list exactly these topics; resolve decisive gaps only. Prior coverage: ${JSON.stringify(topics)}. Fetch budget remaining: ${10-additionalCount}.` : base,attempt?140_000:300_000)
       generation.push(result.metadata)
-      for(const topic of result.data.topics){if(attempt&&!discoveredById.has(topic.id))continue;discoveredById.set(topic.id,topic)}
+      const existingTopicIds=new Set(discoveredById.keys())
+      for(const topic of result.data.topics){if(attempt&&existingTopicIds.size&&!existingTopicIds.has(topic.id))continue;discoveredById.set(topic.id,topic)}
       for(const source of result.data.sources){
         if(Date.now()>=deadline){errors.push('Coverage collection stage time limit exhausted');break}
         const cachedIndex=documents.findIndex(d=>d.url===source.url)
@@ -57,7 +58,7 @@ export async function collectCompanyResearchCoverage(packet:CompanyPacket,option
       topics=groundCoverageTopics([...discoveredById.values()],documents)
     }catch(error){errors.push(error instanceof Error?error.message:'Coverage pass failed');const failed=obj(error).metadata;if(failed)generation.push(failed as GenerationMetadata)}
   }
-  const status=topics.length<3?'failed':topics.some(t=>t.unresolvedQuestions.length)?'partial':'complete'
+  const status=topics.length<3?'failed':topics.some(t=>t.unresolvedQuestions.length)||errors.length||documents.some(d=>d.extractionStatus==='failed')?'partial':'complete'
   const result:ResearchCoverage={version:1,status,topics,documents,attempts,durationMs:Date.now()-started,generation,errors}
   console.info(JSON.stringify({event:'company_research_coverage',symbol:packet.symbol,status,attempts,durationMs:result.durationMs,captured:documents.filter(d=>d.extractionStatus==='readable').length,failed:documents.filter(d=>d.extractionStatus==='failed').length,unresolvedTopics:topics.filter(t=>t.unresolvedQuestions.length).map(t=>t.id)}))
   return result
