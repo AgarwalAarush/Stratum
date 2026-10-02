@@ -21,9 +21,10 @@ test('trade review checks owner holdings, refuses excessive fills, and queues am
  context.mock.method(globalThis,'fetch',async(input:RequestInfo|URL)=>{
   const url=new URL(String(input));urls.push(url);const table=url.pathname.split('/').at(-1)
   if(table==='recommendation_versions') return Response.json({id:'rec',symbol:'TSLA',portfolio_id:portfolio,issued_at:new Date(Date.now()-60000).toISOString()})
-  if(table==='portfolios') return Response.json([{id:portfolio,owner_id:owner,name:'Manual',kind:'manual',initial_funds:1000,started_at:'2026-01-01',created_at:'2026-01-01'}])
+  if(table==='portfolios') return Response.json([{id:portfolio,owner_id:owner,name:'Manual',kind:mode==='brokerage'?'brokerage':'manual',initial_funds:1000,started_at:'2026-01-01',created_at:'2026-01-01'}])
   if(table==='portfolio_transactions') return Response.json([{id:'tx',portfolio_id:portfolio,owner_id:owner,action:'buy',symbol:'TSLA',quantity:3,price_per_share:80,fees:0,occurred_at:'2026-01-01',created_at:'2026-01-01',voided_at:null}])
   if(table==='portfolio_confirmations') return Response.json(url.searchParams.get('limit')?null:[])
+  if(table==='brokerage_sync_runs') return Response.json([{portfolio_id:portfolio,captured_at:new Date().toISOString(),brokerage_account_snapshots:[{cash_balance:1000,equity_value:0,total_value:1000}],brokerage_position_snapshots:[]}])
   if(table==='agent_jobs') return Response.json(mode==='review'?{id:'job'}:{id:'job',status:'succeeded',payload})
   if(table==='agent_runs') return Response.json({output:{data:{side:'sell',symbol:'TSLA',quantity:2,price:100,fees:0,missing:[]}}})
   return Response.json([])
@@ -33,5 +34,8 @@ test('trade review checks owner holdings, refuses excessive fills, and queues am
  await assert.rejects(reviewRecommendationTrade(owner,{recommendationId:'rec',instruction:'Sold 4 shares of TSLA at $100',occurredAt:new Date().toISOString()}),/exceeds/)
  const queued=await reviewRecommendationTrade(owner,payload);assert.ok('queued' in queued)
  mode='complete';const completed=await readRecommendationTradeJob(owner,'job');assert.ok(!('queued' in completed));if(!('queued' in completed))assert.equal(completed.reviewer,'Codex worker review')
+ mode='brokerage'
+ const reported=await reviewRecommendationTrade(owner,{...payload,instruction:'Sold 4 shares of TSLA at $100'})
+ assert.ok(!('queued' in reported));if(!('queued' in reported)){assert.equal(reported.heldShares,0);assert.equal(reported.resultingShares,null);assert.equal(reported.brokerage,true)}
  assert.equal(urls.find(url=>url.pathname.endsWith('agent_jobs')&&url.searchParams.get('job_type'))?.searchParams.get('payload->>ownerId'),`eq.${owner}`)
 })

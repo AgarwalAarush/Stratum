@@ -55,7 +55,7 @@ export async function reviewRecommendationTrade(ownerId:string,input:Record<stri
   if(!portfolio) throw new Error('Portfolio could not be verified')
   const trade=parsed as Trade
   const held=portfolio.holdings.find(h=>h.symbol===trade.symbol)?.quantity??0
-  if(trade.action==='sell'&&trade.quantity>held+1e-8) throw new Error(`The report exceeds the recorded holding (${held} shares). Reconcile Portfolio first.`)
+  if(portfolio.dataSource!=='robinhood'&&trade.action==='sell'&&trade.quantity>held+1e-8) throw new Error(`The report exceeds the recorded holding (${held} shares). Reconcile Portfolio first.`)
   trade.previousQuantity=held;trade.previousCash=portfolio.cashBalance
   if(portfolio.account.kind==='manual') {
     const confirmation=await db().from('portfolio_confirmations').select('confirmed_at').eq('owner_id',ownerId).eq('portfolio_id',rec.portfolio_id).order('confirmed_at',{ascending:false}).limit(1).maybeSingle()
@@ -69,7 +69,7 @@ export async function reviewRecommendationTrade(ownerId:string,input:Record<stri
   if(portfolio.account.kind==='manual'&&portfolio.cashBalance+cashChange < -0.01) throw new Error('The purchase exceeds recorded portfolio cash. Reconcile Portfolio first.')
   const review:Review={ownerId,recommendationId:rec.id,portfolioId:rec.portfolio_id,requestId:randomUUID(),expiresAt:Date.now()+15*60000,occurredAt,trade,kind:portfolio.account.kind}
   const payload=Buffer.from(JSON.stringify(review)).toString('base64url')
-  return {token:`${payload}.${sign(payload)}`,trade,occurredAt,reviewer,portfolioName:portfolio.account.name,heldShares:held,resultingShares:held+(trade.action==='buy'?trade.quantity:-trade.quantity),cashChange,brokerage:portfolio.account.kind==='brokerage'}
+  return {token:`${payload}.${sign(payload)}`,trade,occurredAt,reviewer,portfolioName:portfolio.account.name,heldShares:held,resultingShares:portfolio.account.kind==='brokerage'?null:held+(trade.action==='buy'?trade.quantity:-trade.quantity),cashChange,brokerage:portfolio.account.kind==='brokerage'}
 }
 export async function confirmRecommendationTrade(ownerId:string,token:string) {
   const review=readTradeReview(token,ownerId)
