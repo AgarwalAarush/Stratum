@@ -7,7 +7,7 @@ import { classifyResearchRefresh } from '../lib/markets/research-refresh.ts'
 import { gateRecommendation, type DecisionContext, type Recommendation } from '../lib/markets/recommendations.ts'
 import type { CompanyPacket, EquityResearchSection } from '../lib/markets/types.ts'
 import type { ResearchAdvice } from '../lib/markets/research-advice.ts'
-import { companyResearchOutputSchema } from '../lib/server/company-research-output.ts'
+import { companyResearchOutputSchema, completeResearchSourceLedgers } from '../lib/server/company-research-output.ts'
 
 const url='https://ir.example.com/update.html'
 const quote='Cybercab began production and public road testing during the quarter.'
@@ -185,4 +185,21 @@ test('generation schema constrains citations and partial advice before synthesis
  function refs(value:unknown):void{if(!value||typeof value!=='object')return;const fields=value as Record<string,unknown>;if(fields.$ref)assert.deepEqual(Object.keys(fields),['$ref']);for(const child of Object.values(fields))refs(child)}
  refs(schema)
  assert.equal(at(template,[...root,'advice','properties','evidenceSufficiency','properties','sourceIds','items','enum']),undefined)
+})
+
+test('root source ledgers include existing claim citations without dropping invalid IDs',()=>{
+ const input={research:{sourceIds:['base'],sections:[{sourceIds:['quote']}],coverageReview:{topics:[{sourceIds:['quote']}]}},marketModel:{sourceIds:['base'],businessLines:[{sourceIds:['captured','unknown']}],predictions:[{sourceIds:['captured']}]}}
+ const output=completeResearchSourceLedgers(input) as typeof input
+ assert.deepEqual(output.research.sourceIds,['base','quote'])
+ assert.deepEqual(output.marketModel.sourceIds,['base','captured','unknown'])
+ assert.deepEqual(input.marketModel.sourceIds,['base'])
+ assert.deepEqual(completeResearchSourceLedgers({research:{sourceIds:'invalid',sections:[{sourceIds:['quote']}]}}),{research:{sourceIds:'invalid',sections:[{sourceIds:['quote']}]}})
+})
+
+test('explicit coverage mappings materialize section citations without inventing sections',()=>{
+ const input={research:{sourceIds:[],sections:[{id:'growth_drivers',sourceIds:['base']},{id:'valuation',sourceIds:[]}],coverageReview:{topics:[{sectionIds:['growth_drivers'],sourceIds:['verified-quote']},{sectionIds:['missing-section'],sourceIds:['unknown']}]}},marketModel:{sourceIds:[]}}
+ const output=completeResearchSourceLedgers(input) as typeof input
+ assert.deepEqual(output.research.sections,[{id:'growth_drivers',sourceIds:['base','verified-quote']},{id:'valuation',sourceIds:[]}])
+ assert.deepEqual(output.research.sourceIds,['base','verified-quote','unknown'])
+ assert.deepEqual(input.research.sections[0]!.sourceIds,['base'])
 })
