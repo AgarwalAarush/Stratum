@@ -119,3 +119,15 @@ test('partial coverage permits an independently supported existing-position stan
   assert.doesNotThrow(()=>validateCoverageReview(review,coverage,sections,['s'],{evidenceSufficiency:{value:'limited'},newEntryStance:{value:'wait'},existingPositionStance:{value:'retain'}} as ResearchAdvice))
   assert.throws(()=>validateCoverageReview({...review,topics:review.topics.map(t=>({...t,sourceIds:['headline']}))},coverage,sections,['headline']),/unreadable or unrelated/)
 })
+
+test('retry after discovery failure retains all recovered topics and the partial collection state',async()=>{
+  let calls=0
+  const result=await collectCompanyResearchCoverage(packet,{discover:async()=>{if(++calls===1)throw new Error('Temporary search failure');return {data:discovery,metadata}},capture:input=>captureResearchDocument(input,fetchHtml)})
+  assert.equal(calls,2);assert.equal(result.topics.length,3);assert.equal(result.status,'partial');assert.ok(result.errors.includes('Temporary search failure'));assert.equal(hasDecisiveCoverageGap(result),false)
+})
+
+test('failed intervening 8-K captures remain in the packet ledger',async()=>{
+  const filings=['financing','unreadable','earnings'].map(name=>({url:`https://sec.gov/${name}.htm`,title:name,form:'8-K',publishedAt:'2026-07-22'}))
+  const result=await collectSecFilingDocuments(filings,input=>captureResearchDocument(input,async()=>input.url.includes('unreadable')?new Response('',{status:403}):new Response(`<html><body>${(input.url.includes('earnings')?'Item 2.02 Results of Operations and Financial Condition. ':'Financing facilities. ').repeat(8)}</body></html>`,{headers:{'content-type':'text/html'}})))
+  assert.equal(result.documents.find(d=>d.url.includes('unreadable'))?.extractionStatus,'failed');assert.match(result.filings[2]!.excerpt!,/Item 2.02/)
+})
