@@ -31,6 +31,7 @@ import { isEtfInstrument } from './etf-research.ts'
 import { companyMarketModelPrompt, fetchLatestCompanyMarketModel, validateCompanyMarketModel, materializeCompanyMarketModel } from './company-market-model.ts'
 import { collectSecFilingDocuments } from './research-documents.ts'
 import { collectCompanyResearchCoverage } from './company-research-coverage.ts'
+import { withCompanyResearchSchema } from './company-research-output.ts'
 import { RESEARCH_COVERAGE_RULES, researchCoverageDiagnostics, readableCompanySourceIds, validateCoverageReview, type ResearchDocument, type ResearchCoverage, type ResearchCoverageReview } from '../markets/research-coverage.ts'
 
 const RESEARCH_SECTION_IDS: EquityResearchSectionId[] = [
@@ -733,7 +734,7 @@ export function researchPrompt(
     'Kill Criteria must contain 3-5 specific numeric thresholds or observable events—not vibes.',
     'When evidence is unavailable (TAM, 13F, short interest, options, geographic mix, unit economics, etc.), say “Not available in the current packet” and explain what source would be required.',
     RESEARCH_COVERAGE_RULES,
-    'When coverageReview is required, every topic must be substantively discussed in the mapped report sections, including facts that strengthen the opposing case. Supporting source IDs must have readable content. Prior judgments are revisable and do not override new product evidence.',
+    'When coverageReview is required, every topic must be substantively discussed in the mapped report sections, including facts that strengthen the opposing case. A coverageReview row may cite only that topic’s verified sourceIds; when this list is empty, use status unresolved and an empty row sourceIds array. Its report sections may still analyze other readable packet evidence. Each advice dimension requires at least one readable packet source ID, a substantive reason, and an observable change condition, including evidenceSufficiency: cite the available evidence whose limitations you are assessing. Prior judgments are revisable and do not override new product evidence.',
     FEEDBACK_RULES,
     RESEARCH_ADVICE_RULES,
     'Formal rating is a compatibility summary. NOT_RATED is valid when the evidence is insufficient. Unsupported facts and valuation remain unavailable.',
@@ -808,12 +809,12 @@ export async function generateFullEquityResearch(
 
   try {
     await onProgress?.(72, 'Synthesizing 15-section analysis')
-    const bundle = await runCodexJson({
+    const bundle = await withCompanyResearchSchema(packet, schemaPath => runCodexJson({
       prompt: companyResearchBundlePrompt(analysisPacket, priorMarketModel, independentBaseline ? null : priorResearch, reason),
-      schemaPath: 'schemas/company-research-bundle.schema.json',
+      schemaPath,
       validate: value => { const v=record(value); return {research:validateEquityResearch(v.research, readableCompanySourceIds(packet), packet.outcomeFeedback, packet.researchCoverage),marketModel:validateCompanyMarketModel(v.marketModel,new Set(readableCompanySourceIds(packet)))} },
       timeoutMs: 20 * 60 * 1_000,
-    })
+    }))
     const marketModel = await materializeCompanyMarketModel(packet, ownerId, reason, {data: bundle.data.marketModel, metadata: bundle.metadata})
     const result = {data: bundle.data.research, metadata: bundle.metadata}
     await onProgress?.(90, 'Validating and publishing research')

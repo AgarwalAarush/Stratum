@@ -7,6 +7,7 @@ import { classifyResearchRefresh } from '../lib/markets/research-refresh.ts'
 import { gateRecommendation, type DecisionContext, type Recommendation } from '../lib/markets/recommendations.ts'
 import type { CompanyPacket, EquityResearchSection } from '../lib/markets/types.ts'
 import type { ResearchAdvice } from '../lib/markets/research-advice.ts'
+import { companyResearchOutputSchema } from '../lib/server/company-research-output.ts'
 
 const url='https://ir.example.com/update.html'
 const quote='Cybercab began production and public road testing during the quarter.'
@@ -152,4 +153,26 @@ test('combined synthesis includes its bounded packet once',async()=>{
  const large={...packet,company:{companyName:'Unique issuer',description:'x'.repeat(400_000)}} as CompanyPacket
  const prompt=companyResearchBundlePrompt(large,null,null,'manual')
  assert.ok(prompt.length<600_000);assert.equal(prompt.split('Unique issuer').length-1,1)
+})
+
+test('generation schema constrains citations and partial advice before synthesis',async()=>{
+ const {readFile}=await import('node:fs/promises')
+ const template=JSON.parse(await readFile(new URL('../schemas/company-research-bundle.schema.json',import.meta.url),'utf8'))
+ const doc={sourceId:'primary',url,publishedAt:null,capturedAt:'2026-10-01',extractionStatus:'readable' as const,contentHash:'hash',text:quote,error:null,quality:'primary' as const}
+ const coverage:ResearchCoverage={version:1,status:'partial',topics:groundCoverageTopics(topics,[doc]).map((t,i)=>i===0?{...t,sourceIds:[],quotes:[],unresolvedQuestions:['No verified passage supports this decisive topic.']}:t),documents:[doc],attempts:2,durationMs:1,generation:[],errors:[]}
+ const input={...packet,sources:[{id:'primary',url,label:'Captured document',source:'primary',asOf:'2026-10-01'},{id:'headline',url:'https://news.example.com/lead',label:'Discovery only',source:'news',asOf:'2026-10-01'}],researchEvidence:[{id:'headline',url:'https://news.example.com/lead',kind:'growth_driver' as const,title:'Discovery only',source:'news',publishedAt:'2026-10-01',excerpt:null,quality:'discovery' as const}],researchCoverage:coverage}
+ const schema=companyResearchOutputSchema(template,input)
+ const at=(value:unknown,path:string[]):unknown=>path.reduce((v,key)=>(v as Record<string,unknown>)[key],value)
+ const root=['properties','research','properties']
+ const rows=at(schema,[...root,'coverageReview','properties','topics','items','anyOf']) as unknown[]
+ assert.equal(rows.length,3)
+ assert.deepEqual(at(rows[0],['properties','topicId','enum']),['autonomy'])
+ assert.equal(at(rows[0],['properties','sourceIds','maxItems']),0)
+ assert.deepEqual(at(rows[0],['properties','status','enum']),['unresolved'])
+ assert.deepEqual(at(rows[1],['properties','sourceIds','items','enum']),['primary'])
+ assert.deepEqual(at(schema,[...root,'advice','properties','evidenceSufficiency','properties','value','enum']),['limited','insufficient'])
+ assert.equal(at(schema,[...root,'advice','properties','evidenceSufficiency','properties','sourceIds','minItems']),1)
+ assert.deepEqual(at(schema,[...root,'advice','properties','evidenceSufficiency','properties','sourceIds','items']),{$ref:'#/$defs/capturedSourceId'})
+ assert.deepEqual(at(schema,['$defs','capturedSourceId','enum']),['primary'])
+ assert.equal(at(template,[...root,'advice','properties','evidenceSufficiency','properties','sourceIds','items','enum']),undefined)
 })
