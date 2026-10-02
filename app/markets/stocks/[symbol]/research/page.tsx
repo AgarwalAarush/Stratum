@@ -360,7 +360,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
   const coverage = researchPacket?.researchCoverage
   const chartPoints = financialPoints(packet)
   const estimates = estimateRows(packet)
-  const sources = packet?.sources.filter((source) => research?.sourceIds.includes(source.id)) ?? []
+  const sources = (researchPacket ?? packet)?.sources.filter((source) => research?.sourceIds.includes(source.id)) ?? []
   const confidence = research && research.confidence <= 1 ? research.confidence * 100 : research?.confidence
   const scenarioSections = research?.sections.filter((section) => SCENARIO_SECTION_IDS.has(section.id)) ?? []
   const sectionsById = new Map(research?.sections.map((section) => [section.id, section]) ?? [])
