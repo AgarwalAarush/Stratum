@@ -75,7 +75,9 @@
                   "type": "string"
                 },
                 "quote": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 20,
+                  "maxLength": 1500
                 }
               }
             }
