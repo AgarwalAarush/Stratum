@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAllowedMarketUser } from '@/lib/auth/markets-session'
-import { reviewRecommendationTrade, confirmRecommendationTrade } from '@/lib/server/recommendation-trade'
+import { reviewRecommendationTrade, confirmRecommendationTrade, readRecommendationTradeJob } from '@/lib/server/recommendation-trade'
 export const dynamic='force-dynamic'
 export const maxDuration=60
 export async function POST(request:Request) {
@@ -14,4 +14,10 @@ export async function POST(request:Request) {
     if(!result) throw new Error('Choose review or confirm')
     return NextResponse.json(result)
   } catch(error) {return NextResponse.json({error:error instanceof Error?error.message:'Unable to review trade'},{status:400})}
+}
+
+export async function GET(request:Request) {
+ const user=await getAllowedMarketUser()
+ if(!user) return NextResponse.json({error:'Unauthorized'},{status:401})
+ try{return NextResponse.json(await readRecommendationTradeJob(user.id,new URL(request.url).searchParams.get('job')??''),{headers:{'Cache-Control':'private, no-store'}})}catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Review unavailable'},{status:400})}
 }

@@ -67,6 +67,7 @@ import { reconcileWorldRepositoryProjection } from './world-projection.ts'
 import { findExtraordinaryBiotechMovers } from './biotech-catalysts.ts'
 
 export const AGENT_JOB_TYPES = [
+  'review-recommendation-trade',
   'generate-daily-recommendations',
   'evaluate-recommendation-outcomes',
   'review-recommendation-cohort',
@@ -424,6 +425,7 @@ export function shouldRefreshClosedMarket(
  * behind a backlog of routine market-refresh work, while it remains only
  * operational telemetry—not admission authority. */
 export function agentJobPriority(jobType: AgentJobType): number {
+  if(jobType==='review-recommendation-trade') return 5
   if (jobType === 'sync-robinhood-portfolio') return 6
   if (jobType === 'send-investment-newsletter') return 5
   if (jobType === 'generate-daily-recommendations') return 10
@@ -776,6 +778,13 @@ async function executeJob(
   job: AgentJobRecord,
   reportProgress: (progress: number, phase: string) => Promise<void> = async () => {},
 ): Promise<unknown> {
+  if (job.job_type === 'review-recommendation-trade') {
+    await reportProgress(15,'Reading your completed-trade report')
+    const {extractReportedTrade}=await import('./trade-extraction.ts')
+    const result=await extractReportedTrade(String(job.payload.instruction??''))
+    await reportProgress(100,'Trade details extracted for owner confirmation')
+    return result
+  }
   if (job.job_type === 'generate-daily-recommendations') {
     await captureInvestmentMacro().catch(error => console.warn(JSON.stringify({ event: 'investment_macro_capture_failed', error: error instanceof Error ? error.message : String(error) })))
     const now = new Date(), ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : undefined, editionKey = typeof job.payload.editionKey === 'string' ? job.payload.editionKey : 'daily'
