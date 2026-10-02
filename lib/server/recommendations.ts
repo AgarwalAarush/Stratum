@@ -558,7 +558,7 @@ export async function assembleDecisionContext(
     date,
     cutoff,
     policy: RECOMMENDATION_POLICY,
-    contracts: { forecast: 2 },
+    contracts: { forecast: 2, companyStory: 1 },
     editionKey,
     codeVersion:
       process.env.VERCEL_GIT_COMMIT_SHA ??

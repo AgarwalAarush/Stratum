@@ -30,4 +30,7 @@ test('review instructions distinguish frozen research advice from the decision s
   assert.match(RECOMMENDATION_REVIEW_RULES,/Do not require research advice fields on recommendation objects/)
   assert.ok(!RECOMMENDATION_REVIEW_RULES.includes('Return advice.version'))
   assert.match(RECOMMENDATION_REVIEW_RULES,/Reject Buy\/Add with unresolved decisive coverage/)
+  assert.match(RECOMMENDATION_REVIEW_RULES,/Research is an unresolved capital decision, not a substitute for an analyst judgment/)
+  assert.match(RECOMMENDATION_REVIEW_RULES,/ahead, behind, or differentiated/)
+  assert.match(RECOMMENDATION_REVIEW_RULES,/Maintain the existing evidence, sizing and action gates/)
 })
