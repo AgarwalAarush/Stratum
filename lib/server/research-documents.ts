@@ -43,10 +43,16 @@ export async function captureResearchDocument(input: {url: string; sourceId: str
       result.url=current.toString();result.contentHash=createHash('sha256').update(body).digest('hex')
       if (!extracted.complete || extracted.text.length < 100) throw new Error('Document text extraction failed or empty')
       // Preserve the captured text; synthesis can select passages without losing topics at the end.
-      result.text=extracted.text;result.extractionStatus='readable'
       const companyHost=input.companyWebsite ? new URL(input.companyWebsite).hostname.replace(/^www\./,'') : null
       result.quality=current.hostname==='sec.gov'||current.hostname.endsWith('.sec.gov')?'regulatory':companyHost&&(current.hostname===companyHost||current.hostname.endsWith(`.${companyHost}`))?'primary':'independent'
-      if(type.includes('html')){const {document}=parseHTML(html);result.links=Array.from(document.querySelectorAll('a[href]')).flatMap(a=>{try{return [{url:new URL(a.getAttribute('href')!,current).toString(),label:a.textContent?.trim()??''}]}catch{return []}})}
+      if(type.includes('html')){
+        const {document}=parseHTML(html)
+        result.links=Array.from(document.querySelectorAll('a[href]')).flatMap(a=>{try{return [{url:new URL(a.getAttribute('href')!,current).toString(),label:a.textContent?.trim()??''}]}catch{return []}})
+        document.querySelectorAll('script,style,noscript,svg,nav,footer,header,title,h1,h2,h3,h4,h5,h6').forEach(node=>node.remove())
+        const bodyText=(document.querySelector('article,main')?.textContent??document.body?.textContent??'').replace(/\s+/g,' ').trim()
+        if(bodyText.length<100)throw new Error('Document contains only a headline or insufficient body text')
+      }
+      result.text=extracted.text;result.extractionStatus='readable'
       return result
     }
     throw new Error('Too many document redirects')

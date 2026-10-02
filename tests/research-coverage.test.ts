@@ -59,6 +59,13 @@ test('failed discovery records explicit failure after at most one retry',async()
   assert.equal(calls,2);assert.equal(result.status,'failed');assert.equal(result.topics.length,0);assert.equal(result.errors.length,2)
 })
 
+test('a long HTML headline alone remains a failed discovery capture',async()=>{
+ const headline=quote.repeat(4)
+ const doc=await captureResearchDocument({url,sourceId:'headline-page',publishedAt:null},async()=>new Response(`<html><body><article><h1>${headline}</h1></article></body></html>`,{headers:{'content-type':'text/html'}}))
+ assert.equal(doc.extractionStatus,'failed');assert.equal(doc.text,null);assert.match(doc.error!,/headline/)
+ assert.ok(doc.contentHash)
+})
+
 test('captured commercial evidence still leaves unit economics unresolved',()=>{
   const d={sourceId:'primary',url,publishedAt:null,capturedAt:'2026-10-01',extractionStatus:'readable' as const,contentHash:'hash',text:quote,error:null,quality:'primary' as const}
   const grounded=groundCoverageTopics(topics.map(t=>({...t,unresolvedQuestions:['Unit economics remain undisclosed.']})),[d])
