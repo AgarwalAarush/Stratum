@@ -131,3 +131,25 @@ test('failed intervening 8-K captures remain in the packet ledger',async()=>{
   const result=await collectSecFilingDocuments(filings,input=>captureResearchDocument(input,async()=>input.url.includes('unreadable')?new Response('',{status:403}):new Response(`<html><body>${(input.url.includes('earnings')?'Item 2.02 Results of Operations and Financial Condition. ':'Financing facilities. ').repeat(8)}</body></html>`,{headers:{'content-type':'text/html'}})))
   assert.equal(result.documents.find(d=>d.url.includes('unreadable'))?.extractionStatus,'failed');assert.match(result.filings[2]!.excerpt!,/Item 2.02/)
 })
+
+test('targeted retry verifies exact captured passages instead of unsupported paraphrases',async()=>{
+ let calls=0
+ const result=await collectCompanyResearchCoverage(packet,{discover:async prompt=>{
+  calls++;const correct=calls>1&&prompt.includes(quote)
+  return {data:{...discovery,topics:topics.map(t=>({...t,evidence:[{url,quote:correct?quote:'An unsupported paraphrase about autonomous profitability.'}]}))},metadata}
+ },capture:input=>captureResearchDocument(input,fetchHtml)})
+ assert.equal(calls,2);assert.equal(result.topics.length,3);assert.ok(result.topics.every(t=>t.sourceIds.length===1));assert.ok(result.documents.every(d=>!('links' in d)))
+})
+
+test('combined synthesis schema resolves every reference from its root',async()=>{
+ const {readFile}=await import('node:fs/promises');const schema=JSON.parse(await readFile(new URL('../schemas/company-research-bundle.schema.json',import.meta.url),'utf8'))
+ function inspect(value:unknown):void {if(!value||typeof value!=='object')return;for(const [key,v]of Object.entries(value)){if(key==='$ref'){let target:unknown=schema;for(const part of String(v).slice(2).split('/'))target=(target as Record<string,unknown>)?.[part.replace(/~1/g,'/').replace(/~0/g,'~')];assert.ok(target,`Unresolved schema reference ${v}`)}else inspect(v)}}
+ inspect(schema)
+})
+
+test('combined synthesis includes its bounded packet once',async()=>{
+ const {companyResearchBundlePrompt}=await import('../lib/server/company-research.ts')
+ const large={...packet,company:{companyName:'Unique issuer',description:'x'.repeat(400_000)}} as CompanyPacket
+ const prompt=companyResearchBundlePrompt(large,null,null,'manual')
+ assert.ok(prompt.length<600_000);assert.equal(prompt.split('Unique issuer').length-1,1)
+})

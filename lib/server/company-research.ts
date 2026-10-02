@@ -686,6 +686,7 @@ export function researchPrompt(
   marketModel: CompanyMarketModel | null,
   priorResearch: EquityResearchNote | null,
   reason: string,
+  includePacket = true,
 ): string {
   const revisionInstructions = priorResearch
     ? [
@@ -741,8 +742,12 @@ export function researchPrompt(
     '',
     marketModel ? `PRIOR COMPANY MARKET MODEL VERSION ${marketModel.version}:\n${JSON.stringify(marketModel)}` : 'Build the business-model representation in the same response before writing research.',
     '',
-    JSON.stringify(packet),
+    includePacket ? JSON.stringify(packet) : 'COMPANY PACKET: use the same frozen packet JSON supplied above for the market model.',
   ].join('\n')
+}
+
+export function companyResearchBundlePrompt(packet: CompanyPacket, priorModel: CompanyMarketModel | null, priorResearch: EquityResearchNote | null, reason: string): string {
+  return `Produce research and its company market model together in one response. Build marketModel first from primary evidence, then write research with that causal representation. This model is a compatibility projection of the same generation, never new evidence.\n${companyMarketModelPrompt(packet, priorModel, reason)}\n${researchPrompt(packet, priorModel, priorResearch, reason, false)}`
 }
 
 export async function generateFullEquityResearch(
@@ -804,7 +809,7 @@ export async function generateFullEquityResearch(
   try {
     await onProgress?.(72, 'Synthesizing 15-section analysis')
     const bundle = await runCodexJson({
-      prompt: `Produce research and its company market model together in one response. Build marketModel first from primary evidence, then write research with that causal representation. This model is a compatibility projection of the same generation, never new evidence.\n${companyMarketModelPrompt(analysisPacket, priorMarketModel, reason)}\n${researchPrompt(analysisPacket, priorMarketModel, independentBaseline ? null : priorResearch, reason)}`,
+      prompt: companyResearchBundlePrompt(analysisPacket, priorMarketModel, independentBaseline ? null : priorResearch, reason),
       schemaPath: 'schemas/company-research-bundle.schema.json',
       validate: value => { const v=record(value); return {research:validateEquityResearch(v.research, readableCompanySourceIds(packet), packet.outcomeFeedback, packet.researchCoverage),marketModel:validateCompanyMarketModel(v.marketModel,new Set(readableCompanySourceIds(packet)))} },
       timeoutMs: 20 * 60 * 1_000,

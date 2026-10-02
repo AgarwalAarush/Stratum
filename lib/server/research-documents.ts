@@ -3,7 +3,7 @@ import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 import { parseHTML } from 'linkedom'
 import { extractedText } from './world-source-collector.ts'
-import type { ResearchDocument } from '../markets/research-coverage.ts'
+import { researchDocumentEvidence, type ResearchDocument } from '../markets/research-coverage.ts'
 
 function privateAddress(ip: string): boolean {
   return /^(?:0\.|10\.|127\.|169\.254\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|::|f[cd]|fe[89ab])/i.test(ip) || ip.includes(':') && !/^2[0-9a-f]{3}:/i.test(ip)
@@ -62,15 +62,15 @@ export async function collectSecFilingDocuments<T extends {url:string;form?:stri
   let earningsFound=false
   for(const {f,i} of eightKs){
     const doc=await capture({url:f.url,sourceId:`sec-filing-${i+1}`,publishedAt:f.publishedAt})
-    documents.push(doc)
+    documents.push(researchDocumentEvidence(doc))
     if(doc.text && /Item\s*2\.02|Results of Operations and Financial Condition/i.test(doc.text)){
       selected.add(i);earningsFound=true
-      const exhibits=doc.links.filter(l=>/99[.\-_]?\d|ex(?:hibit)?99/i.test(l.label+' '+l.url)).slice(0,3)
-      for(const [n,link]of exhibits.entries()){const attachment=await capture({url:link.url,sourceId:`sec-filing-${i+1}-exhibit-${n+1}`,publishedAt:f.publishedAt});documents.push(attachment)}
+      const exhibits=[...new Map(doc.links.filter(l=>/99[.\-_]?\d|ex(?:hibit)?99/i.test(l.label+' '+l.url)).map(l=>[l.url.split('#')[0],{...l,url:l.url.split('#')[0]!}])).values()].slice(0,3)
+      for(const [n,link]of exhibits.entries()){const attachment=await capture({url:link.url,sourceId:`sec-filing-${i+1}-exhibit-${n+1}`,publishedAt:f.publishedAt});documents.push(researchDocumentEvidence(attachment))}
       break
     }
   }
   if(!earningsFound)documents.push({sourceId:'sec-earnings-update',url:filings[0]?.url??'https://www.sec.gov',publishedAt:null,capturedAt:new Date().toISOString(),extractionStatus:'failed',contentHash:null,text:null,error:'Latest earnings 8-K could not be identified in recent filings',quality:'regulatory'})
-  for(const i of selected){if(documents.some(d=>d.sourceId===`sec-filing-${i+1}`))continue;documents.push(await capture({url:filings[i]!.url,sourceId:`sec-filing-${i+1}`,publishedAt:filings[i]!.publishedAt}))}
+  for(const i of selected){if(documents.some(d=>d.sourceId===`sec-filing-${i+1}`))continue;documents.push(researchDocumentEvidence(await capture({url:filings[i]!.url,sourceId:`sec-filing-${i+1}`,publishedAt:filings[i]!.publishedAt})))}
   return {filings:filings.map((f,i)=>({...f,excerpt:documents.find(d=>d.sourceId===`sec-filing-${i+1}`)?.text??null})),documents}
 }
