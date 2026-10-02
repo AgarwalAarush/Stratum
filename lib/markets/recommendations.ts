@@ -70,7 +70,7 @@ export type DecisionContext = {
   policy: string
   editionKey?: string
   codeVersion: string
-  contracts?: { forecast: 2 }
+  contracts?: { forecast?: 2; companyStory?: 1 }
   portfolio: unknown
   names: DecisionName[]
   evidence: EvidenceRef[]

@@ -13,4 +13,6 @@ test('equivalent capture IDs and repricing do not change semantic decision input
  assert.notEqual(decisionContextSignature({...next,names:[{...next.names[0],quantity:20}]}),decisionContextSignature(context))
  assert.equal(renewUnchangedRecommendation(recommendation,context,{...next,names:[{...next.names[0],quote:{...next.names[0].quote,price:140}}]}),null)
  assert.equal(renewUnchangedRecommendation(recommendation,context,{...next,cutoff:'2026-10-07T21:00:00Z'}),null)
+ // A new editorial contract must regenerate judgment, not renew old prose.
+ assert.equal(renewUnchangedRecommendation(recommendation,context,{...next,contracts:{companyStory:1}}),null)
 })

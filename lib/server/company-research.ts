@@ -1,3 +1,4 @@
+import { COMPANY_STORY_RULES } from '../markets/company-story.ts'
 import { feedbackSources, loadResearchFeedback } from './research-feedback.ts'
 import { needsIndependentResearch, primaryResearchPacket, PRIMARY_RESEARCH_AUTHORITY } from '../markets/evidence-authority.ts'
 import { FEEDBACK_RULES, validateFeedbackReview, type ResearchFeedback, type FeedbackReview } from '../markets/research-feedback.ts'
@@ -708,6 +709,8 @@ export function researchPrompt(
     'The report must explain the model’s causal chain from external change through the binding constraint or enabling capability, customer behavior, company volume/pricing/mix, monetization, and shareholder outcome. If a link is weak or unverified, make that weakness decision-relevant rather than silently closing the gap.',
     'CompanyPacket.researchEvidence is a bounded company-and-industry research pack. It is useful for framing product, AI, market, competition, and moat—but a discovery item is only a lead, independent reporting needs attribution, and primary or regulatory evidence is preferred for company claims and numbers. Do not elevate an article excerpt into an unsupported fact.',
     ...revisionInstructions,
+    COMPANY_STORY_RULES,
+    'An evidence-limited financial rating does not replace a company opinion. State your best supported business view, the most likely operating outcome, the specific competitive advantage or deficit, and what would reverse that judgment. Distinguish unknown facts from bounded analyst inference; do not default to undetermined when the packet supports a qualitative conclusion. Snapshot and investmentThesis must lead with the product, customer and competitive outcome; funding and valuation follow. Growth Drivers must describe concrete technical, clinical, regulatory, manufacturing and distribution obstacles and the next milestone for each material product, with management targets separated from analyst horizons.',
     'Take a position, defend it with structured evidence, and state exactly what would prove it wrong. Commit or omit; do not use empty hedging language.',
     'Keep formal BUY/HOLD/SELL separate from the practical entry action.',
     'The investmentThesis field must be a concise affirmative, falsifiable ownership belief—not a question. In one or two sentences, state what the company can become or sustain, why the market is wrong now, and the 1-2 year mechanism that can close the gap. Do not merely restate the rating, fair value, or key debate.',

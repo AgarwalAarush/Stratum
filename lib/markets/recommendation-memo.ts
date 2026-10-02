@@ -10,9 +10,21 @@ export function frozenDecisionMemo(context: Pick<DecisionContext,'names'|'eviden
   return context.names.map(name => {
     const content = object(object(name.research).content)
     const sections = Array.isArray(content.sections) ? content.sections.map(object) : []
-    const selected = sections.filter(s => /investment|financial|growth|valuation|risk|bull|base case|bear|verdict|kill/i.test(text(s.title))).slice(0,10)
+    const companyStory = [
+      {id:'business_model_and_moat',title:'What the company is building',legacy:/business model|business & moat/i},
+      {id:'market_and_competition',title:'Where it stands against competitors',legacy:/market.*competition|competitive landscape/i},
+      {id:'growth_drivers',title:'Roadmap, milestones and roadblocks',legacy:/growth drivers/i},
+      {id:'portfolio_exposure',title:'What the fund owns',legacy:/portfolio exposure/i},
+      {id:'top_holdings',title:'The businesses behind the exposure',legacy:/top holdings/i},
+    ].flatMap(def => {
+      const section = sections.find(s => text(s.id) === def.id || (!text(s.id) && def.legacy.test(text(s.title))))
+      const content = text(section?.content) || text(section?.body)
+      return content ? [{id:def.id,title:def.title,content:content.slice(0,10000)}] : []
+    })
+    const selected = sections.filter(s => companyStory.some(story => story.id === text(s.id)) || /investment|business|competition|exposure|holdings|financial|growth|valuation|risk|bull|base case|bear|verdict|kill|catalyst/i.test(text(s.title))).slice(0,15)
     return {symbol:name.symbol,portfolioId:name.portfolioId,currentWeightPct:name.currentWeightPct,
       researchId:text(object(name.research).id), thesis:text(content.investmentThesis), keyDebate:text(content.keyDebate), mispricing:text(content.mispricing),
+      companyStory,
       research: selected.map(s => ({title:text(s.title),content:(text(s.content)||text(s.body)).slice(0,10000)})),
       world: name.causalLinks.map(id => context.evidence.find(e=>e.id===id)).filter(e=>e?.kind==='causal_model').map(e=> {
         const value=object(e!.value), structured=object(value.structured_content)
