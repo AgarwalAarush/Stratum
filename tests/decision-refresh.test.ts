@@ -16,3 +16,14 @@ test('equivalent capture IDs and repricing do not change semantic decision input
  // A new editorial contract must regenerate judgment, not renew old prose.
  assert.equal(renewUnchangedRecommendation(recommendation,context,{...next,contracts:{companyStory:1}}),null)
 })
+
+test('action-specific evidence classification and contract changes require a new judgment',()=>{
+ const withGap={...context,names:[{...context.names[0],providerEvidenceGaps:[{id:'packet:cash flow',description:'cash flow'}]}]}
+ assert.notEqual(decisionContextSignature(withGap),decisionContextSignature(context))
+ assert.equal(renewUnchangedRecommendation(recommendation,context,withGap),null)
+ const assessment={version:1 as const,gaps:[{id:'packet:cash flow',description:'Cash flow disclosure is missing',availability:'retrieval_failed' as const,affectedActions:['add' as const],resolution:'Retrieve the quarterly cash flow statement.'}],actionSupport:[]}
+ const assessed={...withGap,names:[{...withGap.names[0],evidenceAssessment:assessment}]}
+ const material={...assessed,names:[{...assessed.names[0],evidenceAssessment:{...assessment,gaps:[{...assessment.gaps[0],affectedActions:['hold' as const]}]}}]}
+ assert.notEqual(decisionContextSignature(assessed),decisionContextSignature(material))
+ assert.equal(renewUnchangedRecommendation(recommendation,assessed,material),null)
+})

@@ -1,6 +1,8 @@
-import { hasDecisiveCoverageGap, type ResearchCoverage } from './research-coverage.ts'
+import { hasDecisiveCoverageGap, readableCompanySourceIds, type ResearchCoverage } from './research-coverage.ts'
 import { COMPANY_FORECAST_METRICS } from './forecast-metrics.ts'
-import { readResearchAdvice } from './research-advice.ts'
+import { readResearchAdvice, validateResearchAdvice } from './research-advice.ts'
+import { requiredEvidenceGaps, validateEvidenceAssessment, type EvidenceAssessment, type RequiredEvidenceGap } from './research-contract.ts'
+import type { CompanyPacket } from './types.ts'
 /** Published investment advice is an immutable, prospective experiment.
  * These functions never fetch data or place orders. */
 export const RECOMMENDATION_ACTIONS = [
@@ -16,7 +18,7 @@ export const RECOMMENDATION_ACTIONS = [
 export type RecommendationAction = (typeof RECOMMENDATION_ACTIONS)[number]
 // v1.1 corrects thesis schema/provenance. New manifests retain the original
 // abstention edition rather than rewriting its frozen inputs after repair.
-export const RECOMMENDATION_POLICY = 'prospective-v1.6'
+export const RECOMMENDATION_POLICY = 'prospective-v1.7'
 export type EvidenceRef = {
   id: string
   kind: string
@@ -37,6 +39,11 @@ export type DecisionName = {
   systemThesisValidated?: boolean
   limitations?: string[]
   entryGaps?: string[]
+  researchContractVersion?: 1
+  evidenceAssessment?: EvidenceAssessment
+  /** Deterministically captured provider/topic gaps. Universal data/identity
+   * failures remain in gaps and cannot be waived by research opinions. */
+  providerEvidenceGaps?: RequiredEvidenceGap[]
   owned: boolean
   quantity: number
   currentWeightPct: number | null
@@ -70,7 +77,7 @@ export type DecisionContext = {
   policy: string
   editionKey?: string
   codeVersion: string
-  contracts?: { forecast?: 2; companyStory?: 1 }
+  contracts?: { forecast?: 2; companyStory?: 1; research?: 1 }
   portfolio: unknown
   names: DecisionName[]
   evidence: EvidenceRef[]
@@ -140,6 +147,64 @@ const texts = (v: unknown) =>
   Array.isArray(v) ? v.map(str).filter(Boolean) : []
 const num = (v: unknown) =>
   typeof v === 'number' && Number.isFinite(v) ? v : null
+
+/** Packet-local source IDs are not globally unique. Freeze their provenance
+ * under the immutable packet before using an actionSupport citation. */
+export const decisionResearchSourceId = (packetId: string, sourceId: string) => `source:${packetId}:${sourceId}`
+const availableByCutoff = (source: EvidenceRef | undefined, cutoff: string) => Boolean(source && Number.isFinite(Date.parse(source.availableAt ?? '')) && Date.parse(source.availableAt ?? '') <= Date.parse(cutoff))
+
+function currentActionAssessment(name: DecisionName, context: DecisionContext): EvidenceAssessment | null {
+  const content = obj(name.research?.content)
+  if (content.researchContractVersion !== 1) return null
+  const packet = context.evidence.find(e => ['company_packet', 'etf_packet'].includes(e.kind) && name.sources.includes(e.id))
+  const research = context.evidence.find(e => e.kind === 'research' && name.sources.includes(e.id))
+  if (!availableByCutoff(packet, context.cutoff) || !availableByCutoff(research, context.cutoff)) return null
+  const packetRow = obj(packet!.value), raw = obj(packetRow.packet)
+  const packetId = str(packetRow.id) || packet!.id.replace(/^packet:/, '')
+  const sources = (Array.isArray(raw.sources) ? raw.sources : []).map(obj)
+  const readable = packet!.kind === 'company_packet'
+    ? readableCompanySourceIds({ ...raw, sources, filings: Array.isArray(raw.filings) ? raw.filings : [], events: Array.isArray(raw.events) ? raw.events : [] } as unknown as CompanyPacket)
+    : sources.map(s => str(s.id))
+  const cited = texts(content.sourceIds).filter(id => readable.includes(id))
+  try {
+    const assessment = validateEvidenceAssessment(content.evidenceAssessment, cited, [...requiredEvidenceGaps(raw), ...(name.providerEvidenceGaps ?? [])])
+    // Every cited supporting source must have captured provenance in this
+    // manifest. A report citation alone cannot make future/unreadable data valid.
+    for (const support of assessment.actionSupport) for (const id of support.sourceIds) {
+      const original = sources.find(s => s.id === id)
+      const frozen = context.evidence.find(e => e.id === decisionResearchSourceId(packetId, id) && name.sources.includes(e.id))
+      const document = [...(Array.isArray(raw.researchDocuments) ? raw.researchDocuments : []), ...(Array.isArray(obj(raw.researchCoverage).documents) ? obj(raw.researchCoverage).documents as unknown[] : [])].map(obj).find(d => d.sourceId === id)
+      if (!original || !availableByCutoff(frozen, context.cutoff) || !Number.isFinite(Date.parse(str(original.asOf))) || Date.parse(str(original.asOf)) > Date.parse(context.cutoff) || (document && (!Number.isFinite(Date.parse(str(document.capturedAt))) || Date.parse(str(document.capturedAt)) > Date.parse(context.cutoff) || document.extractionStatus !== 'readable'))) return null
+    }
+    validateResearchAdvice(content.advice, cited, { researchContractVersion: 1, evidenceAssessment: assessment })
+    return assessment
+  } catch { return null }
+}
+
+/** Preserve universal gates. Only a validated current report may classify
+ * provider-evidence gaps by action, and Buy/Add retain their existing gates. */
+export function actionEvidenceGapReasons(name: DecisionName, context: DecisionContext, action: RecommendationAction): string[] {
+  const content = obj(name.research?.content), assessment = currentActionAssessment(name, context)
+  const currentContractRequired = context.contracts?.research === 1 || content.researchContractVersion === 1
+  const reasons = [...name.gaps]
+  if (currentContractRequired && content.researchContractVersion !== 1) reasons.push('Research contract upgrade is required before a capital decision')
+  if (content.researchContractVersion === 1 && !assessment) reasons.push('Current research lacks a valid frozen, cited action-specific evidence assessment')
+  if (!assessment) return reasons
+  if (['hold','trim','sell'].includes(action)) {
+    const providerMessages = new Set((name.providerEvidenceGaps ?? []).filter(g => g.id.startsWith('packet:')).map(g => `Missing ${name.instrumentType === 'etf' ? 'fund' : 'company'} evidence: ${g.id.slice(7)}`))
+    for (let i = reasons.length - 1; i >= 0; i--) if (providerMessages.has(reasons[i])) reasons.splice(i, 1)
+  }
+  if (!assessment.actionSupport.some(s => s.action === action)) reasons.push(`Research lacks independently cited support for ${action}`)
+  for (const gap of assessment.gaps) if (gap.affectedActions.includes(action as 'buy' | 'add' | 'hold' | 'trim' | 'sell')) reasons.push(`${gap.description} blocks ${action}: ${gap.resolution}`)
+  return reasons
+}
+
+/** Used only for the all-blocked generation shortcut. Provider gaps alone do
+ * not establish that every possible ownership decision is blocked. */
+export function hasPotentialSupportedAction(name: DecisionName, context: DecisionContext): boolean {
+  const actions: RecommendationAction[] = name.owned ? ['add','hold','trim','sell'] : ['buy']
+  return actions.some(action => actionEvidenceGapReasons(name, context, action).length === 0)
+}
 
 export function validateRecommendation(
   value: unknown,
@@ -311,12 +376,14 @@ export function gateRecommendation(
   )
   const increase = rec.action === 'buy' || rec.action === 'add'
   const reducing = rec.action === 'trim' || rec.action === 'sell'
-  const advice = readResearchAdvice(obj(name.research?.content).advice)
-  const packetEvidence = context.evidence.find(e => e.kind === 'company_packet' && name.sources.includes(e.id))
+  const researchContent = obj(name.research?.content)
+  const assessment = currentActionAssessment(name, context)
+  const advice = readResearchAdvice(researchContent.advice, undefined, researchContent)
+  const packetEvidence = context.evidence.find(e => ['company_packet','etf_packet'].includes(e.kind) && name.sources.includes(e.id))
   const coverage = obj(obj(packetEvidence?.value).packet).researchCoverage as ResearchCoverage | undefined
   if (coverage && hasDecisiveCoverageGap(coverage)) {
     if (increase) reasons.push('Decisive company research coverage remains unresolved')
-    if (['hold','trim','sell'].includes(rec.action)) {
+    if (['hold','trim','sell'].includes(rec.action) && !assessment) {
       const justification=obj(obj(obj(name.research?.content).coverageReview).actionJustifications)[rec.action]
       if(typeof justification!=='string' || justification.trim().length<40) reasons.push('Company research coverage gap requires an independently supported action justification')
     }
@@ -331,7 +398,13 @@ export function gateRecommendation(
   if (capitalAction) {
     // Shared macro/World gaps constrain adding risk, but cannot veto an
     // independently supported exit or hold in another instrument/account.
-    reasons.push(...name.gaps, ...(increase ? context.gaps : []))
+    reasons.push(...actionEvidenceGapReasons(name, context, rec.action), ...(increase ? context.gaps : []))
+    if (assessment) {
+      const support = assessment.actionSupport.find(s => s.action === rec.action)
+      const researchEvidence = context.evidence.find(e => e.kind === 'research' && name.sources.includes(e.id))
+      const packetId = str(obj(packetEvidence?.value).id) || packetEvidence?.id.replace(/^packet:/, '')
+      if (!researchEvidence || !rec.sourceIds.includes(researchEvidence.id) || !packetEvidence || !rec.sourceIds.includes(packetEvidence.id) || !support || support.sourceIds.some(id => !packetId || !rec.sourceIds.includes(decisionResearchSourceId(packetId, id)))) reasons.push('Decision must cite the frozen research, packet and independent sources supporting this action')
+    }
     if (
       !name.quote ||
       !Number.isFinite(Date.parse(name.quote.asOf)) ||
@@ -392,7 +465,7 @@ export function gateRecommendation(
   }
   if (reducing) {
     const researchContent = obj(name.research?.content)
-    const supportedExit = name.thesis?.status === 'invalidated' || researchContent.formalRating === 'SELL'
+    const supportedExit = name.thesis?.status === 'invalidated' || researchContent.formalRating === 'SELL' || assessment?.actionSupport.some(s => s.action === rec.action)
     if (!rec.forecasts.length && !supportedExit)
       reasons.push('Risk reduction requires evidenced thesis invalidation, exit research, or a measurable risk forecast')
     const target = rec.entry.targetWeightPct,
@@ -406,7 +479,7 @@ export function gateRecommendation(
     )
       reasons.push('Reduction must lower existing exposure; sell targets zero')
   }
-  if (rec.action === 'hold' && (name.thesis?.status === 'invalidated' || ['SELL', 'NOT_RATED'].includes(String(obj(name.research?.content).formalRating))))
+  if (rec.action === 'hold' && (name.thesis?.status === 'invalidated' || researchContent.formalRating === 'SELL' || (researchContent.formalRating === 'NOT_RATED' && !assessment?.actionSupport.some(s => s.action === 'hold'))))
     reasons.push('Affirmative hold conflicts with thesis invalidation, exit research, or an unrated evidence case')
   for (const id of [
     ...rec.sourceIds,
@@ -570,4 +643,17 @@ export function validateGeneratedBatch(values: unknown, context: DecisionContext
   })
   const recommendations = validateBatch(prepared, context).map(r => blocked.get(`${r.portfolioId}:${r.symbol}`) ?? r)
   return { recommendations, failures }
+}
+
+/** Final revalidation consumes locally gated and independently reviewed rows.
+ * Keep their veto provenance while still checking coverage, shape, citations
+ * and joint portfolio limits. Initial model output never enters this path. */
+export function revalidateReviewedBatch(values: Recommendation[], context: DecisionContext): Recommendation[] {
+  const checked = validateGeneratedBatch(values, context)
+  const failures = new Set(checked.failures.map(f => `${f.portfolioId}:${f.symbol}`))
+  return checked.recommendations.map((row, index) => {
+    const reviewed = values[index]
+    if (reviewed.action !== 'no_trade' || row.action !== 'no_trade' || !reviewed.gateReasons.length || failures.has(`${row.portfolioId}:${row.symbol}`)) return row
+    return { ...row, reason: reviewed.reason, gateReasons: [...new Set([...row.gateReasons, ...reviewed.gateReasons])], ...(reviewed.proposedAction ? { proposedAction: reviewed.proposedAction } : {}), entry: { ...row.entry, targetWeightPct: null } }
+  })
 }

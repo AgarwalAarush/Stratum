@@ -3,6 +3,7 @@ import { FEEDBACK_RULES, validateFeedbackReview, type FeedbackReview } from '../
 import { beginResearchVersion, publishResearchVersion, failResearchVersion } from './research-lifecycle.ts'
 import { fetchResearchBaseline, recordResearchRefresh } from './research-refresh.ts'
 import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchNarrative, validateResearchAdvice } from '../markets/research-advice.ts'
+import { CURRENT_RESEARCH_CONTRACT_VERSION, RESEARCH_CONTRACT_RULES, readEvidenceAssessment, requiredEvidenceGaps, validateEvidenceAssessment, type EvidenceAssessment } from '../markets/research-contract.ts'
 import { randomUUID } from 'node:crypto'
 import { parseStateStreetHoldings } from './etf-workbook.ts'
 import { fetchVanEckFund } from './vaneck-holdings.ts'
@@ -438,6 +439,8 @@ export async function materializeEtfResearchPacket(symbolInput: string, ownerId:
 }
 
 interface EtfResearchGeneration {
+  researchContractVersion: number
+  evidenceAssessment: EvidenceAssessment
   feedbackReview?: FeedbackReview | null
   advice?: import('../markets/research-advice.ts').ResearchAdvice | null
   formalRating: EtfResearchNote['formalRating']
@@ -485,9 +488,15 @@ export function validateEtfResearch(value: unknown, packet?: EtfResearchPacket):
   })
   if (normalizedChanges.length > 8 || normalizedChanges.length !== changes.length || normalizedChanges.some(c => !c.explanation.trim())) throw new Error('Invalid ETF research revision changes')
   if (!['initial', 'more_constructive', 'less_constructive', 'unchanged'].includes(String(revision.opinionChange)) || !String(revision.summary ?? '').trim()) throw new Error('Invalid ETF research revision comparison')
-  const advice = output.advice || packet ? validateResearchAdvice(output.advice, Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []) : null
+  if (output.researchContractVersion !== CURRENT_RESEARCH_CONTRACT_VERSION) throw new Error('New ETF research requires the current complete report contract')
+  const citedSourceIds = Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []
+  if (!citedSourceIds.length || new Set(citedSourceIds).size !== citedSourceIds.length) throw new Error('ETF research source ledger must contain unique citations')
+  const evidenceAssessment = validateEvidenceAssessment(output.evidenceAssessment, citedSourceIds, packet ? requiredEvidenceGaps(packet) : [])
+  const contract = {researchContractVersion: CURRENT_RESEARCH_CONTRACT_VERSION, evidenceAssessment}
+  const advice = validateResearchAdvice(output.advice, citedSourceIds, contract)
   validateResearchNarrative(advice, sections.filter(s => s.id === 'verdict').map(s => String(s.content ?? '')).join('\n'))
   return {
+    ...contract,
     feedbackReview: packet?.outcomeFeedback ? validateFeedbackReview(output.feedbackReview, packet.outcomeFeedback) : null,
     advice,
     formalRating, entryAction, investmentThesis: requiredString('investmentThesis'), keyDebate: requiredString('keyDebate'),
@@ -517,6 +526,8 @@ export function etfResearchPrompt(packet: EtfResearchPacket, prior: EtfResearchN
     'Assess exposure, top-holding concentration, portfolio construction, benchmark/rebalance mechanics, price setup, catalysts, risks, and the practical entry decision. For look-through fundamentals, state when the current packet lacks constituent financial evidence rather than inventing it.',
     FEEDBACK_RULES,
     RESEARCH_ADVICE_RULES,
+    RESEARCH_CONTRACT_RULES,
+    `REQUIRED EVIDENCE GAPS: ${JSON.stringify(requiredEvidenceGaps(packet))}`,
     'Use BUY/HOLD/SELL separately from today\'s entry action. Use NOT_RATED or wait when fund-level evidence is inadequate.',
     'Return exactly these 12 sections in schema order: Fund Snapshot; Portfolio Exposure; Top Holdings; Index & Rebalance; Fundamentals Look-through; Valuation & Setup; Catalysts; Bull Case; Base Case; Bear Case; Risk Factors; Verdict.',
     'Use only the length the evidence warrants; do not pad the report. Prefix each factual, analytical, or estimate paragraph with **FACT:**, **VIEW:** or **ESTIMATE:**. Attach source IDs through sections and sourceIds, never in prose.',
@@ -533,8 +544,10 @@ function normalizeEtfResearch(row: Record<string, unknown>): EtfResearchNote {
   const changes = Array.isArray(revision.changes) ? revision.changes.map(record) : []
   return {
     id: String(row.id), symbol: String(row.symbol), version: Number(row.version), status: row.status as EtfResearchNote['status'],
+    researchContractVersion: typeof content.researchContractVersion === 'number' ? content.researchContractVersion : null,
+    evidenceAssessment: readEvidenceAssessment(content.evidenceAssessment, Array.isArray(content.sourceIds) ? content.sourceIds.map(String) : []),
     feedbackReview: content.feedbackReview as FeedbackReview | undefined ?? null,
-    advice: readResearchAdvice(content.advice),
+    advice: readResearchAdvice(content.advice, Array.isArray(content.sourceIds) ? content.sourceIds.map(String) : [], {researchContractVersion: Number(content.researchContractVersion), evidenceAssessment: readEvidenceAssessment(content.evidenceAssessment)}),
     formalRating: row.formal_rating as EtfResearchNote['formalRating'], entryAction: row.entry_action as EtfResearchNote['entryAction'],
     investmentThesis: String(content.investmentThesis ?? ''), keyDebate: String(content.keyDebate ?? ''), fastestKillSignal: String(content.fastestKillSignal ?? ''),
     confidence: Number(content.confidence ?? 0),

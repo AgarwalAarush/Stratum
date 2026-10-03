@@ -4,6 +4,7 @@ import { collectSecFilingDocuments, captureResearchDocument, validateResearchDoc
 import { collectCompanyResearchCoverage, groundCoverageTopics, validateCoverageDiscovery } from '../lib/server/company-research-coverage.ts'
 import { validateCoverageReview, hasDecisiveCoverageGap, readableCompanySourceIds, type ResearchCoverage } from '../lib/markets/research-coverage.ts'
 import { classifyResearchRefresh } from '../lib/markets/research-refresh.ts'
+import { currentResearchContract } from './fixtures/current-research-contract.ts'
 import { gateRecommendation, type DecisionContext, type Recommendation } from '../lib/markets/recommendations.ts'
 import type { CompanyPacket, EquityResearchSection } from '../lib/markets/types.ts'
 import type { ResearchAdvice } from '../lib/markets/research-advice.ts'
@@ -79,10 +80,10 @@ test('captured commercial evidence still leaves unit economics unresolved',()=>{
 })
 
 test('price-only refresh reuses coverage; product launch forces material research',()=>{
-  const prior={...packet,researchCoverage:{version:1,status:'complete',topics:[]},events:[]}
-  assert.equal(classifyResearchRefresh({priorPacket:prior,packet:{...prior,priceHistory:{latestPrice:340}},instrument:'equity'}).kind,'reprice')
-  assert.equal(classifyResearchRefresh({priorPacket:prior,packet:{...prior,events:[{title:'Cybercab product launch and paid deployment'}]},instrument:'equity'}).kind,'full_research')
-  assert.equal(classifyResearchRefresh({priorPacket:prior,packet:{...prior,researchCoverage:{version:1,status:'partial',topics:[]}},instrument:'equity'}).kind,'revalidate')
+  const prior={...packet,sources:[{id:'source-1',url,label:'Primary source',source:'primary',asOf:'2026-10-01'}],researchCoverage:{version:1,status:'complete',topics:[{decisive:false},{decisive:false},{decisive:false}]},events:[]}
+  assert.equal(classifyResearchRefresh({priorResearch:currentResearchContract(),priorPacket:prior,packet:{...prior,priceHistory:{latestPrice:340}},instrument:'equity'}).kind,'reprice')
+  assert.equal(classifyResearchRefresh({priorResearch:currentResearchContract(),priorPacket:prior,packet:{...prior,events:[{title:'Cybercab product launch and paid deployment'}]},instrument:'equity'}).kind,'full_research')
+  assert.equal(classifyResearchRefresh({priorResearch:currentResearchContract(),priorPacket:prior,packet:{...prior,researchCoverage:{version:1,status:'partial',topics:[]}},instrument:'equity'}).kind,'full_research')
 })
 
 test('coverage gaps gate only the dependent instrument, not another company',()=>{

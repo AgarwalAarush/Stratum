@@ -1,6 +1,7 @@
 import type { GenerationMetadata } from '../ai/config.ts'
 import type { CompanyPacket, EquityResearchSection } from './types.ts'
 import type { ResearchAdvice } from './research-advice.ts'
+import { validateEvidenceAssessment, type EvidenceAssessment } from './evidence-assessment.ts'
 
 export interface ResearchDocument {
   sourceId: string; url: string; publishedAt: string | null; capturedAt: string
@@ -32,7 +33,7 @@ export interface ResearchCoverageReview {
   topics: Array<{topicId: string; status: 'addressed' | 'unresolved'; sectionIds: string[]; sourceIds: string[]; investmentImplication: string; limitations: string}>
   actionJustifications: {hold: string | null; trim: string | null; sell: string | null}
 }
-export const RESEARCH_COVERAGE_RULES = 'Address every researchCoverage topic in coverageReview.version 1, mapping it to substantive report sections, supporting readable source IDs, its investment implication and remaining limitations. Treat absent evidence as not established in our sources, never proof that a product, customer or business does not exist. Separate commercial deployment, adoption and reception, safe operational scaling, unit economics and valuation. A discovery headline is not evidence. If any decisive topic remains unresolved, or collection failed, evidenceSufficiency cannot be sufficient and newEntryStance cannot be eligible. Independently supported retain/reduce/exit advice may remain useful only with cited evidence and an explicit actionJustifications explanation of why each decisive gap does not undermine that particular stance. Never silently assume unresolved economics are adverse. Prior reports cannot determine the independent topic list.'
+export const RESEARCH_COVERAGE_RULES = 'Address every researchCoverage topic in coverageReview.version 1, mapping it to substantive report sections, supporting readable source IDs, its investment implication and remaining limitations. Treat absent evidence as not established in our sources, never proof that a product, customer or business does not exist. Separate commercial deployment, adoption and reception, safe operational scaling, unit economics and valuation. A discovery headline is not evidence. If any decisive topic remains unresolved, or collection failed, evidenceSufficiency cannot be sufficient and newEntryStance cannot be eligible. Independently supported retain/reduce/exit advice may remain useful only with cited evidence and an explicit explanation of why each decisive gap does not undermine that particular stance. For researchContractVersion 1 this must be a validated evidenceAssessment.actionSupport covering every gap with captured citations and observable reversal conditions; a long actionJustifications string alone is not proof. Never silently assume unresolved economics are adverse. Prior reports cannot determine the independent topic list.'
 const obj = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}
 export const normalizedEvidenceText = (text: string) => text.normalize('NFKC').replace(/\s+/g, ' ').trim()
 
@@ -52,7 +53,7 @@ export function hasDecisiveCoverageGap(coverage: ResearchCoverage): boolean {
   return coverage.status === 'failed' || coverage.topics.length < 3 || coverage.topics.some(t => t.decisive && (!t.sourceIds.length || t.unresolvedQuestions.length > 0))
 }
 
-export function validateCoverageReview(value: unknown, coverage: ResearchCoverage, sections: EquityResearchSection[], cited: string[], advice?: ResearchAdvice | null): ResearchCoverageReview {
+export function validateCoverageReview(value: unknown, coverage: ResearchCoverage, sections: EquityResearchSection[], cited: string[], advice?: ResearchAdvice | null, evidenceAssessment?: EvidenceAssessment | null): ResearchCoverageReview {
   const v = obj(value), rows = Array.isArray(v.topics) ? v.topics.map(obj) : []
   if (v.version !== 1 || rows.length !== coverage.topics.length || new Set(rows.map(r => r.topicId)).size !== rows.length) throw new Error('Coverage review must address every material topic exactly once')
   const readable = new Set(coverage.documents.filter(d => d.extractionStatus === 'readable' && d.text).map(d => d.sourceId))
@@ -69,7 +70,10 @@ export function validateCoverageReview(value: unknown, coverage: ResearchCoverag
   if (hasDecisiveCoverageGap(coverage)) {
     if (advice?.evidenceSufficiency.value === 'sufficient' || advice?.newEntryStance.value === 'eligible') throw new Error('Decisive coverage gaps cannot support sufficient evidence or new risk')
     const action = advice?.existingPositionStance.value === 'retain' ? 'hold' : advice?.existingPositionStance.value === 'reduce' ? 'trim' : advice?.existingPositionStance.value === 'exit' ? 'sell' : null
-    if (action && (typeof justifications[action] !== 'string' || String(justifications[action]).trim().length < 40)) throw new Error('Existing-position advice needs an explicit independent coverage-gap justification')
+    if (evidenceAssessment) {
+      const assessment = validateEvidenceAssessment(evidenceAssessment, cited)
+      if (action && (!assessment.actionSupport.some(s => s.action === action) || assessment.gaps.some(g => g.affectedActions.includes(action)))) throw new Error('Existing-position advice needs validated independent action-specific coverage support')
+    } else if (action && (typeof justifications[action] !== 'string' || String(justifications[action]).trim().length < 40)) throw new Error('Existing-position advice needs an explicit independent coverage-gap justification')
   }
   return value as ResearchCoverageReview
 }

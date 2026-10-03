@@ -35,12 +35,19 @@ test('ETF research validation requires the fund-specific schema and meaningful a
   const sectionIds = ['fund_snapshot', 'portfolio_exposure', 'top_holdings', 'index_and_rebalance', 'fundamentals_look_through', 'valuation_and_setup', 'catalysts', 'bull_case', 'base_case', 'bear_case', 'risk_factors', 'verdict']
   const content = Array.from({ length: 110 }, (_, index) => `evidence${index}`).join(' ')
   const validated = validateEtfResearch({
+    researchContractVersion: 1,
+    evidenceAssessment: {version: 1, gaps: [], actionSupport: [{action: 'hold', reason: 'Current issuer holdings support continued exposure to the investment mandate.', sourceIds: ['issuer-holdings'], gapIds: [], reversalConditions: ['Issuer removes the core portfolio exposures.']}]},
+    advice: {version: 1, businessView: {value: 'constructive', reason: 'The current issuer holdings fit the thematic mandate.', sourceIds: ['issuer-holdings'], changeConditions: ['Issuer changes the investment mandate.']}, evidenceSufficiency: {value: 'sufficient', reason: 'Current issuer evidence supports the fund ownership opinion.', sourceIds: ['issuer-holdings'], changeConditions: ['Issuer holdings become incomplete.']}, newEntryStance: {value: 'wait', reason: 'Await a more attractive market setup.', sourceIds: ['issuer-holdings'], changeConditions: ['Market valuation improves.']}, existingPositionStance: {value: 'retain', reason: 'Retain current exposure to the investment mandate.', sourceIds: ['issuer-holdings'], changeConditions: ['Issuer removes the core portfolio exposures.']}},
     formalRating: 'HOLD', entryAction: 'wait', investmentThesis: 'The fund offers focused exposure with a concentrated portfolio.',
     keyDebate: 'Whether the portfolio concentration is worth the thematic exposure.', fastestKillSignal: 'Issuer removes the core portfolio exposures.', confidence: 72,
     revision: { priorVersion: null, opinionChange: 'initial', summary: 'Issuer holdings are the initial evidence baseline.', changes: [{ field: 'evidence', previous: '', current: 'Initial issuer holdings snapshot', explanation: 'The first version is based on the current issuer export.' }] },
     sections: sectionIds.map((id) => ({ id, title: id, content, sourceIds: ['issuer-holdings'] })), sourceIds: ['issuer-summary', 'issuer-holdings'],
   })
   assert.equal(validated.sections.length, 12)
+  assert.equal(validated.researchContractVersion, 1)
+  assert.throws(() => validateEtfResearch({...validated,researchContractVersion:undefined}), /current complete report contract/)
+  assert.throws(() => validateEtfResearch({...validated,evidenceAssessment:undefined}), /versioned action-specific evidence assessment/)
+  assert.throws(() => validateEtfResearch(validated, {sources:[{id:'issuer-summary'},{id:'issuer-holdings'}],evidenceQuality:{missing:['Complete issuer holdings coverage']}} as unknown as Parameters<typeof validateEtfResearch>[1]), /omits known gap/)
   assert.deepEqual(validateEtfResearch({...validated,revision:{priorVersion:1,opinionChange:'unchanged',summary:'No material evidence change; retain the original conclusion.',changes:[]}}).revision.changes,[])
   assert.throws(() => validateEtfResearch({ ...validated, sections: validated.sections.slice(1) }), /12 required sections/)
 })

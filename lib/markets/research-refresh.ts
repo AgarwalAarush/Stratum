@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { CURRENT_RESEARCH_CONTRACT_VERSION, hasCurrentResearchContract, requiredEvidenceGaps } from './research-contract.ts'
 export type RefreshKind = 'unchanged' | 'reprice' | 'revalidate' | 'full_research'
 export type RefreshDecision = {kind: RefreshKind; reasons: string[]; sourceReferences: string[]; evidenceHash: string}
 const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}
@@ -17,13 +18,16 @@ function substantivePacket(packet: Record<string, unknown>, instrument: 'equity'
     periodicFilings: Array.isArray(packet.filings) ? packet.filings.filter(f=>/10-[KQ]/i.test(String(object(f).form ?? object(f).title))) : [],
     decisiveEvents: Array.isArray(packet.events) ? packet.events.filter(e=>/earnings|results|guidance|acquir|merg|divest|spin-off|bankrupt|restatement|product launch|launch|deployment|commercialization|approval|authorization|capital raise|secondary offering|share (?:buyback|issuance)|stock split/i.test(String(object(e).title))) : [] }
 }
-export function classifyResearchRefresh(input: {priorPacket: unknown; packet: unknown; instrument: 'equity' | 'etf'; onDemand?: boolean; priorGeneratedAt?: string; now?: Date; conditionsChanged?: boolean; forecastChanged?: boolean}): RefreshDecision {
+export function classifyResearchRefresh(input: {priorPacket: unknown; packet: unknown; priorResearch?: unknown; instrument: 'equity' | 'etf'; onDemand?: boolean; priorGeneratedAt?: string; now?: Date; conditionsChanged?: boolean; forecastChanged?: boolean}): RefreshDecision {
   const current=object(input.packet), prior=object(input.priorPacket)
   const sources = Array.isArray(current.sources) ? current.sources.map(s=>String(object(s).url ?? '')).filter(Boolean) : []
   const substantive = substantivePacket(current,input.instrument)
   const evidenceHash=semanticHash(substantive)
   const decision = (kind: RefreshKind, ...reasons: string[]): RefreshDecision => ({kind,reasons,sourceReferences:sources,evidenceHash})
   if (!Object.keys(prior).length) return decision('full_research','Initial evidence coverage')
+  if (!hasCurrentResearchContract(input.priorResearch, input.priorPacket)) return decision('full_research',`Upgrade the complete research report to contract ${CURRENT_RESEARCH_CONTRACT_VERSION}`)
+  if (semanticHash(requiredEvidenceGaps(current)) !== semanticHash(requiredEvidenceGaps(prior))) return decision('full_research','Known evidence gaps changed; reassess their action relevance in a new immutable report')
+  if (!hasCurrentResearchContract(input.priorResearch, input.packet)) return decision('full_research','The report supporting sources are missing or unreadable in the current evidence packet')
   if (input.onDemand) return decision('full_research','Owner requested a full report')
   if (input.forecastChanged) return decision('revalidate','Resolved outcome needs a targeted check of its decisive premise')
   const before=substantivePacket(prior,input.instrument)

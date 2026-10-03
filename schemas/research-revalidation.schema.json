@@ -7,7 +7,8 @@
     "sourceIds",
     "conditions",
     "feedbackReview",
-    "materialChange"
+    "materialChange",
+    "researchContractVersion"
   ],
   "properties": {
     "conclusion": {
@@ -86,6 +87,12 @@
           }
         }
       }
+    },
+    "researchContractVersion": {
+      "type": "integer",
+      "enum": [
+        1
+      ]
     }
   }
 }
