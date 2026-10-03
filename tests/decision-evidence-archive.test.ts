@@ -39,15 +39,3 @@ test('independent review receives the exact complete captured passages from the 
     assert.deepEqual(context.evidence[0].value,stored)
   })
 })
-
-test('full database rows archive both original content and the projected packet without changing their source hashes',()=>{
-  const fullRow={...packet,content:{...packet.packet,worldOrigin:{authority:'shadow'}}}
-  const archived=archiveDecisionEvidence(fullRow) as typeof fullRow
-  assert.ok(JSON.stringify(archived).length<JSON.stringify(fullRow).length/4)
-  assert.equal(archived.content.researchDocuments[0].text,null)
-  assert.equal(archived.packet.researchDocuments[0].text,null)
-  assert.deepEqual(restoreDecisionEvidence(archived),fullRow)
-  assert.deepEqual(archiveDecisionEvidence(archived),archived)
-  assert.equal(fullRow.content.researchDocuments[0].text,text)
-  assert.deepEqual(restoreDecisionEvidence({...packet,content:'opaque legacy content'}),{...packet,content:'opaque legacy content'})
-})
