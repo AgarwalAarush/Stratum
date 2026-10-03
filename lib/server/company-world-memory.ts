@@ -4,11 +4,13 @@ import type { ResearchDocument } from '../markets/research-coverage.ts'
 import type { WorldThinkerOptions } from './world-thinker.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { evidenceText, identifyWorldClaims, worldEvidenceOrigin, stableWorldJson } from './world-claims.ts'
+import { retrieveWorldMemory } from './world-retrieval.ts'
 
 export interface CompanyWorldReceipt {
  report_id:string; owner_id:string; symbol:string; origin:'live'|'backfill'; status:string
  originating_lead_id:string|null; job_id:string|null; run_id:string|null; result_commit:string|null
  affected_node_ids:string[]; affected_claim_ids:string[]; explanation:string|null; evidence_gaps:string[]
+ context_node_ids?:string[]
 }
 export interface CompanyWorldFeedback {
  lead:Record<string,unknown>; note:Record<string,unknown>; businessModel:Record<string,unknown>
@@ -87,6 +89,15 @@ export async function updateCompanyWorldReceipt(reportId:string,changes:Record<s
  const r=await db.from('company_world_memory_receipts').update({...changes,updated_at:new Date().toISOString()}).eq('report_id',reportId)
  if(r.error)throw new Error(`Unable to update memory receipt: ${r.error.message}`)
 }
+/** Context links are metadata, including for terminal gaps; never another review. */
+export async function refreshCompanyWorldReceiptContext(receipt:Pick<CompanyWorldReceipt,'report_id'|'owner_id'|'symbol'|'context_node_ids'>){
+ try{
+  const context=await retrieveWorldMemory({query:`${receipt.symbol} business demand constraints`,symbol:receipt.symbol,limit:12},{ownerId:receipt.owner_id})
+  const nodeIds=[...new Set([...(receipt.context_node_ids??[]),...context.receipt.nodeIds])]
+  await updateCompanyWorldReceipt(receipt.report_id,{context_node_ids:nodeIds})
+  return {nodeIds,gap:null}
+ }catch(error){return {nodeIds:receipt.context_node_ids??[],gap:`World context unavailable: ${error instanceof Error?error.message:String(error)}`}}
+}
 export async function dispatchCompanyWorldReceipts(enqueue:(payload:Record<string,unknown>,key:string,priority:number)=>Promise<{id:string}>){
  const db=getSupabaseClient();if(!db)return 0
  const r=await db.from('company_world_memory_receipts').select('report_id,symbol,origin,originating_lead_id').eq('status','pending').is('job_id',null).order('origin',{ascending:false}).order('created_at').limit(100)
@@ -122,6 +133,8 @@ export async function reviewCompanyWorldReceipt(reportId:string,jobId:string,rev
   }
   const feedback=await loadCompanyWorldFeedback(reportId,receipt.originating_lead_id??undefined)
   if(!feedback)throw new Error('Frozen completed report is unavailable')
+  const context=await refreshCompanyWorldReceiptContext(receipt)
+  if(context.gap)feedback.evidenceGaps.push(context.gap)
   await updateCompanyWorldReceipt(reportId,{evidence_gaps:feedback.evidenceGaps})
   if(!feedback.sources.length){
    await updateCompanyWorldReceipt(reportId,{status:'blocked',explanation:'No original readable source captures; legacy analysis remains an assessment.',finished_at:new Date().toISOString()})
