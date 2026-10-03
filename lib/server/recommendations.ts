@@ -53,7 +53,7 @@ export function investmentDb() {
   return db
 }
 
-async function rows(
+export async function loadDecisionHistory(
   table: string,
   ownerId?: string,
   cutoff?: string,
@@ -61,7 +61,9 @@ async function rows(
   limit = 300,
 ): Promise<Row[]> {
   const accumulated: Row[] = []
-  const pageSize = Math.min(limit, 500)
+  // Full owner reports are large. Metadata-sized pages can exceed the database
+  // statement budget when every row must detoast its complete narrative.
+  const pageSize = Math.min(limit, ownerId ? 20 : 500)
   for (let offset = 0; ; offset += pageSize) {
     let q = investmentDb()
       .from(table)
@@ -71,7 +73,8 @@ async function rows(
       .range(offset, offset + pageSize - 1)
     if (ownerId) q = q.eq('owner_id', ownerId)
     if (cutoff) q = q.lte(dateColumn, cutoff)
-    const result = await q
+    let result = await q
+    if (result.error && (result.status >= 500 || [408,429].includes(result.status) || result.error.code === '57014')) result = await q
     if (result.error) throw new Error(`${table}: ${result.error.message}`)
     accumulated.push(...result.data)
     // Owner research/thesis history is complete. Deliberately bounded market
@@ -146,14 +149,14 @@ export async function assembleDecisionContext(
     })
   const [research, theses, worldVersions, market, candidates, watches, macro, fundResearch, interestMembers] =
     await Promise.all([
-      optional('Research', rows('equity_research_notes', ownerId, cutoff)),
+      optional('Research', loadDecisionHistory('equity_research_notes', ownerId, cutoff)),
       optional(
         'Theses',
-        rows('investment_theses', ownerId, cutoff, 'generated_at'),
+        loadDecisionHistory('investment_theses', ownerId, cutoff, 'generated_at'),
       ),
       optional(
         'World causal model',
-        rows('causal_model_versions', undefined, cutoff, 'as_of', 80),
+        loadDecisionHistory('causal_model_versions', undefined, cutoff, 'as_of', 80),
       ),
       optional(
         'Market snapshots',
@@ -161,7 +164,7 @@ export async function assembleDecisionContext(
       ),
       optional(
         'Candidate discovery',
-        rows('candidate_briefs', undefined, cutoff, 'generated_at', 100),
+        loadDecisionHistory('candidate_briefs', undefined, cutoff, 'generated_at', 100),
       ),
       optional(
         'Watchlists',
@@ -176,9 +179,9 @@ export async function assembleDecisionContext(
       ),
       optional(
         'Macro vintages',
-        rows('investment_macro_vintages', undefined, cutoff, 'observed_at', 60),
+        loadDecisionHistory('investment_macro_vintages', undefined, cutoff, 'observed_at', 60),
       ),
-      optional('ETF research', rows('etf_research_notes', ownerId, cutoff)),
+      optional('ETF research', loadDecisionHistory('etf_research_notes', ownerId, cutoff)),
       optional('Interest coverage', (async()=>{const result=await db.from('market_interest_memberships').select('symbol,theme,eligible_since').eq('owner_id',ownerId).eq('active',true).eq('excluded',false).lte('eligible_since',cutoff);if(result.error)throw new Error(result.error.message);return result.data})()),
     ])
   const upgradeJobs = await optional('Research upgrade schedule',(async()=>{
@@ -599,7 +602,7 @@ export async function assembleDecisionContext(
   // Bounded reads must never quietly truncate an actionable context.
   if (options.persist === false) return context
   const frozenContext = { ...context, evidence: context.evidence.map(e => ({ ...e, value: archiveDecisionEvidence(e.value) })) }
-  const insert = await db.from('recommendation_input_manifests').insert({
+  const insert = await db.rpc('freeze_recommendation_input', {p_manifest:{
     id: context.id,
     owner_id: ownerId,
     decision_date: date,
@@ -608,8 +611,8 @@ export async function assembleDecisionContext(
     edition_key: editionKey,
     content_hash: contentHash(frozenContext),
     content: frozenContext,
-  })
-  if (insert.error?.code === '23505')
+  }})
+  if (!insert.error && insert.data !== context.id)
     return assembleDecisionContext(ownerId, now, editionKey)
   if (insert.error) throw new Error(insert.error.message)
   return frozenContext
