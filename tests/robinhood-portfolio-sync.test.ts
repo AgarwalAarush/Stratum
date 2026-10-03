@@ -1,3 +1,4 @@
+import { testEnvironment } from './fixtures/environment.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
@@ -41,13 +42,13 @@ test('Robinhood normalization uses the newest available price and preserves priv
 })
 
 test('Robinhood worker configuration remains server-only and opt-in', () => {
-  assert.equal(getRobinhoodPortfolioSyncConfig({ ROBINHOOD_SYNC_ENABLED: 'false' }), null)
-  assert.deepEqual(getRobinhoodPortfolioSyncConfig({
+  assert.equal(getRobinhoodPortfolioSyncConfig(testEnvironment({ ROBINHOOD_SYNC_ENABLED: 'false' })), null)
+  assert.deepEqual(getRobinhoodPortfolioSyncConfig(testEnvironment({
     ROBINHOOD_SYNC_ENABLED: 'true',
     ROBINHOOD_PORTFOLIO_OWNER_ID: 'owner-1',
     ROBINHOOD_ACCOUNT_NUMBER: '123456789',
     ROBINHOOD_MCP_OAUTH_STORE: '/var/private/stratum/robinhood-oauth.json',
-  }), {
+  })), {
     ownerId: 'owner-1',
     portfolioName: 'Personal',
     accountNumber: '123456789',

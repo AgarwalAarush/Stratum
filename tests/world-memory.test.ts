@@ -1,3 +1,4 @@
+import { testEnvironment } from './fixtures/environment.ts'
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -86,9 +87,9 @@ test('balanced automatic promotion accepts one non-core gap but blocks missing o
 })
 
 test('completed research needs an explicit auto-promotion switch before a worker may publish a thesis', () => {
-  assert.equal(shouldAutoPromoteMarketResearch('complete', {}), false)
-  assert.equal(shouldAutoPromoteMarketResearch('needs_revision', { MARKET_AUTO_THESIS_ENABLED: 'true' }), false)
-  assert.equal(shouldAutoPromoteMarketResearch('complete', { MARKET_AUTO_THESIS_ENABLED: 'true' }), true)
+  assert.equal(shouldAutoPromoteMarketResearch('complete', testEnvironment({})), false)
+  assert.equal(shouldAutoPromoteMarketResearch('needs_revision', testEnvironment({ MARKET_AUTO_THESIS_ENABLED: 'true' })), false)
+  assert.equal(shouldAutoPromoteMarketResearch('complete', testEnvironment({ MARKET_AUTO_THESIS_ENABLED: 'true' })), true)
 })
 
 test('legacy promotion remains disabled even for historically complete research',async()=>{const {promoteEligibleMarketHypothesis}=await import('../lib/server/world-memory.ts');await assert.rejects(promoteEligibleMarketHypothesis('owner','hypothesis'),/legacy belief writer retired/)})

@@ -18,7 +18,7 @@ test('reviewed trade atomically records ledger and outcome, retries once, and ro
  const now=new Date(),occurredAt=now.toISOString(),date=now.toLocaleDateString('en-CA',{timeZone:'America/New_York'})
  const trade={action:'buy',symbol:'TSLA',quantity:2,pricePerShare:100,fees:1,occurredAt:date,notes:'Bought two actual shares'}
  const request='00000000-0000-4000-8000-000000000004'
- const call=(id:string,t:unknown,o=owner)=>db.query('select record_reviewed_recommendation_trade($1,$2,$3,$4,$5) as id',[o,rec,id,JSON.stringify(t),occurredAt])
+ const call=(id:string,t:unknown,o=owner)=>db.query<{id:string}>('select record_reviewed_recommendation_trade($1,$2,$3,$4,$5) as id',[o,rec,id,JSON.stringify(t),occurredAt])
  const a=await call(request,trade),b=await call(request,trade);assert.equal(a.rows[0].id,b.rows[0].id)
  assert.equal((await db.query('select * from portfolio_transactions')).rows.length,1)
  const events=await db.query<{details:{transactionId:string}}>('select * from recommendation_owner_events');assert.equal(events.rows[0].details.transactionId,a.rows[0].id)

@@ -1,3 +1,4 @@
+import { testEnvironment } from './fixtures/environment.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
@@ -18,10 +19,10 @@ const salt = new Uint8Array([
 ])
 
 async function authEnvironment(): Promise<NodeJS.ProcessEnv> {
-  return {
+  return testEnvironment({
     MARKETS_ACCESS_PASSWORD_HASH: await createMarketsPasswordHash('private password', salt, 100_000),
     MARKETS_SESSION_SECRET: 'a-test-session-secret-with-at-least-32-characters',
-  } as NodeJS.ProcessEnv
+  })
 }
 
 test('Markets password configuration is hashed and verified exactly', async () => {
@@ -35,11 +36,11 @@ test('Markets password configuration is hashed and verified exactly', async () =
 
 test('Markets auth rejects incomplete or weak session configuration', async () => {
   const hash = await createMarketsPasswordHash('private password', salt, 100_000)
-  assert.equal(hasMarketsAuthConfig({ MARKETS_ACCESS_PASSWORD_HASH: hash } as NodeJS.ProcessEnv), false)
-  assert.equal(hasMarketsAuthConfig({
+  assert.equal(hasMarketsAuthConfig(testEnvironment({ MARKETS_ACCESS_PASSWORD_HASH: hash })), false)
+  assert.equal(hasMarketsAuthConfig(testEnvironment({
     MARKETS_ACCESS_PASSWORD_HASH: hash,
     MARKETS_SESSION_SECRET: 'too-short',
-  } as NodeJS.ProcessEnv), false)
+  })), false)
 })
 
 test('Markets sessions are signed, expire, and cannot be modified', async () => {

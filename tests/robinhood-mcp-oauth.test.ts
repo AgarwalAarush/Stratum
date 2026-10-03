@@ -16,7 +16,7 @@ test('Robinhood OAuth credentials are written only to a private worker-local sto
       onAuthorizationUrl: () => undefined,
     })
     await provider.saveClientInformation({ client_id: 'worker-client', issuer: 'https://broker.example' })
-    await provider.saveTokens({ access_token: 'not-logged', refresh_token: 'not-logged', issuer: 'https://broker.example' })
+    await provider.saveTokens({ token_type: 'Bearer', access_token: 'not-logged', refresh_token: 'not-logged', issuer: 'https://broker.example' })
     const state = await provider.state()
 
     assert.equal(await provider.hasExpectedState(state), true)

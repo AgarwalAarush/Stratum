@@ -51,7 +51,7 @@ test('transactional completion creates exactly one receipt; retained/retried rep
   for(const status of ['applied','no_change','blocked']){
    await db.query('update company_world_memory_receipts set status=$1 where report_id=$2',[status,id]);assert.equal((await db.query('select * from claim_company_world_receipt($1,$2)',[id,job])).rows.length,0)
   }
-  assert.equal((await db.query("select status from equity_research_notes where id=$1",[id])).rows[0].status,'complete')
+  assert.equal((await db.query<{status:string}>("select status from equity_research_notes where id=$1",[id])).rows[0].status,'complete')
   const newer='00000000-0000-4000-8000-000000000012',other='00000000-0000-4000-8000-000000000002'
   // Simulate completed legacy versions before this release's completion trigger.
   await db.exec('alter table equity_research_notes disable trigger company_world_report_complete')

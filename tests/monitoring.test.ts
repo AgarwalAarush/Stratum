@@ -30,6 +30,12 @@ const decision: ThesisDecision = {
   createdAt: '2026-07-28T20:00:00.000Z',
   investmentThesisId: 'thesis-1',
   researchNoteId: 'research-1',
+  portfolioId: null,
+  valuationSupport: 'Entry range reflects the recorded fair value.',
+  whatChanged: 'No material change.',
+  changeSummary: [],
+  sizingInputs: null,
+  constraintStatus: 'needs_inputs',
 }
 
 test('event refresh keys are stable per owner and source event', () => {

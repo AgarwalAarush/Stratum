@@ -1,3 +1,4 @@
+import { testEnvironment } from './fixtures/environment.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
@@ -56,9 +57,9 @@ test('market overview has a source-backed deterministic memo without Codex', () 
 })
 
 test('market synthesis can be disabled while deterministic state stays live', () => {
-  assert.equal(shouldRunMarketSynthesis({ CODEX_SYNTHESIS_ENABLED: 'false' }), false)
-  assert.equal(shouldRunMarketSynthesis({ CODEX_SYNTHESIS_ENABLED: 'true' }), true)
-  assert.equal(shouldRunMarketSynthesis({}), true)
+  assert.equal(shouldRunMarketSynthesis(testEnvironment({ CODEX_SYNTHESIS_ENABLED: 'false' })), false)
+  assert.equal(shouldRunMarketSynthesis(testEnvironment({ CODEX_SYNTHESIS_ENABLED: 'true' })), true)
+  assert.equal(shouldRunMarketSynthesis(testEnvironment({})), true)
 })
 
 test('Codex runner arguments enforce ephemeral read-only schema output', () => {
@@ -79,29 +80,29 @@ test('Codex runner arguments enforce ephemeral read-only schema output', () => {
 })
 
 test('Codex runner receives only the scoped credential and safe process settings', () => {
-  const env = buildCodexExecEnv({
+  const env = buildCodexExecEnv(testEnvironment({
     PATH: '/usr/bin',
     HOME: '/Users/worker',
     OPENAI_API_KEY: 'worker-key',
     SUPABASE_SERVICE_ROLE_KEY: 'must-not-leak',
     ALPACA_API_SECRET_KEY: 'must-not-leak',
-  })
+  }))
 
+  assert.equal(env.SUPABASE_SERVICE_ROLE_KEY, undefined)
+  assert.equal(env.ALPACA_API_SECRET_KEY, undefined)
   assert.deepEqual(env, {
     PATH: '/usr/bin',
     HOME: '/Users/worker',
     CODEX_API_KEY: 'worker-key',
   })
-  assert.equal(env.SUPABASE_SERVICE_ROLE_KEY, undefined)
-  assert.equal(env.ALPACA_API_SECRET_KEY, undefined)
 })
 
 test('Codex runner can fall back to cached CLI authentication without leaking secrets', () => {
-  assert.deepEqual(buildCodexExecEnv({
+  assert.deepEqual(buildCodexExecEnv(testEnvironment({
     PATH: '/usr/bin',
     HOME: '/Users/worker',
     SUPABASE_SERVICE_ROLE_KEY: 'must-not-leak',
-  }), {
+  })), {
     PATH: '/usr/bin',
     HOME: '/Users/worker',
   })

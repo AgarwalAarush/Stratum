@@ -54,8 +54,8 @@ test('candidate frontier provenance includes every matching bounded discovery ru
     provider: 'openai', model: 'cheap-model', generatedAt: '2026-08-04T00:00:00.000Z', error: null, createdAt: '2026-08-04T00:00:00.000Z',
   }
   const frontiers: MarketResearchFrontierItem[] = [
-    { id: 'lower', hypothesisId: 'hypothesis', researchVersionId: 'version', question: 'Lower', causalNode: 'lower-priority node', priority: 2, sourceTypes: [], adapterId: null, status: 'deferred', evidenceNeeded: 'Evidence', attemptCount: 0, lastError: null, nextRunAt: null },
-    { id: 'higher', hypothesisId: 'hypothesis', researchVersionId: 'version', question: 'Higher', causalNode: 'higher-priority node', priority: 5, sourceTypes: [], adapterId: null, status: 'deferred', evidenceNeeded: 'Evidence', attemptCount: 0, lastError: null, nextRunAt: null },
+    { id: 'lower', hypothesisId: 'hypothesis', researchVersionId: 'version', question: 'Lower', causalNode: 'lower-priority node', priority: 2, sourceTypes: [], adapterId: null, status: 'deferred', evidenceNeeded: 'Evidence', attemptCount: 0, lastError: null, nextRunAt: null, createdAt: '2026-08-04T00:00:00.000Z' },
+    { id: 'higher', hypothesisId: 'hypothesis', researchVersionId: 'version', question: 'Higher', causalNode: 'higher-priority node', priority: 5, sourceTypes: [], adapterId: null, status: 'deferred', evidenceNeeded: 'Evidence', attemptCount: 0, lastError: null, nextRunAt: null, createdAt: '2026-08-04T00:00:00.000Z' },
   ]
   assert.deepEqual(candidateResearchFrontiers(candidate, [discoveryRun], frontiers).map((item) => item.id), ['higher', 'lower'])
 })
@@ -67,11 +67,11 @@ test('observation review gives a human the highest-materiality open frontier evi
     ...partial,
   })
   const frontiers: MarketResearchFrontierItem[] = [
-    { id: 'high', hypothesisId: 'hypothesis', researchVersionId: null, question: 'Deliverable capacity?', causalNode: 'firm_capacity_constraint', priority: 5, sourceTypes: [], adapterId: null, status: 'deferred', evidenceNeeded: 'Evidence', attemptCount: 0, lastError: null, nextRunAt: null },
-    { id: 'complete', hypothesisId: 'hypothesis', researchVersionId: null, question: 'Resolved', causalNode: 'data_center_load', priority: 5, sourceTypes: [], adapterId: null, status: 'complete', evidenceNeeded: 'Evidence', attemptCount: 0, lastError: null, nextRunAt: null },
+    { id: 'high', hypothesisId: 'hypothesis', researchVersionId: null, question: 'Deliverable capacity?', causalNode: 'firm_capacity_constraint', priority: 5, sourceTypes: [], adapterId: null, status: 'deferred', evidenceNeeded: 'Evidence', attemptCount: 0, lastError: null, nextRunAt: null, createdAt: '2026-08-04T00:00:00.000Z' },
+    { id: 'complete', hypothesisId: 'hypothesis', researchVersionId: null, question: 'Resolved', causalNode: 'data_center_load', priority: 5, sourceTypes: [], adapterId: null, status: 'complete', evidenceNeeded: 'Evidence', attemptCount: 0, lastError: null, nextRunAt: null, createdAt: '2026-08-04T00:00:00.000Z' },
   ]
   const ordered = prioritizeWorldObservationProposals([
-    proposal('reviewed', { review: { decision: 'accepted', rationale: 'Reviewed', reviewedAt: '2026-08-04T01:00:00.000Z', observationId: 'observation' } }),
+    proposal('reviewed', { review: { decision: 'accepted', rationale: 'Reviewed', reviewedAt: '2026-08-04T01:00:00.000Z', observationId: 'observation', reviewerKind: 'human' } }),
     proposal('non-frontier', { mechanism: 'data_center_load', materiality: 99 }),
     proposal('frontier-low', { materiality: 71 }),
     proposal('frontier-high', { materiality: 90 }),

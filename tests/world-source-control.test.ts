@@ -12,9 +12,10 @@ import {
   validatePersistedWorldSourceScoutCandidates,
   validateWorldSourceScoutCandidates,
 } from '../lib/server/world-source-control.ts'
+import type { WorldSourceScoutCandidate } from '../lib/markets/types.ts'
 import { getMarketDomainPack } from '../lib/markets/domain-packs.ts'
 
-const candidate = {
+const candidate: WorldSourceScoutCandidate = {
   slug: 'example-grid-operator',
   label: 'Example Grid Operator',
   publisher: 'Example Grid Operator',
