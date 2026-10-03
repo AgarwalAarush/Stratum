@@ -1,3 +1,4 @@
+import { currentAdvice } from './fixtures/research-advice-v2.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { recommendationResearchTargets, dependencyReadiness, parseRecommendationDependencies } from '../lib/markets/recommendation-preparation.ts'
@@ -7,7 +8,7 @@ test('repairs each instrument once across accounts, without retrying an unresolv
   const name = {symbol:'GRID',securityId:'grid',gaps:['ETF holdings are older than seven days or undated'],instrumentType:'etf',research:{id:'old'}}
   const context = {names:[name,{...name,portfolioId:'another'},
     {symbol:'PIKA',securityId:'unresolved:PIKA',gaps:['Research missing']},
-    {symbol:'ABC',securityId:'abc',gaps:[],entryGaps:['Cash availability needs a current owner confirmation']}]} as unknown as DecisionContext
+    {symbol:'ABC',research:{content:{advice:currentAdvice()}},securityId:'abc',gaps:[],entryGaps:['Cash availability needs a current owner confirmation']}]} as unknown as DecisionContext
   assert.deepEqual(recommendationResearchTargets(context),[{symbol:'GRID',instrumentType:'etf',researchId:'old'}])
 })
 
