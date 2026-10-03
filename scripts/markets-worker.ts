@@ -1,3 +1,4 @@
+import { dispatchCompanyWorldReceipts } from '../lib/server/company-world-memory.ts'
 import { execFileSync } from 'node:child_process'
 import { writeWorkerLocalHealth, safeWorkerError } from '../lib/server/worker-local-health.ts'
 import { workerProgressState } from '../lib/server/worker-watchdog.ts'
@@ -89,6 +90,7 @@ async function maintenance(){
           includeRobinhood: robinhoodEnabled,
           includeWorldThinker: worldThinkerEnabled,
         })
+        if(worldThinkerEnabled && codexEnabled) await dispatchCompanyWorldReceipts((payload,key,priority)=>enqueueAgentJob('run-world-thinker',payload,key,{priority}))
         nextScheduleAt = Date.now() + SCHEDULER_INTERVAL_MS
         for (const job of scheduled) {
           console.info(JSON.stringify({

@@ -1,0 +1,11 @@
+[
+ {"name":"paraphrased recall","query":"electricity shortage","required":["capacity","fabrication"]},
+ {"name":"cross-domain relationship","query":"hydrology power","required":["water","capacity","fabrication"]},
+ {"name":"contradictions","query":"bottleneck","required":["capacity"],"counter":["relief"]},
+ {"name":"source duplication","query":"power","required":["capacity"]},
+ {"name":"historical knowledge","query":"capacity estimate","cutoff":"2026-09-15","required":["old"],"excluded":["correction","future"]},
+ {"name":"expired forecast","query":"chip demand","required":[],"excluded":["forecast","future"]},
+ {"name":"historical forecast","query":"chip demand","eventFrom":"2026-08-01","eventTo":"2026-09-01","required":["forecast"],"excluded":["future"]},
+ {"name":"correction","query":"capacity estimate","required":["correction"],"counter":["old"],"excluded":["future"]},
+ {"name":"abstention","query":"unicorn textiles","required":[],"excluded":["future"]}
+]

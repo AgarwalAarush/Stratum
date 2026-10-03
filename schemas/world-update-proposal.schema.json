@@ -18,7 +18,140 @@
     "stringList": { "type": "array", "maxItems": 20, "items": { "type": "string" } },
     "score": { "type": "integer", "minimum": 0, "maximum": 100 },
     "relationship": { "type": "object", "additionalProperties": false, "required": ["type", "targetId", "description"], "properties": { "type": { "type": "string" }, "targetId": { "type": "string" }, "description": { "type": "string" } } },
-    "claim": { "type": "object", "additionalProperties": false, "required": ["text", "sourceIds", "assessment"], "properties": { "text": { "type": "string" }, "sourceIds": { "type": "array", "items": { "type": "string" } }, "assessment": { "type": "boolean" } } },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "sourceIds",
+        "assessment",
+        "claimId",
+        "observationIds",
+        "kind",
+        "validFrom",
+        "validTo",
+        "qualifier",
+        "supports",
+        "contradicts",
+        "supersedes",
+        "evidence"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "sourceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assessment": {
+          "type": "boolean"
+        },
+        "claimId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 160
+        },
+        "observationIds": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 30
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "observed_fact",
+            "company_statement",
+            "forecast",
+            "analytical_hypothesis",
+            null
+          ]
+        },
+        "validFrom": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "validTo": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "qualifier": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "supports": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 30
+        },
+        "contradicts": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 30
+        },
+        "supersedes": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 30
+        },
+        "evidence": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "sourceId": {
+                "type": "string"
+              },
+              "quote": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "sourceId",
+              "quote"
+            ]
+          },
+          "maxItems": 20
+        }
+      }
+    },
     "indicator": { "type": "object", "additionalProperties": false, "required": ["id", "label", "condition", "direction", "threshold", "sourceIds"], "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "condition": { "type": "string" }, "direction": { "enum": ["higher", "lower", "crosses", "changes"] }, "threshold": { "type": ["string", "null"] }, "sourceIds": { "type": "array", "items": { "type": "string" } } } },
     "probabilityRange": { "type": ["object", "null"], "additionalProperties": false, "required": ["low", "high", "label"], "properties": { "low": { "$ref": "#/$defs/score" }, "high": { "$ref": "#/$defs/score" }, "label": { "type": "string", "const": "assessment" } } },
     "node": {

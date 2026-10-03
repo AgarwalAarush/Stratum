@@ -1,3 +1,7 @@
+import { loadCompanyWorldFeedback, validateCompanyWorldPublication, companyFeedbackHasChanges, updateCompanyWorldReceipt, type CompanyWorldFeedback } from './company-world-memory.ts'
+import { retrieveWorldMemory } from './world-retrieval.ts'
+import { identifyWorldClaims, stableWorldJson } from './world-claims.ts'
+import { ingestWorldObservation } from './world-memory.ts'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises'
@@ -91,11 +95,7 @@ interface ThinkerContext {
   eventKeyMap: Array<{ eventKey: string; eventClusterId: string }>
   coverageFrontiers: WorldCoverageFrontier[]
   explorationFrontiers: WorldCoverageFrontier[]
-  companyResearchFeedback: {
-    lead: Record<string, unknown>
-    note: Record<string, unknown>
-    sources: Array<{ id: string; label: string; url: string; sourceAsOf: string | null }>
-  } | null
+  companyResearchFeedback: CompanyWorldFeedback | null
   signals: WorldSignal[]
   specialistAssessments: WorldSpecialistAssessment[]
 }
@@ -207,25 +207,10 @@ async function loadActiveAssetRegistry(): Promise<ThinkerContext['assetRegistry'
 }
 
 async function loadCompanyResearchFeedback(options: Pick<WorldThinkerOptions, 'trigger' | 'worldOpportunityLeadId' | 'researchNoteId' | 'symbol'>): Promise<ThinkerContext['companyResearchFeedback']> {
-  if (options.trigger !== 'company_research' || !options.worldOpportunityLeadId || !options.researchNoteId) return null
-  const supabase = getSupabaseClient()
-  if (!supabase) return null
-  const [{ data: lead, error: leadError }, { data: note, error: noteError }, { data: sources, error: sourceError }] = await Promise.all([
-    supabase.from('world_opportunity_leads').select('id,originating_node_id,originating_hypothesis_id,symbol,issuer,value_chain_role,what_changed,transmission_mechanism,capture_mechanism,capture_conditions,evidence_gaps,decisive_questions,catalysts,falsifiers,expectations_question,status').eq('id', options.worldOpportunityLeadId).maybeSingle(),
-    supabase.from('equity_research_notes').select('id,symbol,version,status,content,data_as_of,generated_at').eq('id', options.researchNoteId).maybeSingle(),
-    supabase.from('equity_research_sources').select('source_id,label,url,source_as_of').eq('research_note_id', options.researchNoteId).limit(80),
-  ])
-  if (leadError) throw new Error(`Unable to retrieve the originating world opportunity: ${leadError.message}`)
-  if (noteError) throw new Error(`Unable to retrieve company research feedback: ${noteError.message}`)
-  if (sourceError) throw new Error(`Unable to retrieve company research source lineage: ${sourceError.message}`)
-  if (!lead || !note || note.status !== 'complete' || (options.symbol && note.symbol !== options.symbol)) return null
-  return {
-    lead: lead as Record<string, unknown>,
-    note: note as Record<string, unknown>,
-    sources: (sources ?? []).flatMap((source) => typeof source.source_id === 'string' && typeof source.url === 'string'
-      ? [{ id: `equity-research-source:${source.source_id}`, label: typeof source.label === 'string' ? source.label : 'Company research source', url: source.url, sourceAsOf: typeof source.source_as_of === 'string' ? source.source_as_of : null }]
-      : []),
-  }
+  if (options.trigger !== 'company_research' || !options.researchNoteId) return null
+  const feedback = await loadCompanyWorldFeedback(options.researchNoteId, options.worldOpportunityLeadId)
+  if (options.symbol && feedback?.note.symbol !== options.symbol) return null
+  return feedback
 }
 
 function selectRelevantNodes(nodes: WorldNode[], events: EventClusterRow[]): WorldNode[] {
@@ -287,6 +272,11 @@ export async function retrieveWorldThinkerContext(options: Pick<WorldThinkerOpti
   const current = snapshot.nodes.find((entry) => entry.node.kind === 'current')?.node ?? null
   const journals = latestDistinctWorldJournals(snapshot.nodes.map((entry) => entry.node), 2)
   const relevantNodes = selectRelevantNodes(snapshot.nodes.map((entry) => entry.node), pending.events)
+  const recall = await retrieveWorldMemory({query: companyResearchFeedback ? String(companyResearchFeedback.note.symbol) : pending.events.map(e=>`${e.title} ${e.channels.join(' ')}`).join(' ').slice(0,500) || 'economic constraints power semiconductor policy', symbol: options.symbol, limit:20}, {branch}).catch(error=>({bundles:[],receipt:{error:String(error)}}))
+  for (const bundle of recall.bundles) {
+    const node = snapshot.nodes.find(n=>n.node.id===bundle.nodeId)?.node
+    if(node && !relevantNodes.some(n=>n.id===node.id)) relevantNodes.push(node)
+  }
   // Review overdue economic hypotheses even when today's headlines do not match them.
   if (options.trigger === 'manual') {
     for (const { node } of snapshot.nodes.filter(({ node }) => node.kind === 'hypothesis' && ['active', 'monitoring'].includes(node.status) && Date.parse(node.nextReviewAt) <= Date.now()).slice(0, 2)) {
@@ -306,9 +296,10 @@ export async function retrieveWorldThinkerContext(options: Pick<WorldThinkerOpti
   const explorationFrontiers = requestedFrontiers.size
     ? coverageFrontiers.filter((frontier) => requestedFrontiers.has(frontier.id)).slice(0, 1)
     : options.trigger === 'scheduled' || options.trigger === 'manual' ? selectDueWorldCoverageFrontiers(coverageFrontiers, new Date(), 1) : []
-  const needsWebSearch = explorationFrontiers.length > 0 || relevantNodes.some(node => node.kind === 'hypothesis' && Date.parse(node.nextReviewAt) <= Date.now()) || pending.events.some((event) => event.materiality >= 75 && (event.source_diversity < 2 || event.claim_state === 'contested'))
+  const needsWebSearch = !companyResearchFeedback && (explorationFrontiers.length > 0 || relevantNodes.some(node => node.kind === 'hypothesis' && Date.parse(node.nextReviewAt) <= Date.now()) || pending.events.some((event) => event.materiality >= 75 && (event.source_diversity < 2 || event.claim_state === 'contested')))
   const eventKeyMap = pending.events.map((event, index) => ({ eventKey: `E${String(index + 1).padStart(3, '0')}`, eventClusterId: event.id }))
   const retrievalLedger = [
+    { order: 0, memoryRetrieval: recall.receipt },
     { order: 1, retrieved: ['WORLD_CHARTER.md', 'THINKER.md', 'world/current.md'], commit: baseCommit },
     { order: 2, retrieved: journals.map((node) => node.id), eventClusterIds: pending.events.map((event) => event.id) },
     { order: 3, retrieved: relevantNodes.map((node) => node.id), resolution: 'event entity and channel match' },
@@ -344,9 +335,9 @@ Orient against prior state. Classify every supplied event key as confirmation, c
 
 When ownerInvestigation is present, investigate its exact causal version and unresolved question. Preserve source lineage; record supported, rejected or unresolved economic links in the journal, and emit bounded company leads only when verified.
 
-When companyResearchFeedback is present, use its completed note and source ledger to strengthen, weaken, narrow, supersede, or retire the originating world hypothesis. Add the supplied equity-research sources to the draft source ledger before citing them. Do not copy a company rating, entry action, position, or capital decision into world memory.
+When companyResearchFeedback is present, review this ordinary or World-led frozen report exactly once. Treat note.assessmentSections and businessModel as analytical hypotheses; independently test against the complete readable originals in sources, never cite report prose as evidence. The sources use report-namespaced IDs and origin identities; repeated reports quoting one original are ONE evidence origin, never independent corroboration. Strengthen, challenge, revise or retain related World knowledge. Add the supplied readable sources to the draft ledger. Every NEW factual claim must supply kind (observed_fact, company_statement or forecast), qualifier when needed, and evidence with exact sourceId and verbatim quote from the original captured text for EVERY cited source. A company's statement about demand or future production is company_statement or forecast, not an independently observed fact. Forecasts require validTo. Preserve prior claimId on revisions; use contradicts, supersedes or supports to explicitly connect corrections and contrary evidence. Retain unchanged claims and their metadata exactly. Do not publish a company rating, entry action, accepted owner thesis, holdings, brokerage detail, or capital decision. Return no opportunityLeads and no journal.newInvestigations. If no material source-backed change is warranted, return only the unchanged current node, no archives, empty material/belief/scenario changes and an explicit no-change explanation and evidence gaps in journal.summary. The host will record a terminal no-change receipt without making a World commit.
 
-Investigate exactly one supplied event, frontier, or owner question. Related nodes supply context, not additional assignments. Do not fan out into specialist or recursive investigations. For the focal overdue hypothesis, explicitly strengthen, weaken, narrow, retire, or retain it with an explained evidence gap. When fresh evidence warrants investigation, resolve at most one public issuer and produce a bounded company lead. If none qualifies, explain the missing capture or expectations evidence in the journal; do not invent a lead or leave the question silently unreviewed. For each opportunity, trace event -> mechanism -> economic variable -> constrained layer -> rent recipient -> expectations question before naming a company. Include capture conditions, contradictions, gaps, catalysts, and falsifiers. Every hypothesis upsert must populate non-empty mechanism, economicVariable, constrainedLayer, rentRecipient, expectationsQuestion, catalysts, and falsifiers; omit an immature hypothesis instead of returning null or empty specialized fields. Every scenario requires at least one signpost. Every active material situation should link to durable actor nodes and observable indicators when the evidence supports them. Before emitting any company lead, resolve its exact active/tradable symbol and issuer with the read-only command ${worldCli} market <symbol-or-issuer>; omit the lead if that command returns no verified asset. A lead is only a research queue candidate. Never accept a company thesis, recommend a purchase, allocate capital, or propose a trade. Return one bounded WorldUpdateDraft matching the schema; the host owns asOf, nextReviewAt, trigger, baseCommit, and database IDs, so omit those administrative fields. The upserts array must contain exactly one node with kind "current" and id "current", even on the first run; summarize the current assessment concisely there. Never include a node with kind "journal" in upserts; the host deterministically renders the journal from the draft journal fields. Do not delete nodes; archive or supersede them. Upsert only nodes that changed or were explicitly reviewed. Preserve every unchanged claim and its source IDs on updated nodes; explicitly explain any superseded claim in changeSummary. The current node is a concise navigation summary, not the evidence archive: link to durable nodes instead of copying their entire history. Use stable IDs.
+${context.companyResearchFeedback ? 'Review exactly this completed report against its supplied originals and relevant World knowledge. Do not initiate an additional investigation, external source collection, or company lead. The report receipt is outside the general investigation budget. If evidence supports a material change, propose bounded durable nodes and explicit claim relationships. Otherwise explain no change and gaps. Never recommend a purchase, accept a thesis, allocate capital or propose a trade.' : `Investigate exactly one supplied event, frontier, or owner question. Related nodes supply context, not additional assignments. Do not fan out into specialist or recursive investigations. For the focal overdue hypothesis, explicitly strengthen, weaken, narrow, retire, or retain it with an explained evidence gap. When fresh evidence warrants investigation, resolve at most one public issuer and produce a bounded company lead. If none qualifies, explain the missing capture or expectations evidence in the journal; do not invent a lead or leave the question silently unreviewed. For each opportunity, trace event -> mechanism -> economic variable -> constrained layer -> rent recipient -> expectations question before naming a company. Include capture conditions, contradictions, gaps, catalysts, and falsifiers. Every hypothesis upsert must populate non-empty mechanism, economicVariable, constrainedLayer, rentRecipient, expectationsQuestion, catalysts, and falsifiers; omit an immature hypothesis instead of returning null or empty specialized fields. Every scenario requires at least one signpost. Every active material situation should link to durable actor nodes and observable indicators when the evidence supports them. Before emitting any company lead, resolve its exact active/tradable symbol and issuer with the read-only command ${worldCli} market <symbol-or-issuer>; omit the lead if that command returns no verified asset. A lead is only a research queue candidate. Never accept a company thesis, recommend a purchase, allocate capital, or propose a trade.`} Return one bounded WorldUpdateDraft matching the schema; the host owns asOf, nextReviewAt, trigger, baseCommit, and database IDs, so omit those administrative fields. The upserts array must contain exactly one node with kind "current" and id "current", even on the first run; summarize the current assessment concisely there. Never include a node with kind "journal" in upserts; the host deterministically renders the journal from the draft journal fields. Do not delete nodes; archive or supersede them. Upsert only nodes that changed or were explicitly reviewed. Preserve every unchanged claim and its source IDs on updated nodes; explicitly explain any superseded claim in changeSummary. The current node is a concise navigation summary, not the evidence archive: link to durable nodes instead of copying their entire history. Use stable IDs.
 
 UNTRUSTED_CONTEXT
 ${json}
@@ -379,7 +370,7 @@ EVENT_KEYS
 ${JSON.stringify(context.eventKeyMap)}`
 }
 
-export function materializeWorldUpdateProposal(draft: WorldUpdateDraft, context: Pick<ThinkerContext, 'baseCommit' | 'eventKeyMap'> & { current?: WorldNode | null }, trigger: WorldUpdateProposal['trigger'], asOf = new Date().toISOString()): WorldUpdateProposal {
+export function materializeWorldUpdateProposal(draft: WorldUpdateDraft, context: Pick<ThinkerContext, 'baseCommit' | 'eventKeyMap'> & { current?: WorldNode | null; allNodes?:WorldNode[] }, trigger: WorldUpdateProposal['trigger'], asOf = new Date().toISOString()): WorldUpdateProposal {
   const ids = new Map(context.eventKeyMap.map((entry) => [entry.eventKey, entry.eventClusterId]))
   const seen = new Set<string>()
   const eventClassifications = draft.eventClassifications.map((classification) => {
@@ -405,6 +396,10 @@ export function materializeWorldUpdateProposal(draft: WorldUpdateDraft, context:
   }
   const upserts: WorldNode[] = sourceUpserts.map((node) => ({
     ...node,
+    claims: node.claims.map(claim=>{
+      const prior=context.allNodes?.find(n=>n.id===node.id)?.claims.find(c=>c.text===claim.text && stableWorldJson([...c.sourceIds].sort())===stableWorldJson([...claim.sourceIds].sort()))
+      return prior ? {...prior} : claim
+    }),
     asOf,
     nextReviewAt: new Date(Date.parse(asOf) + reviewDays[node.kind] * 24 * 60 * 60_000).toISOString(),
   }))
@@ -413,7 +408,7 @@ export function materializeWorldUpdateProposal(draft: WorldUpdateDraft, context:
 
 export function validateWorldUpdateDraftWithHostSources(
   value: unknown,
-  sources: Array<Pick<EventSourceRow, 'source_id' | 'url' | 'title' | 'publisher' | 'published_at' | 'claim_state' | 'stance'>>,
+  sources: Array<Pick<EventSourceRow, 'source_id' | 'url' | 'title' | 'publisher' | 'published_at' | 'claim_state' | 'stance'> & Pick<WorldSourceReference,'capturedAt'|'ingestedAt'|'evidenceOrigin'|'documentId'>>,
 ): WorldUpdateDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return validateWorldUpdateDraft(value)
   const input = value as Record<string, unknown>
@@ -430,6 +425,7 @@ export function validateWorldUpdateDraftWithHostSources(
       title: host.title,
       publisher: host.publisher ?? undefined,
       publishedAt: host.published_at ?? undefined,
+      capturedAt: host.capturedAt, ingestedAt:host.ingestedAt, evidenceOrigin:host.evidenceOrigin, documentId:host.documentId,
       claimState: host.claim_state,
       stance: host.stance,
     }
@@ -569,6 +565,7 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
   const { data: run, error: runError } = await supabase.from('world_thinker_runs').insert({ trigger: options.trigger, status: 'orienting', branch, agent_job_id: options.agentJobId ?? null }).select('id').single()
   if (runError || !run) throw new Error(`Unable to create World Thinker run: ${runError?.message ?? 'unknown error'}`)
   const runId = String(run.id)
+  if(options.trigger==='company_research' && options.researchNoteId) await updateCompanyWorldReceipt(options.researchNoteId,{run_id:runId})
   let context: ThinkerContext | null = null
   let draftSchemaPath: string | null = null
   let claimedIds: string[] = []
@@ -576,7 +573,7 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
     // An explicitly requested frontier review is a bounded breadth task, not a
     // second route into the oldest general backlog. Mixing both caused the
     // event batch to consume the prompt and left the named blind spot unchanged.
-    const automatic = options.trigger !== 'manual';
+    const automatic = options.trigger !== 'manual' && options.trigger !== 'company_research';
     const preview = automatic ? await supabase.rpc('acquire_world_investigation_slot', {}) : null;
     if (preview?.error) throw new Error(`Unable to inspect World investigation budget: ${preview.error.message}`);
     const pendingIds = isCoverageOnlyWorldRun(options) ? [] : await selectPendingEventIds(options.eventClusterIds, options.trigger);
@@ -617,7 +614,7 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
       return { runId, status: 'rejected', commit: null, criticVerdict: 'reject', queuedResearch: [] }
     }
     // Reserve only a useful, bounded investigation; collection and manual requests are outside this cap.
-    if (options.trigger !== 'manual') {
+    if (automatic) {
       const question = { eventClusterId: context.events[0]?.id ?? null, frontierId: context.explorationFrontiers[0]?.id ?? null,
         researchNoteId: context.companyResearchFeedback?.note.id ?? null };
       const budget = await supabase.rpc('acquire_world_investigation_slot', { p_run_id: runId, p_question: question, p_lane: context.manifest.investigationLane });
@@ -628,7 +625,8 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
     await updateRun(runId, { context_manifest: context.manifest, retrieval_ledger: context.retrievalLedger });
     draftSchemaPath = await writeWorldUpdateDraftSchema(context, runId, root)
     context.inputDirectory = await mkdtemp(join(worldDataRoot(root), 'runtime', 'world-inputs-'))
-    const hostSources = [...context.priorSources.map(source => ({ source_id: source.id, url: source.url, title: source.title, publisher: source.publisher ?? null, published_at: source.publishedAt ?? null, claim_state: source.claimState, stance: source.stance })), ...context.sources]
+    const companySources = context.companyResearchFeedback?.sources.map(source=>({source_id:source.id,url:source.url,title:source.label,publisher:new URL(source.url).hostname,published_at:source.sourceAsOf,claim_state:'reported' as const,stance:'neutral' as const})) ?? []
+    const hostSources = [...companySources, ...context.priorSources.map(source => ({ source_id: source.id, url: source.url, title: source.title, publisher: source.publisher ?? null, published_at: source.publishedAt ?? null, claim_state: source.claimState, stance: source.stance, capturedAt:source.capturedAt, ingestedAt:source.ingestedAt, evidenceOrigin:source.evidenceOrigin, documentId:source.documentId })), ...context.sources]
     const thinkerSelection = selectMarketModel(context.needsWebSearch ? 'world_web_research' : 'world_thinker')
     const thinkerRunPrompt = await thinkerPrompt(context, options.trigger)
     await updateRun(runId, { context_manifest: context.manifest })
@@ -640,6 +638,7 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
     await captureWorldSearchSources(proposal, context)
     validateEventClassifications(proposal, context)
     validateWorldProposalAgainstState(proposal, context.allNodes, context.priorSourceIds)
+    if(context.companyResearchFeedback) validateCompanyWorldPublication(proposal,context.companyResearchFeedback,context.allNodes)
     await validateLeadAssets(proposal.opportunityLeads)
     await updateRun(runId, { status: 'criticizing', model_metadata: { thinker: draftResult.metadata, webSearch: context.needsWebSearch } })
     const criticSelection = selectMarketModel('world_critic')
@@ -658,7 +657,8 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
       await captureWorldSearchSources(proposal, context)
       validateEventClassifications(proposal, context)
       validateWorldProposalAgainstState(proposal, context.allNodes, context.priorSourceIds)
-      await validateLeadAssets(proposal.opportunityLeads)
+      if(context.companyResearchFeedback) validateCompanyWorldPublication(proposal,context.companyResearchFeedback,context.allNodes)
+    await validateLeadAssets(proposal.opportunityLeads)
       // A repair is still model output. Re-criticize the repaired proposal with
       // the same independent evidence packet; host schema checks alone cannot
       // establish that causal support was actually repaired.
@@ -676,7 +676,39 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
       await updateRun(runId, { status: 'rejected', critic_verdict: critique.verdict, error: critique.summary, finished_at: new Date().toISOString() })
       return { runId, status: 'rejected', commit: null, criticVerdict: critique.verdict, queuedResearch: [] }
     }
-    const committed = await commitWorldUpdate(proposal, { root, branch, push: options.push })
+    if(context.companyResearchFeedback && !companyFeedbackHasChanges(proposal,context.allNodes)) {
+      if(proposal.journal.materialChanges.length || proposal.journal.beliefChanges.length || proposal.journal.scenarioChanges.length) throw new Error('No-change feedback contains unprojected material changes')
+      await updateRun(runId,{status:'noop',critic_verdict:'pass',outcome_reason:proposal.journal.summary,finished_at:new Date().toISOString()})
+      return {runId,status:'noop',commit:null,criticVerdict:'pass',queuedResearch:[]}
+    }
+    proposal.upserts = proposal.upserts.map(identifyWorldClaims)
+    if(context.companyResearchFeedback) {
+      const originals = new Map(context.companyResearchFeedback.sources.map(s=>[s.id,s]))
+      const previous = new Map(context.allNodes.flatMap(n=>identifyWorldClaims(n).claims.map(c=>[c.claimId,stableWorldJson(c)] as const)))
+      for(const node of proposal.upserts)for(const claim of node.claims) {
+        if(claim.assessment || previous.get(claim.claimId)===stableWorldJson(claim))continue
+        claim.observationIds=[]
+        for(const evidence of claim.evidence??[]) {
+          const source=originals.get(evidence.sourceId)!
+          const observation=await ingestWorldObservation({title:source.label,canonicalUrl:source.url,publisher:new URL(source.url).hostname,sourceTier:source.quality,
+            body:source.text,publishedAt:source.sourceAsOf,assertion:claim.text,kind:claim.kind==='forecast'?'estimate':claim.kind==='company_statement'?'claim':'fact',
+            domain:'company-research',mechanism:claim.qualifier??node.summary,observedAt:source.capturedAt,validFrom:claim.validFrom,validTo:claim.validTo,
+            entities:[{kind:'company',name:String(context.companyResearchFeedback.note.symbol)}]})
+          claim.observationIds.push(observation.id)
+          const ledgerSource=proposal.sources.find(s=>s.id===source.id)
+          if(ledgerSource)Object.assign(ledgerSource,{documentId:observation.documentId,capturedAt:source.capturedAt,ingestedAt:observation.ingestedAt,evidenceOrigin:source.origin})
+        }
+      }
+      await updateCompanyWorldReceipt(options.researchNoteId!,{affected_node_ids:proposal.upserts.filter(n=>n.kind!=='current').map(n=>n.id),affected_claim_ids:proposal.upserts.flatMap(n=>n.claims.map(c=>c.claimId))})
+    }
+    const observationIds=[...new Set(proposal.upserts.flatMap(n=>n.claims.flatMap(c=>c.observationIds??[])))]
+    for(let start=0;start<observationIds.length;start+=100){
+      const ids=observationIds.slice(start,start+100)
+      const found=await supabase.from('world_observations').select('id').in('id',ids)
+      if(found.error || found.data?.length!==ids.length)throw new Error('World claim references unavailable immutable observations')
+    }
+    const committed = await commitWorldUpdate(proposal, { root, branch, push: options.push, researchReportId:options.trigger==='company_research'?options.researchNoteId:undefined })
+    if(options.trigger==='company_research' && options.researchNoteId) await updateCompanyWorldReceipt(options.researchNoteId,{result_commit:committed.commit})
     await updateRun(runId, { status: committed.pushPending ? 'push_pending' : 'committed', result_commit: committed.commit, critic_verdict: 'pass', push_pending: committed.pushPending, error: committed.pushError ?? null })
     try {
       const { error: changeSetError } = await supabase.from('world_change_sets').upsert({
