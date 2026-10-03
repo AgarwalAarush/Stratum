@@ -28,7 +28,9 @@ import { crossAssetMarketInstrument } from './cross-asset.ts'
 import { normalizeStockLeadershipRow } from './market-leadership.ts'
 import { AsyncTtlCache } from './async-ttl-cache.ts'
 import { cachedFetchWithFallback } from './cache.ts'
-import { getSupabaseClient } from './supabase.ts'
+import { getSupabaseClient, getTypedSupabaseClient } from './supabase.ts'
+import type { Tables } from './database.types.ts'
+import { marketFeed, screenerHistory } from './screener-records.ts'
 
 const DATABASE_PAGE_SIZE = 1_000
 const STALE_AFTER_MS = 20 * 60 * 1_000
@@ -98,30 +100,9 @@ interface MarketHomeRecord {
   generated_at: string
 }
 
-interface ScreenerRowRecord {
-  history_provenance?: ScreenerRow['history']
-  symbol: string
-  company: string
-  price: number | string
-  daily_change: number | string
-  return_5d: number | string | null
-  return_30d: number | string | null
-  return_90d: number | string | null
-  return_180d: number | string | null
-  return_ytd: number | string | null
-  return_1y: number | string | null
-  gap: number | string
-  volume: number | string
-  relative_volume: number | string
-  range_values: unknown
-  fifty_day_average: number | string
-  fifty_two_week_position: number | string
-  exchange: string
-  sector: string | null
-  sub_industry: string | null
-  tradable: boolean
-  data_as_of: string
-}
+const SCREENER_COLUMNS = 'symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,sector,sub_industry,tradable,data_as_of,history_provenance' as const
+
+type ScreenerRowRecord = Omit<Tables<'screener_rows'>, 'snapshot_id' | 'created_at'>
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -220,7 +201,7 @@ function marketMemo(value: unknown, generatedAt: string): MarketMemo | null {
 
 function normalizeScreenerRow(row: ScreenerRowRecord): ScreenerRow {
   return {
-    history: row.history_provenance,
+    history: screenerHistory(row.history_provenance),
     symbol: row.symbol,
     company: row.company,
     price: Number(row.price),
@@ -246,7 +227,7 @@ function normalizeScreenerRow(row: ScreenerRowRecord): ScreenerRow {
 }
 
 export async function fetchLatestSnapshotMeta(options: { bypassCache?: boolean } = {}): Promise<SnapshotRecord | null> {
-  const supabase = getSupabaseClient()
+  const supabase = getTypedSupabaseClient()
   if (!supabase) return null
   const load = async () => {
     const { data, error } = await supabase
@@ -255,7 +236,8 @@ export async function fetchLatestSnapshotMeta(options: { bypassCache?: boolean }
       .eq('status', 'complete')
       .eq('is_latest', true)
       .maybeSingle()
-    return error || !data ? null : data as SnapshotRecord
+    const feed = data ? marketFeed(data.feed) : null
+    return error || !data || !feed ? null : { ...data, feed }
   }
   if (options.bypassCache) return load()
   return fetchSharedArtifact(
@@ -294,7 +276,7 @@ export async function getCachedSnapshotRows(
 }
 
 export async function fetchLatestScreener(query: ScreenerQuery): Promise<ScreenerResponse | null> {
-  const supabase = getSupabaseClient()
+  const supabase = getTypedSupabaseClient()
   const snapshot = await fetchLatestSnapshotMeta()
   if (!supabase || !snapshot) return null
 
@@ -303,11 +285,11 @@ export async function fetchLatestScreener(query: ScreenerQuery): Promise<Screene
     for (let from = 0; ; from += DATABASE_PAGE_SIZE) {
       const { data, error } = await supabase
         .from('screener_rows')
-        .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,sector,sub_industry,tradable,data_as_of,history_provenance')
+        .select(SCREENER_COLUMNS)
         .eq('snapshot_id', snapshot.id)
         .range(from, from + DATABASE_PAGE_SIZE - 1)
       if (error) return null
-      const page = (data ?? []) as ScreenerRowRecord[]
+      const page = data ?? []
       loaded.push(...page.map(normalizeScreenerRow))
       if (page.length < DATABASE_PAGE_SIZE) break
     }
@@ -329,19 +311,19 @@ export async function fetchLatestScreener(query: ScreenerQuery): Promise<Screene
  * alphabetical slice happens to be visible in the screener UI.
  */
 export async function fetchLatestScreenerSymbols(symbols: string[]): Promise<ScreenerResponse | null> {
-  const supabase = getSupabaseClient()
+  const supabase = getTypedSupabaseClient()
   const snapshot = await fetchLatestSnapshotMeta()
   const requested = [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))]
   if (!supabase || !snapshot || requested.length === 0) return null
 
   const { data, error } = await supabase
     .from('screener_rows')
-    .select('symbol,company,price,daily_change,return_5d,return_30d,return_90d,return_180d,return_ytd,return_1y,gap,volume,relative_volume,range_values,fifty_day_average,fifty_two_week_position,exchange,sector,sub_industry,tradable,data_as_of,history_provenance')
+    .select(SCREENER_COLUMNS)
     .eq('snapshot_id', snapshot.id)
     .in('symbol', requested)
   if (error) return null
 
-  const rows = ((data ?? []) as ScreenerRowRecord[]).map(normalizeScreenerRow)
+  const rows = (data ?? []).map(normalizeScreenerRow)
   return {
     rows,
     total: rows.length,

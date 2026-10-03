@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit --incremental false",
+    "db:types": "node --experimental-strip-types scripts/generate-database-types.ts",
     "test": "node --test --experimental-strip-types tests/*.test.ts tests/**/*.test.ts"
   },
   "dependencies": {
