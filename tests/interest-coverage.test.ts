@@ -98,3 +98,28 @@ test('rechecked unresolved checkpoints wait, and only current passed decisions a
  assert.deepEqual([...decisionReadiness([row],notes,now)],['ABC']);
  for(const patch of [{researchId:'old'},{blocked:true},{action:'research'},{expiresAt:'2026-10-01T00:00:00Z'}])assert.equal(decisionReadiness([{...row,...patch}],notes,now).size,0);
 })
+
+
+test('scheduled upgrades survive newer failed or cancelled refresh attempts', async () => {
+ const { selectCoverageJobs, hasFailedResearchPrerequisite } = await import('../lib/markets/interest-coverage.ts');
+ const scheduled = { id:'upgrade', status:'queued', payload:{symbol:'ABC'}, run_after:'2026-10-05' };
+ const failed = { id:'refresh', status:'blocked', payload:{symbol:'ABC'}, run_after:'2026-10-03' };
+ assert.equal(selectCoverageJobs([failed, scheduled]).get('ABC'), scheduled);
+ assert.equal(selectCoverageJobs([{...failed,status:'cancelled'},scheduled]).get('ABC'), scheduled);
+ assert.equal(hasFailedResearchPrerequisite({contractCurrent:false,job:selectCoverageJobs([failed, scheduled]).get('ABC')!}), false);
+ assert.equal(hasFailedResearchPrerequisite({contractCurrent:false,job:failed}), true);
+ assert.equal(hasFailedResearchPrerequisite({contractCurrent:true,job:failed}), false);
+ assert.equal(hasFailedResearchPrerequisite({contractCurrent:false,job:null}), false);
+ assert.equal(selectCoverageJobs([{...failed,status:'cancelled'}]).size, 0);
+});
+
+test('coverage prioritizes running work and retains the newest terminal failure', async () => {
+ const { selectCoverageJobs } = await import('../lib/markets/interest-coverage.ts');
+ const running = { id:'running',status:'running',payload:{symbol:'ABC'} };
+ const queued = { id:'queued',status:'queued',payload:{symbol:'ABC'} };
+ const failed = { id:'failed',status:'failed',payload:{symbol:'ABC'} };
+ const older = { id:'prior',status:'succeeded',payload:{symbol:'ABC'} };
+ assert.equal(selectCoverageJobs([queued,failed,running,older]).get('ABC'), running);
+ assert.equal(selectCoverageJobs([failed,older]).get('ABC'), failed);
+ assert.deepEqual([...selectCoverageJobs([failed,{id:'other',status:'queued',payload:{symbol:'OTHER'}}]).keys()], ['ABC','OTHER']);
+});
