@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { prepareDailyRecommendations, reconcileRecommendationEvidence } from '../lib/server/recommendation-preparation.ts'
+import { loadDecisionCandidates } from '../lib/server/recommendations.ts'
 
 test('source repair queues a durable continuation before freezing and later evidence creates a new edition', async t => {
   process.env.SUPABASE_URL='https://preparation-test.supabase.co'
@@ -35,6 +36,8 @@ test('source repair queues a durable continuation before freezing and later evid
   assert.deepEqual(queued.map(q=>q.type),['refresh-market-screener','generate-company-research','generate-daily-recommendations'])
   assert.equal(queued.at(-1)!.payload.phase,'publish')
   assert.equal((queued.at(-1)!.payload.dependencyJobIds as string[]).length,2)
+  assert.equal(queued[1].payload.requiredResearchContractVersion,1)
+  assert.match(queued[1].key,/recommendation-research:v1:/)
   assert.match(String(queued.at(-1)!.payload.editionKey),/^daily:prepared:/)
   reconcile=true
   queued.length=0
@@ -44,4 +47,18 @@ test('source repair queues a durable continuation before freezing and later evid
   active=true
   assert.equal(await reconcileRecommendationEvidence(enqueue,owner),null)
   assert.equal(queued.length,1)
+})
+
+test('discovery history includes older scoped leads beyond the newest page and honors their latest state',async t=>{
+ process.env.SUPABASE_URL='https://candidate-pagination-test.supabase.co';process.env.SUPABASE_SERVICE_ROLE_KEY='fixture-key'
+ const owner='00000000-0000-4000-8000-000000000001'
+ let pages=0
+ t.mock.method(globalThis,'fetch',async(input:RequestInfo|URL)=>{
+  const url=new URL(String(input));assert.ok(url.pathname.endsWith('candidate_briefs'))
+  assert.equal(url.searchParams.get('or'),`(owner_id.eq.${owner},owner_id.is.null)`)
+  const offset=Number(url.searchParams.get('offset')??0);pages++
+  return Response.json(offset===0?Array.from({length:500},()=>({id:'new-state',symbol:'RECENT',status:'dismissed',generated_at:'2026-10-02'})):[{symbol:'LITE',status:'new',generated_at:'2026-08-01',owner_id:owner},{symbol:'RECENT',status:'new',generated_at:'2026-08-01'},{symbol:'PRIVATE',status:'new',generated_at:'2026-08-01',owner_id:'another-owner'}])
+ })
+ const rows=await loadDecisionCandidates(owner,'2026-10-03T00:00:00Z')
+ assert.equal(pages,2);assert.deepEqual(rows.map(row=>row.symbol),['RECENT','LITE']);assert.equal(rows[0].status,'dismissed')
 })

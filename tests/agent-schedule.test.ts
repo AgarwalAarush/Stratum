@@ -52,6 +52,7 @@ test('worker schedules daily intelligence only after its UTC release time', () =
     'prune-market-data',
     'refresh-fmp-intelligence',
     'scan-research-refreshes',
+    'seed-portfolio-company-research',
   ])
   assert.ok(jobTypes('2026-07-28T12:00:00Z').includes('generate-morning-brief'))
 })
@@ -113,6 +114,14 @@ test('portfolio-led research seeding runs after the morning thesis cycle', () =>
   const scheduled = buildDueAgentJobs(new Date('2026-07-28T10:12:00Z')).map((job) => job.jobType)
   assert.equal(scheduled.includes('seed-portfolio-company-research'), true)
   assert.equal(buildDueAgentJobs(new Date('2026-07-28T10:05:00Z')).some((job) => job.jobType === 'seed-portfolio-company-research'), false)
+})
+
+test('a late worker restart catches up daily coverage with the same durable daily key', () => {
+  const morning = buildDueAgentJobs(new Date('2026-07-28T10:12:00Z')).find(job => job.jobType === 'seed-portfolio-company-research')
+  const late = buildDueAgentJobs(new Date('2026-07-28T18:12:00Z')).find(job => job.jobType === 'seed-portfolio-company-research')
+  assert.ok(morning && late)
+  assert.equal(morning.dedupeKey, late.dedupeKey)
+  assert.equal(buildDueAgentJobs(new Date('2026-07-28T18:12:00Z'), { includeCodex: false }).some(job => job.jobType === 'seed-portfolio-company-research'), false)
 })
 
 test('six-hour research bucket schedules only the market orchestrator', () => {

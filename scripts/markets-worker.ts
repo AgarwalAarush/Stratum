@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { writeWorkerLocalHealth, safeWorkerError } from '../lib/server/worker-local-health.ts'
 import { workerProgressState } from '../lib/server/worker-watchdog.ts'
+import { evaluateWorkerLocalHealth } from '../lib/markets/worker-readiness.ts'
 import { hostname } from 'node:os'
 import { enqueueAgentJob, resumeBlockedAgentJobs, processAgentJobs, processOneAgentJob, recoverInterruptedAgentJobs, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
 import { enqueueDueAgentJobs } from '../lib/server/agent-schedule.ts'
@@ -35,6 +36,14 @@ let nextRecoveryAt = 0
 let nextQueueReconcileAt = 0
 let shutdownTimer: NodeJS.Timeout | null = null
 let lastLoopAt = Date.now()
+let lastHeartbeatAt: number | null = null
+let heartbeatError: string | null = null
+let readinessSchema: 'current' | 'legacy' | 'unknown' = 'unknown'
+
+async function localHealth() {
+  const health = evaluateWorkerLocalHealth({ consecutiveFailures, lastLoopAt, lastHeartbeatAt, heartbeatError })
+  await writeWorkerLocalHealth({ workerId, consecutiveFailures, readinessSchema, ...health })
+}
 
 function requestStop(signal: 'SIGINT' | 'SIGTERM') {
   if (stopping) return
@@ -57,15 +66,23 @@ async function heartbeat(): Promise<void> {
   if (Date.now() < nextHeartbeatAt) return
   nextHeartbeatAt = Date.now() + HEARTBEAT_INTERVAL_MS
   try {
-    await recordWorkerHeartbeat({ workerId, schedulerEnabled, fmpEnabled, codexEnabled })
     const progress = workerProgressState(lastLoopAt)
-    await writeWorkerLocalHealth({workerId,status:consecutiveFailures || progress.stalled?'degraded':'healthy',consecutiveFailures, ...progress})
+    const recorded = await recordWorkerHeartbeat({
+      workerId, schedulerEnabled, fmpEnabled, codexEnabled,
+      healthStatus: consecutiveFailures || progress.stalled ? 'degraded' : 'healthy',
+      lastLoopAt: new Date(lastLoopAt).toISOString(),
+    })
+    readinessSchema = recorded.readinessSchema
+    lastHeartbeatAt = Date.now()
+    heartbeatError = null
+    await localHealth()
     if (progress.stalled) {
       console.error(JSON.stringify({ event: 'worker_control_loop_stalled', workerId, ...progress }))
       process.exit(1)
     }
   } catch (error) {
-    await writeWorkerLocalHealth({workerId,status:'degraded',consecutiveFailures,error:safeWorkerError(error)})
+    heartbeatError = safeWorkerError(error)
+    await localHealth()
     console.warn(JSON.stringify({
       level: 'warn',
       workerId,
@@ -185,7 +202,7 @@ async function main() {
       }
       const processed = runOnce ? Number(await processOneAgentJob(workerId)) : await processAgentJobs(workerId, WORKER_CONCURRENCY)
       consecutiveFailures = 0
-      await writeWorkerLocalHealth({workerId,status:'healthy',consecutiveFailures})
+      await localHealth()
       if (runOnce) return
       if (!processed) await new Promise((resolve) => setTimeout(resolve, Math.min(60000, POLL_INTERVAL_MS * 2 ** Math.min(consecutiveFailures,4))))
     } catch (error) {

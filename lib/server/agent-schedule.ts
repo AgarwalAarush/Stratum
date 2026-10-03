@@ -120,7 +120,7 @@ export function buildDueAgentJobs(
   }
   // Research existing exposure before adjacent discovery. This run only creates
   // durable company-research jobs; it cannot create an investment decision.
-  if (newYork.hour === 6 && newYork.minute >= 10 && newYork.minute < 20) {
+  if (options.includeCodex !== false && newYork.hour * 60 + newYork.minute >= 6 * 60 + 10) {
     jobs.push(scheduledJob('seed-portfolio-company-research', now))
   }
   // The optional adapters value keeps schedule tests independent of process

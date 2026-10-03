@@ -20,3 +20,8 @@ test('a new edition waits for every dependency, then retains failed-source gaps 
   assert.deepEqual(parseRecommendationDependencies({dependencyJobIds:[id,id]}),[id])
   assert.throws(()=>parseRecommendationDependencies({dependencyJobIds:['missing']}),/Invalid/)
 })
+
+test('portfolio preparation does not bypass reserved rotation by repairing an entire new interest list',()=>{
+  const context={names:[{symbol:'OWNED',owned:true,securityId:'owned',gaps:['Research contract upgrade is required'],research:{id:'old'}},...Array.from({length:30},(_,index)=>({symbol:`WATCH${index}`,owned:false,securityId:`watch${index}`,gaps:['Research missing']}))]} as unknown as DecisionContext
+  assert.deepEqual(recommendationResearchTargets(context,{ownedOnly:true}).map(target=>target.symbol),['OWNED'])
+})
