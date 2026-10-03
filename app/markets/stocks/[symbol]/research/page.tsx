@@ -362,8 +362,8 @@ export default async function EquityResearchPage({ params, searchParams }: { par
   const research = requested ? await fetchEquityResearchVersion(user.id,symbol,requested) : stock.researchNote
   if(requested && !research) notFound()
   const [connections,history] = await Promise.all([research ? fetchCompanyWorldConnections(user.id,{reportId:research.id}) : [],fetchEquityResearchHistory(user.id,symbol)])
-  const packet = stock.companyPacket
   const researchPacket = research?.status === 'complete' ? await fetchResearchBaseline(user.id, 'equity', research.id) as CompanyPacket : null
+  const packet = requested ? researchPacket : stock.companyPacket
   const coverage = researchPacket?.researchCoverage
   const chartPoints = financialPoints(packet)
   const estimates = estimateRows(packet)
