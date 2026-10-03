@@ -399,7 +399,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
             <div><span>Conviction</span><strong>{confidence?.toFixed(0)}%</strong><small>Evidence confidence</small></div>
           </section>
 
-          <ResearchAdvice advice={research.advice} />
+          <ResearchAdvice advice={research.advice} evidenceAssessment={research.evidenceAssessment} status={research.status} />
           <section className="equity-research-revision" data-opinion-change={research.revision.opinionChange} aria-labelledby="research-revision-title">
             <header>
               <div>

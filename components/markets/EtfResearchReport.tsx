@@ -60,7 +60,7 @@ export function EtfResearchReport({
         </section>
       ) : (
         <>
-          <ResearchAdvice advice={research.advice} />
+          <ResearchAdvice advice={research.advice} evidenceAssessment={research.evidenceAssessment} status={research.status} />
       <section className="equity-research-executive-strip" aria-label="ETF research decision summary">
             <div><span>Formal rating</span><strong data-rating={research.formalRating}>{research.formalRating}</strong><small>Fund-level view</small></div>
             <div><span>Entry decision</span><strong>{formatEntryAction(research.entryAction)}</strong><small>What to do today</small></div>

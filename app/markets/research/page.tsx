@@ -11,6 +11,7 @@ import { fetchEquityResearchLibrary, fetchEtfResearchLibrary } from '@/lib/serve
 import { cachedFetchWithFallback } from '@/lib/server/cache'
 import { fetchPortfolioResearchCoverage } from '@/lib/server/portfolio-research-seeding'
 import { fetchResearchJobs } from '@/lib/server/research-jobs'
+import { fetchResearchCoverageStatus } from '@/lib/server/research-coverage-scheduling'
 import styles from './research.module.css'
 
 export default async function MarketsResearchPage() {
@@ -40,12 +41,21 @@ async function ResearchLibrary({ ownerId }: { ownerId: string }) {
       </nav>
       <div className={styles.context}>
         <Suspense fallback={<SectionLoading label="Portfolio coverage" />}><CoverageSection ownerId={ownerId} /></Suspense>
+        <Suspense fallback={<SectionLoading label="Research rotation" />}><RotationSection ownerId={ownerId} /></Suspense>
         <Suspense fallback={<SectionLoading label="Research queue" />}><QueueSection ownerId={ownerId} /></Suspense>
       </div>
       {library ? <ResearchLibraryGrid notes={notes} /> : <p className={styles.unavailable} role="alert">Saved research could not be loaded. Use Refresh to try again.</p>}
       <Suspense fallback={<SectionLoading label="Supporting evidence" />}><SupportingEvidence /></Suspense>
     </div>
   )
+}
+
+async function RotationSection({ownerId}:{ownerId:string}) {
+  const rows=await fetchResearchCoverageStatus(ownerId).catch(()=>null)
+  if(!rows)return <p className="py-4 text-sm text-[var(--text-muted)]">Research rotation status is unavailable.</p>
+  if(!rows.length)return null
+  const due=rows.filter(row=>row.overdue||row.queued)
+  return <section className={styles.coverage} aria-labelledby="research-rotation-title"><div><h2 id="research-rotation-title">Research rotation</h2><p>{rows.filter(row=>row.overdue).length} overdue · {rows.filter(row=>row.queued).length} queued or running. Review deadlines are targets; overdue names remain visible when capacity is limited.</p></div><div>{due.slice(0,8).map(row=><p key={row.symbol}><strong>{row.symbol}</strong> · {row.queueStatus??(row.overdue?'Overdue':'Due')} · {row.selectionReason}</p>)}{due.length>8&&<p>{due.length-8} additional names await review.</p>}</div></section>
 }
 
 async function QueueSection({ ownerId }: { ownerId: string }) {
@@ -63,8 +73,9 @@ async function CoverageSection({ ownerId }: { ownerId: string }) {
       <p>Owned first, then watchlists. Peers remain research leads.</p>
     </div>
     <div>
-      <strong>{coverage.ownedSymbols.filter((symbol) => coverage.coveredSymbols.includes(symbol)).length}/{coverage.ownedSymbols.length} owned researched</strong>
-      <p>{coverage.targets.length ? `Next: ${coverage.targets.map((target) => target.symbol).join(' · ')}` : 'Owned names are covered or already in the research queue.'}</p>
+      <strong>{coverage.ownedSymbols.filter((symbol) => coverage.coveredSymbols.includes(symbol)).length}/{coverage.ownedSymbols.length} holdings with current research</strong>
+      <p>{coverage.targets.length ? `Needs research: ${coverage.targets.map((target) => target.symbol).join(' · ')}` : 'No additional verified instruments are due in this coverage check.'}</p>
+      {!!coverage.unavailableSymbols.length&&<p>Security verification needed: {coverage.unavailableSymbols.join(' · ')}.</p>}
     </div>
   </section>
 }
