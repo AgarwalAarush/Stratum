@@ -1,3 +1,4 @@
+import { archiveDecisionEvidence } from './decision-evidence-archive.ts'
 import { admitInterestResearch } from '../markets/interest-coverage.ts'
 import { renewUnchangedRecommendation } from '../markets/decision-refresh.ts'
 import { canonicalCausalVersions, canonicalResearchNote, primaryResearchPacket } from '../markets/evidence-authority.ts'
@@ -595,6 +596,7 @@ export async function assembleDecisionContext(
   }
   // Bounded reads must never quietly truncate an actionable context.
   if (options.persist === false) return context
+  const frozenContext = { ...context, evidence: context.evidence.map(e => ({ ...e, value: archiveDecisionEvidence(e.value) })) }
   const insert = await db.from('recommendation_input_manifests').insert({
     id: context.id,
     owner_id: ownerId,
@@ -602,13 +604,13 @@ export async function assembleDecisionContext(
     decision_cutoff: cutoff,
     policy_version: context.policy,
     edition_key: editionKey,
-    content_hash: contentHash(context),
-    content: context,
+    content_hash: contentHash(frozenContext),
+    content: frozenContext,
   })
   if (insert.error?.code === '23505')
     return assembleDecisionContext(ownerId, now, editionKey)
   if (insert.error) throw new Error(insert.error.message)
-  return context
+  return frozenContext
 }
 
 export async function generateDailyRecommendations(
