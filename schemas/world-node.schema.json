@@ -17,7 +17,133 @@
     "sourceIds": { "type": "array", "maxItems": 100, "items": { "type": "string" } },
     "nextReviewAt": { "type": "string", "format": "date-time" },
     "summary": { "type": "string", "minLength": 3, "maxLength": 2000 },
-    "claims": { "type": "array", "maxItems": 50, "items": { "type": "object", "additionalProperties": false, "required": ["text", "sourceIds"], "properties": { "text": { "type": "string" }, "sourceIds": { "type": "array", "items": { "type": "string" } }, "assessment": { "type": "boolean" } } } },
+    "claims": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "sourceIds"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "assessment": {
+            "type": "boolean"
+          },
+          "claimId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 160
+          },
+          "observationIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "observed_fact",
+              "company_statement",
+              "forecast",
+              "analytical_hypothesis",
+              null
+            ]
+          },
+          "validFrom": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validTo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "qualifier": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supports": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30
+          },
+          "contradicts": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30
+          },
+          "supersedes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30
+          },
+          "evidence": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "sourceId": {
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sourceId",
+                "quote"
+              ]
+            },
+            "maxItems": 20
+          }
+        }
+      }
+    },
     "indicators": { "type": "array", "maxItems": 30, "items": { "type": "object", "additionalProperties": false, "required": ["id", "label", "condition", "direction", "sourceIds"], "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "condition": { "type": "string" }, "direction": { "enum": ["higher", "lower", "crosses", "changes"] }, "threshold": { "type": "string" }, "sourceIds": { "type": "array", "items": { "type": "string" } } } } },
     "body": { "type": "string", "minLength": 3, "maxLength": 16000 },
     "supersedes": { "type": "string" },

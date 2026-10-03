@@ -1,3 +1,6 @@
+import { WorldConnections } from '@/components/markets/WorldConnections'
+import { fetchCompanyWorldConnections } from '@/lib/server/company-world-memory'
+import { fetchEquityResearchVersion, fetchEquityResearchHistory } from '@/lib/server/company-research'
 import { ResearchAdvice } from '@/components/markets/ResearchAdvice'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -342,7 +345,7 @@ function ResearchSection({
   )
 }
 
-export default async function EquityResearchPage({ params }: { params: Promise<{ symbol: string }> }) {
+export default async function EquityResearchPage({ params, searchParams }: { params: Promise<{ symbol: string }>; searchParams:Promise<{report?:string}> }) {
   const [{ symbol: rawSymbol }, user] = await Promise.all([params, requireAllowedMarketUser()])
   const symbol = rawSymbol.toUpperCase()
   const stock = await fetchStockViewerData(symbol, user.id)
@@ -354,7 +357,11 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
     ])
     return <EtfResearchReport stock={stock} packet={packet} research={research} />
   }
-  const research = stock.researchNote
+  const requested = (await searchParams).report
+  if(requested && !/^[0-9a-f-]{36}$/i.test(requested)) notFound()
+  const research = requested ? await fetchEquityResearchVersion(user.id,symbol,requested) : stock.researchNote
+  if(requested && !research) notFound()
+  const [connections,history] = await Promise.all([research ? fetchCompanyWorldConnections(user.id,{reportId:research.id}) : [],fetchEquityResearchHistory(user.id,symbol)])
   const packet = stock.companyPacket
   const researchPacket = research?.status === 'complete' ? await fetchResearchBaseline(user.id, 'equity', research.id) as CompanyPacket : null
   const coverage = researchPacket?.researchCoverage
@@ -368,6 +375,7 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
 
   return (
     <article className="equity-research-note" data-research-presentation>
+
       <header className="equity-research-header">
         <div>
           <p className="markets-eyebrow">Equity research · GARP · 12-month valuation / 1–2 year ownership</p>
@@ -380,6 +388,8 @@ export default async function EquityResearchPage({ params }: { params: Promise<{
           {research?.status === 'complete' ? <ResearchActionButton symbol={symbol} hasResearch currentVersion={research.version} /> : null}
         </div>
       </header>
+      {research?.status==='complete'?<WorldConnections receipts={connections}/>:null}
+      {history.length>1?<details className="world-memory-connections"><summary>Research version history ({history.length})</summary><nav>{history.map(v=><Link key={v.id} href={`/markets/stocks/${encodeURIComponent(symbol)}/research?report=${v.id}`} style={{marginRight:16}}>Version {v.version} · {formatMarketDate(v.generated_at)}</Link>)}</nav></details>:null}
 
       {!research || research.status !== 'complete' ? (
         <section className="equity-research-empty">

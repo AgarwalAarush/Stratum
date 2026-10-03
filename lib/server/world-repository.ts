@@ -1,3 +1,4 @@
+import { identifyWorldClaims } from './world-claims.ts'
 import { createHash, randomUUID } from 'node:crypto'
 import { execFile as execFileCallback } from 'node:child_process'
 import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
@@ -107,6 +108,7 @@ export interface WorldRepositoryOptions {
   branch?: string
   remote?: string
   push?: boolean
+  researchReportId?: string
 }
 
 export interface WorldRepositoryCommit {
@@ -155,6 +157,7 @@ export function renderWorldNode(node: WorldNode): string {
     `aliases: ${JSON.stringify(normalized.aliases)}`,
     `relationships: ${JSON.stringify(normalized.relationships)}`,
     `source_ids: ${JSON.stringify(normalized.sourceIds)}`,
+    `claim_metadata: ${JSON.stringify(normalized.claims)}`,
     `next_review_at: ${yamlString(normalized.nextReviewAt)}`,
     ...(normalized.supersedes ? [`supersedes: ${yamlString(normalized.supersedes)}`] : []),
     ...(normalized.changeSummary ? [`change_summary: ${yamlString(normalized.changeSummary)}`] : []),
@@ -235,7 +238,7 @@ export function parseWorldNode(markdown: string): WorldNode {
     probabilityRange: frontmatter.probability_range, signposts: frontmatter.signposts, mechanism: frontmatter.mechanism,
     economicVariable: frontmatter.economic_variable, constrainedLayer: frontmatter.constrained_layer, rentRecipient: frontmatter.rent_recipient,
     expectationsQuestion: frontmatter.expectations_question, catalysts: frontmatter.catalysts, falsifiers: frontmatter.falsifiers,
-    summary, claims, indicators, body: assessment,
+    summary, claims: claims.map((claim,index)=>({...((frontmatter.claim_metadata as object[] | undefined)?.[index] ?? {}),...claim})), indicators, body: assessment,
   })
 }
 
@@ -360,6 +363,11 @@ export function validateWorldProposalAgainstState(proposal: WorldUpdateProposal,
     if (!nodeIds.has(archive.nodeId)) throw new Error(`Cannot archive unknown node ${archive.nodeId}`)
     if (archive.replacementId && !nodeIds.has(archive.replacementId)) throw new Error(`Unknown archive replacement ${archive.replacementId}`)
   }
+  const claimIds=new Set([...existing,...proposal.upserts].flatMap(n=>identifyWorldClaims(n).claims.map(c=>c.claimId)))
+  for(const node of proposal.upserts)for(const claim of node.claims)for(const id of [...claim.supports??[],...claim.contradicts??[],...claim.supersedes??[]]) {
+    if(!claimIds.has(id))throw new Error(`Claim relationship references unknown claim ${id}`)
+    if(id===claim.claimId)throw new Error('A claim cannot support, contradict or supersede itself')
+  }
   const nodes = new Map([...existing, ...proposal.upserts].map((node) => [node.id, node]))
   for (const lead of proposal.opportunityLeads) {
     if (!nodes.has(lead.originatingNodeId)) throw new Error(`Opportunity lead ${lead.id} has an unknown originating node`)
@@ -384,7 +392,7 @@ async function readIndexArray<T>(root: string, path: string): Promise<T[]> {
 }
 
 function renderJournal(proposal: WorldUpdateProposal): WorldNode {
-  const id = `journal-${proposal.asOf.slice(0, 10)}-${createHash('sha256').update(JSON.stringify(proposal.eventClassifications)).digest('hex').slice(0, 10)}`
+  const id = `journal-${proposal.asOf.slice(0, 10)}-${createHash('sha256').update(JSON.stringify([proposal.eventClassifications,proposal.journal,proposal.sources.map(s=>s.id)])).digest('hex').slice(0, 10)}`
   const sections = [
     ['Material changes', proposal.journal.materialChanges], ['Belief changes', proposal.journal.beliefChanges], ['Scenario changes', proposal.journal.scenarioChanges],
     ['New investigations', proposal.journal.newInvestigations], ['Indicators requiring attention', proposal.journal.attentionIndicators],
@@ -438,7 +446,7 @@ export async function commitWorldUpdate(rawProposal: unknown, options: WorldRepo
     const status = await runGit(worktree, ['status', '--porcelain'])
     if (!status) return { commit: await runGit(worktree, ['rev-parse', 'HEAD']), branch, changedPaths: [], pushPending: false }
     await runGit(worktree, ['add', 'world'])
-    await runGit(worktree, ['commit', '-m', `world: ${proposal.journal.title.slice(0, 68)}`])
+    await runGit(worktree, ['commit', '-m', `world: ${proposal.journal.title.slice(0, 68)}${options.researchReportId ? `\n\ncompany-world-report:${options.researchReportId}` : ''}`])
     const commit = await runGit(worktree, ['rev-parse', 'HEAD'])
     await runGit(root, ['branch', '-f', branch, commit])
     const changedPaths = (await runGit(worktree, ['diff-tree', '--no-commit-id', '--name-only', '-r', commit])).split('\n').filter(Boolean)
@@ -477,4 +485,12 @@ export function isWorldNodeKind(value: string): value is WorldNodeKind {
 
 export function worldNodeFilename(node: WorldNode): string {
   return basename(worldNodePath(node))
+}
+
+/** Git acceptance survives a process failure before the Supabase outbox is written. */
+export async function findCompanyWorldCommit(reportId:string,root=worldRepositoryRoot(),branch=worldRepositoryBranch()):Promise<string|null> {
+ if(!/^[0-9a-f-]{36}$/i.test(reportId))throw new Error('Invalid report identity')
+ if(!(await pathExists(join(root,'.git'))))return null
+ const result=await runGit(root,['log',branch,'--format=%H','--fixed-strings',`--grep=company-world-report:${reportId}`,'-1'])
+ return result||null
 }

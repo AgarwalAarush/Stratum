@@ -1,3 +1,4 @@
+import { WorldMemorySearch } from '@/components/markets/WorldMemorySearch'
 import { WorldLearningHealth } from '@/components/markets/WorldLearningHealth'
 import { fetchLearningHealth } from '@/lib/server/learning-health'
 import { Suspense } from 'react'
@@ -80,6 +81,7 @@ export default async function MarketsWorldPage() {
         </div>
       </header>
 
+      <WorldMemorySearch/>
       <section className="world-status-rail" aria-label="World Thinker status">
         <div><span>Mode</span><strong>{world.canonical ? 'Canonical' : 'Shadow evaluation'}</strong><small>{world.branch ?? 'No projected branch'}</small></div>
         <div className={healthyCoverage < world.coverage.length ? 'world-status-rail--attention' : undefined}><span>Coverage</span><strong>{healthyCoverage} of {world.coverage.length} strong</strong><small>{activeModelCount} active world nodes</small></div>

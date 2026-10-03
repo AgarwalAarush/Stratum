@@ -1,4 +1,5 @@
 import { seedDecisionResearch } from './interest-coverage.ts'
+import { reviewCompanyWorldReceipt } from './company-world-memory.ts'
 import { lastCompletedSession } from '../markets/market-sessions.ts'
 import { generateAIOverview } from '../data/overview.ts'
 import { generateGlobalNewsOverview } from '../data/global-news-overview.ts'
@@ -182,7 +183,7 @@ export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), 
     return `${jobType}:${bucket.toISOString()}`
   }
   if (jobType === 'run-world-thinker') {
-    if (payload.trigger === 'company_research' && typeof payload.worldOpportunityLeadId === 'string') return `${jobType}:company-research:${payload.worldOpportunityLeadId}`
+    if (payload.trigger === 'company_research' && typeof payload.researchNoteId === 'string') return `${jobType}:company-research:${payload.researchNoteId}`
     const minutes = payload.trigger === 'urgent' ? 20 : 12 * 60
     const bucket = new Date(now)
     bucket.setTime(Math.floor(bucket.getTime() / (minutes * 60_000)) * minutes * 60_000)
@@ -591,7 +592,7 @@ export async function enqueueAgentJob(
   jobType: AgentJobType,
   payload: Record<string, unknown> = {},
   dedupeKey = buildAgentJobDedupeKey(jobType, new Date(), payload),
-  options: { runAfter?: Date } = {},
+  options: { runAfter?: Date; priority?: number } = {},
 ): Promise<{ id: string; deduplicated: boolean }> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
@@ -613,7 +614,7 @@ export async function enqueueAgentJob(
     job_type: jobType,
     payload,
     dedupe_key: dedupeKey,
-    priority: agentJobPriority(jobType),
+    priority: options.priority ?? agentJobPriority(jobType),
     ...(options.runAfter ? { run_after: options.runAfter.toISOString() } : {}),
   }
   const { data, error } = await supabase
@@ -823,6 +824,12 @@ async function executeJob(
     const coverageFrontierIds = Array.isArray(job.payload.coverageFrontierIds)
       ? job.payload.coverageFrontierIds.filter((value): value is string => typeof value === 'string')
       : typeof job.payload.coverageFrontierId === 'string' ? [job.payload.coverageFrontierId] : undefined
+    if(trigger==='company_research') {
+      if(typeof job.payload.researchNoteId!=='string')throw new Error('Company feedback requires a completed report receipt')
+      return reviewCompanyWorldReceipt(job.payload.researchNoteId,job.id,
+        options=>runWorldThinker({...options,canonicalProjection:false}),
+        commit=>reconcileWorldRepositoryProjection({commit,canonical:false}))
+    }
     return runWorldThinker({
       legacyHypothesisId: typeof job.payload.legacyHypothesisId === 'string' ? job.payload.legacyHypothesisId : undefined,
       ownerReviewItemId: typeof job.payload.ownerReviewItemId === 'string' ? job.payload.ownerReviewItemId : undefined,

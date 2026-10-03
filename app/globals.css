@@ -15156,3 +15156,18 @@ body:has(.equity-research-note) {
 @media (max-width: 767px) { .intelligence-subnav-open .intelligence-mobile-action { display: flex; } }
 
 [data-research-presentation]:not(.evidence-mode) .research-coverage-evidence { display: none; }
+
+/* Search and reciprocal provenance reuse the Markets editorial surfaces. */
+.world-memory-search, .world-memory-connections { border-block: 1px solid var(--market-border); padding: 24px 0; margin: 20px 0; }
+.world-memory-search form > label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+.world-memory-search form > div { display: flex; gap: 10px; max-width: 760px; }
+.world-memory-search input { flex: 1; min-width: 0; border: 1px solid var(--market-border); background: var(--bg); color: var(--text); padding: 12px; font: inherit; }
+.world-memory-search button { border: 1px solid var(--market-border); background: var(--text); color: var(--bg); padding: 10px 20px; cursor: pointer; }
+.world-memory-search button:disabled { opacity: .6; }
+.world-memory-search ul, .world-memory-connections > ul { list-style: none; margin: 14px 0; padding: 0; }
+.world-memory-search li, .world-memory-connections > ul > li { border-top: 1px solid var(--market-border); padding: 14px 0; }
+.world-memory-search small, .world-memory-connections small { color: var(--text-muted); display: block; margin-top: 8px; }
+.world-memory-connections h2 { font-size: 22px; margin: 6px 0 10px; }
+.world-memory-connections li > span { margin-left: 14px; font-size: 13px; }
+.world-memory-connections nav { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; }
+.world-memory-connections details, .world-memory-search details { margin-top: 10px; }

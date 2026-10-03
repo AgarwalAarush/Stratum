@@ -8,6 +8,8 @@ import { loadWorldCoverageFrontiers, refreshWorldCoverageState } from './world-c
 import { projectWorldCausalModel } from './causal-model.ts'
 import type { WorldReplayBatch, WorldReplayRun } from './world-replay.ts'
 import { cachedFetchWithFallback } from './cache.ts'
+import { identifyWorldClaims } from './world-claims.ts'
+import { publishWorldMemorySnapshot } from './world-retrieval.ts'
 import { AsyncTtlCache } from './async-ttl-cache.ts'
 
 const execFile = promisify(execFileCallback)
@@ -29,7 +31,7 @@ export async function readWorldCommit(root: string, commit: string): Promise<{
   const paths = (await git(root, ['ls-tree', '-r', '--name-only', commit, 'world'])).split('\n').filter(Boolean)
   const nodes: Array<{ path: string; node: WorldNode }> = []
   for (const path of paths.filter((path) => path.endsWith('.md') && !path.startsWith('world/index/'))) {
-    try { nodes.push({ path, node: parseWorldNode(await readCommitFile(root, commit, path)) }) } catch { /* ignore non-node forward-compatible files */ }
+    try { nodes.push({ path, node: identifyWorldClaims(parseWorldNode(await readCommitFile(root, commit, path))) }) } catch { /* ignore non-node forward-compatible files */ }
   }
   const parseIndex = async <T>(path: string): Promise<T[]> => {
     try {
@@ -48,12 +50,16 @@ export async function projectWorldRepository(options: { root?: string; commit?: 
   const commit = options.commit ?? await git(root, ['rev-parse', branch])
   const { data: existing, error: existingError } = await supabase.from('world_repository_projections').select('commit_sha,file_count').eq('commit_sha', commit).maybeSingle()
   if (existingError) throw new Error(`Unable to inspect world projection: ${existingError.message}`)
-  if (existing) return { commit, fileCount: Number(existing.file_count), idempotent: true }
+  if (existing) {
+    const snapshot = await readWorldCommit(root, commit)
+    await publishWorldMemorySnapshot(commit, branch, snapshot.nodes.map(n=>n.node), snapshot.sources)
+    return { commit, fileCount: Number(existing.file_count), idempotent: true }
+  }
   const snapshot = await readWorldCommit(root, commit)
   const rows = snapshot.nodes.map(({ path, node }) => ({
     commit_sha: commit, file_path: path, node_id: node.id, kind: node.kind, status: node.status, title: node.title, as_of: node.asOf,
     next_review_at: node.nextReviewAt, confidence: node.confidence, importance: node.importance, summary: node.summary, aliases: node.aliases,
-    relationships: node.relationships, source_ids: node.sourceIds, structured_content: node,
+    relationships: node.relationships, source_ids: node.sourceIds, structured_content: identifyWorldClaims(node),
     search_text: [node.title, node.summary, node.body, node.aliases.join(' ')].join('\n').slice(0, 50_000),
   }))
   if (rows.length > 0) {
@@ -78,6 +84,7 @@ export async function projectWorldRepository(options: { root?: string; commit?: 
     commit_sha: commit, branch, file_count: rows.length, is_canonical: false,
   })
   if (projectionError) throw new Error(`Unable to record world projection: ${projectionError.message}`)
+  await publishWorldMemorySnapshot(commit, branch, snapshot.nodes.map(n=>n.node), snapshot.sources)
   if (options.canonical) {
     const { error: promoteError } = await supabase.rpc('promote_world_repository_projection', { p_commit_sha: commit })
     if (promoteError) throw new Error(`Unable to promote world projection: ${promoteError.message}`)
@@ -268,8 +275,15 @@ export async function fetchWorldNode(id: string): Promise<{ commit: string; node
   const targetIds = new Set(row.relationships.map((relationship) => relationship.targetId))
   for (const entry of rows) if (entry.relationships.some((relationship) => relationship.targetId === id)) targetIds.add(entry.node_id)
   const { data: history } = await supabase.from('world_file_index').select('*').eq('node_id', id).order('projected_at', { ascending: false }).limit(20)
-  const { data: sources } = await supabase.from('world_event_cluster_sources').select('*').in('source_id', row.source_ids.length ? row.source_ids : ['__none__'])
-  return { commit: projection.commit_sha, node: row.structured_content, related: rows.filter((entry) => targetIds.has(entry.node_id)).map((entry) => entry.structured_content), history: ((history ?? []) as WorldIndexRow[]).map((entry) => entry.structured_content), sources: (sources ?? []) as Array<Record<string, unknown>> }
+  const sourceIds=[...new Set([...row.source_ids,...row.structured_content.claims.flatMap(c=>c.sourceIds)])]
+  const [{ data: sources },memory]=await Promise.all([
+    supabase.from('world_event_cluster_sources').select('*').in('source_id',sourceIds.length?sourceIds:['__none__']),
+    supabase.from('world_memory_snapshots').select('sources').eq('commit_sha',projection.commit_sha).maybeSingle(),
+  ])
+  const memorySources=(memory.data?.sources as WorldSourceReference[]??[]).filter(s=>sourceIds.includes(s.id)).map(s=>({source_id:s.id,url:s.url,title:s.title,publisher:s.publisher,claim_state:s.claimState}))
+  const sourceLedger=[...new Map([...(sources??[]),...memorySources].map(s=>[s.source_id,s])).values()]
+
+  return { commit: projection.commit_sha, node: row.structured_content, related: rows.filter((entry) => targetIds.has(entry.node_id)).map((entry) => entry.structured_content), history: ((history ?? []) as WorldIndexRow[]).map((entry) => entry.structured_content), sources: sourceLedger as Array<Record<string, unknown>> }
 }
 
 export async function fetchWorldRuns(limit = 40): Promise<Array<Record<string, unknown>>> {

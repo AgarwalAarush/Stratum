@@ -13,6 +13,10 @@ export interface WorldSourceReference {
   title: string
   publisher?: string
   publishedAt?: string
+  capturedAt?: string
+  ingestedAt?: string
+  evidenceOrigin?: string
+  documentId?: string
   claimState: WorldClaimState
   stance: 'supporting' | 'contradicting' | 'neutral'
 }
@@ -27,6 +31,17 @@ export interface WorldClaim {
   text: string
   sourceIds: string[]
   assessment?: boolean
+  claimId?: string
+  observationIds?: string[]
+  kind?: 'observed_fact' | 'company_statement' | 'forecast' | 'analytical_hypothesis'
+  validFrom?: string
+  validTo?: string
+  qualifier?: string
+  supports?: string[]
+  contradicts?: string[]
+  supersedes?: string[]
+  evidence?: Array<{ sourceId: string; quote: string }>
+
 }
 
 export interface WorldIndicator {
@@ -312,6 +327,10 @@ export function validateWorldSourceReference(value: unknown): WorldSourceReferen
     title: string(input.title, 'source.title', 500),
     publisher: typeof input.publisher === 'string' ? input.publisher.trim() : undefined,
     publishedAt: typeof input.publishedAt === 'string' ? iso(input.publishedAt, 'source.publishedAt') : undefined,
+    ingestedAt: typeof input.ingestedAt === 'string' ? iso(input.ingestedAt,'source.ingestedAt') : undefined,
+    capturedAt: typeof input.capturedAt === 'string' ? iso(input.capturedAt,'source.capturedAt') : undefined,
+    evidenceOrigin: typeof input.evidenceOrigin === 'string' ? string(input.evidenceOrigin,'source.evidenceOrigin',2_000) : undefined,
+    documentId: typeof input.documentId === 'string' ? string(input.documentId,'source.documentId',160) : undefined,
     claimState: enumValue(input.claimState, WORLD_CLAIM_STATES, 'source.claimState'),
     stance: enumValue(input.stance, ['supporting', 'contradicting', 'neutral'] as const, 'source.stance'),
   }
@@ -325,7 +344,16 @@ export function validateWorldNode(value: unknown): WorldNode {
   }) : []
   const claims = Array.isArray(input.claims) ? input.claims.map((entry, index) => {
     const item = record(entry, `claims[${index}]`)
-    return { text: string(item.text, 'claim.text', 2_000), sourceIds: strings(item.sourceIds, 'claim.sourceIds', 20), assessment: item.assessment === true || undefined }
+    const claim: WorldClaim = { text: string(item.text, 'claim.text', 2_000), sourceIds: strings(item.sourceIds, 'claim.sourceIds', 20), assessment: item.assessment === true || undefined }
+    if (item.claimId) claim.claimId = string(item.claimId, 'claim.claimId', 160)
+    if (item.kind) claim.kind = enumValue(item.kind, ['observed_fact', 'company_statement', 'forecast', 'analytical_hypothesis'] as const, 'claim.kind')
+    for (const key of ['observationIds', 'supports', 'contradicts', 'supersedes'] as const) if (item[key]) claim[key] = strings(item[key], `claim.${key}`, 30)
+    for (const key of ['validFrom', 'validTo'] as const) if (item[key]) claim[key] = iso(item[key], `claim.${key}`)
+    if (claim.validFrom && claim.validTo && Date.parse(claim.validFrom) > Date.parse(claim.validTo)) throw new Error('Claim validity range is reversed')
+    if (item.qualifier) claim.qualifier = string(item.qualifier, 'claim.qualifier', 2_000)
+    if (Array.isArray(item.evidence)) claim.evidence = item.evidence.map(entry => { const e = record(entry, 'claim.evidence'); return {sourceId: string(e.sourceId, 'evidence.sourceId', 160), quote: string(e.quote, 'evidence.quote', 4_000)} })
+    if (claim.kind === 'analytical_hypothesis') claim.assessment = true
+    return claim
   }) : []
   const indicators = Array.isArray(input.indicators) ? input.indicators.map((entry, index) => {
     const item = record(entry, `indicators[${index}]`)
