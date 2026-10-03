@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { gzipSync } from 'node:zlib'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { archiveDecisionEvidence, restoreDecisionEvidence } from '../lib/server/decision-evidence-archive.ts'
@@ -25,6 +26,17 @@ test('captured text archives are lossless and leave facts, quotes, timestamps an
   assert.throws(()=>restoreDecisionEvidence(corrupted),/integrity/)
   corrupted.packet.researchDocuments[0].frozenTextArchive.bytes = 100_000_000
   assert.throws(()=>restoreDecisionEvidence(corrupted),/Invalid frozen/)
+})
+
+test('repeated captured documents share one checked payload and legacy embedded archives remain readable',()=>{
+  const repeated={...packet,packet:{...packet.packet,researchCoverage:{...packet.packet.researchCoverage,documents:[{sourceId:'coverage-alias',text},{sourceId:'sec',text}]}}}
+  const archived=archiveDecisionEvidence(repeated) as {frozenDocumentTexts:{texts:Record<string,{data:string}>}}
+  assert.equal(Object.keys(archived.frozenDocumentTexts.texts).length,1)
+  assert.deepEqual(restoreDecisionEvidence(archived),repeated)
+  const broken=structuredClone(archived);broken.frozenDocumentTexts.texts={}
+  assert.throws(()=>restoreDecisionEvidence(broken),/integrity/)
+  const bytes=Buffer.from(text),legacy={...packet,packet:{...packet.packet,researchDocuments:[{sourceId:'sec',capturedAt:'2026-10-03',text:null,frozenTextArchive:{encoding:'gzip-base64-v1',data:gzipSync(bytes).toString('base64'),bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}}]}}
+  assert.deepEqual(restoreDecisionEvidence(legacy),packet)
 })
 
 test('independent review receives the exact complete captured passages from the immutable archive', async () => {
