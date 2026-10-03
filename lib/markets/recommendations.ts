@@ -133,6 +133,14 @@ export type Recommendation = {
   gateReasons: string[]
   assessmentStatus?: 'decision_ready' | 'unresolved' | 'blocked'
   evidenceGaps?: EvidenceGap[]
+  assessmentBlockers?: Array<{
+    kind: 'research_upgrade'
+    question: string
+    jobId: string | null
+    status: string
+    targetContractVersion: 2
+    followUp: { trigger: string; nextCheckAt: string | null }
+  }>
   followUp?: { trigger: string; nextCheckAt: string | null }
   proposedAction?: RecommendationAction
 }
@@ -302,6 +310,25 @@ export function validateRecommendation(
   }
 }
 
+function citesActionSupport(
+  sourceIds: string[],
+  rec: Recommendation,
+  name: DecisionName,
+  context: DecisionContext,
+): boolean {
+  if (sourceIds.some(id => name.sources.includes(id) && rec.sourceIds.includes(id) && context.evidence.some(e => e.id === id))) return true
+  // Research citations are scoped inside the immutable packet. Decisions cite
+  // its global ledger ID, so verify the instrument and the complete source set.
+  return sourceIds.length > 0 && context.evidence.some(e => {
+    if (!['company_packet', 'etf_packet'].includes(e.kind) || !name.sources.includes(e.id) || !rec.sourceIds.includes(e.id)) return false
+    const value = obj(e.value)
+    if (value.symbol !== name.symbol) return false
+    const packet = obj(value.packet)
+    const sources = Array.isArray(packet.sources) ? packet.sources : []
+    return sourceIds.every(id => sources.some(source => obj(source).id === id))
+  })
+}
+
 export function gateRecommendation(
   rec: Recommendation,
   context: DecisionContext,
@@ -339,7 +366,7 @@ export function gateRecommendation(
     // independently supported exit or hold in another instrument/account.
     const support = advice?.version === 2 ? advice.decisionSupport?.actionSupport[rec.action as CapitalAction] : undefined
     if (advice?.version === 2 && support?.status !== 'supported') reasons.push('Research does not independently support this action')
-    if (support && !support.sourceIds.some(id => rec.sourceIds.includes(id))) reasons.push('Decision must cite its independently supported action grounds')
+    if (support && !citesActionSupport(support.sourceIds, rec, name, context)) reasons.push('Decision must cite its independently supported action grounds')
     const nameGaps = name.gaps.filter(gap => {
       const prefix = gap.match(/^Missing (?:company|fund) evidence: (.+)$/)?.[1]
       if (!prefix || advice?.version !== 2) return true
@@ -436,9 +463,8 @@ export function gateRecommendation(
       reasons.push('Evidence was unavailable at the decision cutoff')
   }
   const upgradeFollowUp = name.researchUpgrade ? {trigger:name.researchUpgrade.error ? `Resolve research prerequisite: ${name.researchUpgrade.error}` : 'Complete the scheduled contract-2 ownership investigation',nextCheckAt:name.researchUpgrade.scheduledFor} : {trigger:'Schedule a contract-2 investigation to establish the ownership stance',nextCheckAt:null};
-  const upgradeGap:EvidenceGap = {id:'research-contract-upgrade',kind:'missing_fact',question:'What is the independently supported retain, add, reduce or exit stance under the current research contract?',dataKeys:['research_contract'],blockingActions:[...CAPITAL_ACTIONS],sourceIds:[],followUp:upgradeFollowUp};
   const needsUpgrade=context.policy==='prospective-v1.7'&&advice?.version!==2;
-  const assessment = { assessmentStatus: CAPITAL_ACTIONS.includes(rec.action as CapitalAction) ? 'decision_ready' as const : 'unresolved' as const, evidenceGaps: advice?.decisionSupport?.evidenceGaps ?? (needsUpgrade?[upgradeGap]:[]), followUp: advice?.decisionSupport?.followUp ?? (needsUpgrade?upgradeFollowUp:undefined) }
+  const assessment = { assessmentStatus: rec.gateReasons.length ? 'blocked' as const : CAPITAL_ACTIONS.includes(rec.action as CapitalAction) ? 'decision_ready' as const : 'unresolved' as const, evidenceGaps: advice?.decisionSupport?.evidenceGaps ?? [], assessmentBlockers: needsUpgrade ? [{kind:'research_upgrade' as const,question:'What is the independently supported retain, add, reduce or exit stance under the current research contract?',jobId:name.researchUpgrade?.jobId ?? null,status:name.researchUpgrade?.status ?? 'not_scheduled',targetContractVersion:2 as const,followUp:upgradeFollowUp}] : [], followUp: advice?.decisionSupport?.followUp ?? (needsUpgrade?upgradeFollowUp:undefined) }
   if (!reasons.length) return {...rec,...assessment}
   return {
     ...rec,
@@ -448,7 +474,7 @@ export function gateRecommendation(
     sourceIds: rec.sourceIds.filter(id => context.evidence.some(e => e.id === id && Number.isFinite(Date.parse(e.availableAt ?? '')) && Date.parse(e.availableAt ?? '') <= Date.parse(context.cutoff))),
     action: 'no_trade',
     gateReasons: [...new Set(reasons)],
-    reason: `Evaluation blocked: ${[...new Set(reasons)].join('; ')}. Existing holdings have not been declared safe.`,
+    reason: `Evaluation blocked: ${[...new Set(reasons)].join('; ')}. Resolve these assessment prerequisites before establishing the ownership stance.`,
     entry: { ...rec.entry, targetWeightPct: null },
   }
 }
@@ -564,6 +590,18 @@ export function validateBatch(
         })
   }
   return rows
+}
+
+/** Reapply schema, present facts and joint sizing to already reviewed rows.
+ * Normalizing no-trade must not erase an earlier gate or critic rejection. */
+export function validateReviewedBatch(values: Recommendation[], context: DecisionContext): Recommendation[] {
+  return validateBatch(values,context).map((checked,index)=>{
+    const prior=values[index]
+    if(!prior.gateReasons.length)return checked
+    return {...checked,action:'no_trade',proposedAction:prior.proposedAction??prior.action,
+      reason:prior.reason,entry:{...checked.entry,targetWeightPct:null},assessmentStatus:'blocked',
+      gateReasons:[...new Set([...prior.gateReasons,...checked.gateReasons])]}
+  })
 }
 
 /** Preserve complete coverage and joint portfolio gates, but isolate a model's

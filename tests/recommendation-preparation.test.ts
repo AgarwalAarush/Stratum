@@ -1,8 +1,21 @@
 import { currentAdvice } from './fixtures/research-advice-v2.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { recommendationResearchTargets, dependencyReadiness, parseRecommendationDependencies } from '../lib/markets/recommendation-preparation.ts'
+import { recommendationResearchTargets, recommendationNeedsReview, dependencyReadiness, parseRecommendationDependencies } from '../lib/markets/recommendation-preparation.ts'
 import type { DecisionContext } from '../lib/markets/recommendations.ts'
+
+test('batch evidence gaps cannot suppress independently supported ownership review', () => {
+  const advice = currentAdvice()
+  advice.evidenceSufficiency.value = 'insufficient'
+  const name = {owned:true,gaps:['Missing company evidence: cash flow'],research:{id:'current',content:{advice}}}
+  assert.equal(recommendationNeedsReview(name),true)
+  assert.equal(recommendationNeedsReview({...name,research:{id:'legacy',content:{formalRating:'SELL'}}}),false)
+  assert.equal(recommendationNeedsReview({...name,research:{id:'unreadable',content:null}}),false)
+  assert.equal(recommendationNeedsReview({...name,research:undefined,gaps:[]}),true)
+  for(const action of ['buy','add','hold','trim','sell'] as const) advice.decisionSupport!.actionSupport[action].status='unresolved'
+  advice.existingPositionStance.value='undetermined';advice.newEntryStance.value='wait'
+  assert.equal(recommendationNeedsReview(name),false)
+})
 
 test('repairs each instrument once across accounts, without retrying an unresolved identity or cash gap as research', () => {
   const name = {symbol:'GRID',securityId:'grid',gaps:['ETF holdings are older than seven days or undated'],instrumentType:'etf',research:{id:'old'}}

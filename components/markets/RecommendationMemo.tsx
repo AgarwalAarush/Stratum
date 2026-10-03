@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { decisionActionLabel, decisionHeadline, decisionIsBlocked, readableDecisionMarkdown } from '@/lib/markets/recommendation-display'
 import { sourceLabel } from '@/lib/markets/recommendation-memo'
 import { researchMemoMarkdown } from '@/lib/markets/research-presentation'
+import { formatMarketDate } from '@/lib/markets/format-date'
 import type { Recommendation } from '@/lib/markets/recommendations'
 import type { fetchRecommendationEvidence } from '@/lib/server/recommendation-reads'
 import { RecommendationReview } from './RecommendationReview'
@@ -20,7 +21,7 @@ export function RecommendationMemo({id,rec,portfolioName,viewedAt,evidence,onSav
   const world=memo?.world??[]
   const baseCase=memo?.research.find(s=>/base case/i.test(s.title))
   const bullCase=memo?.research.find(s=>/bull case/i.test(s.title))
-  const date=(value:string)=>new Date(value).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'America/Los_Angeles'})
+  const date=(value:string)=>formatMarketDate(value,'America/Los_Angeles')
   return <article className={styles.memo}>
     <header className={styles.header}><div><Link href={`/markets/stocks/${rec.symbol}`} className={styles.symbol}>{rec.symbol}</Link><span className={styles.badge}>{decisionActionLabel(rec)}</span><p>{portfolioName}</p></div><dl>
       {rec.entry.targetWeightPct!==null&&<div><dt>Proposed exposure</dt><dd>{memo?.currentWeightPct!=null?`${memo.currentWeightPct.toFixed(2)}% → `:''}{rec.entry.targetWeightPct}%</dd></div>}
