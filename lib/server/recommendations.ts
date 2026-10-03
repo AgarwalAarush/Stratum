@@ -1,4 +1,5 @@
 import { reviewWithOneRevision } from '../markets/recommendation-revision.ts'
+import { ownershipResearchModel } from '../ai/config.ts'
 import { archiveDecisionEvidence } from './decision-evidence-archive.ts'
 import { admitInterestResearch } from '../markets/interest-coverage.ts'
 import { canonicalCausalVersions } from '../markets/evidence-authority.ts'
@@ -638,6 +639,7 @@ export async function generateDailyRecommendations(
   } else {
     await withDecisionInputs(context, async (input) => {
       const initialGenerated = await runCodexJson({
+        model: ownershipResearchModel(),
         schemaPath: resolve('schemas/daily-recommendations.schema.json'),
         cwd: input.directory,
         webSearch: false,
@@ -652,6 +654,7 @@ export async function generateDailyRecommendations(
         },
       })
       const review = async (batch: Pick<typeof initialGenerated.data,'summary'|'recommendations'>) => runCodexJson({
+        model: ownershipResearchModel(),
         schemaPath: input.criticSchemaPath,
         cwd: input.directory,
         webSearch: false,
@@ -675,7 +678,7 @@ export async function generateDailyRecommendations(
       })
       const {generated,critic,revision} = await reviewWithOneRevision(initialGenerated,review,async (targets,blocks) => {
         const repairContext={...context,names:context.names.filter(n=>targets.some(r=>r.symbol===n.symbol&&r.portfolioId===n.portfolioId))}
-        return runCodexJson({schemaPath:resolve('schemas/daily-recommendations.schema.json'),cwd:input.directory,webSearch:false,timeoutMs:5*60*1000,
+        return runCodexJson({model:ownershipResearchModel(),schemaPath:resolve('schemas/daily-recommendations.schema.json'),cwd:input.directory,webSearch:false,timeoutMs:5*60*1000,
           prompt:`Revise only the rejected account/security pairs below using the same frozen evidence. ${RECOMMENDATION_REVIEW_RULES} Independently establish the corrected stance from cited facts; reviewer feedback is a criticism, not evidence or authority to choose an action. Resolve each criticism, or state the exact remaining ownership question and follow-up. Do not invent facts, forecasts, sizing, or scenarios to pass review. Missing Buy/Add support must not erase independently supported retention. Preserve essential identity, price, ownership and portfolio gates. Return every rejected pair exactly once and no other recommendation. All unchanged decisions will be retained and the complete batch will receive a fresh independent review. Give a summary for the complete edition.\nCONTEXT ${input.prompt}\nREJECTED PROPOSALS ${JSON.stringify(targets)}\nREVIEW FINDINGS ${JSON.stringify(blocks)}`,
           validate:value=>{const v=record(value);return {summary:String(v.summary??''),...validateGeneratedBatch(v.recommendations,repairContext)}}})
       },recommendations=>validateReviewedBatch(recommendations,context))

@@ -1,4 +1,5 @@
 import { startInvestigation } from './research-investigations.ts'
+import { ownershipResearchModel } from '../ai/config.ts'
 import { hasCurrentResearchContract, validatePacketDecisionSupport } from '../markets/research-contract.ts'
 import { fetchResearchBaseline, recordResearchRefresh } from './research-refresh.ts'
 import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchNarrative, validateResearchAdvice, type ResearchAdvice } from '../markets/research-advice.ts'
@@ -584,6 +585,7 @@ export async function generateEtfResearch(
   try {
     await onProgress?.(55, 'Synthesizing ETF analysis')
     const result = await runCodexJson({
+      model: ownershipResearchModel(),
       prompt: etfResearchPrompt(packet, prior, reason), schemaPath: 'schemas/etf-research.schema.json', validate: value => validateEtfResearch(value, packet),
       timeoutMs: 20 * 60 * 1_000,
     })
