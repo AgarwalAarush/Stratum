@@ -16,6 +16,7 @@ test('source repair queues a durable continuation before freezing and later evid
     }
     if (table==='recommendation_batches') return Response.json({manifest_id:'old-manifest'})
     if (table==='reserve_research_investigation') return Response.json(true)
+    if (table==='agent_jobs'&&url.searchParams.get('select')==='id,run_after')return Response.json([{id:'00000000-0000-4000-8000-000000009999',run_after:new Date(now.getTime()+3*3600000).toISOString()},{id:'00000000-0000-4000-8000-000000008888',run_after:new Date(now.getTime()+24*3600000).toISOString()}])
     if (table==='agent_jobs') return Response.json(active ? [{payload:{ownerId:owner}}] : [])
     const fixtures:Record<string,unknown>={
       portfolios:[{id:portfolio,owner_id:owner,name:'Manual',kind:'manual',created_at:'2026-01-01'}],
@@ -35,7 +36,9 @@ test('source repair queues a durable continuation before freezing and later evid
   assert.equal(manifestWrites,0)
   assert.deepEqual(queued.map(q=>q.type),['refresh-market-screener','generate-company-research','generate-daily-recommendations'])
   assert.equal(queued.at(-1)!.payload.phase,'publish')
-  assert.equal((queued.at(-1)!.payload.dependencyJobIds as string[]).length,2)
+  assert.equal((queued.at(-1)!.payload.dependencyJobIds as string[]).length,3)
+  assert.ok((queued.at(-1)!.payload.dependencyJobIds as string[]).includes('00000000-0000-4000-8000-000000009999'))
+  assert.ok(!(queued.at(-1)!.payload.dependencyJobIds as string[]).includes('00000000-0000-4000-8000-000000008888'))
   assert.match(String(queued.at(-1)!.payload.editionKey),/^daily:prepared:/)
   reconcile=true
   queued.length=0
