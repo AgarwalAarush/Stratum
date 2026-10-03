@@ -48,5 +48,10 @@ test('fresh legacy holdings are selected for upgrades, while full regeneration o
 test('incomplete advice cannot count as upgraded; pending upgrades expose their frozen question and scheduled check',()=>{
  const advice=currentAdvice();assert.equal(hasCurrentResearchContract({advice:{version:2,decisionSupport:advice.decisionSupport}}),false);
  const {name,context,rec}=fixture();const date='2026-10-04T14:00:00Z';const result=gateRecommendation(rec,{...context,names:[{...name,research:{id:'legacy',content:{formalRating:'HOLD'}},researchUpgrade:{jobId:'j',status:'queued',scheduledFor:date,error:null}}]});
- assert.equal(result.action,'no_trade');assert.equal(result.followUp?.nextCheckAt,date);assert.equal(result.evidenceGaps?.[0].id,'research-contract-upgrade');
+ assert.equal(result.action,'no_trade');assert.equal(result.followUp?.nextCheckAt,date);assert.deepEqual(result.evidenceGaps,[]);
+ assert.deepEqual(result.assessmentBlockers,[{kind:'research_upgrade',question:'What is the independently supported retain, add, reduce or exit stance under the current research contract?',jobId:'j',status:'queued',targetContractVersion:2,followUp:result.followUp}]);
+ assert.ok(result.gateReasons.includes('Current research contract upgrade is required before an ownership decision'));
+ assert.ok(!result.reason.includes('safe'));
+ const historical=gateRecommendation(rec,{...context,policy:'prospective-v1.6',names:[{...name,gaps:[],research:{id:'legacy',content:{formalRating:'HOLD'}}}]});
+ assert.equal(historical.action,'hold');assert.deepEqual(historical.assessmentBlockers,[]);
 })

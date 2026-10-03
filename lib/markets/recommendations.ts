@@ -133,6 +133,14 @@ export type Recommendation = {
   gateReasons: string[]
   assessmentStatus?: 'decision_ready' | 'unresolved' | 'blocked'
   evidenceGaps?: EvidenceGap[]
+  assessmentBlockers?: Array<{
+    kind: 'research_upgrade'
+    question: string
+    jobId: string | null
+    status: string
+    targetContractVersion: 2
+    followUp: { trigger: string; nextCheckAt: string | null }
+  }>
   followUp?: { trigger: string; nextCheckAt: string | null }
   proposedAction?: RecommendationAction
 }
@@ -455,9 +463,8 @@ export function gateRecommendation(
       reasons.push('Evidence was unavailable at the decision cutoff')
   }
   const upgradeFollowUp = name.researchUpgrade ? {trigger:name.researchUpgrade.error ? `Resolve research prerequisite: ${name.researchUpgrade.error}` : 'Complete the scheduled contract-2 ownership investigation',nextCheckAt:name.researchUpgrade.scheduledFor} : {trigger:'Schedule a contract-2 investigation to establish the ownership stance',nextCheckAt:null};
-  const upgradeGap:EvidenceGap = {id:'research-contract-upgrade',kind:'missing_fact',question:'What is the independently supported retain, add, reduce or exit stance under the current research contract?',dataKeys:['research_contract'],blockingActions:[...CAPITAL_ACTIONS],sourceIds:[],followUp:upgradeFollowUp};
   const needsUpgrade=context.policy==='prospective-v1.7'&&advice?.version!==2;
-  const assessment = { assessmentStatus: rec.gateReasons.length ? 'blocked' as const : CAPITAL_ACTIONS.includes(rec.action as CapitalAction) ? 'decision_ready' as const : 'unresolved' as const, evidenceGaps: advice?.decisionSupport?.evidenceGaps ?? (needsUpgrade?[upgradeGap]:[]), followUp: advice?.decisionSupport?.followUp ?? (needsUpgrade?upgradeFollowUp:undefined) }
+  const assessment = { assessmentStatus: rec.gateReasons.length ? 'blocked' as const : CAPITAL_ACTIONS.includes(rec.action as CapitalAction) ? 'decision_ready' as const : 'unresolved' as const, evidenceGaps: advice?.decisionSupport?.evidenceGaps ?? [], assessmentBlockers: needsUpgrade ? [{kind:'research_upgrade' as const,question:'What is the independently supported retain, add, reduce or exit stance under the current research contract?',jobId:name.researchUpgrade?.jobId ?? null,status:name.researchUpgrade?.status ?? 'not_scheduled',targetContractVersion:2 as const,followUp:upgradeFollowUp}] : [], followUp: advice?.decisionSupport?.followUp ?? (needsUpgrade?upgradeFollowUp:undefined) }
   if (!reasons.length) return {...rec,...assessment}
   return {
     ...rec,
@@ -467,7 +474,7 @@ export function gateRecommendation(
     sourceIds: rec.sourceIds.filter(id => context.evidence.some(e => e.id === id && Number.isFinite(Date.parse(e.availableAt ?? '')) && Date.parse(e.availableAt ?? '') <= Date.parse(context.cutoff))),
     action: 'no_trade',
     gateReasons: [...new Set(reasons)],
-    reason: `Evaluation blocked: ${[...new Set(reasons)].join('; ')}. Existing holdings have not been declared safe.`,
+    reason: `Evaluation blocked: ${[...new Set(reasons)].join('; ')}. Resolve these assessment prerequisites before establishing the ownership stance.`,
     entry: { ...rec.entry, targetWeightPct: null },
   }
 }
