@@ -1,9 +1,12 @@
 import { executeAgentJob } from '../lib/server/agent-jobs.ts'
+import { normalizeClaimedAgentJob } from '../lib/server/agent-job-contracts.ts'
 import { safeWorkerError } from '../lib/server/worker-local-health.ts'
 
 process.once('message', async job => {
   try {
-    const output = await executeAgentJob(job as Parameters<typeof executeAgentJob>[0], async (progress, phase) => {
+    const claimed = normalizeClaimedAgentJob(job)
+    if (!claimed) throw new Error('Invalid agent job envelope')
+    const output = await executeAgentJob(claimed, async (progress, phase) => {
       process.send?.({ type: 'progress', progress, phase })
     })
     process.send?.({ type: 'result', output }, () => process.exit(0))

@@ -7,9 +7,10 @@ import { pathToFileURL } from 'node:url'
 import { runIsolatedAgentAttempt } from '../lib/server/isolated-agent-attempt.ts'
 import { agentAttemptEnvironment, ownerRequestedCatchUpAllowance } from '../lib/server/agent-attempt-environment.ts'
 import { ownershipResearchModel } from '../lib/ai/config.ts'
+import { testEnvironment } from './fixtures/environment.ts'
 
 test('ordinary ownership investigations and reviews use one model policy without changing budgets or World', () => {
-  const environment = { CODEX_SYNTHESIS_MODEL: 'legacy-synthesis', STRATUM_MARKET_STANDARD_MODEL: 'legacy-standard', STRATUM_WORLD_CRITIC_MODEL: 'world-critic' }
+  const environment = testEnvironment({ CODEX_SYNTHESIS_MODEL: 'legacy-synthesis', STRATUM_MARKET_STANDARD_MODEL: 'legacy-standard', STRATUM_WORLD_CRITIC_MODEL: 'world-critic' })
   for (const job_type of ['generate-company-research', 'generate-etf-research', 'event-refresh-company-research', 'generate-daily-recommendations']) {
     const scoped = agentAttemptEnvironment({ job_type, payload: {} }, environment)
     assert.equal(ownershipResearchModel(scoped), 'gpt-6.1-sol')
@@ -59,7 +60,7 @@ test('the visible catch-up allowance expires with its date and deduplicates repe
 })
 
 test('catch-up models reach the child and telemetry without changing sibling jobs or World', async () => {
-  const environment = { CODEX_SYNTHESIS_MODEL: 'gpt-5.6-terra', STRATUM_WORLD_CRITIC_MODEL: 'world-critic' }
+  const environment = testEnvironment({ CODEX_SYNTHESIS_MODEL: 'gpt-5.6-terra', STRATUM_WORLD_CRITIC_MODEL: 'world-critic' })
   const job = { job_type: 'generate-company-research', payload: { researchModel: 'gpt-6.1-sol', ownerRequestedCatchUp: { key: 'explicit', date: '2026-10-03', reason: 'Owner requested all upgrades today' } } }
   assert.equal(agentAttemptEnvironment(job, environment).CODEX_SYNTHESIS_MODEL, 'gpt-6.1-sol')
   assert.equal(agentAttemptEnvironment(job, environment).STRATUM_WORLD_CRITIC_MODEL, 'world-critic')

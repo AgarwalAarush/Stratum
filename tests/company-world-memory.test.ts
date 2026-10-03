@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { PGlite } from '@electric-sql/pglite'
 import { sanitizeCompanyWorldFeedback, validateCompanyWorldPublication, companyFeedbackHasChanges } from '../lib/server/company-world-memory.ts'
-import { buildAgentJobDedupeKey } from '../lib/server/agent-jobs.ts'
+import { buildAgentJobDedupeKey } from '../lib/server/agent-job-contracts.ts'
 import type { WorldNode, WorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
 const id='00000000-0000-4000-8000-000000000010',owner='00000000-0000-4000-8000-000000000001'
 const text='The company opened its first production facility in September. Management expects further expansion in 2027.'
@@ -51,7 +51,7 @@ test('transactional completion creates exactly one receipt; retained/retried rep
   for(const status of ['applied','no_change','blocked']){
    await db.query('update company_world_memory_receipts set status=$1 where report_id=$2',[status,id]);assert.equal((await db.query('select * from claim_company_world_receipt($1,$2)',[id,job])).rows.length,0)
   }
-  assert.equal((await db.query("select status from equity_research_notes where id=$1",[id])).rows[0].status,'complete')
+  assert.equal((await db.query<{status:string}>("select status from equity_research_notes where id=$1",[id])).rows[0].status,'complete')
   const newer='00000000-0000-4000-8000-000000000012',other='00000000-0000-4000-8000-000000000002'
   // Simulate completed legacy versions before this release's completion trigger.
   await db.exec('alter table equity_research_notes disable trigger company_world_report_complete')

@@ -1,6 +1,7 @@
 import type { MarketOrchestrationActionType } from '../markets/types.ts'
 import { getSupabaseClient } from './supabase.ts'
-import { enqueueAgentJob, type AgentJobType } from './agent-jobs.ts'
+import type { AgentJobType } from './agent-job-contracts.ts'
+import { enqueueAgentJob } from './agent-job-queue.ts'
 import { scheduledMarketResearchRunLimit, selectMarketModel } from './market-model-policy.ts'
 import { autoAcceptEligibleWorldObservationProposals } from './world-observation-review.ts'
 import { runCodexJson, type CodexExecResult } from './codex-exec.ts'

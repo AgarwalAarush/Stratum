@@ -1,3 +1,26 @@
+import {
+  agentJobProvider,
+  agentJobStaleAfterMs,
+  buildAgentJobDedupeKey,
+  marketModelRoutingForAgentJob,
+  modelForAgentJob,
+  normalizeClaimedAgentJob,
+  parseAgentJobPayload,
+  parseAgentJobType,
+  shouldCoalesceAgentJob,
+  shouldRefreshClosedMarket,
+  type AgentJobHandler,
+  type AgentJobHandlers,
+  type AgentJobProgress,
+  type AgentJobRecord,
+  type AgentJobType,
+} from './agent-job-contracts.ts'
+import { enqueueAgentJob } from './agent-job-queue.ts'
+
+// Keep existing worker imports compatible while queue producers use the smaller modules.
+export * from './agent-job-contracts.ts'
+export { enqueueAgentJob, isMissingDedupeConstraint } from './agent-job-queue.ts'
+
 import { seedDecisionResearch } from './interest-coverage.ts'
 import { reviewCompanyWorldReceipt } from './company-world-memory.ts'
 import { lastCompletedSession } from '../markets/market-sessions.ts'
@@ -9,7 +32,7 @@ import { dependencyReadiness, parseRecommendationDependencies } from '../markets
 import { prepareDailyRecommendations } from './recommendation-preparation.ts'
 import { AgentJobPool } from './agent-job-pool.ts'
 import { runIsolatedAgentAttempt } from './isolated-agent-attempt.ts'
-import { agentAttemptEnvironment, isOwnershipResearchJob } from './agent-attempt-environment.ts'
+import { agentAttemptEnvironment } from './agent-attempt-environment.ts'
 import { blockingFingerprint, blockingReason } from './agent-blocking.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { captureInvestmentMacro } from './investment-macro.ts'
@@ -40,9 +63,7 @@ import { syncRobinhoodPortfolio, type RobinhoodSyncSlot } from './robinhood-port
 import {
   compileWorldBaseline,
   ingestWorldObservation,
-  isMarketAutoThesisEnabled,
   isMarketWorldModelEnabled,
-  runMarketWorldCycle,
 } from './world-memory.ts'
 import { backupMarketCorpus, verifyMarketCorpusBackup } from './world-backup.ts'
 import { getWorldSourceAdapter, listWorldSourceAdapters } from './world-sources.ts'
@@ -51,8 +72,6 @@ import { runMarketResearchScout } from './market-research-scout.ts'
 import { auditWorldSourceHealth, preflightWorldSourceCandidate } from './world-source-health.ts'
 import { collectGovernedWorldSourceDocuments } from './world-source-collector.ts'
 import { triageCapturedWorldObservationProposals } from './world-observation-proposals.ts'
-import { AI_MODELS, ownershipResearchModel } from '../ai/config.ts'
-import { scheduledMarketResearchRunLimit, selectMarketModel, type MarketModelSelection } from './market-model-policy.ts'
 import { evaluateMarketPrediction, findDueMarketPredictionEvaluations } from './market-prediction-evaluation.ts'
 import {
   fetchPersistedMarketAssets,
@@ -63,80 +82,10 @@ import { fetchLatestSnapshotMeta } from './markets-repository.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { materializeIntelligenceSourceReferrals } from './intelligence-source-referrals.ts'
 import { fetchPortfolioResearchSeedOwners } from './portfolio-research-seeding.ts'
-import { selectControlledExposureResearch } from '../markets/market-exposure-research.ts'
 import { refreshWorldEvents } from './world-events.ts'
 import { runWorldThinker } from './world-thinker.ts'
 import { reconcileWorldRepositoryProjection } from './world-projection.ts'
 import { findExtraordinaryBiotechMovers } from './biotech-catalysts.ts'
-
-export const AGENT_JOB_TYPES = [
-  'review-recommendation-trade',
-  'generate-daily-recommendations',
-  'evaluate-recommendation-outcomes',
-  'review-recommendation-cohort',
-  'send-investment-newsletter',
-  'sync-market-assets',
-  'sync-robinhood-portfolio',
-  'refresh-market-screener',
-  'prune-market-data',
-  'refresh-cross-asset',
-  'materialize-market-leadership',
-  'run-candidate-scout',
-  'summarize-candidate-scout',
-  'refresh-company-packet',
-  'generate-company-research',
-  'generate-etf-research',
-  'event-refresh-company-research',
-  'scan-research-refreshes',
-  'seed-portfolio-company-research',
-  'monitor-investment-theses',
-  'refresh-fmp-intelligence',
-  'fetch-stock-price-history',
-  'generate-market-memo',
-  'generate-daily-overview',
-  'generate-morning-brief',
-  'generate-weekly-overview',
-  'generate-monthly-overview',
-  'ingest-world-source',
-  'run-market-thesis-cycle',
-  'verify-world-source-health',
-  'preflight-world-source-candidate',
-  'collect-world-source-documents',
-  'triage-world-observation-proposals',
-  'auto-accept-observation-proposals',
-  'scout-market-research',
-  'scout-world-sources',
-  'review-world-source-coverage',
-  'scan-intelligence-source-referrals',
-  'compile-world-baseline',
-  'correlate-market-signals',
-  'synthesize-market-hypotheses',
-  'deepen-market-hypothesis',
-  'refresh-market-hypothesis-research',
-  'route-market-research-frontiers',
-  'orchestrate-market-research',
-  'evaluate-market-prediction',
-  'evaluate-market-predictions',
-  'monitor-market-theses',
-  'backup-market-corpus',
-  'verify-market-corpus',
-  'refresh-world-events',
-  'refresh-world-benchmark',
-  'run-world-replay',
-  'run-world-thinker',
-  'project-world-repository',
-] as const
-
-export type AgentJobType = typeof AGENT_JOB_TYPES[number]
-export type AgentJobProvider = 'alpaca' | 'fmp' | 'codex' | 'market-data' | 'robinhood'
-
-interface AgentJobRecord {
-  id: string
-  job_type: AgentJobType
-  payload: Record<string, unknown>
-  attempts: number
-  max_attempts: number
-}
 
 function fmpUsageDelta(before: FmpUsageSnapshot, after: FmpUsageSnapshot) {
   return {
@@ -154,314 +103,6 @@ function outputWithUsage(output: unknown, before: FmpUsageSnapshot, after: FmpUs
     return { ...output as Record<string, unknown>, providerUsage: { fmp: delta } }
   }
   return { result: output, providerUsage: { fmp: delta } }
-}
-
-export function normalizeClaimedAgentJob(data: unknown): AgentJobRecord | null {
-  const job = Array.isArray(data) ? data[0] : data
-  if (!job || typeof job !== 'object') return null
-  const record = job as Partial<AgentJobRecord>
-  if (
-    typeof record.id !== 'string'
-    || typeof record.job_type !== 'string'
-    || !AGENT_JOB_TYPES.includes(record.job_type as AgentJobType)
-  ) return null
-  return record as AgentJobRecord
-}
-
-export function parseAgentJobType(value: unknown): AgentJobType {
-  if (typeof value !== 'string' || !AGENT_JOB_TYPES.includes(value as AgentJobType)) {
-    throw new Error('Unsupported agent job type')
-  }
-  return value as AgentJobType
-}
-
-export function buildAgentJobDedupeKey(jobType: AgentJobType, now = new Date(), payload: Record<string, unknown> = {}): string {
-  if (['generate-daily-recommendations','evaluate-recommendation-outcomes','review-recommendation-cohort','send-investment-newsletter'].includes(jobType)) return `${jobType}:${now.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })}`
-  if (jobType === 'generate-daily-overview') return `${jobType}:${now.toISOString().slice(0, 10)}:${String(payload.scope ?? 'ai-research')}`
-  if (jobType === 'refresh-world-events') {
-    const bucket = new Date(now)
-    bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
-    return `${jobType}:${bucket.toISOString()}`
-  }
-  if (jobType === 'run-world-thinker') {
-    if (payload.trigger === 'company_research' && typeof payload.researchNoteId === 'string') return `${jobType}:company-research:${payload.researchNoteId}`
-    const minutes = payload.trigger === 'urgent' ? 20 : 12 * 60
-    const bucket = new Date(now)
-    bucket.setTime(Math.floor(bucket.getTime() / (minutes * 60_000)) * minutes * 60_000)
-    return `${jobType}:${payload.trigger === 'urgent' ? 'urgent' : String(payload.trigger ?? 'scheduled')}:${bucket.toISOString()}`
-  }
-  if (jobType === 'run-world-replay') {
-    if (typeof payload.replayRunId === 'string') return `${jobType}:${payload.replayRunId}:${String(payload.cursorAt ?? 'next')}:${String(payload.step ?? 'start')}:${String(payload.resumeAttempt ?? 0)}`
-    return `${jobType}:${now.toISOString().slice(0, 10)}`
-  }
-  if (jobType === 'project-world-repository' && typeof payload.commit === 'string') return `${jobType}:${payload.commit}`
-  if (jobType === 'run-market-thesis-cycle' && typeof payload.cycleDate === 'string' && (payload.cycle === 'pre-market' || payload.cycle === 'post-close')) {
-    return `${jobType}:${payload.cycleDate}:${payload.cycle}`
-  }
-  if (jobType === 'sync-robinhood-portfolio' && typeof payload.tradingDate === 'string' && typeof payload.slot === 'string') {
-    return `${jobType}:${payload.tradingDate}:${payload.slot}`
-  }
-  if (jobType === 'generate-market-memo' && typeof payload.snapshotId === 'string') return `${jobType}:${payload.snapshotId}`
-  if (jobType === 'refresh-market-screener') {
-    if (payload.mode === 'coverage' && typeof payload.symbol === 'string') {
-      return `${jobType}:coverage:${payload.symbol.toUpperCase()}:${now.toISOString().slice(0, 10)}`
-    }
-    if (payload.mode === 'daily') return `${jobType}:daily:${now.toISOString().slice(0, 10)}`
-    const bucket = new Date(now)
-    bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 5) * 5, 0, 0)
-    return `${jobType}:${bucket.toISOString()}`
-  }
-  if (jobType === 'refresh-cross-asset') {
-    if (payload.mode === 'daily') return `${jobType}:daily:${now.toISOString().slice(0, 10)}`
-    const bucket = new Date(now)
-    bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 5) * 5, 0, 0)
-    return `${jobType}:${bucket.toISOString()}`
-  }
-  if (jobType === 'refresh-fmp-intelligence') {
-    const cadence = typeof payload.cadenceMinutes === 'number'
-      ? Math.max(15, Math.min(240, Math.round(payload.cadenceMinutes)))
-      : 15
-    const bucket = new Date(now)
-    const bucketMs = cadence * 60_000
-    bucket.setTime(Math.floor(bucket.getTime() / bucketMs) * bucketMs)
-    return `${jobType}:${bucket.toISOString()}`
-  }
-  if (jobType === 'fetch-stock-price-history' && typeof payload.symbol === 'string') {
-    const bucket = new Date(now)
-    bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 5) * 5, 0, 0)
-    return `${jobType}:${payload.symbol.trim().toUpperCase()}:${bucket.toISOString()}`
-  }
-  if (jobType === 'scan-research-refreshes') {
-    const cadence = typeof payload.cadenceMinutes === 'number'
-      ? Math.max(15, Math.min(240, Math.round(payload.cadenceMinutes)))
-      : 15
-    const bucket = new Date(now)
-    const bucketMs = cadence * 60_000
-    bucket.setTime(Math.floor(bucket.getTime() / bucketMs) * bucketMs)
-    return `${jobType}:${bucket.toISOString()}`
-  }
-  if (jobType === 'seed-portfolio-company-research') return `${jobType}:${now.toISOString().slice(0, 10)}`
-  if (jobType === 'monitor-investment-theses') {
-    const cadence = typeof payload.cadenceMinutes === 'number'
-      ? Math.max(5, Math.min(240, Math.round(payload.cadenceMinutes)))
-      : 15
-    const bucket = new Date(now)
-    const bucketMs = cadence * 60_000
-    bucket.setTime(Math.floor(bucket.getTime() / bucketMs) * bucketMs)
-    return `${jobType}:${bucket.toISOString()}`
-  }
-  if (jobType === 'compile-world-baseline' || jobType === 'correlate-market-signals' || jobType === 'synthesize-market-hypotheses' || jobType === 'monitor-market-theses') {
-    const evidenceFingerprint = typeof payload.evidenceFingerprint === 'string' ? payload.evidenceFingerprint.trim() : ''
-    if (evidenceFingerprint && (jobType === 'compile-world-baseline' || jobType === 'synthesize-market-hypotheses')) {
-      const scope = jobType === 'compile-world-baseline'
-        ? `${payload.scopeType === 'domain' ? 'domain' : 'global'}:${typeof payload.scopeKey === 'string' ? payload.scopeKey : 'global'}`
-        : ''
-      return `${jobType}:${scope}:evidence:${evidenceFingerprint}`
-    }
-    const bucket = new Date(now)
-    const cadence = jobType === 'monitor-market-theses' ? 60 : jobType === 'compile-world-baseline' ? 60 : 24 * 60
-    bucket.setTime(Math.floor(bucket.getTime() / (cadence * 60_000)) * cadence * 60_000)
-    const scope = jobType === 'compile-world-baseline'
-      ? `${payload.scopeType === 'domain' ? 'domain' : 'global'}:${typeof payload.scopeKey === 'string' ? payload.scopeKey : 'global'}`
-      : ''
-    return `${jobType}:${scope}:${bucket.toISOString()}`
-  }
-  if (jobType === 'deepen-market-hypothesis' && typeof payload.ownerId === 'string' && typeof payload.hypothesisId === 'string') {
-    return `${jobType}:${payload.ownerId}:${payload.hypothesisId}:${now.toISOString().slice(0, 10)}`
-  }
-  if (jobType === 'refresh-market-hypothesis-research') {
-    const bucket = new Date(now)
-    bucket.setUTCHours(Math.floor(bucket.getUTCHours() / 6) * 6, 0, 0, 0)
-    return `${jobType}:${bucket.toISOString()}`
-  }
-  if (jobType === 'route-market-research-frontiers') {
-    const bucket = new Date(now)
-    bucket.setUTCHours(Math.floor(bucket.getUTCHours() / 6) * 6, 0, 0, 0)
-    return `${jobType}:${bucket.toISOString()}`
-  }
-  if (jobType === 'orchestrate-market-research') {
-    const bucket = new Date(now)
-    bucket.setUTCHours(Math.floor(bucket.getUTCHours() / 6) * 6, 0, 0, 0)
-    return `${jobType}:${bucket.toISOString()}`
-  }
-  if (jobType === 'auto-accept-observation-proposals') {
-    const domain = typeof payload.domainId === 'string' ? payload.domainId : 'all'
-    const bucket = new Date(now)
-    bucket.setUTCMinutes(Math.floor(bucket.getUTCMinutes() / 15) * 15, 0, 0)
-    return `${jobType}:${domain}:${bucket.toISOString()}`
-  }
-  if (jobType === 'evaluate-market-prediction' && typeof payload.predictionId === 'string') {
-    return `${jobType}:${payload.predictionId}:${now.toISOString().slice(0, 10)}`
-  }
-  if (jobType === 'evaluate-market-predictions') {
-    const bucket = new Date(now)
-    bucket.setUTCHours(Math.floor(bucket.getUTCHours() / 6) * 6, 0, 0, 0)
-    return `${jobType}:${bucket.toISOString()}`
-  }
-  if (jobType === 'backup-market-corpus' || jobType === 'verify-market-corpus') return `${jobType}:${now.toISOString().slice(0, 10)}`
-  if (jobType === 'ingest-world-source') {
-    if (typeof payload.fingerprint === 'string') return `${jobType}:${payload.fingerprint}`
-    if (typeof payload.adapterId === 'string') return `${jobType}:${payload.adapterId}:${now.toISOString().slice(0, 10)}`
-  }
-  if (jobType === 'triage-world-observation-proposals' && Array.isArray(payload.captureIds)) {
-    const captures = payload.captureIds.filter((item): item is string => typeof item === 'string').sort().join(',')
-    if (captures) return `${jobType}:${captures}`
-  }
-  if (jobType === 'verify-world-source-health') return `${jobType}:${now.toISOString().slice(0, 10)}`
-  if (jobType === 'preflight-world-source-candidate' && typeof payload.slug === 'string') {
-    return `${jobType}:${payload.slug.trim().toLowerCase()}:${now.toISOString().slice(0, 10)}`
-  }
-  if (jobType === 'scout-world-sources' && typeof payload.domainId === 'string') {
-    // A frontier pass is deliberately capped to a few questions. Including its
-    // stable frontier set lets the next bounded pass cover the remaining gap
-    // today, while still deduplicating retries of the same request.
-    const frontierIds = payload.trigger === 'frontier_gap' && Array.isArray(payload.frontierIds)
-      ? payload.frontierIds.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).sort()
-      : []
-    if (frontierIds.length > 0) {
-      return `${jobType}:${payload.domainId}:frontier:${frontierIds.join(',')}:${now.toISOString().slice(0, 10)}`
-    }
-    return `${jobType}:${payload.domainId}:${now.toISOString().slice(0, 10)}`
-  }
-  if (jobType === 'scout-market-research' && typeof payload.domainId === 'string') {
-    const frontierIds = Array.isArray(payload.frontierIds)
-      ? payload.frontierIds.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).sort()
-      : []
-    return `${jobType}:${payload.domainId}:${frontierIds.join(',') || 'manual'}:${now.toISOString().slice(0, 10)}`
-  }
-  if (jobType === 'review-world-source-coverage') return `${jobType}:${now.toISOString().slice(0, 10)}`
-  if (jobType === 'scan-intelligence-source-referrals') return `${jobType}:${now.toISOString().slice(0, 10)}`
-  if ((jobType === 'materialize-market-leadership' || jobType === 'run-candidate-scout') && typeof payload.tradingDate === 'string') {
-    return `${jobType}:${payload.tradingDate}`
-  }
-  if (jobType === 'summarize-candidate-scout' && typeof payload.weekEnding === 'string') {
-    return `${jobType}:${payload.weekEnding}`
-  }
-  if ((jobType === 'refresh-company-packet' || jobType === 'generate-company-research' || jobType === 'generate-etf-research' || jobType === 'event-refresh-company-research')
-    && typeof payload.ownerId === 'string' && typeof payload.symbol === 'string') {
-    const event = typeof payload.eventId === 'string' ? `:${payload.eventId}` : ''
-    return `${jobType}:${payload.ownerId}:${payload.symbol}:${now.toISOString().slice(0, 10)}${event}`
-  }
-  return `${jobType}:${now.toISOString().slice(0, 10)}`
-}
-
-export function agentJobProvider(jobType: AgentJobType): AgentJobProvider {
-  if (['evaluate-recommendation-outcomes','review-recommendation-cohort','send-investment-newsletter'].includes(jobType)) return 'market-data'
-  if (jobType === 'sync-robinhood-portfolio') return 'robinhood'
-  if (jobType === 'sync-market-assets' || jobType === 'refresh-market-screener') return 'alpaca'
-  if (jobType === 'refresh-fmp-intelligence' || jobType === 'fetch-stock-price-history' || jobType === 'run-candidate-scout' || jobType === 'refresh-company-packet') return 'fmp'
-  if (jobType === 'project-world-repository' || jobType === 'run-world-replay' || jobType === 'refresh-world-benchmark') return 'market-data'
-  if (jobType === 'ingest-world-source' || jobType === 'run-market-thesis-cycle' || jobType === 'verify-world-source-health' || jobType === 'preflight-world-source-candidate' || jobType === 'collect-world-source-documents') return 'market-data'
-  if (jobType === 'triage-world-observation-proposals' || jobType === 'scout-market-research') return 'codex'
-  if (
-    jobType === 'refresh-cross-asset'
-    || jobType === 'materialize-market-leadership'
-    || jobType === 'scan-research-refreshes'
-    || jobType === 'seed-portfolio-company-research'
-    || jobType === 'monitor-investment-theses'
-    || jobType === 'summarize-candidate-scout'
-    || jobType === 'compile-world-baseline'
-    || jobType === 'correlate-market-signals'
-    || jobType === 'monitor-market-theses'
-    || jobType === 'refresh-market-hypothesis-research'
-    || jobType === 'route-market-research-frontiers'
-    || jobType === 'orchestrate-market-research'
-    || jobType === 'auto-accept-observation-proposals'
-    || jobType === 'review-world-source-coverage'
-    || jobType === 'scan-intelligence-source-referrals'
-    || jobType === 'evaluate-market-predictions'
-    || jobType === 'prune-market-data'
-  ) return 'market-data'
-  if (jobType === 'backup-market-corpus' || jobType === 'verify-market-corpus') return 'market-data'
-  return 'codex'
-}
-
-/**
- * Durable worker telemetry must describe the exact policy choices used by a
- * job, not merely the generic fallback model. A deepening pass invokes both
- * an analyst and a critic; each remains visible in the immutable run input.
- */
-export function marketModelRoutingForAgentJob(
-  jobType: AgentJobType,
-  environment: NodeJS.ProcessEnv = process.env,
-): MarketModelSelection[] {
-  const tasks = jobType === 'refresh-world-events'
-    ? ['world_event_extraction'] as const
-    : jobType === 'run-world-thinker'
-      ? ['world_thinker', 'world_critic'] as const
-      : jobType === 'scout-world-sources'
-    ? ['source_scout'] as const
-    : jobType === 'scout-market-research'
-      ? ['research_planning'] as const
-    : jobType === 'triage-world-observation-proposals'
-      ? ['observation_triage'] as const
-      : jobType === 'deepen-market-hypothesis'
-        ? ['hypothesis_analysis', 'hypothesis_critic'] as const
-        : jobType === 'evaluate-market-prediction'
-          ? ['prediction_evaluation'] as const
-          : []
-  return tasks.map((task) => selectMarketModel(task, environment))
-}
-
-export function modelForAgentJob(jobType: AgentJobType, environment: NodeJS.ProcessEnv = process.env): string | null {
-  if (isOwnershipResearchJob(jobType)) return ownershipResearchModel(environment)
-  const routed = marketModelRoutingForAgentJob(jobType, environment)
-  if (routed.length > 0) return routed[0]!.model
-  return agentJobProvider(jobType) === 'codex'
-    ? environment.CODEX_SYNTHESIS_MODEL ?? AI_MODELS.scheduledSynthesis
-    : null
-}
-
-export function isMissingDedupeConstraint(message: string): boolean {
-  return message.includes('no unique or exclusion constraint matching the ON CONFLICT specification')
-}
-
-export function shouldRefreshClosedMarket(
-  snapshot: { published_at: string | null } | null,
-  now = new Date(),
-): boolean {
-  if (!snapshot?.published_at) return true
-  const publishedAt = Date.parse(snapshot.published_at)
-  return !Number.isFinite(publishedAt) || now.getTime() - publishedAt >= 6 * 60 * 60 * 1_000
-}
-
-/** Lower values claim first. Human-initiated source verification must not wait
- * behind a backlog of routine market-refresh work, while it remains only
- * operational telemetry—not admission authority. */
-export function agentJobPriority(jobType: AgentJobType): number {
-  if(jobType==='review-recommendation-trade') return 5
-  if (jobType === 'sync-robinhood-portfolio') return 6
-  if (jobType === 'send-investment-newsletter') return 5
-  if (jobType === 'generate-daily-recommendations') return 10
-  if (jobType === 'evaluate-recommendation-outcomes' || jobType === 'review-recommendation-cohort') return 15
-  if (jobType === 'run-world-thinker') return 25
-  if (jobType === 'run-world-replay') return 70
-  if (jobType === 'refresh-world-benchmark') return 80
-  if (jobType === 'refresh-world-events' || jobType === 'project-world-repository') return 35
-  if (jobType === 'preflight-world-source-candidate') return 20
-  if (jobType === 'verify-world-source-health') return 30
-  if (jobType === 'scout-world-sources' || jobType === 'scout-market-research' || jobType === 'review-world-source-coverage' || jobType === 'scan-intelligence-source-referrals' || jobType === 'route-market-research-frontiers' || jobType === 'orchestrate-market-research' || jobType === 'auto-accept-observation-proposals') return 40
-  if (jobType === 'collect-world-source-documents' || jobType === 'triage-world-observation-proposals') return 50
-  if (jobType === 'refresh-market-screener' || jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence') return 140
-  return 100
-}
-
-/** Short, bounded refreshes should not hold the sole worker for as long as an
- * intentionally long research generation. */
-export function agentJobStaleAfterMs(jobType: AgentJobType, defaultStaleAfterMs = 45 * 60 * 1_000): number {
-  if (jobType === 'run-world-thinker') return 35 * 60 * 1_000
-  if (jobType === 'run-world-replay') return 45 * 60 * 1_000
-  if (jobType === 'refresh-market-screener' || jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence') return 10 * 60 * 1_000
-  return defaultStaleAfterMs
-}
-
-/** Routine publications are snapshots, not a historical work queue. If an
- * earlier refresh is still queued or running, a later calendar tick can reuse
- * it; symbol-specific coverage and all governed research work stay distinct. */
-export function shouldCoalesceAgentJob(jobType: AgentJobType, payload: Record<string, unknown>): boolean {
-  if (jobType === 'refresh-world-events') return Object.keys(payload).length === 0
-  if (jobType === 'refresh-market-screener') return payload.mode !== 'coverage' && typeof payload.symbol !== 'string'
-  return jobType === 'refresh-cross-asset' || jobType === 'refresh-fmp-intelligence' || jobType === 'monitor-investment-theses'
 }
 
 interface QueuedRoutineAgentJob {
@@ -590,65 +231,6 @@ export async function recoverStaleAgentJobs(
   return recoverClaimedAgentJobs(jobs, now, 'Recovered after the worker stopped while this job was running.')
 }
 
-export async function enqueueAgentJob(
-  jobType: AgentJobType,
-  payload: Record<string, unknown> = {},
-  dedupeKey = buildAgentJobDedupeKey(jobType, new Date(), payload),
-  options: { runAfter?: Date; priority?: number } = {},
-): Promise<{ id: string; deduplicated: boolean }> {
-  const supabase = getSupabaseClient()
-  if (!supabase) throw new Error('Supabase service credentials are not configured')
-
-  if (shouldCoalesceAgentJob(jobType, payload)) {
-    const { data: pending, error: pendingError } = await supabase
-      .from('agent_jobs')
-      .select('id')
-      .eq('job_type', jobType)
-      .in('status', ['queued', 'running'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (pendingError) throw new Error(`Unable to inspect active ${jobType} work: ${pendingError.message}`)
-    if (pending) return { id: String(pending.id), deduplicated: true }
-  }
-
-  const queuedJob = {
-    job_type: jobType,
-    payload,
-    dedupe_key: dedupeKey,
-    priority: options.priority ?? agentJobPriority(jobType),
-    ...(options.runAfter ? { run_after: options.runAfter.toISOString() } : {}),
-  }
-  const { data, error } = await supabase
-    .from('agent_jobs')
-    .upsert(queuedJob, { onConflict: 'dedupe_key', ignoreDuplicates: true })
-    .select('id')
-    .maybeSingle()
-  if (error && !isMissingDedupeConstraint(error.message)) {
-    throw new Error(`Unable to enqueue agent job: ${error.message}`)
-  }
-  if (data) return { id: data.id, deduplicated: false }
-
-  const { data: existing, error: existingError } = await supabase
-    .from('agent_jobs')
-    .select('id')
-    .eq('dedupe_key', dedupeKey)
-    .maybeSingle()
-  if (existingError) throw new Error(`Unable to find deduplicated agent job: ${existingError.message}`)
-  if (existing) return { id: existing.id, deduplicated: true }
-
-  if (!error) throw new Error(`Unable to find deduplicated agent job: ${dedupeKey}`)
-  const { data: inserted, error: insertError } = await supabase
-    .from('agent_jobs')
-    .insert(queuedJob)
-    .select('id')
-    .single()
-  if (insertError || !inserted) {
-    throw new Error(`Unable to enqueue agent job without the dedupe index: ${insertError?.message ?? dedupeKey}`)
-  }
-  return { id: inserted.id, deduplicated: false }
-}
-
 type MarketThesisCycle = 'pre-market' | 'post-close'
 
 function validMarketThesisCycle(value: unknown): value is MarketThesisCycle {
@@ -749,22 +331,49 @@ export async function resumeBlockedAgentJobs(): Promise<number> {
   return resumed
 }
 
-async function executeJob(
-  job: AgentJobRecord,
-  reportProgress: (progress: number, phase: string) => Promise<void> = async () => {},
+const generateCompanyResearchJob: AgentJobHandler<'generate-company-research' | 'event-refresh-company-research'> = async (job, reportProgress) => {
+    const ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : ''
+    const symbol = typeof job.payload.symbol === 'string' ? job.payload.symbol.toUpperCase() : ''
+    if (!ownerId || !symbol) throw new Error('Research jobs require ownerId and symbol')
+    const note = await generateFullEquityResearch(
+      symbol,
+      ownerId,
+      String(job.payload.reason ?? 'manual'),
+      reportProgress,
+      {
+        forceFullResearch: job.payload.forceFullResearch === true,
+        investigationKey: job.id,
+        worldOpportunityLeadId: typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : undefined,
+        marketThesisVersionId: typeof job.payload.marketThesisVersionId === 'string'
+          ? job.payload.marketThesisVersionId
+          : undefined,
+      },
+    )
+    const worldOpportunityLeadId = typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : null
+    if (worldOpportunityLeadId) {
+      const supabase = getSupabaseClient()
+      if (supabase) await supabase.from('world_opportunity_leads').update({ status: 'researched', research_note_id: note.id, updated_at: new Date().toISOString() }).eq('id', worldOpportunityLeadId)
 
-): Promise<unknown> {
-  const retiredBeliefJobs: AgentJobType[] = ['correlate-market-signals', 'synthesize-market-hypotheses', 'deepen-market-hypothesis',
-    'refresh-market-hypothesis-research', 'orchestrate-market-research', 'monitor-market-theses', 'route-market-research-frontiers'];
-  if (retiredBeliefJobs.includes(job.job_type)) return { readiness: 'blocked', errors: ['Unsupported capability: legacy belief writer retired; use Git World investigation'], authority: 'git-world-v1' };
-  if (job.job_type === 'review-recommendation-trade') {
+    }
+    return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf, worldOpportunityLeadId, coverage: note.coverageDiagnostics ?? null }
+}
+
+const retiredBeliefJob: AgentJobHandler = async () => ({
+  readiness: 'blocked',
+  errors: ['Unsupported capability: legacy belief writer retired; use Git World investigation'],
+  authority: 'git-world-v1',
+})
+
+/** Every registered job has an explicit handler, including retired compatibility IDs. */
+const AGENT_JOB_HANDLERS: AgentJobHandlers = {
+  'review-recommendation-trade': async (job, reportProgress) => {
     await reportProgress(15,'Reading your completed-trade report')
     const {extractReportedTrade}=await import('./trade-extraction.ts')
     const result=await extractReportedTrade(String(job.payload.instruction??''))
     await reportProgress(100,'Trade details extracted for owner confirmation')
     return result
-  }
-  if (job.job_type === 'generate-daily-recommendations') {
+  },
+  'generate-daily-recommendations': async (job) => {
     await captureInvestmentMacro().catch(error => console.warn(JSON.stringify({ event: 'investment_macro_capture_failed', error: error instanceof Error ? error.message : String(error) })))
     const now = new Date(), ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : undefined, editionKey = typeof job.payload.editionKey === 'string' ? job.payload.editionKey : 'daily'
     const result = job.payload.phase === 'publish'
@@ -773,93 +382,19 @@ async function executeJob(
     if ('preparing' in result) return result
     await captureShadowPolicies(result.batchId)
     return result
-  }
-  if (job.job_type === 'evaluate-recommendation-outcomes') {
+  },
+  'evaluate-recommendation-outcomes': async () => {
     const outcomes = await evaluateRecommendationOutcomes()
     const shadow = await evaluateShadowPolicies(MARKETS_OWNER_ID)
     return {outcomes, shadow}
-  }
-  if (job.job_type === 'review-recommendation-cohort') return reviewRecommendationCohort()
-  if (job.job_type === 'send-investment-newsletter') return sendInvestmentNewsletter()
-
-  if (job.job_type === 'refresh-world-events') {
-    const result = await refreshWorldEvents()
-    if (job.payload.runThinkerAfter === true) {
-      await enqueueAgentJob('run-world-thinker', { trigger: 'manual', eventClusterIds: result.urgent.length ? result.urgent : undefined })
-    } else if (result.urgent.length > 0) {
-      await enqueueAgentJob('run-world-thinker', { trigger: 'urgent', eventClusterIds: result.urgent })
-    }
-    return result
-  }
-
-  if (job.job_type === 'refresh-world-benchmark') {
-    const { evaluateWorldBenchmark, seedWorldBenchmarkFromEventLedger } = await import('./world-benchmark.ts')
-    const seeded = await seedWorldBenchmarkFromEventLedger()
-    const evaluation = await evaluateWorldBenchmark()
-    return { seeded, evaluation }
-  }
-
-  if (job.job_type === 'run-world-replay') {
-    const { processWorldReplayStep, startWorldReplay } = await import('./world-replay.ts')
-    const replay = typeof job.payload.replayRunId === 'string'
-      ? { id: job.payload.replayRunId }
-      : await startWorldReplay({
-        since: typeof job.payload.since === 'string' ? new Date(job.payload.since) : undefined,
-        until: typeof job.payload.until === 'string' ? new Date(job.payload.until) : undefined,
-      })
-    const result = await processWorldReplayStep(replay.id, { model: job.payload.model !== false })
-    if (!result.complete) {
-      const resumeAttempt = Number(job.payload.resumeAttempt ?? 0) + 1
-      const payload = { replayRunId: replay.id, cursorAt: result.replay.cursorAt, step: result.nextStep, resumeAttempt, model: job.payload.model !== false }
-      await enqueueAgentJob(
-        'run-world-replay', payload, buildAgentJobDedupeKey('run-world-replay', new Date(), payload),
-        result.deferred ? { runAfter: new Date(Date.now() + 2 * 60_000) } : {},
-      )
-    }
-    return result
-  }
-
-  if (job.job_type === 'run-world-thinker') {
-    const trigger = job.payload.trigger
-    if (trigger !== 'scheduled' && trigger !== 'urgent' && trigger !== 'manual' && trigger !== 'backfill' && trigger !== 'company_research') throw new Error('World Thinker trigger is invalid')
-    const eventClusterIds = Array.isArray(job.payload.eventClusterIds) ? job.payload.eventClusterIds.filter((value): value is string => typeof value === 'string') : undefined
-    const coverageFrontierIds = Array.isArray(job.payload.coverageFrontierIds)
-      ? job.payload.coverageFrontierIds.filter((value): value is string => typeof value === 'string')
-      : typeof job.payload.coverageFrontierId === 'string' ? [job.payload.coverageFrontierId] : undefined
-    if(trigger==='company_research') {
-      if(typeof job.payload.researchNoteId!=='string')throw new Error('Company feedback requires a completed report receipt')
-      return reviewCompanyWorldReceipt(job.payload.researchNoteId,job.id,
-        options=>runWorldThinker({...options,canonicalProjection:false}),
-        commit=>reconcileWorldRepositoryProjection({commit,canonical:false}))
-    }
-    return runWorldThinker({
-      legacyHypothesisId: typeof job.payload.legacyHypothesisId === 'string' ? job.payload.legacyHypothesisId : undefined,
-      ownerReviewItemId: typeof job.payload.ownerReviewItemId === 'string' ? job.payload.ownerReviewItemId : undefined,
-      trigger, eventClusterIds, coverageFrontierIds, agentJobId: job.id, canonicalProjection: process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true',
-        worldOpportunityLeadId: typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : undefined,
-      researchNoteId: typeof job.payload.researchNoteId === 'string' ? job.payload.researchNoteId : undefined,
-      symbol: typeof job.payload.symbol === 'string' ? job.payload.symbol : undefined,
-    })
-  }
-
-  if (job.job_type === 'project-world-repository') {
-    return reconcileWorldRepositoryProjection({ commit: typeof job.payload.commit === 'string' ? job.payload.commit : undefined, canonical: process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true' })
-  }
-
-  if (job.job_type === 'run-market-thesis-cycle') {
-    if (!validMarketThesisCycle(job.payload.cycle)) throw new Error('Market thesis cycle requires a valid cycle')
-    return runMarketThesisCycle(job.payload.cycle, reportProgress)
-  }
-
-  if (job.job_type === 'sync-robinhood-portfolio') {
-    const slot = job.payload.slot
-    if (slot !== 'open' && slot !== 'midday' && slot !== 'close' && slot !== 'final') {
-      throw new Error('Robinhood sync requires a valid capture slot')
-    }
-    return syncRobinhoodPortfolio(undefined, slot as RobinhoodSyncSlot)
-  }
-
-  if (job.job_type === 'sync-market-assets') {
+  },
+  'review-recommendation-cohort': async () => {
+    return reviewRecommendationCohort()
+  },
+  'send-investment-newsletter': async () => {
+    return sendInvestmentNewsletter()
+  },
+  'sync-market-assets': async () => {
     const client = getAlpacaClient()
     if (!client) throw new Error('Alpaca credentials are not configured')
     const assets = await syncAlpacaAssets(client)
@@ -869,13 +404,15 @@ async function executeJob(
       eligibleListingCount: expanded.eligibleListingCount,
       screenerUniverseCount: expanded.selectedCount,
     }
-  }
-
-  if (job.job_type === 'prune-market-data') {
-    return pruneMarketData()
-  }
-
-  if (job.job_type === 'refresh-market-screener') {
+  },
+  'sync-robinhood-portfolio': async (job) => {
+    const slot = job.payload.slot
+    if (slot !== 'open' && slot !== 'midday' && slot !== 'close' && slot !== 'final') {
+      throw new Error('Robinhood sync requires a valid capture slot')
+    }
+    return syncRobinhoodPortfolio(undefined, slot as RobinhoodSyncSlot)
+  },
+  'refresh-market-screener': async (job) => {
     const client = getAlpacaClient()
     if (!client) throw new Error('Alpaca credentials are not configured')
     const clock = await client.fetchClock()
@@ -924,41 +461,19 @@ async function executeJob(
       ...(slot ? { slot: slot.slot } : {}),
     })
     return snapshot
-  }
-
-  if (job.job_type === 'refresh-company-packet') {
-    const symbol = typeof job.payload.symbol === 'string' ? job.payload.symbol.trim().toUpperCase() : ''
-    const ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : ''
-    if (!/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol) || !ownerId) {
-      throw new Error('Company packet refresh requires an owner and valid stock symbol')
-    }
-    const packet = await materializeCompanyPacket(symbol, ownerId)
-    return { symbol, packetId: packet.id, dataAsOf: packet.dataAsOf }
-  }
-
-  if (job.job_type === 'refresh-fmp-intelligence') {
-    return syncFmpMarketIntelligence()
-  }
-
-  if (job.job_type === 'fetch-stock-price-history') {
-    const symbol = typeof job.payload.symbol === 'string' ? job.payload.symbol.trim().toUpperCase() : ''
-    if (!/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol)) throw new Error('Stock price history requires a valid symbol')
-    await reportProgress(20, 'fetching FMP daily prices')
-    const history = await cacheFmpFiveYearPriceHistory(symbol)
-    await reportProgress(100, 'cached')
-    return { symbol, provider: history.provider, dataAsOf: history.dataAsOf, pointCount: history.history.length }
-  }
-
-  if (job.job_type === 'refresh-cross-asset') {
+  },
+  'prune-market-data': async () => {
+    return pruneMarketData()
+  },
+  'refresh-cross-asset': async () => {
     const snapshot = await materializeCrossAssetSnapshot()
     return {
       snapshotId: snapshot.id,
       observationCount: snapshot.observations.length,
       dataAsOf: snapshot.dataAsOf,
     }
-  }
-
-  if (job.job_type === 'materialize-market-leadership') {
+  },
+  'materialize-market-leadership': async () => {
     const leadership = await materializeMarketLeadership()
     await materializeMarketHomeSnapshot()
     await enqueueAgentJob(
@@ -972,9 +487,8 @@ async function executeJob(
       usableCount: leadership.usableCount,
       groupCount: leadership.subIndustries.length,
     }
-  }
-
-  if (job.job_type === 'run-candidate-scout') {
+  },
+  'run-candidate-scout': async (job) => {
     const briefs = await materializeCandidateScout({
       tradingDate: typeof job.payload.tradingDate === 'string' ? job.payload.tradingDate : undefined,
       preferredSymbols: Array.isArray(job.payload.symbols) ? job.payload.symbols.filter((symbol): symbol is string => typeof symbol === 'string') : undefined,
@@ -993,42 +507,23 @@ async function executeJob(
       symbols: briefs.map((brief) => brief.symbol),
       tradingDate: tradingDate ?? null,
     }
-  }
-
-  if (job.job_type === 'summarize-candidate-scout') {
+  },
+  'summarize-candidate-scout': async (job) => {
     const weekEnding = typeof job.payload.weekEnding === 'string' ? job.payload.weekEnding : ''
     if (!/^\d{4}-\d{2}-\d{2}$/.test(weekEnding)) throw new Error('Candidate weekly summary requires a week-ending date')
     return materializeCandidateWeeklySummary({ weekEnding })
-  }
-
-  if (job.job_type === 'generate-company-research' || job.job_type === 'event-refresh-company-research') {
+  },
+  'refresh-company-packet': async (job) => {
+    const symbol = typeof job.payload.symbol === 'string' ? job.payload.symbol.trim().toUpperCase() : ''
     const ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : ''
-    const symbol = typeof job.payload.symbol === 'string' ? job.payload.symbol.toUpperCase() : ''
-    if (!ownerId || !symbol) throw new Error('Research jobs require ownerId and symbol')
-    const note = await generateFullEquityResearch(
-      symbol,
-      ownerId,
-      String(job.payload.reason ?? 'manual'),
-      reportProgress,
-      {
-        forceFullResearch: job.payload.forceFullResearch === true,
-        investigationKey: job.id,
-        worldOpportunityLeadId: typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : undefined,
-        marketThesisVersionId: typeof job.payload.marketThesisVersionId === 'string'
-          ? job.payload.marketThesisVersionId
-          : undefined,
-      },
-    )
-    const worldOpportunityLeadId = typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : null
-    if (worldOpportunityLeadId) {
-      const supabase = getSupabaseClient()
-      if (supabase) await supabase.from('world_opportunity_leads').update({ status: 'researched', research_note_id: note.id, updated_at: new Date().toISOString() }).eq('id', worldOpportunityLeadId)
-
+    if (!/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol) || !ownerId) {
+      throw new Error('Company packet refresh requires an owner and valid stock symbol')
     }
-    return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf, worldOpportunityLeadId, coverage: note.coverageDiagnostics ?? null }
-  }
-
-  if (job.job_type === 'generate-etf-research') {
+    const packet = await materializeCompanyPacket(symbol, ownerId)
+    return { symbol, packetId: packet.id, dataAsOf: packet.dataAsOf }
+  },
+  'generate-company-research': generateCompanyResearchJob,
+  'generate-etf-research': async (job, reportProgress) => {
     const ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : ''
     const symbol = typeof job.payload.symbol === 'string' ? job.payload.symbol.toUpperCase() : ''
     if (!ownerId || !symbol) throw new Error('ETF research jobs require ownerId and symbol')
@@ -1041,25 +536,63 @@ async function executeJob(
       job.id,
     )
     return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf, instrumentType: 'etf' }
-  }
-
-  if (job.job_type === 'scan-research-refreshes') {
+  },
+  'event-refresh-company-research': generateCompanyResearchJob,
+  'scan-research-refreshes': async () => {
     return scanResearchRefreshes()
-  }
-
-  if (job.job_type === 'seed-portfolio-company-research') {
+  },
+  'seed-portfolio-company-research': async (job) => {
     const requestedOwnerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : null
     const ownerIds = requestedOwnerId ? [requestedOwnerId] : await fetchPortfolioResearchSeedOwners()
     const results = []
     for (const ownerId of ownerIds) results.push({ownerId,...await seedDecisionResearch(ownerId,enqueueAgentJob,new Date(),{backfillAll:true})})
     return {owners:results,note:'Eight daily investigations; dated holdings upgrades and rotating interest coverage.'}
-  }
-
-  if (job.job_type === 'monitor-investment-theses') {
+  },
+  'monitor-investment-theses': async () => {
     return monitorInvestmentTheses()
-  }
-
-  if (job.job_type === 'ingest-world-source') {
+  },
+  'refresh-fmp-intelligence': async () => {
+    return syncFmpMarketIntelligence()
+  },
+  'fetch-stock-price-history': async (job, reportProgress) => {
+    const symbol = typeof job.payload.symbol === 'string' ? job.payload.symbol.trim().toUpperCase() : ''
+    if (!/^[A-Z][A-Z0-9.-]{0,11}$/.test(symbol)) throw new Error('Stock price history requires a valid symbol')
+    await reportProgress(20, 'fetching FMP daily prices')
+    const history = await cacheFmpFiveYearPriceHistory(symbol)
+    await reportProgress(100, 'cached')
+    return { symbol, provider: history.provider, dataAsOf: history.dataAsOf, pointCount: history.history.length }
+  },
+  'generate-market-memo': async (job) => {
+    const snapshotId = typeof job.payload.snapshotId === 'string'
+      ? job.payload.snapshotId
+      : (await fetchLatestSnapshotMeta())?.id
+    if (!snapshotId) throw new Error('No completed market snapshot is available')
+    return materializeMarketMemo(snapshotId, { synthesize: job.payload.synthesize !== false })
+  },
+  'generate-daily-overview': async (job) => {
+    const global = job.payload.scope === 'global-news'
+    const data = await (global ? generateGlobalNewsOverview : generateAIOverview)({ provider: 'codex' })
+    await (global ? saveGlobalNewsDailyOverview : saveDailyOverview)(data)
+    if (['blocked', 'failed'].includes(data.readiness ?? '')) throw new Error(data.errors?.join('; ') ?? 'Intelligence generation unavailable')
+    return data
+  },
+  'generate-morning-brief': async () => {
+    const brief = await generateMorningBrief({ provider: 'codex' })
+    await saveMorningBrief(brief)
+    if (['blocked', 'failed'].includes(brief.readiness ?? '')) throw new Error(brief.errors?.join('; ') ?? 'Morning brief unavailable')
+    return { sectionCount: brief.sections.length, generatedAt: brief.generatedAt }
+  },
+  'generate-weekly-overview': async () => {
+    const result = await generateWeeklyOverview({ provider: 'codex' })
+    if (!result.success) throw new Error(result.error ?? 'Weekly overview generation failed')
+    return result
+  },
+  'generate-monthly-overview': async () => {
+    const result = await generateMonthlyOverview({ provider: 'codex' })
+    if (!result.success) throw new Error(result.error ?? 'Monthly overview generation failed')
+    return result
+  },
+  'ingest-world-source': async (job, reportProgress) => {
     const adapterId = typeof job.payload.adapterId === 'string' ? job.payload.adapterId : ''
     if (adapterId) {
       const adapter = getWorldSourceAdapter(adapterId)
@@ -1083,41 +616,67 @@ async function executeJob(
     const payload = job.payload.observation
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('World-source ingestion requires an observation payload')
     return ingestWorldObservation(payload as Parameters<typeof ingestWorldObservation>[0])
-  }
-
-  if (job.job_type === 'verify-world-source-health') {
+  },
+  'run-market-thesis-cycle': async (job, reportProgress) => {
+    if (!validMarketThesisCycle(job.payload.cycle)) throw new Error('Market thesis cycle requires a valid cycle')
+    return runMarketThesisCycle(job.payload.cycle, reportProgress)
+  },
+  'verify-world-source-health': async (job, reportProgress) => {
     await reportProgress(5, 'probing approved source contracts')
     const audit = await auditWorldSourceHealth()
     await reportProgress(100, `${audit.healthy} healthy, ${audit.degraded} degraded, ${audit.failed} failed`)
     return { checked: audit.checks.length, healthy: audit.healthy, degraded: audit.degraded, failed: audit.failed }
-  }
-
-  if (job.job_type === 'preflight-world-source-candidate') {
+  },
+  'preflight-world-source-candidate': async (job, reportProgress) => {
     const slug = typeof job.payload.slug === 'string' ? job.payload.slug.trim().toLowerCase() : ''
     if (!slug) throw new Error('Candidate preflight requires a source slug')
     await reportProgress(5, 'probing the candidate direct target')
     const check = await preflightWorldSourceCandidate(slug)
     await reportProgress(100, `${check.status} candidate target check recorded`)
     return { sourceId: check.sourceId, slug, status: check.status, resolvedUrl: check.resolvedUrl, mimeType: check.mimeType }
-  }
-
-  if (job.job_type === 'collect-world-source-documents') {
+  },
+  'collect-world-source-documents': async (job, reportProgress) => {
     await reportProgress(5, 'collecting bounded governed source documents')
     const result = await collectGovernedWorldSourceDocuments()
     if (result.captureIds.length > 0) await enqueueAgentJob('triage-world-observation-proposals', { captureIds: result.captureIds })
     await reportProgress(100, `${result.captured} captured, ${result.rejected} rejected, ${result.failed} failed`)
     return result
-  }
-
-  if (job.job_type === 'triage-world-observation-proposals') {
+  },
+  'triage-world-observation-proposals': async (job, reportProgress) => {
     const captureIds = Array.isArray(job.payload.captureIds) ? job.payload.captureIds.filter((item): item is string => typeof item === 'string') : undefined
     await reportProgress(5, 'creating quote-verified observation proposals')
     const result = await triageCapturedWorldObservationProposals({ captureIds })
     await reportProgress(100, `${result.proposals} reviewable proposals from ${result.documents} documents; ${result.failures.length} isolated failures`)
     return result
-  }
-
-  if (job.job_type === 'scout-world-sources') {
+  },
+  'auto-accept-observation-proposals': async (job, reportProgress) => {
+    const { autoAcceptEligibleWorldObservationProposals } = await import('./world-observation-review.ts')
+    await reportProgress(5, 're-checking quote-bound proposals against worker corpus extracts')
+    const result = await autoAcceptEligibleWorldObservationProposals({
+      domainId: typeof job.payload.domainId === 'string' ? job.payload.domainId : undefined,
+      limit: typeof job.payload.limit === 'number' ? job.payload.limit : 40,
+    })
+    if (result.accepted > 0) {
+      await enqueueAgentJob('refresh-world-events', {
+        reason: `policy auto-accept:${result.accepted}`,
+        evidenceFingerprint: result.observationIds[0] ?? 'auto-accept',
+      })
+    }
+    await reportProgress(100, `${result.accepted} accepted; ${result.failed} failed checks; ${Object.values(result.remainingByDomain).reduce((sum, count) => sum + count, 0)} still awaiting human review`)
+    return result
+  },
+  'scout-market-research': async (job, reportProgress) => {
+    const domainId = typeof job.payload.domainId === 'string' ? job.payload.domainId : ''
+    const reason = typeof job.payload.reason === 'string' ? job.payload.reason : ''
+    const frontierIds = Array.isArray(job.payload.frontierIds)
+      ? job.payload.frontierIds.filter((item): item is string => typeof item === 'string') : []
+    if (!domainId || !reason) throw new Error('Broad research scout requires a domain and reason')
+    await reportProgress(5, 'investigating broad, citation-required research leads')
+    const run = await runMarketResearchScout({ domainId, reason, frontierIds, trigger: job.payload.trigger === 'frontier_gap' ? 'frontier_gap' : 'manual' })
+    await reportProgress(100, `${run.leads.length} provisional leads; no source contract or market evidence was auto-created`)
+    return { researchScoutRunId: run.id, domainId, leadCount: run.leads.length, unresolvedQuestions: run.unresolvedQuestions.length }
+  },
+  'scout-world-sources': async (job, reportProgress) => {
     const domainId = typeof job.payload.domainId === 'string' ? job.payload.domainId : ''
     const reason = typeof job.payload.reason === 'string' ? job.payload.reason : ''
     const trigger = job.payload.trigger === 'bootstrap' || job.payload.trigger === 'frontier_gap' || job.payload.trigger === 'coverage_review'
@@ -1142,150 +701,32 @@ async function executeJob(
       preflightQueued: preflights.filter((item) => !item.deduplicated).length,
       preflightDeduplicated: preflights.filter((item) => item.deduplicated).length,
     }
-  }
-
-  if (job.job_type === 'scout-market-research') {
-    const domainId = typeof job.payload.domainId === 'string' ? job.payload.domainId : ''
-    const reason = typeof job.payload.reason === 'string' ? job.payload.reason : ''
-    const frontierIds = Array.isArray(job.payload.frontierIds)
-      ? job.payload.frontierIds.filter((item): item is string => typeof item === 'string') : []
-    if (!domainId || !reason) throw new Error('Broad research scout requires a domain and reason')
-    await reportProgress(5, 'investigating broad, citation-required research leads')
-    const run = await runMarketResearchScout({ domainId, reason, frontierIds, trigger: job.payload.trigger === 'frontier_gap' ? 'frontier_gap' : 'manual' })
-    await reportProgress(100, `${run.leads.length} provisional leads; no source contract or market evidence was auto-created`)
-    return { researchScoutRunId: run.id, domainId, leadCount: run.leads.length, unresolvedQuestions: run.unresolvedQuestions.length }
-  }
-
-  if (job.job_type === 'review-world-source-coverage') {
+  },
+  'review-world-source-coverage': async () => {
     const plans = await findWorldSourceCoverageScoutPlans()
     const queued = await Promise.all(plans.map((plan) => enqueueAgentJob('scout-world-sources', {
       domainId: plan.domainId, reason: plan.reason, trigger: 'coverage_review',
     })))
     return { planned: plans.length, queued: queued.filter((item) => !item.deduplicated).length, domainIds: plans.map((plan) => plan.domainId) }
-  }
-
-  if (job.job_type === 'scan-intelligence-source-referrals') {
+  },
+  'scan-intelligence-source-referrals': async (job, reportProgress) => {
     await reportProgress(5, 'scanning existing Intelligence and Markets feed records for bounded source referrals')
     const result = await materializeIntelligenceSourceReferrals()
     await reportProgress(100, `${result.created} pending referrals from ${result.scanned} recent feed records; none were admitted as evidence`)
     return result
-  }
-
-  if (job.job_type === 'compile-world-baseline') {
+  },
+  'compile-world-baseline': async (job) => {
     const scopeType = job.payload.scopeType === 'domain' ? 'domain' : 'global'
     const scopeKey = typeof job.payload.scopeKey === 'string' ? job.payload.scopeKey : 'global'
     return compileWorldBaseline(scopeType, scopeKey)
-  }
-
-  if (job.job_type === 'correlate-market-signals') {
-    if (!isMarketWorldModelEnabled()) return { skipped: 'MARKET_WORLD_MODEL_ENABLED is false' }
-    const result = await runMarketWorldCycle()
-    return { ...result, automaticPromotionEnabled: isMarketAutoThesisEnabled() }
-  }
-
-  if (job.job_type === 'synthesize-market-hypotheses') {
-    if (!isMarketWorldModelEnabled()) return { skipped: 'MARKET_WORLD_MODEL_ENABLED is false' }
-    const result = await runMarketWorldCycle()
-    const { findDueMarketHypothesisResearch } = await import('./market-thesis-research.ts')
-    const scheduledResearchLimit = scheduledMarketResearchRunLimit()
-    const due = await findDueMarketHypothesisResearch(typeof job.payload.ownerId === 'string' ? job.payload.ownerId : undefined, scheduledResearchLimit)
-    const queued = await Promise.all(due.map((item) => enqueueAgentJob('deepen-market-hypothesis', item)))
-    return { ...result, queuedResearch: queued.length, scheduledResearchLimit }
-  }
-
-  if (job.job_type === 'deepen-market-hypothesis') {
-    const ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : ''
-    const hypothesisId = typeof job.payload.hypothesisId === 'string' ? job.payload.hypothesisId : ''
-    if (!ownerId || !hypothesisId) throw new Error('Market research requires ownerId and hypothesisId')
-    const { deepenMarketHypothesis } = await import('./market-thesis-research.ts')
-    await reportProgress(5, 'loading bounded source ledger')
-    const research = await deepenMarketHypothesis({ ownerId, hypothesisId, reason: typeof job.payload.reason === 'string' ? job.payload.reason : 'scheduled deepening' })
-    const { promoteEligibleMarketHypothesis, shouldAutoPromoteMarketResearch } = await import('./world-memory.ts')
-    const autoPromotionEnabled = shouldAutoPromoteMarketResearch(research.status)
-    await reportProgress(100, research.status === 'complete'
-      ? (autoPromotionEnabled ? 'validated research published' : 'validated research awaits promotion authorization')
-      : 'research requires revision')
-    const marketThesis = autoPromotionEnabled ? await promoteEligibleMarketHypothesis(ownerId, hypothesisId) : null
-    const exposureResearch = marketThesis ? selectControlledExposureResearch(marketThesis.exposures) : []
-    const queuedExposureResearch = []
-    for (const candidate of exposureResearch) {
-      const queued = await enqueueAgentJob('generate-company-research', {
-        ownerId, symbol: candidate.symbol,
-        reason: `controlled-market-exposure:${marketThesis!.id}:${candidate.exposureId}`,
-        marketThesisVersionId: marketThesis!.id, marketThesisExposureId: candidate.exposureId,
-        researchPriority: candidate.materiality,
-      }, `generate-company-research:controlled-market-exposure:${ownerId}:${marketThesis!.id}:${candidate.exposureId}`)
-      const supabase = getSupabaseClient()
-      if (supabase) await supabase.from('market_thesis_exposures').update({ research_job_id: queued.id, research_queued_at: new Date().toISOString() }).eq('id', candidate.exposureId).is('research_queued_at', null)
-      queuedExposureResearch.push({ ...candidate, jobId: queued.id, deduplicated: queued.deduplicated })
-    }
-    return { hypothesisId, researchVersionId: research.id, version: research.version, status: research.status, marketThesisId: marketThesis?.id ?? null, queuedExposureResearch }
-  }
-
-  if (job.job_type === 'refresh-market-hypothesis-research') {
-    const { findDueMarketHypothesisResearch } = await import('./market-thesis-research.ts')
-    const scheduledResearchLimit = scheduledMarketResearchRunLimit()
-    const requestedIds = Array.isArray(job.payload.hypothesisIds)
-      ? new Set(job.payload.hypothesisIds.filter((item): item is string => typeof item === 'string'))
-      : null
-    const candidates = await findDueMarketHypothesisResearch(undefined, requestedIds ? 40 : scheduledResearchLimit)
-    const due = requestedIds
-      ? candidates.filter((item) => requestedIds.has(item.hypothesisId)).slice(0, scheduledResearchLimit)
-      : candidates
-    const queued = await Promise.all(due.map((item) => enqueueAgentJob('deepen-market-hypothesis', item)))
-    return { queued: queued.length, hypothesisIds: due.map((item) => item.hypothesisId), requestedHypothesisIds: requestedIds ? [...requestedIds] : null, scheduledResearchLimit }
-  }
-
-  if (job.job_type === 'route-market-research-frontiers') {
-    const { deferResearchFrontiersForScout, findQueuedResearchFrontierScoutPlans } = await import('./market-thesis-research.ts')
-    const plans = await findQueuedResearchFrontierScoutPlans()
-    const results = []
-    for (const plan of plans) {
-      const queued = await enqueueAgentJob('scout-market-research', {
-        domainId: plan.domainId, reason: plan.reason, trigger: 'frontier_gap', frontierIds: plan.frontierIds,
-      })
-      // A same-day broad research pass may already cover this exact frontier.
-      // These frontiers remain unresolved until independent governed evidence
-      // is accepted; a lead dossier is deliberately not an evidence completion.
-      if (!queued.deduplicated) await deferResearchFrontiersForScout(plan.frontierIds, queued.id)
-      results.push({ domainId: plan.domainId, frontierCount: plan.frontierIds.length, ...queued })
-    }
-    return { planned: plans.length, queued: results.filter((item) => !item.deduplicated).length, results }
-  }
-
-  if (job.job_type === 'orchestrate-market-research') {
-    if (process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true') {
-      const supabase = getSupabaseClient()
-      if (!supabase) throw new Error('Supabase service credentials are not configured')
-      const { data, error } = await supabase.from('agent_jobs').select('id,job_type,status').in('job_type', ['generate-company-research', 'event-refresh-company-research']).in('status', ['queued', 'running']).limit(scheduledMarketResearchRunLimit())
-      if (error) throw new Error(`Unable to inspect bounded research execution: ${error.message}`)
-      return { cutover: true, activeResearchJobs: data ?? [], note: 'World opportunity leads own planning; the worker continues bounded company-research execution only.' }
-    }
-    const { runMarketResearchOrchestration } = await import('./market-research-orchestrator.ts')
-    await reportProgress(5, 'reading governed evidence, frontier, and lead signals across active domains')
-    const result = await runMarketResearchOrchestration({ trigger: job.payload.trigger === 'manual' ? 'manual' : 'scheduled' })
-    await reportProgress(100, `${result.planned} durable actions planned; ${result.enqueued} worker jobs enqueued; ${result.autoAccepted} auto-accepted; ${result.awaitingReview} review waits; ${result.deferred} budget-deferred`)
-    return result
-  }
-
-  if (job.job_type === 'auto-accept-observation-proposals') {
-    const { autoAcceptEligibleWorldObservationProposals } = await import('./world-observation-review.ts')
-    await reportProgress(5, 're-checking quote-bound proposals against worker corpus extracts')
-    const result = await autoAcceptEligibleWorldObservationProposals({
-      domainId: typeof job.payload.domainId === 'string' ? job.payload.domainId : undefined,
-      limit: typeof job.payload.limit === 'number' ? job.payload.limit : 40,
-    })
-    if (result.accepted > 0) {
-      await enqueueAgentJob('refresh-world-events', {
-        reason: `policy auto-accept:${result.accepted}`,
-        evidenceFingerprint: result.observationIds[0] ?? 'auto-accept',
-      })
-    }
-    await reportProgress(100, `${result.accepted} accepted; ${result.failed} failed checks; ${Object.values(result.remainingByDomain).reduce((sum, count) => sum + count, 0)} still awaiting human review`)
-    return result
-  }
-
-  if (job.job_type === 'evaluate-market-prediction') {
+  },
+  'correlate-market-signals': retiredBeliefJob,
+  'synthesize-market-hypotheses': retiredBeliefJob,
+  'deepen-market-hypothesis': retiredBeliefJob,
+  'refresh-market-hypothesis-research': retiredBeliefJob,
+  'route-market-research-frontiers': retiredBeliefJob,
+  'orchestrate-market-research': retiredBeliefJob,
+  'evaluate-market-prediction': async (job, reportProgress) => {
     const predictionId = typeof job.payload.predictionId === 'string' ? job.payload.predictionId : ''
     if (!predictionId) throw new Error('Prediction evaluation requires a prediction ID')
     await reportProgress(5, 'loading post-prediction evidence')
@@ -1298,54 +739,93 @@ async function executeJob(
     }
     await reportProgress(100, `prediction evaluation ${result.evaluation.verdict}`)
     return { predictionId, evaluationId: result.evaluation.id, verdict: result.evaluation.verdict, hypothesisId: result.hypothesisId }
-  }
-
-  if (job.job_type === 'evaluate-market-predictions') {
+  },
+  'evaluate-market-predictions': async () => {
     const predictionIds = await findDueMarketPredictionEvaluations()
     const queued = await Promise.all(predictionIds.map((predictionId) => enqueueAgentJob('evaluate-market-prediction', { predictionId })))
     return { queued: queued.length, predictionIds }
-  }
-
-  if (job.job_type === 'monitor-market-theses') {
-    if (!isMarketWorldModelEnabled()) return { skipped: 'MARKET_WORLD_MODEL_ENABLED is false' }
-    return runMarketWorldCycle()
-  }
-
-  if (job.job_type === 'backup-market-corpus') return backupMarketCorpus()
-  if (job.job_type === 'verify-market-corpus') return verifyMarketCorpusBackup()
-
-  if (job.job_type === 'generate-market-memo') {
-    const snapshotId = typeof job.payload.snapshotId === 'string'
-      ? job.payload.snapshotId
-      : (await fetchLatestSnapshotMeta())?.id
-    if (!snapshotId) throw new Error('No completed market snapshot is available')
-    return materializeMarketMemo(snapshotId, { synthesize: job.payload.synthesize !== false })
-  }
-
-  if (job.job_type === 'generate-daily-overview') {
-    const global = job.payload.scope === 'global-news'
-    const data = await (global ? generateGlobalNewsOverview : generateAIOverview)({ provider: 'codex' })
-    await (global ? saveGlobalNewsDailyOverview : saveDailyOverview)(data)
-    if (['blocked', 'failed'].includes(data.readiness ?? '')) throw new Error(data.errors?.join('; ') ?? 'Intelligence generation unavailable')
-    return data
-  }
-
-  if (job.job_type === 'generate-morning-brief') {
-    const brief = await generateMorningBrief({ provider: 'codex' })
-    await saveMorningBrief(brief)
-    if (['blocked', 'failed'].includes(brief.readiness ?? '')) throw new Error(brief.errors?.join('; ') ?? 'Morning brief unavailable')
-    return { sectionCount: brief.sections.length, generatedAt: brief.generatedAt }
-  }
-
-  if (job.job_type === 'generate-weekly-overview') {
-    const result = await generateWeeklyOverview({ provider: 'codex' })
-    if (!result.success) throw new Error(result.error ?? 'Weekly overview generation failed')
+  },
+  'monitor-market-theses': retiredBeliefJob,
+  'backup-market-corpus': async () => {
+    return backupMarketCorpus()
+  },
+  'verify-market-corpus': async () => {
+    return verifyMarketCorpusBackup()
+  },
+  'refresh-world-events': async (job) => {
+    const result = await refreshWorldEvents()
+    if (job.payload.runThinkerAfter === true) {
+      await enqueueAgentJob('run-world-thinker', { trigger: 'manual', eventClusterIds: result.urgent.length ? result.urgent : undefined })
+    } else if (result.urgent.length > 0) {
+      await enqueueAgentJob('run-world-thinker', { trigger: 'urgent', eventClusterIds: result.urgent })
+    }
     return result
-  }
+  },
+  'refresh-world-benchmark': async () => {
+    const { evaluateWorldBenchmark, seedWorldBenchmarkFromEventLedger } = await import('./world-benchmark.ts')
+    const seeded = await seedWorldBenchmarkFromEventLedger()
+    const evaluation = await evaluateWorldBenchmark()
+    return { seeded, evaluation }
+  },
+  'run-world-replay': async (job) => {
+    const { processWorldReplayStep, startWorldReplay } = await import('./world-replay.ts')
+    const replay = typeof job.payload.replayRunId === 'string'
+      ? { id: job.payload.replayRunId }
+      : await startWorldReplay({
+        since: typeof job.payload.since === 'string' ? new Date(job.payload.since) : undefined,
+        until: typeof job.payload.until === 'string' ? new Date(job.payload.until) : undefined,
+      })
+    const result = await processWorldReplayStep(replay.id, { model: job.payload.model !== false })
+    if (!result.complete) {
+      const resumeAttempt = Number(job.payload.resumeAttempt ?? 0) + 1
+      const payload = { replayRunId: replay.id, cursorAt: result.replay.cursorAt, step: result.nextStep, resumeAttempt, model: job.payload.model !== false }
+      await enqueueAgentJob(
+        'run-world-replay', payload, buildAgentJobDedupeKey('run-world-replay', new Date(), payload),
+        result.deferred ? { runAfter: new Date(Date.now() + 2 * 60_000) } : {},
+      )
+    }
+    return result
+  },
+  'run-world-thinker': async (job) => {
+    const trigger = job.payload.trigger
+    if (trigger !== 'scheduled' && trigger !== 'urgent' && trigger !== 'manual' && trigger !== 'backfill' && trigger !== 'company_research') throw new Error('World Thinker trigger is invalid')
+    const eventClusterIds = Array.isArray(job.payload.eventClusterIds) ? job.payload.eventClusterIds.filter((value): value is string => typeof value === 'string') : undefined
+    const coverageFrontierIds = Array.isArray(job.payload.coverageFrontierIds)
+      ? job.payload.coverageFrontierIds.filter((value): value is string => typeof value === 'string')
+      : typeof job.payload.coverageFrontierId === 'string' ? [job.payload.coverageFrontierId] : undefined
+    if(trigger==='company_research') {
+      if(typeof job.payload.researchNoteId!=='string')throw new Error('Company feedback requires a completed report receipt')
+      return reviewCompanyWorldReceipt(job.payload.researchNoteId,job.id,
+        options=>runWorldThinker({...options,canonicalProjection:false}),
+        commit=>reconcileWorldRepositoryProjection({commit,canonical:false}))
+    }
+    return runWorldThinker({
+      legacyHypothesisId: typeof job.payload.legacyHypothesisId === 'string' ? job.payload.legacyHypothesisId : undefined,
+      ownerReviewItemId: typeof job.payload.ownerReviewItemId === 'string' ? job.payload.ownerReviewItemId : undefined,
+      trigger, eventClusterIds, coverageFrontierIds, agentJobId: job.id, canonicalProjection: process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true',
+        worldOpportunityLeadId: typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : undefined,
+      researchNoteId: typeof job.payload.researchNoteId === 'string' ? job.payload.researchNoteId : undefined,
+      symbol: typeof job.payload.symbol === 'string' ? job.payload.symbol : undefined,
+    })
+  },
+  'project-world-repository': async (job) => {
+    return reconcileWorldRepositoryProjection({ commit: typeof job.payload.commit === 'string' ? job.payload.commit : undefined, canonical: process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true' })
+  },
+}
 
-  const result = await generateMonthlyOverview({ provider: 'codex' })
-  if (!result.success) throw new Error(result.error ?? 'Monthly overview generation failed')
-  return result
+export function resolveAgentJobHandler(jobType: unknown, handlers: Partial<AgentJobHandlers> = AGENT_JOB_HANDLERS): AgentJobHandler {
+  const type = parseAgentJobType(jobType)
+  const handler = handlers[type]
+  if (!handler) throw new Error(`Missing agent job handler: ${type}`)
+  // The key was validated above; dispatch preserves the matching job/payload pair.
+  return handler as AgentJobHandler
+}
+
+async function executeJob(job: AgentJobRecord, reportProgress: AgentJobProgress = async () => {}): Promise<unknown> {
+  const handler = resolveAgentJobHandler(job.job_type)
+  if (handler === retiredBeliefJob) return handler(job, reportProgress)
+  const payload = parseAgentJobPayload(job.job_type, job.payload)
+  return handler({ ...job, payload } as AgentJobRecord, reportProgress)
 }
 
 export async function processOneAgentJob(workerId: string): Promise<boolean> {

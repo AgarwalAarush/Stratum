@@ -4,7 +4,7 @@ import { seedDecisionResearch } from './interest-coverage.ts'
 import { investigationDate } from './research-investigations.ts'
 import { isRobinhoodPortfolioSyncConfigured } from './robinhood-portfolio-sync.ts'
 import { assembleDecisionContext, contentHash, generateDailyRecommendations, investmentDb, record } from './recommendations.ts'
-import type { AgentJobType } from './agent-jobs.ts'
+import type { AgentJobType } from './agent-job-contracts.ts'
 
 type Enqueue = (type: AgentJobType, payload: Record<string, unknown>, key: string, options?: {runAfter?:Date}) => Promise<{id:string;deduplicated:boolean}>
 

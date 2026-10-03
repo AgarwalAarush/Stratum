@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic'
 import type { OverviewData, ScopeDef, SectionData } from '@/lib/types'
 import type { ScopeFeedPayload } from '@/lib/server/scope-feed'
 import { formatRelativeTime } from '@/lib/utils'
+import { getScopeSectionLayout, type SectionRenderOptions } from '@/lib/scope-layout'
 import { ScopeSection } from './ScopeSection'
 import { AIOverview } from './AIOverview'
 import { IntelligenceResearchDashboard } from '@/components/intelligence/IntelligenceResearchDashboard'
@@ -28,12 +29,6 @@ export const SCOPE_REFRESH_INTERVAL_MS = 3_600_000
 
 type ScopeSectionsMap = Record<string, SectionData>
 type ScopeSectionDef = ScopeDef['sections'][number]
-
-interface SectionRenderOptions {
-  columns?: number
-  fillByColumn?: boolean
-  viewportMode?: 'fixed' | 'fill' | 'natural'
-}
 
 async function fetchScope(scopeId: string): Promise<ScopeFeedPayload> {
   try {
@@ -120,17 +115,7 @@ export function ScopeFeed({ scope, initialData, relativeTimeAsOf }: ScopeFeedPro
         key={section.id}
         label={section.label}
         items={data?.[section.id]?.items ?? []}
-        columns={options.columns ?? (section.id === 'earnings' ? 3 : 1)}
-        fillByColumn={options.fillByColumn ?? (section.id === 'earnings')}
-        itemsPerColumn={section.id === 'earnings' ? 4 : undefined}
-        viewportMode={
-          options.viewportMode
-            ?? (section.id === 'tech-events'
-              ? 'fill'
-              : section.id === 'earnings'
-                ? 'natural'
-                : 'fixed')
-        }
+        {...getScopeSectionLayout(section.id, options)}
       />
     )
   }

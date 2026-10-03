@@ -1,3 +1,4 @@
+import { testEnvironment } from './fixtures/environment.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
@@ -178,12 +179,12 @@ test('AlpacaClient resolves a requested active watchlist asset without loading t
 
 test('getAlpacaClient honors configured API hosts', async () => {
   let requestedUrl = ''
-  const client = getAlpacaClient({
+  const client = getAlpacaClient(testEnvironment({
     ALPACA_API_KEY_ID: 'paper-key',
     ALPACA_API_SECRET_KEY: 'paper-secret',
     ALPACA_DATA_FEED: 'iex',
     ALPACA_TRADING_URL: 'https://paper-api.alpaca.markets',
-  }, async (input) => {
+  }), async (input) => {
     requestedUrl = String(input)
     return jsonResponse({
       timestamp: '2026-07-15T20:00:00Z',

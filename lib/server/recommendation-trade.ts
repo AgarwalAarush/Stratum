@@ -35,7 +35,7 @@ export async function reviewRecommendationTrade(ownerId:string,input:Record<stri
   if(!parsed) {
     const apiKey=process.env.OPENAI_API_KEY
     if(!apiKey&&!extraction) {
-      const {enqueueAgentJob}=await import('./agent-jobs.ts')
+      const {enqueueAgentJob}=await import('./agent-job-queue.ts')
       const job=await enqueueAgentJob('review-recommendation-trade',{ownerId,recommendationId:rec.id,instruction,occurredAt},`review-trade:${ownerId}:${randomUUID()}`)
       return {queued:true as const,jobId:job.id}
     }

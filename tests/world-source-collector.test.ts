@@ -6,7 +6,7 @@ import { fetchGovernedSourceDocument, governedCaptureCoverageKey, isSourceCollec
 const source = {
   id: 'source-id', slug: 'official-source', label: 'Official source', publisher: 'Official publisher', canonicalUrl: 'https://official.example/data',
   sourceTier: 'regulatory', sourceKind: 'html', status: 'approved', evidenceClasses: ['regulatory_data'], discoveredBy: 'seed', discoveryRunId: null,
-  approvedAt: '2026-08-01T00:00:00.000Z', blockedReason: null, domainIds: ['ai-power'], health: null, createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+  approvedAt: '2026-08-01T00:00:00.000Z', blockedReason: null, candidateContext: null, domainIds: ['ai-power'], health: null, createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
 } satisfies WorldSourceRegistryEntry
 
 const contract = {

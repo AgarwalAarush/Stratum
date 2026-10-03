@@ -90,7 +90,7 @@ test('FMP intelligence fetch tolerates plan-gated sources and reports diagnostic
 test('feed persistence deduplicates an upsert batch by its database conflict key', async () => {
   const source = await readFile(new URL('../lib/data/overview-persistence.ts', import.meta.url), 'utf8')
   assert.match(source, /new Map\(normalizedRows\.map/)
-  assert.match(source, /row\.item_type.*row\.url/s)
+  assert.match(source, /row\.item_type[\s\S]*row\.url/)
 })
 
 test('feed chronology cannot claim publication after ingestion', () => {

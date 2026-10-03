@@ -18,7 +18,7 @@ const packet={symbol:'TSLA',company:{companyName:'Tesla',website:'https://exampl
 const fetchHtml:typeof fetch=async()=>new Response(`<html><body>${quote.repeat(3)}</body></html>`,{headers:{'content-type':'text/html'}})
 
 test('earnings attachment is captured when a financing 8-K is newer',async()=>{
-  const filings=[{url:'https://sec.gov/financing.htm',title:'Financing',form:'8-K',publishedAt:'2026-09-29T00:00:00Z'},{url:'https://sec.gov/earnings.htm',title:'Quarterly results',form:'8-K',publishedAt:'2026-07-22T00:00:00Z'}]
+  const filings: CompanyPacket['filings']=[{url:'https://sec.gov/financing.htm',title:'Financing',form:'8-K',publishedAt:'2026-09-29T00:00:00Z'},{url:'https://sec.gov/earnings.htm',title:'Quarterly results',form:'8-K',publishedAt:'2026-07-22T00:00:00Z'}]
   const fetchFixture:typeof fetch=async input=>{
     const u=String(input)
     return new Response(u.endsWith('financing.htm')?`<body>${'Financing agreements and credit facilities. '.repeat(8)}</body>`:u.endsWith('earnings.htm')?`<body>Item 2.02 Results of Operations and Financial Condition. ${'Quarterly financial results. '.repeat(8)}<a href="deck.htm">99.1</a></body>`:`<body>${quote.repeat(4)}</body>`,{headers:{'content-type':'text/html'}})
@@ -93,7 +93,7 @@ test('coverage gaps gate only the dependent instrument, not another company',()=
   assert.ok(!msft.gateReasons.some(r=>r.includes('coverage')))
 })
 
-function pdfFixture(text:string):Uint8Array {
+function pdfFixture(text:string):Uint8Array<ArrayBuffer> {
   const stream=`BT /F1 12 Tf 40 700 Td (${text}) Tj ET`
   const bodies=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`]
   let pdf='%PDF-1.4\n';const offsets=[0]
@@ -135,7 +135,7 @@ test('retry after discovery failure retains all recovered topics and the partial
 })
 
 test('failed intervening 8-K captures remain in the packet ledger',async()=>{
-  const filings=['financing','unreadable','earnings'].map(name=>({url:`https://sec.gov/${name}.htm`,title:name,form:'8-K',publishedAt:'2026-07-22'}))
+  const filings: CompanyPacket['filings']=['financing','unreadable','earnings'].map(name=>({url:`https://sec.gov/${name}.htm`,title:name,form:'8-K',publishedAt:'2026-07-22'}))
   const result=await collectSecFilingDocuments(filings,input=>captureResearchDocument(input,async()=>input.url.includes('unreadable')?new Response('',{status:403}):new Response(`<html><body>${(input.url.includes('earnings')?'Item 2.02 Results of Operations and Financial Condition. ':'Financing facilities. ').repeat(8)}</body></html>`,{headers:{'content-type':'text/html'}})))
   assert.equal(result.documents.find(d=>d.url.includes('unreadable'))?.extractionStatus,'failed');assert.match(result.filings[2]!.excerpt!,/Item 2.02/)
 })

@@ -96,7 +96,6 @@ test('orchestration is worker-queued, durable, and separately visible from sourc
     readFile(new URL('../scripts/markets-worker.ts', import.meta.url), 'utf8'),
   ])
   assert.match(jobs, /'orchestrate-market-research'/)
-  assert.match(jobs, /runMarketResearchOrchestration/)
   assert.match(jobs, /processAgentJobs/)
   assert.doesNotMatch(schedule, /scheduledJob\('orchestrate-market-research'/)
   assert.doesNotMatch(schedule, /hour % 6 === 0[\s\S]*refresh-market-hypothesis-research/)

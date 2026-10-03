@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { requestJson } from '@/lib/client/request-json'
 import { ArrowRight, CaretDown, CheckCircle, ClockCounterClockwise, Pulse } from '@phosphor-icons/react'
 import type { MarketHypothesis, MarketHypothesisCrossDomainLink, MarketResearchFrontierItem, MarketThesisVersion, MarketThesisWorkspaceData, ThesisPrediction } from '@/lib/markets/types'
 
@@ -10,7 +11,7 @@ function dateLabel(value: string) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' }).format(new Date(value))
 }
 
-function actionLabel(hypothesis: MarketHypothesis): { action: Action; label: string } {
+function actionLabel(): { action: Action; label: string } {
   return { action: 'request_deepening', label: 'Review in World' }
 }
 
@@ -29,11 +30,9 @@ export function MarketThesisWorkspace({ initialData }: { initialData: MarketThes
     setBusy(`${hypothesis.id}:${action}`)
     setNotice('')
     try {
-      const response = await fetch(`/api/markets/market-theses/${hypothesis.id}/actions`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }),
+      const payload = await requestJson<{ queued?: boolean }>(`/api/markets/market-theses/${hypothesis.id}/actions`, {
+        method: 'POST', body: { action }, errorMessage: 'Unable to update market thesis',
       })
-      const payload = await response.json() as { error?: string; queued?: boolean }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to update market thesis')
       if (action === 'freeze' || action === 'reactivate') {
         setData((current) => ({ ...current, hypotheses: current.hypotheses.map((item) => item.id === hypothesis.id ? { ...item, status: action === 'freeze' ? 'proposed' : 'active' } : item) }))
       }
@@ -53,13 +52,11 @@ export function MarketThesisWorkspace({ initialData }: { initialData: MarketThes
     setBusy(key)
     setNotice('')
     try {
-      const response = await fetch(`/api/markets/market-theses/${thesis.hypothesisId}/exposures/${exposureId}/investigate`, {
+      const payload = await requestJson<{ symbol?: string; deduplicated?: boolean }>(`/api/markets/market-theses/${thesis.hypothesisId}/exposures/${exposureId}/investigate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ marketThesisVersionId: thesis.id }),
+        body: { marketThesisVersionId: thesis.id },
+        errorMessage: 'Unable to queue company research',
       })
-      const payload = await response.json() as { error?: string; symbol?: string; deduplicated?: boolean }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue company research')
       setQueuedExposureIds((current) => new Set([...current, exposureId]))
       setNotice(payload.deduplicated
         ? `${payload.symbol ?? 'Company'} research is already queued. The resulting proposal will remain separate from this market model.`
@@ -141,7 +138,7 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
 }
 
 function MarketThesisDetail({ thesis, hypothesis, busy, queuedExposureIds, onAction, onInvestigate }: { thesis: MarketThesisVersion; hypothesis: MarketHypothesis | null; busy: string | null; queuedExposureIds: Set<string>; onAction: (hypothesis: MarketHypothesis, action: Action) => Promise<void>; onInvestigate: (thesis: MarketThesisVersion, exposureId: string) => Promise<void> }) {
-  const primary = hypothesis ? actionLabel(hypothesis) : null
+  const primary = hypothesis ? actionLabel() : null
   const sources = [...new Map(thesis.content.sourceLedger.map((source) => [`${source.label}:${source.url}`, source])).values()]
   const verifiedExposures = thesis.exposures.filter((item) => item.verificationStatus === 'verified')
   const companyResearchLeads = thesis.exposures.filter((item) => item.symbol && item.verificationStatus !== 'unverified')
@@ -225,7 +222,7 @@ function ResearchQueue({ hypotheses, frontiers, busy, onAction }: { hypotheses: 
       const research = hypothesis.latestResearch
       const ownFrontiers = frontiers.filter((item) => item.hypothesisId === hypothesis.id)
       const priorityFrontier = ownFrontiers[0]
-      const primary = actionLabel(hypothesis)
+      const primary = actionLabel()
       return <article key={hypothesis.id}>
         <div><span className="thesis-status-pill" data-status={hypothesis.status}>{hypothesis.status}</span><h3>{hypothesis.title}</h3><p>{hypothesis.coreMechanism}</p></div>
         <dl><div><dt>Counter-case</dt><dd>{hypothesis.counterThesis}</dd></div><div><dt>Evidence</dt><dd>{countLabel(hypothesis.evidence.length, 'linked observation')} · {countLabel(ownFrontiers.length, 'open research gap')}</dd></div></dl>

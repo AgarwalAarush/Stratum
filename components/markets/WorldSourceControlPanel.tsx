@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
+import { requestJson } from '@/lib/client/request-json'
 import type { MarketDomainPack, WorldSourceControlWorkspaceData, WorldSourceRegistryEntry } from '@/lib/markets/types'
 import { candidateResearchFrontiers, prioritizeWorldObservationProposals, prioritizeWorldSourceCandidates } from '@/lib/markets/source-review-priority'
 
@@ -137,11 +138,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setPending(true)
     setNotice(null)
     try {
-      const response = await fetch('/api/markets/world-sources', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'orchestrate-market-research' }),
+      const payload = await requestJson<{ deduplicated?: boolean }>('/api/markets/world-sources', {
+        method: 'POST', body: { action: 'orchestrate-market-research' },
+        errorMessage: 'Unable to queue World investigation',
       })
-      const payload = await response.json() as { error?: string; deduplicated?: boolean }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue World investigation')
       setNotice(payload.deduplicated
         ? 'A market-wide orchestration run is already queued or completed in this planning window.'
         : 'One bounded World investigation queued. Source admission and owner capital decisions remain separate.')
@@ -157,12 +157,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setPending(true)
     setNotice(null)
     try {
-      const response = await fetch('/api/markets/world-sources', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'auto-accept-observation-proposals', domainId: selectedDomain?.id }),
+      const payload = await requestJson<{ deduplicated?: boolean }>('/api/markets/world-sources', {
+        method: 'POST', body: { action: 'auto-accept-observation-proposals', domainId: selectedDomain?.id },
+        errorMessage: 'Unable to queue proposal auto-accept',
       })
-      const payload = await response.json() as { error?: string; deduplicated?: boolean }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue proposal auto-accept')
       setNotice(payload.deduplicated
         ? 'A proposal auto-accept pass is already queued or completed in this window.'
         : 'Proposal auto-accept queued on the worker. It re-checks verbatim quotes against the private corpus; it cannot invent evidence or create a thesis.')
@@ -178,13 +176,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setPending(true)
     setNotice(null)
     try {
-      const response = await fetch('/api/markets/world-sources', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'scout', domainId: selectedDomain.id, reason: reason.trim() }),
+      const payload = await requestJson<{ deduplicated?: boolean }>('/api/markets/world-sources', {
+        method: 'POST', body: { action: 'scout', domainId: selectedDomain.id, reason: reason.trim() },
+        errorMessage: 'Unable to queue source scout',
       })
-      const payload = await response.json() as { error?: string; deduplicated?: boolean }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue source scout')
       setNotice(payload.deduplicated
         ? `A bounded scout for ${selectedDomain.label} is already queued or completed today. No additional model run was started.`
         : `Scout queued for ${selectedDomain.label}. It can only create candidate sources; a reviewed contract is still required before ingestion.`)
@@ -201,12 +196,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setPending(true)
     setNotice(null)
     try {
-      const response = await fetch('/api/markets/world-sources', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'scout-broad-research', domainId: selectedDomain.id, reason: reason.trim() }),
+      const payload = await requestJson<{ deduplicated?: boolean }>('/api/markets/world-sources', {
+        method: 'POST', body: { action: 'scout-broad-research', domainId: selectedDomain.id, reason: reason.trim() },
+        errorMessage: 'Unable to queue broad research',
       })
-      const payload = await response.json() as { error?: string; deduplicated?: boolean }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue broad research')
       setNotice(payload.deduplicated
         ? `A broad-research scout for this exact domain/question is already queued or completed today.`
         : `Broad research queued for ${selectedDomain.label}. It will return provisional cited leads, including counter-evidence where found; it cannot create market evidence or a thesis.`)
@@ -222,11 +215,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setPending(true)
     setNotice(null)
     try {
-      const response = await fetch('/api/markets/world-sources', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'audit-health' }),
+      const payload = await requestJson<{ deduplicated?: boolean }>('/api/markets/world-sources', {
+        method: 'POST', body: { action: 'audit-health' },
+        errorMessage: 'Unable to queue source health audit',
       })
-      const payload = await response.json() as { error?: string; deduplicated?: boolean }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue source health audit')
       setNotice(payload.deduplicated
         ? 'A source health audit is already queued or completed today. No additional probe run was started.'
         : 'Source health audit queued. It probes approved contracts only and records review telemetry; it does not change source admission.')
@@ -243,11 +235,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setPending(true)
     setNotice(null)
     try {
-      const response = await fetch('/api/markets/world-sources', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'scan-intelligence-source-referrals' }),
+      const payload = await requestJson<{ deduplicated?: boolean }>('/api/markets/world-sources', {
+        method: 'POST', body: { action: 'scan-intelligence-source-referrals' },
+        errorMessage: 'Unable to scan source referrals',
       })
-      const payload = await response.json() as { error?: string; deduplicated?: boolean }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to scan source referrals')
       setNotice(payload.deduplicated
         ? 'Today’s Intelligence and Markets source-referral scan is already queued or complete.'
         : 'Referral scan queued. It can create only reviewable referrals from existing feed items; it cannot admit a source or add market evidence.')
@@ -264,12 +255,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setPending(true)
     setNotice(null)
     try {
-      const response = await fetch('/api/markets/world-sources', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'review-source-referral', referralId, decision: referralDecision, rationale: referralRationale.trim() }),
+      const payload = await requestJson<{ preflightQueued?: boolean }>('/api/markets/world-sources', {
+        method: 'POST', body: { action: 'review-source-referral', referralId, decision: referralDecision, rationale: referralRationale.trim() },
+        errorMessage: 'Unable to review source referral',
       })
-      const payload = await response.json() as { error?: string; preflightQueued?: boolean }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to review source referral')
       setNotice(referralDecision === 'register'
         ? `Referral registered as a source candidate.${payload.preflightQueued ? ' A direct-target preflight is queued.' : ''} Contract review is still required before collection.`
         : 'Referral dismissed with its provenance and rationale preserved.')
@@ -288,11 +277,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setPending(true)
     setNotice(null)
     try {
-      const response = await fetch('/api/markets/world-sources', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'activate-domain', domainId: domain.id, reason: activationReason.trim(), maintenanceOwner: maintenanceOwner.trim() }),
+      await requestJson('/api/markets/world-sources', {
+        method: 'POST', body: { action: 'activate-domain', domainId: domain.id, reason: activationReason.trim(), maintenanceOwner: maintenanceOwner.trim() },
+        errorMessage: 'Unable to activate market domain',
       })
-      const payload = await response.json() as { error?: string }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to activate market domain')
       setNotice(`${domain.label} is active. Only its approved, contract-bounded sources may enter the scheduled collection path; candidates remain outside evidence.`)
       setActivatingDomainId(null)
       setActivationReason('')
@@ -317,11 +305,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setPending(true)
     setNotice(null)
     try {
-      const response = await fetch('/api/markets/world-sources', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'preflight-candidate', slug: source.slug }),
+      const payload = await requestJson<{ deduplicated?: boolean }>('/api/markets/world-sources', {
+        method: 'POST', body: { action: 'preflight-candidate', slug: source.slug },
+        errorMessage: 'Unable to queue candidate preflight',
       })
-      const payload = await response.json() as { error?: string; deduplicated?: boolean }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to queue candidate preflight')
       setNotice(payload.deduplicated
         ? `${source.label} already has a candidate preflight queued or completed today.`
         : `${source.label} preflight queued on the worker. It records only reachability, redirect, and MIME telemetry; it cannot approve the source.`)
@@ -338,11 +325,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setPending(true)
     setNotice(null)
     try {
-      const response = await fetch('/api/markets/world-sources', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'block', slug: source.slug, reason: blockRationale.trim() }),
+      await requestJson('/api/markets/world-sources', {
+        method: 'POST', body: { action: 'block', slug: source.slug, reason: blockRationale.trim() },
+        errorMessage: 'Unable to block source candidate',
       })
-      const payload = await response.json() as { error?: string }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to block source candidate')
       setNotice(`${source.label} is blocked. Its discovery record remains available, but it cannot be approved or collected.`)
       setBlockingCandidate(null)
       setBlockRationale('')
@@ -359,17 +345,16 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setPending(true)
     setNotice(null)
     try {
-      const response = await fetch('/api/markets/world-sources', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+      await requestJson('/api/markets/world-sources', {
+        method: 'POST', body: {
           action: 'approve', slug: source.slug, reason: contract.reason,
           contract: {
             allowedHosts: listValue(contract.allowedHosts), allowedPaths: listValue(contract.allowedPaths), acceptedMimeTypes: listValue(contract.acceptedMimeTypes), cadence: contract.cadence,
             assertionsAllowed: listValue(contract.assertionsAllowed), retentionDays: contract.retentionDays.trim() ? Number(contract.retentionDays) : null, notes: contract.notes,
           },
-        }),
+        },
+        errorMessage: 'Unable to approve source contract',
       })
-      const payload = await response.json() as { error?: string }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to approve source contract')
       setNotice(`${source.label} is approved with an active contract. Its first bounded immutable capture is queued; event sources are captured once and remain event-driven afterward.`)
       setReviewing(null)
       setContract(null)
@@ -386,9 +371,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setPending(true)
     setNotice(null)
     try {
-      const response = await fetch('/api/markets/world-sources', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'review-observation-proposal', proposalId, decision, rationale: proposalRationale.trim() }) })
-      const payload = await response.json() as { error?: string; analysisQueued?: boolean }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to record evidence review')
+      const payload = await requestJson<{ analysisQueued?: boolean }>('/api/markets/world-sources', {
+        method: 'POST', body: { action: 'review-observation-proposal', proposalId, decision, rationale: proposalRationale.trim() },
+        errorMessage: 'Unable to record evidence review',
+      })
       setNotice(decision === 'accepted'
         ? `Proposal accepted as a governed observation.${payload.analysisQueued ? ' A bounded analyst revision is queued.' : ''} It remains evidence, not a thesis or capital decision.`
         : 'Proposal rejected. Its immutable source and review record remain available.')
@@ -414,12 +400,10 @@ export function WorldSourceControlPanel({ workspace, unavailableReason }: { work
     setPending(true)
     setNotice(null)
     try {
-      const response = await fetch('/api/markets/world-sources', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'revise-canonical-url', slug: source.slug, canonicalUrl: canonicalUrl.trim(), rationale: canonicalRationale.trim() }),
+      await requestJson('/api/markets/world-sources', {
+        method: 'POST', body: { action: 'revise-canonical-url', slug: source.slug, canonicalUrl: canonicalUrl.trim(), rationale: canonicalRationale.trim() },
+        errorMessage: 'Unable to revise canonical source URL',
       })
-      const payload = await response.json() as { error?: string }
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to revise canonical source URL')
       setNotice(`${source.label}'s canonical URL was revised and audit-recorded. The collector will use it only within the existing active contract.`)
       setRevisingCanonicalSlug(null)
       setCanonicalUrl('')

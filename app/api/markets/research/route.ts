@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAllowedMarketUser } from '@/lib/auth/markets-session'
-import { enqueueAgentJob } from '@/lib/server/agent-jobs'
+import { enqueueAgentJob } from '@/lib/server/agent-job-queue'
 import { fetchResearchJobs, parseResearchJobIds } from '@/lib/server/research-jobs'
 import { isEtfInstrument } from '@/lib/server/etf-research'
 
