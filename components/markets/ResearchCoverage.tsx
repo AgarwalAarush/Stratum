@@ -37,6 +37,6 @@ export function ResearchCoverage({ initial }: {
         asOf?: string;
     } | null)?.asOf)} · {(data.inventory as {
         classificationGaps?: number;
-    } | null)?.classificationGaps ?? '—'} listings awaiting classification · {data.metrics.researchFailures} latest research failures</footer>
+    } | null)?.classificationGaps ?? '—'} listings awaiting classification · {(data.inventory as {classificationFailures?:unknown[]}|null)?.classificationFailures?.length??0} classification feeds unavailable · {data.metrics.researchFailures} latest research failures</footer>
  </section>;
 }
