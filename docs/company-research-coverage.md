@@ -21,3 +21,5 @@ Job diagnostics expose collection status, readable/failed capture counts, unreso
 ## Scoped release compatibility
 
 The October 2026 release was backported onto the deployed application baseline because unrelated main-branch releases and their migrations were held by the owner. The Vercel ignored-build hold remains enabled. This feature needs no new database tables or migrations. Where the separately held `research_refresh_checks` table is unavailable, the check is frozen on the newly materialized packet; other database failures still fail the job. The production branch is `codex/company-research-production`; do not substitute a blanket main deployment for this scoped release while that hold remains active.
+
+The subsequent ownership contract-2 release adds the interest inventory and activates the append-only refresh-check prerequisite through a separate scoped branch. Its scheduling contract, exact migrations and acceptance checkpoint are recorded in [Ownership research contract 2](implementation/ownership-research-v2.md).
