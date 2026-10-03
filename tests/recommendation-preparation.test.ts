@@ -11,7 +11,7 @@ test('batch evidence gaps cannot suppress independently supported ownership revi
   assert.equal(recommendationNeedsReview(name),true)
   assert.equal(recommendationNeedsReview({...name,research:{id:'legacy',content:{formalRating:'SELL'}}}),false)
   assert.equal(recommendationNeedsReview({...name,research:{id:'unreadable',content:null}}),false)
-  assert.equal(recommendationNeedsReview({...name,research:undefined,gaps:[]}),true)
+  assert.equal(recommendationNeedsReview({...name,research:null,gaps:[]}),true)
   for(const action of ['buy','add','hold','trim','sell'] as const) advice.decisionSupport!.actionSupport[action].status='unresolved'
   advice.existingPositionStance.value='undetermined';advice.newEntryStance.value='wait'
   assert.equal(recommendationNeedsReview(name),false)

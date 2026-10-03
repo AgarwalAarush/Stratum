@@ -7,7 +7,7 @@ import {loadDecisionHistory} from '../lib/server/recommendations.ts'
 test('owner narrative reads preserve complete history, isolation and cutoff through bounded transient retries',async t=>{
  process.env.SUPABASE_URL='https://decision-history-test.supabase.co';process.env.SUPABASE_SERVICE_ROLE_KEY='test-only-key'
  const requests:URL[]=[],source=Array.from({length:43},(_,i)=>({id:String(i),symbol:'ABC',content:{complete:`report-${i}`}}));let transient=true,permanent=false
- t.mock.method(globalThis,'fetch',async input=>{
+ t.mock.method(globalThis,'fetch',async (input: Parameters<typeof fetch>[0])=>{
   const url=new URL(String(input));requests.push(url)
   assert.equal(url.searchParams.get('owner_id'),'eq.owner-a');assert.equal(url.searchParams.get('generated_at'),'lte.2026-10-03T14:00:00Z')
   const offset=Number(url.searchParams.get('offset')??0),limit=Number(url.searchParams.get('limit'))
