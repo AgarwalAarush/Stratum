@@ -1,3 +1,4 @@
+import { currentAdvice } from './fixtures/research-advice-v2.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { selectCompanyMarketBasis } from '../lib/markets/company-market-basis.ts'
@@ -10,8 +11,8 @@ const now = new Date('2026-09-07T14:00:00Z')
 test('daily evidence repair includes stale entry assumptions but not unrelated portfolio gaps', () => {
   assert.equal(needsDecisionResearchRefresh({gaps: [], entryGaps: ['Research entry assumptions use stale price evidence; refresh research']}), true)
   assert.equal(needsDecisionResearchRefresh({gaps: ['Research missing or older than 35 days']}), true)
-  assert.equal(needsDecisionResearchRefresh({gaps: ['Current portfolio capture needs verification']}), false)
-  assert.equal(needsDecisionResearchRefresh({gaps: [], entryGaps: []}), false)
+  assert.equal(needsDecisionResearchRefresh({gaps: ['Current portfolio capture needs verification'],research:{content:{advice:currentAdvice()}}}), false)
+  assert.equal(needsDecisionResearchRefresh({gaps: [], entryGaps: [],research:{content:{advice:currentAdvice()}}}), false)
 })
 
 test('fresh quote supersedes stale leadership without relabeling old technicals', () => {

@@ -22,7 +22,7 @@ export function validateCoverageDiscovery(value:unknown):Discovery{
 export function groundCoverageTopics(topics:DiscoveredTopic[],documents:ResearchDocument[]):ResearchCoverageTopic[]{
   return topics.map(topic=>{
     const quotes:Array<{sourceId:string;quote:string}>=[],unresolved=[...topic.unresolvedQuestions]
-    for(const e of topic.evidence){const d=documents.find(d=>d.url===e.url);if(d?.extractionStatus==='readable'&&d.text&&normalizedEvidenceText(d.text).includes(normalizedEvidenceText(e.quote))){quotes.push({sourceId:d.sourceId,quote:e.quote})}else unresolved.push(`Could not verify supporting passage from ${e.url}`)}
+    for(const e of topic.evidence){const d=documents.find(d=>d.url===e.url);if(d?.extractionStatus==='readable'&&d.text&&normalizedEvidenceText(d.text).includes(normalizedEvidenceText(e.quote))){quotes.push({sourceId:d.sourceId,quote:e.quote})}else unresolved.push(d?.extractionStatus==='readable' ? `Quotation mismatch in readable document: ${e.url}` : `Document capture or extraction failed: ${e.url}`)}
     if(!quotes.length)unresolved.push('No readable verified evidence was captured for this topic.')
     return {id:topic.id,title:topic.title,importance:topic.importance,decisive:topic.decisive,sourceIds:[...new Set(quotes.map(q=>q.sourceId))],quotes,unresolvedQuestions:[...new Set(unresolved)]}
   })
@@ -31,7 +31,7 @@ export function groundCoverageTopics(topics:DiscoveredTopic[],documents:Research
 export function coverageRetryPassages(document: ResearchDocument, topics: Array<{title:string}>): string {
   const body=document.text ?? '', chunks=[body.slice(0,3000)], lower=body.toLowerCase()
   const terms=[...new Set(topics.flatMap(t=>t.title.toLowerCase().match(/[a-z][a-z0-9-]{4,}/g) ?? []))].filter(t=>!['company','their','which','material','should','evidence'].includes(t))
-  for(const term of terms){const at=lower.indexOf(term);if(at>=3000)chunks.push(body.slice(Math.max(0,at-500),at+1600));if(chunks.join('\n').length>=16000)break}
+  for(const term of terms){const at=lower.indexOf(term,3000);if(at>=3000)chunks.push(body.slice(Math.max(0,at-500),at+1600));if(chunks.join('\n').length>=16000)break}
   return [...new Set(chunks)].join('\n').slice(0,18000)
 }
 type CoverageOptions={discover?:(prompt:string,timeoutMs:number)=>Promise<{data:Discovery;metadata:GenerationMetadata}>;capture?:typeof captureResearchDocument;onProgress?:(progress:number,phase:string)=>Promise<void>}

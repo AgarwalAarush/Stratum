@@ -1,3 +1,4 @@
+import { admitInterestResearch } from '../markets/interest-coverage.ts'
 import { canonicalCausalVersions } from '../markets/evidence-authority.ts'
 import { RECOMMENDATION_REVIEW_RULES } from '../markets/recommendation-critic.ts'
 import { recommendationDisplayContext } from '../markets/recommendation-display.ts'
@@ -128,7 +129,7 @@ export async function assembleDecisionContext(
       )
       return []
     })
-  const [research, theses, worldVersions, market, candidates, watches, macro, fundResearch] =
+  const [research, theses, worldVersions, market, candidates, watches, macro, fundResearch, interestMembers] =
     await Promise.all([
       optional('Research', rows('equity_research_notes', ownerId, cutoff)),
       optional(
@@ -163,6 +164,7 @@ export async function assembleDecisionContext(
         rows('investment_macro_vintages', undefined, cutoff, 'observed_at', 60),
       ),
       optional('ETF research', rows('etf_research_notes', ownerId, cutoff)),
+      optional('Interest coverage', (async()=>{const result=await db.from('market_interest_memberships').select('symbol,theme,eligible_since').eq('owner_id',ownerId).eq('active',true).eq('excluded',false).lte('eligible_since',cutoff);if(result.error)throw new Error(result.error.message);return result.data})()),
     ])
   const snapshot = market.find((m) => m.status === 'complete')
   const watched = new Set(
@@ -177,7 +179,9 @@ export async function assembleDecisionContext(
     portfolio.flatMap((p) => p.holdings.map((h) => h.symbol)),
   )
   const selected = new Set([...owned, ...watched])
-  const admitted = admitDiscoveryCandidates(candidates.filter(c => !c.owner_id || c.owner_id === ownerId), selected, cutoff)
+  const interestAdmitted = admitInterestResearch(interestMembers as Array<{symbol:string;theme:string;eligible_since:string}>,[...research,...fundResearch] as Array<{symbol:string;status:string;generated_at:string;content:unknown}>,selected,cutoff,6)
+  for(const symbol of interestAdmitted)selected.add(symbol)
+  const admitted = admitDiscoveryCandidates(candidates.filter(c => !c.owner_id || c.owner_id === ownerId), selected, cutoff,6-interestAdmitted.length)
   for (const c of admitted) selected.add(String(c.symbol))
   const selectedNotes = [...selected].flatMap(symbol => {
     const note = [...research,...fundResearch].filter(r => r.symbol === symbol && r.status === 'complete')
@@ -197,7 +201,7 @@ export async function assembleDecisionContext(
       ? 'Current authoritative holding'
       : watched.has(symbol)
         ? 'Owner watchlist'
-        : selected.has(symbol) ? 'Scout discovery admitted for investigation; screening is not a buy signal' : 'Discovery candidate outside the bounded daily admission',
+        : interestAdmitted.includes(symbol) ? 'Completed owner-interest research admitted for decision review' : selected.has(symbol) ? 'Scout discovery admitted for investigation; screening is not a buy signal' : 'Discovery candidate outside the bounded daily admission',
   }))
   const world = canonicalCausalVersions(worldVersions, process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true')
   const addEvidence = (
@@ -278,7 +282,7 @@ export async function assembleDecisionContext(
   for (const p of portfolio) {
     const portfolioId = p.account.id
     addEvidence(`portfolio:${portfolioId}`, 'portfolio', p, p.dataAsOf, cutoff)
-    const symbols = new Set([...p.holdings.map((h) => h.symbol), ...watched, ...admitted.map(c => String(c.symbol))])
+    const symbols = new Set([...p.holdings.map((h) => h.symbol), ...watched, ...interestAdmitted, ...admitted.map(c => String(c.symbol))])
     const valuation = p.holdings.map(
       (h) =>
         h.currentValue ??
@@ -486,7 +490,7 @@ export async function assembleDecisionContext(
         causalLinks,
         selectionReason: h
           ? 'Owned: required daily coverage'
-          : watched.has(symbol) ? 'Owner watchlist' : 'Scout discovery: investigate before allocating capital',
+          : watched.has(symbol) ? 'Owner watchlist' : interestAdmitted.includes(symbol) ? 'Completed owner-interest research' : 'Scout discovery: investigate before allocating capital',
       })
     }
   }

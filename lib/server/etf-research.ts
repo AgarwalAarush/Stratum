@@ -1,3 +1,4 @@
+import { startInvestigation } from './research-investigations.ts'
 import { hasCurrentResearchContract, validatePacketDecisionSupport } from '../markets/research-contract.ts'
 import { fetchResearchBaseline, recordResearchRefresh } from './research-refresh.ts'
 import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchNarrative, validateResearchAdvice, type ResearchAdvice } from '../markets/research-advice.ts'
@@ -432,6 +433,7 @@ export async function materializeEtfResearchPacket(symbolInput: string, ownerId:
 }
 
 interface EtfResearchGeneration {
+  advice?: ResearchAdvice | null
   formalRating: EtfResearchNote['formalRating']
   entryAction: EtfResearchNote['entryAction']
   investmentThesis: string
@@ -503,6 +505,7 @@ export function validateEtfResearch(value: unknown, packet?: EtfResearchPacket):
 
 function etfResearchPrompt(packet: EtfResearchPacket, prior: EtfResearchNote | null, reason: string): string {
   return [
+    RESEARCH_ADVICE_RULES,
     'Act as a senior ETF research analyst. Produce an institutional-quality ETF research note for a capital-allocation decision.',
     'This security is a fund, not an operating company. Do not use company financial statements, revenue, earnings transcripts, management commentary, corporate P/E, or forward EPS as if they belonged to the ETF.',
     'Use only the facts and source IDs in the ETF research packet. Never invent holdings, weights, benchmark rules, flows, NAV, AUM, valuation, or citations.',
@@ -525,6 +528,7 @@ function normalizeEtfResearch(row: Record<string, unknown>): EtfResearchNote {
   return {
     id: String(row.id), symbol: String(row.symbol), version: Number(row.version), status: row.status as EtfResearchNote['status'],
     formalRating: row.formal_rating as EtfResearchNote['formalRating'], entryAction: row.entry_action as EtfResearchNote['entryAction'],
+    advice:readResearchAdvice(content.advice),
     investmentThesis: String(content.investmentThesis ?? ''), keyDebate: String(content.keyDebate ?? ''), fastestKillSignal: String(content.fastestKillSignal ?? ''),
     confidence: Number(content.confidence ?? 0),
     revision: {
@@ -558,6 +562,7 @@ export async function generateEtfResearch(
   reason = 'manual',
   onProgress?: (progress: number, phase: string) => Promise<void>,
   forceFullResearch = false,
+  investigationKey?: string,
 ): Promise<EtfResearchNote> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required for ETF research ownership')
   const supabase = getSupabaseClient()
@@ -568,6 +573,7 @@ export async function generateEtfResearch(
   const packet = await materializeEtfResearchPacket(symbol, ownerId)
   const refresh = await recordResearchRefresh({ownerId,instrument:'etf',packet,priorPacket:previousPacket,prior,reason,conditionsChanged:/kill|entry|invalidation/i.test(reason),forceFullResearch:forceFullResearch || !hasCurrentResearchContract(prior)})
   if (prior && refresh.kind !== 'full_research') { await onProgress?.(100, `Evidence ${refresh.kind}; retained research v${prior.version}`); return prior }
+  await startInvestigation(ownerId,symbol,investigationKey)
   await onProgress?.(45, 'ETF packet assembled')
   const version = await nextVersion('etf_research_notes', ownerId, symbol)
   const { data: note, error: createError } = await supabase.from('etf_research_notes').insert({
