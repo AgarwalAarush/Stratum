@@ -28,24 +28,14 @@ function capturedDocument(value: unknown, restore: boolean): unknown {
 
 /** Only captured text is archived. Facts, topic quotes, gaps and provenance stay
  * directly readable; immutable packet storage and historical reports are untouched. */
-function capturedPacket(value: unknown, restore: boolean): unknown {
-  const packet = row(value)
-  if (!packet) return value
+function evidenceValue(value: unknown, restore: boolean): unknown {
+  const evidence = row(value), packet = row(evidence?.packet)
+  if (!evidence || !packet) return value
   const coverage = row(packet.researchCoverage)
-  return { ...packet,
+  return { ...evidence, packet: { ...packet,
     ...(Array.isArray(packet.researchDocuments) ? { researchDocuments: packet.researchDocuments.map(d => capturedDocument(d, restore)) } : {}),
     ...(coverage && Array.isArray(coverage.documents) ? { researchCoverage: { ...coverage, documents: coverage.documents.map(d => capturedDocument(d, restore)) } } : {}),
-  }
-}
-
-function evidenceValue(value: unknown, restore: boolean): unknown {
-  const evidence = row(value)
-  if (!evidence || !row(evidence.packet)) return value
-  // Frozen packet rows retain their original content as well as the authority
-  // projection. Archive both copies; restoring either must reproduce its hash.
-  return { ...evidence, packet: capturedPacket(evidence.packet, restore),
-    ...(row(evidence.content) ? { content: capturedPacket(evidence.content, restore) } : {}),
-  }
+  } }
 }
 
 export const archiveDecisionEvidence = (value: unknown) => evidenceValue(value, false)
