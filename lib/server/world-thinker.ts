@@ -442,14 +442,22 @@ export function buildWorldUpdateDraftSchema(proposalSchema: Record<string, unkno
   delete properties.baseCommit
   cloned.required = (cloned.required as string[]).filter((key) => !['asOf', 'trigger', 'baseCommit'].includes(key))
   const classifications = properties.eventClassifications as { minItems?: number; maxItems?: number; items: { required: string[]; properties: Record<string, unknown> } }
-  classifications.minItems = eventKeys.length
-  classifications.maxItems = eventKeys.length
+  // The provider rejects maxItems: 0. Empty-event runs are enforced by the
+  // host's exact event-key validation rather than an unsatisfiable array bound.
+  if (eventKeys.length) {
+    classifications.minItems = eventKeys.length
+    classifications.maxItems = eventKeys.length
+  } else {
+    delete classifications.minItems
+    delete classifications.maxItems
+  }
   classifications.items.required = ['eventKey', 'classification', 'rationale']
   delete classifications.items.properties.eventClusterId
   classifications.items.properties.eventKey = { type: 'string', enum: eventKeys.length ? eventKeys : ['NO_EVENTS'] }
   const archives = properties.archives as { maxItems?: number; items: { properties: Record<string, unknown> } }
   const archivableNodeIds = [...new Set(knownNodeIds)]
-  archives.maxItems = archivableNodeIds.length ? 40 : 0
+  if (archivableNodeIds.length) archives.maxItems = 40
+  else delete archives.maxItems
   archives.items.properties.nodeId = { type: 'string', enum: archivableNodeIds.length ? archivableNodeIds : ['NO_ARCHIVABLE_NODES'] }
   const definitions = cloned.$defs as { node: { required: string[]; properties: Record<string, unknown> } }
   definitions.node.required = definitions.node.required.filter((key) => !['asOf', 'nextReviewAt'].includes(key))
