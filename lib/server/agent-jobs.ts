@@ -8,7 +8,7 @@ import { dependencyReadiness, parseRecommendationDependencies } from '../markets
 import { prepareDailyRecommendations } from './recommendation-preparation.ts'
 import { AgentJobPool } from './agent-job-pool.ts'
 import { runIsolatedAgentAttempt } from './isolated-agent-attempt.ts'
-import { agentAttemptEnvironment } from './agent-attempt-environment.ts'
+import { agentAttemptEnvironment, isOwnershipResearchJob } from './agent-attempt-environment.ts'
 import { blockingFingerprint, blockingReason } from './agent-blocking.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { captureInvestmentMacro } from './investment-macro.ts'
@@ -50,7 +50,7 @@ import { runMarketResearchScout } from './market-research-scout.ts'
 import { auditWorldSourceHealth, preflightWorldSourceCandidate } from './world-source-health.ts'
 import { collectGovernedWorldSourceDocuments } from './world-source-collector.ts'
 import { triageCapturedWorldObservationProposals } from './world-observation-proposals.ts'
-import { AI_MODELS } from '../ai/config.ts'
+import { AI_MODELS, ownershipResearchModel } from '../ai/config.ts'
 import { scheduledMarketResearchRunLimit, selectMarketModel, type MarketModelSelection } from './market-model-policy.ts'
 import { evaluateMarketPrediction, findDueMarketPredictionEvaluations } from './market-prediction-evaluation.ts'
 import {
@@ -403,6 +403,7 @@ export function marketModelRoutingForAgentJob(
 }
 
 export function modelForAgentJob(jobType: AgentJobType, environment: NodeJS.ProcessEnv = process.env): string | null {
+  if (isOwnershipResearchJob(jobType)) return ownershipResearchModel(environment)
   const routed = marketModelRoutingForAgentJob(jobType, environment)
   if (routed.length > 0) return routed[0]!.model
   return agentJobProvider(jobType) === 'codex'

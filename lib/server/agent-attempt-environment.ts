@@ -1,16 +1,25 @@
-/** An explicit owner catch-up applies to its isolated process, never the supervisor. */
+import { ownershipResearchModel } from '../ai/config.ts'
+
+export function isOwnershipResearchJob(type: string | undefined): boolean {
+  return ['generate-company-research', 'generate-etf-research', 'event-refresh-company-research', 'generate-daily-recommendations'].includes(type ?? '')
+}
+
+/** Ownership model policy applies to its isolated process, never the supervisor. */
 export function agentAttemptEnvironment(job: object, environment: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const { job_type: type, payload } = job as { job_type?: string; payload?: Record<string, unknown> }
-  if (!payload?.researchModel) return environment
-  const authorization = payload.ownerRequestedCatchUp as { key?: unknown; date?: unknown; reason?: unknown } | undefined
-  if (!['generate-company-research', 'generate-etf-research', 'generate-daily-recommendations'].includes(type ?? '')
+  if (payload?.researchModel) {
+    const authorization = payload.ownerRequestedCatchUp as { key?: unknown; date?: unknown; reason?: unknown } | undefined
+    if (!['generate-company-research', 'generate-etf-research', 'generate-daily-recommendations'].includes(type ?? '')
     || payload.researchModel !== 'gpt-6.1-sol' || typeof authorization?.key !== 'string' || !authorization.key
     || typeof authorization.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(authorization.date)
     || typeof authorization.reason !== 'string' || authorization.reason.length < 8) {
-    throw new Error('Invalid owner-requested research model override')
+      throw new Error('Invalid owner-requested research model override')
+    }
   }
-  return { ...environment, CODEX_SYNTHESIS_MODEL: payload.researchModel,
-    STRATUM_MARKET_STANDARD_MODEL: payload.researchModel, STRATUM_MARKET_RESEARCH_MODEL: payload.researchModel }
+  if (!isOwnershipResearchJob(type)) return environment
+  const model = typeof payload?.researchModel === 'string' ? payload.researchModel : ownershipResearchModel(environment)
+  return { ...environment, STRATUM_OWNERSHIP_RESEARCH_MODEL: model, CODEX_SYNTHESIS_MODEL: model,
+    STRATUM_MARKET_STANDARD_MODEL: model, STRATUM_MARKET_RESEARCH_MODEL: model }
 }
 
 export function ownerRequestedCatchUpAllowance(jobs: Array<{ payload: unknown }>, date: string): number {
