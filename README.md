@@ -117,8 +117,16 @@ npm run dev
 npm run dev       # Start dev server
 npm run build     # Production build
 npm run lint      # ESLint
+npm run typecheck # Type-check application code and tests
 npm test          # Run all tests (Node built-in test runner)
+npm run db:types -- PROJECT_REF # Regenerate public schema types with the authenticated Supabase CLI
 ```
+
+Queue producers import `enqueueAgentJob` from `lib/server/agent-job-queue.ts` and job types/policies from `agent-job-contracts.ts`. Worker execution lives in `agent-jobs.ts`; add a job's payload contract and handler together so the registry stays exhaustive. Legacy imports remain compatible during incremental migration.
+
+Database schema types live in `lib/server/database.types.ts`. Regenerate them after applying schema changes, and use `getTypedSupabaseClient()` when migrating a query. Generated JSON column types still need runtime validation at domain boundaries, as the screener provenance parser demonstrates.
+
+Client JSON requests share `lib/client/request-json.ts`, including timeouts, cancellation, and server error messages. It sends each mutation once; callers keep form inputs on failure and refresh after an ambiguous timeout before submitting again.
 
 ---
 
