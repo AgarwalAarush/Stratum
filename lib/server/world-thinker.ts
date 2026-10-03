@@ -459,7 +459,12 @@ export function buildWorldUpdateDraftSchema(proposalSchema: Record<string, unkno
   if (archivableNodeIds.length) archives.maxItems = 40
   else delete archives.maxItems
   archives.items.properties.nodeId = { type: 'string', enum: archivableNodeIds.length ? archivableNodeIds : ['NO_ARCHIVABLE_NODES'] }
-  const definitions = cloned.$defs as { node: { required: string[]; properties: Record<string, unknown> } }
+  const definitions = cloned.$defs as { node: { required: string[]; properties: Record<string, unknown> }; claim: { properties: Record<string, { type?: unknown }> } }
+  // Nullable claim arrays cause the provider's nested schema compiler to reject
+  // this draft. Canonical readers stay compatible; model drafts use [] instead.
+  for (const property of Object.values(definitions.claim.properties)) {
+    if (Array.isArray(property.type) && property.type.includes('array')) property.type = 'array'
+  }
   definitions.node.required = definitions.node.required.filter((key) => !['asOf', 'nextReviewAt'].includes(key))
   delete definitions.node.properties.asOf
   delete definitions.node.properties.nextReviewAt
