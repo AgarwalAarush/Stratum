@@ -409,10 +409,12 @@ export function materializeWorldUpdateProposal(draft: WorldUpdateDraft, context:
 export function validateWorldUpdateDraftWithHostSources(
   value: unknown,
   sources: Array<Pick<EventSourceRow, 'source_id' | 'url' | 'title' | 'publisher' | 'published_at' | 'claim_state' | 'stance'> & Pick<WorldSourceReference,'capturedAt'|'ingestedAt'|'evidenceOrigin'|'documentId'>>,
+  eventFree = false,
 ): WorldUpdateDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return validateWorldUpdateDraft(value)
-  const input = value as Record<string, unknown>
-  if (!Array.isArray(input.sources)) return validateWorldUpdateDraft(value)
+  const input = { ...value as Record<string, unknown> }
+  if (eventFree && input.eventClassifications === undefined) input.eventClassifications = []
+  if (!Array.isArray(input.sources)) return validateWorldUpdateDraft(input)
   const known = new Map(sources.map((source) => [source.source_id, source]))
   const hydratedSources = input.sources.map((candidate) => {
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return candidate
@@ -442,14 +444,14 @@ export function buildWorldUpdateDraftSchema(proposalSchema: Record<string, unkno
   delete properties.baseCommit
   cloned.required = (cloned.required as string[]).filter((key) => !['asOf', 'trigger', 'baseCommit'].includes(key))
   const classifications = properties.eventClassifications as { minItems?: number; maxItems?: number; items: { required: string[]; properties: Record<string, unknown> } }
-  // The provider rejects maxItems: 0. Empty-event runs are enforced by the
-  // host's exact event-key validation rather than an unsatisfiable array bound.
+  // Event-free drafts omit this host-owned field instead of exposing a dummy
+  // event that the model can classify. The host restores an empty array.
   if (eventKeys.length) {
     classifications.minItems = eventKeys.length
     classifications.maxItems = eventKeys.length
   } else {
-    delete classifications.minItems
-    delete classifications.maxItems
+    delete properties.eventClassifications
+    cloned.required = (cloned.required as string[]).filter(key => key !== 'eventClassifications')
   }
   classifications.items.required = ['eventKey', 'classification', 'rationale']
   delete classifications.items.properties.eventClusterId
@@ -642,9 +644,10 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
     const hostSources = [...companySources, ...context.priorSources.map(source => ({ source_id: source.id, url: source.url, title: source.title, publisher: source.publisher ?? null, published_at: source.publishedAt ?? null, claim_state: source.claimState, stance: source.stance, capturedAt:source.capturedAt, ingestedAt:source.ingestedAt, evidenceOrigin:source.evidenceOrigin, documentId:source.documentId })), ...context.sources]
     const thinkerSelection = selectMarketModel(context.needsWebSearch ? 'world_web_research' : 'world_thinker')
     const thinkerRunPrompt = await thinkerPrompt(context, options.trigger)
+    const eventFree = context.eventKeyMap.length === 0
     await updateRun(runId, { context_manifest: context.manifest })
     const draftResult = await runCodexJson({
-      prompt: thinkerRunPrompt, schemaPath: draftSchemaPath, validate: (value) => validateWorldUpdateDraftWithHostSources(value, hostSources),
+      prompt: thinkerRunPrompt, schemaPath: draftSchemaPath, validate: (value) => validateWorldUpdateDraftWithHostSources(value, hostSources, eventFree),
       model: thinkerSelection.model, cwd: worldDataRoot(root), webSearch: context.needsWebSearch, timeoutMs: 20 * 60_000,
     })
     let proposal = materializeWorldUpdateProposal(draftResult.data, context, options.trigger)
@@ -663,7 +666,7 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
     if (critique.verdict === 'revise') {
       await updateRun(runId, { status: 'revising', critic_verdict: 'revise' })
       const revision = await runCodexJson({
-        prompt: await revisionPrompt(context, proposal, critique), schemaPath: draftSchemaPath, validate: (value) => validateWorldUpdateDraftWithHostSources(value, hostSources),
+        prompt: await revisionPrompt(context, proposal, critique), schemaPath: draftSchemaPath, validate: (value) => validateWorldUpdateDraftWithHostSources(value, hostSources, eventFree),
         model: thinkerSelection.model, cwd: worldDataRoot(root), webSearch: context.needsWebSearch, timeoutMs: 15 * 60_000,
       })
       proposal = materializeWorldUpdateProposal(revision.data, context, options.trigger)
