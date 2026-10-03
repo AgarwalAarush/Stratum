@@ -490,6 +490,7 @@ test('model-facing World schemas satisfy strict Responses object requirements', 
       return
     }
     const schema = value as Record<string, unknown>
+    assert.notEqual(schema.maxItems, 0, `${path} must not use provider-rejected empty-array bounds`)
     if (schema.type === 'object' && schema.properties && typeof schema.properties === 'object') {
       const propertyNames = Object.keys(schema.properties as Record<string, unknown>).sort()
       assert.deepEqual(Array.isArray(schema.required) ? [...schema.required].sort() : [], propertyNames, `${path} must require every declared property`)
@@ -501,4 +502,10 @@ test('model-facing World schemas satisfy strict Responses object requirements', 
   for (const name of ['world-update-proposal', 'world-critique']) {
     visit(JSON.parse(await readFile(join(process.cwd(), 'schemas', `${name}.schema.json`), 'utf8')))
   }
+  const source = JSON.parse(await readFile(join(process.cwd(), 'schemas', 'world-update-proposal.schema.json'), 'utf8'))
+  visit(buildWorldUpdateDraftSchema(source, [], []))
+  visit(buildWorldUpdateDraftSchema(source, [], ['current']))
+  const canonical = proposal()
+  const draft = {...canonical, eventClassifications: [{eventKey:'NO_EVENTS',classification:'noise' as const,rationale:'Invented event'}]}
+  assert.throws(() => materializeWorldUpdateProposal(draft, {baseCommit:null,current:node({id:'current',kind:'current'}),eventKeyMap:[]}, 'company_research', now), /unknown event key/)
 })
