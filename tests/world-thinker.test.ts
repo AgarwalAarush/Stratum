@@ -506,12 +506,18 @@ test('model-facing World schemas satisfy strict Responses object requirements', 
   visit(buildWorldUpdateDraftSchema(source, [], []))
   visit(buildWorldUpdateDraftSchema(source, [], ['current']))
   const draftSchema = buildWorldUpdateDraftSchema(source, [], ['current'])
+  assert.equal('eventClassifications' in (draftSchema.properties as Record<string, unknown>), false)
+  assert.equal((draftSchema.required as string[]).includes('eventClassifications'), false)
   const claimSchema = (draftSchema.$defs as {claim:{properties:Record<string,{type:unknown}>}}).claim
   for (const key of ['observationIds','supports','contradicts','supersedes','evidence']) {
     assert.equal(claimSchema.properties[key].type, 'array', `${key} uses [] instead of a provider-rejected nullable array`)
   }
   assert.deepEqual(source.$defs.claim.properties.evidence.type, ['array','null'], 'legacy canonical claims remain readable')
   const canonical = proposal()
+  const { eventClassifications: _classifications, ...eventFree } = canonical
+  void _classifications
+  assert.deepEqual(validateWorldUpdateDraftWithHostSources(eventFree,[],true).eventClassifications,[])
+  assert.throws(()=>materializeWorldUpdateProposal(validateWorldUpdateDraftWithHostSources(eventFree,[],true),{baseCommit:null,eventKeyMap:[{eventKey:'E001',eventClusterId:'real-event'}]},'scheduled',now),/omitted event classification E001/)
   const draft = {...canonical, eventClassifications: [{eventKey:'NO_EVENTS',classification:'noise' as const,rationale:'Invented event'}]}
   assert.throws(() => materializeWorldUpdateProposal(draft, {baseCommit:null,current:node({id:'current',kind:'current'}),eventKeyMap:[]}, 'company_research', now), /unknown event key/)
 })
