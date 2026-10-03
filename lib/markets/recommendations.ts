@@ -292,6 +292,25 @@ export function validateRecommendation(
   }
 }
 
+function citesActionSupport(
+  sourceIds: string[],
+  rec: Recommendation,
+  name: DecisionName,
+  context: DecisionContext,
+): boolean {
+  if (sourceIds.some(id => name.sources.includes(id) && rec.sourceIds.includes(id) && context.evidence.some(e => e.id === id))) return true
+  // Research citations are scoped inside the immutable packet. Decisions cite
+  // its global ledger ID, so verify the instrument and the complete source set.
+  return sourceIds.length > 0 && context.evidence.some(e => {
+    if (!['company_packet', 'etf_packet'].includes(e.kind) || !name.sources.includes(e.id) || !rec.sourceIds.includes(e.id)) return false
+    const value = obj(e.value)
+    if (value.symbol !== name.symbol) return false
+    const packet = obj(value.packet)
+    const sources = Array.isArray(packet.sources) ? packet.sources : []
+    return sourceIds.every(id => sources.some(source => obj(source).id === id))
+  })
+}
+
 export function gateRecommendation(
   rec: Recommendation,
   context: DecisionContext,
@@ -329,7 +348,7 @@ export function gateRecommendation(
     // independently supported exit or hold in another instrument/account.
     const support = advice?.version === 2 ? advice.decisionSupport?.actionSupport[rec.action as CapitalAction] : undefined
     if (advice?.version === 2 && support?.status !== 'supported') reasons.push('Research does not independently support this action')
-    if (support && !support.sourceIds.some(id => rec.sourceIds.includes(id))) reasons.push('Decision must cite its independently supported action grounds')
+    if (support && !citesActionSupport(support.sourceIds, rec, name, context)) reasons.push('Decision must cite its independently supported action grounds')
     const nameGaps = name.gaps.filter(gap => {
       const prefix = gap.match(/^Missing (?:company|fund) evidence: (.+)$/)?.[1]
       if (!prefix || advice?.version !== 2) return true
