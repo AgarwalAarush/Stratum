@@ -11,6 +11,7 @@ export function WorldConnections({receipts,reciprocal=false}:{receipts:CompanyWo
    {r.explanation?<p>{r.explanation}</p>:null}
    {r.evidence_gaps.length?<details><summary>{r.evidence_gaps.length} evidence gaps</summary><ul>{r.evidence_gaps.map(g=><li key={g}>{g}</li>)}</ul></details>:null}
    <nav aria-label={`${r.symbol} World connections`}>{r.affected_node_ids.map(id=><Link key={id} href={`/markets/world/${encodeURIComponent(id)}`}>{id.replaceAll('-',' ')}</Link>)}</nav>
+   {r.context_node_ids?.length?<><p>Related World context</p><nav aria-label={`${r.symbol} World context`}>{r.context_node_ids.filter(id=>!r.affected_node_ids.includes(id)).map(id=><Link key={id} href={`/markets/world/${encodeURIComponent(id)}`}>{id.replaceAll('-',' ')}</Link>)}</nav></>:null}
    {r.result_commit?<small>Accepted World commit {r.result_commit.slice(0,10)}</small>:null}
   </li>)}</ul>}
  </section>
