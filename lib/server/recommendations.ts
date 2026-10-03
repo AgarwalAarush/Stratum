@@ -677,7 +677,7 @@ export async function generateDailyRecommendations(
           }
         },
       })
-      const review = async (batch: typeof initialGenerated.data) => runCodexJson({
+      const review = async (batch: Pick<typeof initialGenerated.data,'summary'|'recommendations'>) => runCodexJson({
         schemaPath: input.criticSchemaPath,
         cwd: input.directory,
         webSearch: false,
