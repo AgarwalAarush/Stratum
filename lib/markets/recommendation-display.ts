@@ -16,7 +16,9 @@ export function readableDecisionText(text: string): string {
 
 /** Keep paragraph breaks, lists and emphasis for the Markdown reader. */
 export function readableDecisionMarkdown(text: string): string {
-  return text.replace(/\[(?:portfolio|research|packet|quote|liquidity|world|source):[^\]]+\]/g, '')
+  return text.replace(/^Advice v2 audit:[^\n]*(?:\n|$)/gm, '')
+    .replace(/\bpacket:[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12};?\s*/gi, '')
+    .replace(/\[(?:portfolio|research|packet|quote|liquidity|world|source):[^\]]+\]/g, '')
     .replace(/\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b/gi, '')
     .replace(/^(?:Independent review blocked action:|Evaluation blocked:)\s*/i, '')
     .replace(/^Blocking[^:]{0,45}:\s*/i, '')

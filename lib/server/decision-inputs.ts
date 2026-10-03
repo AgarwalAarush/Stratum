@@ -1,3 +1,4 @@
+import { restoreDecisionEvidence } from './decision-evidence-archive.ts'
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -20,11 +21,12 @@ export async function withDecisionInputs<T>(
   try {
     const reviewSchema = options.includeCriticSchema === false ? null : recommendationCriticSchema(JSON.parse(await readFile(resolve('schemas/recommendation-critic.schema.json'),'utf8')),context.names)
     const criticSchemaPath = reviewSchema ? join(directory,await save('critic-schema.json',reviewSchema)) : null
-    const manifest = JSON.stringify(context)
+    const reviewContext = { ...context, evidence: context.evidence.map(e => ({ ...e, value: restoreDecisionEvidence(e.value) })) }
+    const manifest = JSON.stringify(reviewContext)
     const manifestHash = createHash('sha256').update(manifest).digest('hex')
-    await save('manifest.json', context)
+    await save('manifest.json', reviewContext)
     const evidence = []
-    for (const [i, item] of context.evidence.entries()) {
+    for (const [i, item] of reviewContext.evidence.entries()) {
       const { value, ...provenance } = item
       const file = await save(`evidence-${i}.json`, value)
       evidence.push({ ...provenance, file })

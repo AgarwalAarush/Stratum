@@ -1,8 +1,12 @@
+import { reviewWithOneRevision } from '../markets/recommendation-revision.ts'
+import { ownershipResearchModel } from '../ai/config.ts'
+import { archiveDecisionEvidence } from './decision-evidence-archive.ts'
 import { admitInterestResearch } from '../markets/interest-coverage.ts'
 import { renewUnchangedRecommendation } from '../markets/decision-refresh.ts'
 import { canonicalCausalVersions, canonicalResearchNote, primaryResearchPacket } from '../markets/evidence-authority.ts'
 import { RECOMMENDATION_REVIEW_RULES } from '../markets/recommendation-critic.ts'
 import { recommendationDisplayContext } from '../markets/recommendation-display.ts'
+import { recommendationNeedsReview } from '../markets/recommendation-preparation.ts'
 import { admitDiscoveryCandidates, hasValidatedSystemThesis } from '../markets/decision-admission.ts'
 import { createHash, randomUUID } from 'node:crypto'
 import { getSupabaseClient } from './supabase.ts'
@@ -16,6 +20,7 @@ import {
   RECOMMENDATION_POLICY,
   abstention,
   validateGeneratedBatch,
+  validateReviewedBatch,
   type DecisionContext,
   type DecisionName,
   type EvidenceRef,
@@ -49,7 +54,7 @@ export function investmentDb() {
   return db
 }
 
-async function rows(
+export async function loadDecisionHistory(
   table: string,
   ownerId?: string,
   cutoff?: string,
@@ -57,7 +62,9 @@ async function rows(
   limit = 300,
 ): Promise<Row[]> {
   const accumulated: Row[] = []
-  const pageSize = Math.min(limit, 500)
+  // Full owner reports are large. Metadata-sized pages can exceed the database
+  // statement budget when every row must detoast its complete narrative.
+  const pageSize = Math.min(limit, ownerId ? 20 : 500)
   for (let offset = 0; ; offset += pageSize) {
     let q = investmentDb()
       .from(table)
@@ -67,7 +74,8 @@ async function rows(
       .range(offset, offset + pageSize - 1)
     if (ownerId) q = q.eq('owner_id', ownerId)
     if (cutoff) q = q.lte(dateColumn, cutoff)
-    const result = await q
+    let result = await q
+    if (result.error && (result.status >= 500 || [408,429].includes(result.status) || result.error.code === '57014')) result = await q
     if (result.error) throw new Error(`${table}: ${result.error.message}`)
     accumulated.push(...result.data)
     // Owner research/thesis history is complete. Deliberately bounded market
@@ -79,6 +87,16 @@ async function rows(
       )
   }
   return accumulated
+}
+
+/** Failed refresh attempts cannot hide the last accepted snapshot. The original
+ * data timestamp remains frozen and the normal instrument price-age gate applies. */
+export async function latestCompleteMarketSnapshot(cutoff: string): Promise<Row[]> {
+  const result = await investmentDb().from('market_snapshots').select('*')
+    .eq('status', 'complete').lte('created_at', cutoff)
+    .order('created_at', { ascending: false }).order('id').limit(1)
+  if (result.error) throw new Error(`market_snapshots: ${result.error.message}`)
+  return result.data ?? []
 }
 
 /** Load exact immutable versions referenced by the selected notes, not every
@@ -132,22 +150,22 @@ export async function assembleDecisionContext(
     })
   const [research, theses, worldVersions, market, candidates, watches, macro, fundResearch, interestMembers] =
     await Promise.all([
-      optional('Research', rows('equity_research_notes', ownerId, cutoff)),
+      optional('Research', loadDecisionHistory('equity_research_notes', ownerId, cutoff)),
       optional(
         'Theses',
-        rows('investment_theses', ownerId, cutoff, 'generated_at'),
+        loadDecisionHistory('investment_theses', ownerId, cutoff, 'generated_at'),
       ),
       optional(
         'World causal model',
-        rows('causal_model_versions', undefined, cutoff, 'as_of', 80),
+        loadDecisionHistory('causal_model_versions', undefined, cutoff, 'as_of', 80),
       ),
       optional(
         'Market snapshots',
-        rows('market_snapshots', undefined, cutoff, 'created_at', 10),
+        latestCompleteMarketSnapshot(cutoff),
       ),
       optional(
         'Candidate discovery',
-        rows('candidate_briefs', undefined, cutoff, 'generated_at', 100),
+        loadDecisionHistory('candidate_briefs', undefined, cutoff, 'generated_at', 100),
       ),
       optional(
         'Watchlists',
@@ -162,9 +180,9 @@ export async function assembleDecisionContext(
       ),
       optional(
         'Macro vintages',
-        rows('investment_macro_vintages', undefined, cutoff, 'observed_at', 60),
+        loadDecisionHistory('investment_macro_vintages', undefined, cutoff, 'observed_at', 60),
       ),
-      optional('ETF research', rows('etf_research_notes', ownerId, cutoff)),
+      optional('ETF research', loadDecisionHistory('etf_research_notes', ownerId, cutoff)),
       optional('Interest coverage', (async()=>{const result=await db.from('market_interest_memberships').select('symbol,theme,eligible_since').eq('owner_id',ownerId).eq('active',true).eq('excluded',false).lte('eligible_since',cutoff);if(result.error)throw new Error(result.error.message);return result.data})()),
     ])
   const upgradeJobs = await optional('Research upgrade schedule',(async()=>{
@@ -584,20 +602,21 @@ export async function assembleDecisionContext(
   }
   // Bounded reads must never quietly truncate an actionable context.
   if (options.persist === false) return context
-  const insert = await db.from('recommendation_input_manifests').insert({
+  const frozenContext = { ...context, evidence: context.evidence.map(e => ({ ...e, value: archiveDecisionEvidence(e.value) })) }
+  const insert = await db.rpc('freeze_recommendation_input', {p_manifest:{
     id: context.id,
     owner_id: ownerId,
     decision_date: date,
     decision_cutoff: cutoff,
     policy_version: context.policy,
     edition_key: editionKey,
-    content_hash: contentHash(context),
-    content: context,
-  })
-  if (insert.error?.code === '23505')
+    content_hash: contentHash(frozenContext),
+    content: frozenContext,
+  }})
+  if (!insert.error && insert.data !== context.id)
     return assembleDecisionContext(ownerId, now, editionKey)
   if (insert.error) throw new Error(insert.error.message)
-  return context
+  return frozenContext
 }
 
 export async function generateDailyRecommendations(
@@ -636,8 +655,8 @@ export async function generateDailyRecommendations(
     }
   let summary =
     'Daily evaluation is incomplete. Review the stated gaps before changing capital.'
-  // Do not spend model time pretending a completely blocked context is decision-ready.
-  if (analysisContext.names.every((n) => n.gaps.length > 0)) {
+  // Skip review only when no name has reviewable support; action gates still enforce present facts.
+  if (!analysisContext.names.some(recommendationNeedsReview)) {
     recommendations = analysisContext.names.map((n) =>
       abstention(
         n,
@@ -647,8 +666,10 @@ export async function generateDailyRecommendations(
     )
   } else {
     await withDecisionInputs(analysisContext, async (input) => {
-      if (!input.criticSchemaPath) throw new Error('Recommendation critic schema is required')
-      const generated = await runCodexJson({
+      const criticSchemaPath=input.criticSchemaPath
+      if (!criticSchemaPath) throw new Error('Recommendation critic schema is required')
+      const initialGenerated = await runCodexJson({
+        model: ownershipResearchModel(),
         schemaPath: resolve('schemas/daily-recommendations.schema.json'),
         cwd: input.directory,
         webSearch: false,
@@ -662,12 +683,13 @@ export async function generateDailyRecommendations(
           }
         },
       })
-      const critic = await runCodexJson({
-        schemaPath: input.criticSchemaPath,
+      const review = async (batch: Pick<typeof initialGenerated.data,'summary'|'recommendations'>) => runCodexJson({
+        model: ownershipResearchModel(),
+        schemaPath: criticSchemaPath,
         cwd: input.directory,
         webSearch: false,
         timeoutMs: 8 * 60 * 1000,
-        prompt: `Independently criticize these proposed decisions against the frozen evidence. ${RECOMMENDATION_REVIEW_RULES} Flag any unsupported economic link, overlooked contrary evidence, misleading timestamp, stale data, invalid sizing or invented factual claim. Identify blocking problems only by the exact portfolioId and symbol pairs in DECISIONS; copy both values verbatim. Never use a portfolio name, wildcard, or global target. For a shared blocking problem, name each affected valid pair separately. Do not change the original thesis or fetch new information.\nCONTEXT ${input.prompt}\nDECISIONS ${JSON.stringify({summary: generated.data.summary, recommendations: generated.data.recommendations})}`,
+        prompt: `Independently criticize these proposed decisions against the frozen evidence. ${RECOMMENDATION_REVIEW_RULES} Flag any unsupported economic link, overlooked contrary evidence, misleading timestamp, stale data, invalid sizing or invented factual claim. Identify blocking problems only by the exact portfolioId and symbol pairs in DECISIONS; copy both values verbatim. Never use a portfolio name, wildcard, or global target. For a shared blocking problem, name each affected valid pair separately. Do not change the original thesis or fetch new information.\nCONTEXT ${input.prompt}\nDECISIONS ${JSON.stringify({summary: batch.summary, recommendations: batch.recommendations})}`,
         validate: (value) => {
           const v = record(value)
           if (!Array.isArray(v.blocks)) throw new Error('Invalid critic')
@@ -680,10 +702,16 @@ export async function generateDailyRecommendations(
               !String(x.reason ?? '').trim()
             )
               throw new Error('Invalid critic target')
-            return x
+            return {symbol:String(x.symbol),portfolioId:String(x.portfolioId),reason:String(x.reason)}
           })
         },
       })
+      const {generated,critic,revision} = await reviewWithOneRevision(initialGenerated,review,async (targets,blocks) => {
+        const repairContext={...analysisContext,names:analysisContext.names.filter(n=>targets.some(r=>r.symbol===n.symbol&&r.portfolioId===n.portfolioId))}
+        return runCodexJson({model:ownershipResearchModel(),schemaPath:resolve('schemas/daily-recommendations.schema.json'),cwd:input.directory,webSearch:false,timeoutMs:5*60*1000,
+          prompt:`Revise only the rejected account/security pairs below using the same frozen evidence. ${RECOMMENDATION_REVIEW_RULES} Independently establish the corrected stance from cited facts; reviewer feedback is a criticism, not evidence or authority to choose an action. Resolve each criticism, or state the exact remaining ownership question and follow-up. Do not invent facts, forecasts, sizing, or scenarios to pass review. Missing Buy/Add support must not erase independently supported retention. Preserve essential identity, price, ownership and portfolio gates. Return every rejected pair exactly once and no other recommendation. All unchanged decisions will be retained and the complete batch will receive a fresh independent review. Give a summary for the complete edition.\nCONTEXT ${input.prompt}\nREJECTED PROPOSALS ${JSON.stringify(targets)}\nREVIEW FINDINGS ${JSON.stringify(blocks)}`,
+          validate:value=>{const v=record(value);return {summary:String(v.summary??''),...validateGeneratedBatch(v.recommendations,repairContext)}}})
+      },recommendations=>validateReviewedBatch(recommendations,analysisContext))
       recommendations = generated.data.recommendations.map((r) => {
         const block = critic.data.find(
           (b) => b.symbol === r.symbol && b.portfolioId === r.portfolioId,
@@ -709,6 +737,7 @@ export async function generateDailyRecommendations(
         contractFailures: generated.data.failures,
         critic: critic.metadata,
         criticBlocks: critic.data,
+        reviewRevision: revision,
       }
       recommendations = recommendations.map(reviewedForecasts)
       summary = recommendations.some((r) => r.gateReasons.length)
@@ -716,7 +745,7 @@ export async function generateDailyRecommendations(
         : generated.data.summary
     })
   }
-  recommendations = validateGeneratedBatch([...retained,...recommendations],context).recommendations
+  recommendations = validateReviewedBatch([...retained,...recommendations],context)
   if (!analysisContext.names.length) summary = `Retained ${retained.length} analytical conclusions and validated every instrument against a new frozen context. This edition is newly logged advice for owner review.`
   metadata = {...record(metadata),reusedConclusions:retained.length,analyzedNames:analysisContext.names.length}
   const result = await db.rpc('publish_recommendation_batch', {

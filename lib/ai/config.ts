@@ -1,5 +1,10 @@
 export const AI_PROVIDER = 'openai' as const
 
+/** Company/fund investigations and ownership reviews have their own model policy. */
+export function ownershipResearchModel(environment: NodeJS.ProcessEnv = process.env): string {
+  return environment.STRATUM_OWNERSHIP_RESEARCH_MODEL ?? 'gpt-6.1-sol'
+}
+
 export const AI_MODELS = {
   portfolioTradeReview: process.env.OPENAI_PORTFOLIO_REVIEW_MODEL ?? process.env.OPENAI_ARTICLE_SUMMARY_MODEL ?? 'gpt-5.6-luna',
   articleSummary: process.env.OPENAI_ARTICLE_SUMMARY_MODEL ?? 'gpt-5.6-luna',

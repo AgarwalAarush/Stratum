@@ -1,4 +1,5 @@
 import { startInvestigation } from './research-investigations.ts'
+import { ownershipResearchModel } from '../ai/config.ts'
 import { hasCurrentResearchContract, validatePacketDecisionSupport } from '../markets/research-contract.ts'
 import { retrieveWorldMemory, worldResearchPreparation } from './world-retrieval.ts'
 import { COMPANY_STORY_RULES } from '../markets/company-story.ts'
@@ -821,6 +822,7 @@ export async function generateFullEquityResearch(
   try {
     await onProgress?.(72, 'Synthesizing 15-section analysis')
     const bundle = await withCompanyResearchSchema(packet, schemaPath => runCodexJson({
+      model: ownershipResearchModel(),
       prompt: companyResearchBundlePrompt(analysisPacket, priorMarketModel, independentBaseline ? null : priorResearch, reason),
       schemaPath,
       validate: value => { const v=record(completeResearchSourceLedgers(value)); validatePacketDecisionSupport(record(v.research).advice,packet.evidenceQuality?.missing ?? [],packet.researchCoverage?.topics); return {research:validateEquityResearch(v.research, readableCompanySourceIds(packet), packet.outcomeFeedback, packet.researchCoverage),marketModel:validateCompanyMarketModel(v.marketModel,new Set(readableCompanySourceIds(packet)))} },
