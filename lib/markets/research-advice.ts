@@ -1,11 +1,6 @@
-import { DECISION_SUPPORT_RULES, validateDecisionSupport, type DecisionSupport } from './research-contract.ts'
+import { ADVICE_VALUES, validateAdviceDimensions, DECISION_SUPPORT_RULES, validateDecisionSupport, type DecisionSupport } from './research-contract.ts'
 /** Versioned meanings shared by research, recommendation validation, critics and presentation. */
-export const ADVICE_VALUES = {
-  businessView: ['constructive', 'mixed', 'adverse', 'undetermined'],
-  evidenceSufficiency: ['sufficient', 'limited', 'insufficient'],
-  newEntryStance: ['eligible', 'wait', 'avoid', 'undetermined'],
-  existingPositionStance: ['retain', 'reduce', 'exit', 'undetermined'],
-} as const
+export { ADVICE_VALUES } from './research-contract.ts'
 export type AdviceDimension<K extends keyof typeof ADVICE_VALUES> = {
   value: typeof ADVICE_VALUES[K][number]; reason: string; sourceIds: string[]; changeConditions: string[]
 }
@@ -16,10 +11,7 @@ const object = (value: unknown): Record<string, unknown> => value && typeof valu
 export function validateResearchAdvice(value: unknown, allowedSourceIds?: readonly string[]): ResearchAdvice {
   const advice = object(value)
   if (![1, 2].includes(Number(advice.version))) throw new Error('Missing versioned research advice')
-  for (const [key, values] of Object.entries(ADVICE_VALUES)) {
-    const field = object(advice[key])
-    if (!(values as readonly unknown[]).includes(field.value) || typeof field.reason !== 'string' || field.reason.trim().length < 8 || !Array.isArray(field.sourceIds) || !field.sourceIds.length || field.sourceIds.some(id => typeof id !== 'string' || (allowedSourceIds && !allowedSourceIds.includes(id))) || !Array.isArray(field.changeConditions) || !field.changeConditions.length || field.changeConditions.some(c => typeof c !== 'string' || c.trim().length < 8)) throw new Error(`Invalid cited research advice: ${key}`)
-  }
+  validateAdviceDimensions(advice,allowedSourceIds)
   const result = advice as ResearchAdvice
   if (result.version === 2) {
     result.decisionSupport = validateDecisionSupport(advice.decisionSupport, allowedSourceIds)

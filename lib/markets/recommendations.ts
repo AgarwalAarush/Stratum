@@ -62,6 +62,7 @@ export type DecisionName = {
   gaps: string[]
   causalLinks: string[]
   selectionReason: string
+  researchUpgrade?: {jobId:string;status:string;scheduledFor:string;error:string|null}
 }
 export type DecisionContext = {
   id: string
@@ -434,7 +435,10 @@ export function gateRecommendation(
     )
       reasons.push('Evidence was unavailable at the decision cutoff')
   }
-  const assessment = { assessmentStatus: CAPITAL_ACTIONS.includes(rec.action as CapitalAction) ? 'decision_ready' as const : 'unresolved' as const, evidenceGaps: advice?.decisionSupport?.evidenceGaps ?? [], followUp: advice?.decisionSupport?.followUp }
+  const upgradeFollowUp = name.researchUpgrade ? {trigger:name.researchUpgrade.error ? `Resolve research prerequisite: ${name.researchUpgrade.error}` : 'Complete the scheduled contract-2 ownership investigation',nextCheckAt:name.researchUpgrade.scheduledFor} : {trigger:'Schedule a contract-2 investigation to establish the ownership stance',nextCheckAt:null};
+  const upgradeGap:EvidenceGap = {id:'research-contract-upgrade',kind:'missing_fact',question:'What is the independently supported retain, add, reduce or exit stance under the current research contract?',dataKeys:['research_contract'],blockingActions:[...CAPITAL_ACTIONS],sourceIds:[],followUp:upgradeFollowUp};
+  const needsUpgrade=context.policy==='prospective-v1.7'&&advice?.version!==2;
+  const assessment = { assessmentStatus: CAPITAL_ACTIONS.includes(rec.action as CapitalAction) ? 'decision_ready' as const : 'unresolved' as const, evidenceGaps: advice?.decisionSupport?.evidenceGaps ?? (needsUpgrade?[upgradeGap]:[]), followUp: advice?.decisionSupport?.followUp ?? (needsUpgrade?upgradeFollowUp:undefined) }
   if (!reasons.length) return {...rec,...assessment}
   return {
     ...rec,
