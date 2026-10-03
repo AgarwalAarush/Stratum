@@ -3,6 +3,7 @@ import { renewUnchangedRecommendation } from '../markets/decision-refresh.ts'
 import { canonicalCausalVersions, canonicalResearchNote, primaryResearchPacket } from '../markets/evidence-authority.ts'
 import { RECOMMENDATION_REVIEW_RULES } from '../markets/recommendation-critic.ts'
 import { recommendationDisplayContext } from '../markets/recommendation-display.ts'
+import { recommendationNeedsReview } from '../markets/recommendation-preparation.ts'
 import { admitDiscoveryCandidates, hasValidatedSystemThesis } from '../markets/decision-admission.ts'
 import { createHash, randomUUID } from 'node:crypto'
 import { getSupabaseClient } from './supabase.ts'
@@ -636,8 +637,8 @@ export async function generateDailyRecommendations(
     }
   let summary =
     'Daily evaluation is incomplete. Review the stated gaps before changing capital.'
-  // Do not spend model time pretending a completely blocked context is decision-ready.
-  if (analysisContext.names.every((n) => n.gaps.length > 0)) {
+  // Skip review only when no name has reviewable support; action gates still enforce present facts.
+  if (!analysisContext.names.some(recommendationNeedsReview)) {
     recommendations = analysisContext.names.map((n) =>
       abstention(
         n,
