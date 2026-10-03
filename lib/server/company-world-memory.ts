@@ -30,7 +30,8 @@ export function sanitizeCompanyWorldFeedback(note:Record<string,unknown>,packet:
   }
   sources.push({id:`research:${reportId}:${String(source.source_id)}`,originalSourceId:String(source.source_id),label:String(source.label),url:String(source.url),
    sourceAsOf:typeof document.publishedAt==='string'?document.publishedAt:null,capturedAt:String(document.capturedAt),
-   origin:typeof document.contentHash==='string'?`capture:${document.contentHash}`:worldEvidenceOrigin(String(source.url)),text:document.text,quality:document.quality as ResearchDocument['quality']})
+   // A recapture can change its byte hash without becoming an independent original.
+   origin:worldEvidenceOrigin(String(source.url)),text:document.text,quality:document.quality as ResearchDocument['quality']})
  }
  const modelContent=obj(model.content??model),businessModel:Record<string,unknown>={}
  for(const key of ['businessSummary','businessLines','valueChain','demandDrivers','supplyConstraints','causalChain','marketStructure','competitors','strategicRelationships','crossChecks']) if(modelContent[key])businessModel[key]=modelContent[key]
