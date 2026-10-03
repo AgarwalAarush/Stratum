@@ -1,3 +1,4 @@
+import { startInvestigation } from './research-investigations.ts'
 import { hasCurrentResearchContract, validatePacketDecisionSupport } from '../markets/research-contract.ts'
 import { feedbackSources, loadResearchFeedback } from './research-feedback.ts'
 import { FEEDBACK_RULES, validateFeedbackReview, type FeedbackReview } from '../markets/research-feedback.ts'
@@ -571,6 +572,7 @@ export async function generateEtfResearch(
   reason = 'manual',
   onProgress?: (progress: number, phase: string) => Promise<void>,
   forceFullResearch = false,
+  investigationKey?: string,
 ): Promise<EtfResearchNote> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required for ETF research ownership')
   const supabase = getSupabaseClient()
@@ -581,6 +583,7 @@ export async function generateEtfResearch(
   const packet = await materializeEtfResearchPacket(symbol, ownerId)
   const refresh = await recordResearchRefresh({ownerId,instrument:'etf',packet,priorPacket:previousPacket,prior,reason,conditionsChanged:/kill|entry|invalidation/i.test(reason),forceFullResearch:forceFullResearch || !hasCurrentResearchContract(prior)})
   if (prior && refresh.kind !== 'full_research') { await onProgress?.(100, `Evidence ${refresh.kind}; retained research v${prior.version}`); return prior }
+  await startInvestigation(ownerId,symbol,investigationKey)
   await onProgress?.(45, 'ETF packet assembled')
   const note = await beginResearchVersion({kind:'etf',ownerId,symbol,packetId:packet.id,dataAsOf:packet.dataAsOf,previousId:prior?.id??null})
   const version = note.version

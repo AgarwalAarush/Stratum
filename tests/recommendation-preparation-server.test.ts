@@ -15,6 +15,7 @@ test('source repair queues a durable continuation before freezing and later evid
       return Response.json(reconcile ? {cutoff:'2026-09-30T13:00:00Z',universe:[{symbol:'ABC',selected:true}]} : [])
     }
     if (table==='recommendation_batches') return Response.json({manifest_id:'old-manifest'})
+    if (table==='reserve_research_investigation') return Response.json(true)
     if (table==='agent_jobs') return Response.json(active ? [{payload:{ownerId:owner}}] : [])
     const fixtures:Record<string,unknown>={
       portfolios:[{id:portfolio,owner_id:owner,name:'Manual',kind:'manual',created_at:'2026-01-01'}],

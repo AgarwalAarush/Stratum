@@ -1,3 +1,4 @@
+import { startInvestigation } from './research-investigations.ts'
 import { hasCurrentResearchContract, validatePacketDecisionSupport } from '../markets/research-contract.ts'
 import { COMPANY_STORY_RULES } from '../markets/company-story.ts'
 import { feedbackSources, loadResearchFeedback } from './research-feedback.ts'
@@ -760,7 +761,7 @@ export async function generateFullEquityResearch(
   ownerId: string,
   reason = 'manual',
   onProgress?: (progress: number, phase: string) => Promise<void>,
-  context?: { marketThesisVersionId?: string; worldOpportunityLeadId?: string; forceFullResearch?: boolean },
+  context?: { marketThesisVersionId?: string; worldOpportunityLeadId?: string; forceFullResearch?: boolean; investigationKey?: string },
 ): Promise<EquityResearchNote> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required for research ownership')
   if (await isEtfInstrument(symbol)) {
@@ -794,6 +795,7 @@ export async function generateFullEquityResearch(
   const refresh = await recordResearchRefresh({ownerId,instrument:'equity',packet:analysisPacket,priorPacket:needsIndependent ? null : previousPacket ? primaryResearchPacket(previousPacket as object) : null,prior:needsIndependent ? null : priorResearch,reason:needsIndependent ? 'Initial independent primary-evidence coverage; legacy World context excluded' : reason,conditionsChanged: /kill|entry|invalidation/i.test(reason),forceFullResearch:context?.forceFullResearch || !hasCurrentResearchContract(priorResearch)})
   if (record(analysisPacket).researchRefresh) Object.assign(packet,{researchRefresh:record(analysisPacket).researchRefresh})
   if (priorResearch && refresh.kind !== 'full_research') { await onProgress?.(100, `Evidence ${refresh.kind}; retained research v${priorResearch.version}`); return priorResearch }
+  await startInvestigation(ownerId,symbol,context?.investigationKey)
   await onProgress?.(45, 'Company packet assembled')
   packet.researchCoverage = await collectCompanyResearchCoverage(packet,{onProgress})
   for (const document of packet.researchCoverage.documents) {

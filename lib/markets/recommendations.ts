@@ -316,6 +316,7 @@ export function gateRecommendation(
   const increase = rec.action === 'buy' || rec.action === 'add'
   const reducing = rec.action === 'trim' || rec.action === 'sell'
   const advice = readResearchAdvice(obj(name.research?.content).advice)
+  if (capitalAction && context.policy === 'prospective-v1.7' && advice?.version !== 2) reasons.push('Current research contract upgrade is required before an ownership decision')
   const packetEvidence = context.evidence.find(e => e.kind === 'company_packet' && name.sources.includes(e.id))
   const coverage = obj(obj(packetEvidence?.value).packet).researchCoverage as ResearchCoverage | undefined
   if (advice?.version !== 2 && coverage && hasDecisiveCoverageGap(coverage)) {
