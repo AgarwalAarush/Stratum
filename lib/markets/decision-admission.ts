@@ -1,6 +1,7 @@
+import { hasCurrentResearchContract } from './research-contract.ts'
 type Row = Record<string, unknown>
-export function needsDecisionResearchRefresh(name: { gaps: string[]; entryGaps?: string[] }) {
-  return name.gaps.some(g => /Research missing|Research predates|ETF holdings|Missing (company|fund) evidence/.test(g)) ||
+export function needsDecisionResearchRefresh(name: { gaps: string[]; entryGaps?: string[]; research?: Record<string, unknown> | null }) {
+  return !hasCurrentResearchContract(name.research?.content) || name.gaps.some(g => /Research missing|Research predates|Research requires independent|ETF holdings|Missing (company|fund) evidence/.test(g)) ||
     Boolean(name.entryGaps?.some(g => /Research entry assumptions/.test(g)))
 }
 const obj = (value: unknown): Row =>

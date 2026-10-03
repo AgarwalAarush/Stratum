@@ -177,7 +177,7 @@ test('generation schema constrains citations and partial advice before synthesis
  assert.equal(at(rows[0],['properties','sourceIds','maxItems']),0)
  assert.deepEqual(at(rows[0],['properties','status','enum']),['unresolved'])
  assert.deepEqual(at(rows[1],['properties','sourceIds','items','enum']),['primary'])
- assert.deepEqual(at(schema,[...root,'advice','properties','evidenceSufficiency','properties','value','enum']),['limited','insufficient'])
+ assert.deepEqual(at(schema,[...root,'advice','properties','evidenceSufficiency','properties','value','enum']),['sufficient','limited','insufficient'])
  assert.equal(at(schema,[...root,'advice','properties','evidenceSufficiency','properties','sourceIds','minItems']),1)
  assert.deepEqual(at(schema,[...root,'advice','properties','evidenceSufficiency','properties','sourceIds','items']),{$ref:'#/$defs/capturedSourceId'})
  assert.deepEqual(at(schema,['$defs','capturedSourceId','enum']),['primary'])

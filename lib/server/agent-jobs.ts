@@ -850,7 +850,7 @@ async function executeJob(
     return runWorldThinker({
       ownerReviewItemId: typeof job.payload.ownerReviewItemId === 'string' ? job.payload.ownerReviewItemId : undefined,
       trigger, eventClusterIds, coverageFrontierIds, agentJobId: job.id, canonicalProjection: process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true',
-      worldOpportunityLeadId: typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : undefined,
+        worldOpportunityLeadId: typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : undefined,
       researchNoteId: typeof job.payload.researchNoteId === 'string' ? job.payload.researchNoteId : undefined,
       symbol: typeof job.payload.symbol === 'string' ? job.payload.symbol : undefined,
     })
@@ -1025,6 +1025,7 @@ async function executeJob(
       String(job.payload.reason ?? 'manual'),
       reportProgress,
       {
+        forceFullResearch: job.payload.forceFullResearch === true,
         worldOpportunityLeadId: typeof job.payload.worldOpportunityLeadId === 'string' ? job.payload.worldOpportunityLeadId : undefined,
         marketThesisVersionId: typeof job.payload.marketThesisVersionId === 'string'
           ? job.payload.marketThesisVersionId
@@ -1051,6 +1052,7 @@ async function executeJob(
       ownerId,
       String(job.payload.reason ?? 'manual'),
       reportProgress,
+      job.payload.forceFullResearch === true,
     )
     return { researchNoteId: note.id, symbol, version: note.version, dataAsOf: note.dataAsOf, instrumentType: 'etf' }
   }

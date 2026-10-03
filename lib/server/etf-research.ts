@@ -1,3 +1,6 @@
+import { hasCurrentResearchContract, validatePacketDecisionSupport } from '../markets/research-contract.ts'
+import { fetchResearchBaseline, recordResearchRefresh } from './research-refresh.ts'
+import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchNarrative, validateResearchAdvice, type ResearchAdvice } from '../markets/research-advice.ts'
 import { randomUUID } from 'node:crypto'
 import { parseStateStreetHoldings } from './etf-workbook.ts'
 import { fetchVanEckFund } from './vaneck-holdings.ts'
@@ -473,8 +476,13 @@ export function validateEtfResearch(value: unknown, packet?: EtfResearchPacket):
       ? [{ field, previous: String(change.previous ?? ''), current: String(change.current ?? ''), explanation: String(change.explanation ?? '') }]
       : []
   })
-  if (normalizedChanges.length === 0) throw new Error('ETF research revision must contain at least one material evidence change')
+  if (normalizedChanges.length > 8 || normalizedChanges.length !== changes.length || normalizedChanges.some(c => !c.explanation.trim())) throw new Error('Invalid ETF research revision changes')
+  if (!['initial', 'more_constructive', 'less_constructive', 'unchanged'].includes(String(revision.opinionChange)) || !String(revision.summary ?? '').trim()) throw new Error('Invalid ETF research revision comparison')
+  const advice = output.advice || packet ? validateResearchAdvice(output.advice, Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []) : null
+  if (packet) validatePacketDecisionSupport(advice,packet.evidenceQuality?.missing ?? [])
+  validateResearchNarrative(advice, sections.filter(s => s.id === 'verdict').map(s => String(s.content ?? '')).join('\n'))
   return {
+    advice,
     formalRating, entryAction, investmentThesis: requiredString('investmentThesis'), keyDebate: requiredString('keyDebate'),
     fastestKillSignal: requiredString('fastestKillSignal'), confidence,
     revision: {
@@ -549,13 +557,17 @@ export async function generateEtfResearch(
   ownerId: string,
   reason = 'manual',
   onProgress?: (progress: number, phase: string) => Promise<void>,
+  forceFullResearch = false,
 ): Promise<EtfResearchNote> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required for ETF research ownership')
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const prior = await fetchLatestCompletedEtfResearch(ownerId, symbol)
   await onProgress?.(15, prior ? `Refreshing version ${prior.version} issuer evidence` : 'Collecting issuer holdings')
+  const previousPacket=prior ? await fetchResearchBaseline(ownerId,'etf',prior.id) : null
   const packet = await materializeEtfResearchPacket(symbol, ownerId)
+  const refresh = await recordResearchRefresh({ownerId,instrument:'etf',packet,priorPacket:previousPacket,prior,reason,conditionsChanged:/kill|entry|invalidation/i.test(reason),forceFullResearch:forceFullResearch || !hasCurrentResearchContract(prior)})
+  if (prior && refresh.kind !== 'full_research') { await onProgress?.(100, `Evidence ${refresh.kind}; retained research v${prior.version}`); return prior }
   await onProgress?.(45, 'ETF packet assembled')
   const version = await nextVersion('etf_research_notes', ownerId, symbol)
   const { data: note, error: createError } = await supabase.from('etf_research_notes').insert({
