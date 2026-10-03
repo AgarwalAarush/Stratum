@@ -1429,6 +1429,7 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
       p_error:null,p_duration_ms:Date.now()-startedAt,p_run_after:null,
     })
     if(transition.error) throw new Error(`Unable to persist job transition: ${transition.error.message}`)
+    if(['generate-company-research','generate-etf-research','event-refresh-company-research'].includes(job.job_type)){const released=await supabase.from('research_investigation_slots').delete().eq('job_id',job.id).is('started_at',null);if(released.error)throw new Error(`Unable to release unused investigation capacity: ${released.error.message}`)}
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     const reason = blockingReason(message)
