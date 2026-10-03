@@ -1,3 +1,5 @@
+import { startInvestigation } from './research-investigations.ts'
+import { hasCurrentResearchContract, validatePacketDecisionSupport } from '../markets/research-contract.ts'
 import { feedbackSources, loadResearchFeedback } from './research-feedback.ts'
 import { FEEDBACK_RULES, validateFeedbackReview, type FeedbackReview } from '../markets/research-feedback.ts'
 import { beginResearchVersion, publishResearchVersion, failResearchVersion } from './research-lifecycle.ts'
@@ -486,6 +488,7 @@ export function validateEtfResearch(value: unknown, packet?: EtfResearchPacket):
   if (normalizedChanges.length > 8 || normalizedChanges.length !== changes.length || normalizedChanges.some(c => !c.explanation.trim())) throw new Error('Invalid ETF research revision changes')
   if (!['initial', 'more_constructive', 'less_constructive', 'unchanged'].includes(String(revision.opinionChange)) || !String(revision.summary ?? '').trim()) throw new Error('Invalid ETF research revision comparison')
   const advice = output.advice || packet ? validateResearchAdvice(output.advice, Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []) : null
+  if (packet) validatePacketDecisionSupport(advice,packet.evidenceQuality?.missing ?? [])
   validateResearchNarrative(advice, sections.filter(s => s.id === 'verdict').map(s => String(s.content ?? '')).join('\n'))
   return {
     feedbackReview: packet?.outcomeFeedback ? validateFeedbackReview(output.feedbackReview, packet.outcomeFeedback) : null,
@@ -568,6 +571,8 @@ export async function generateEtfResearch(
   ownerId: string,
   reason = 'manual',
   onProgress?: (progress: number, phase: string) => Promise<void>,
+  forceFullResearch = false,
+  investigationKey?: string,
 ): Promise<EtfResearchNote> {
   if (!validOwnerId(ownerId)) throw new Error('A persisted authenticated user is required for ETF research ownership')
   const supabase = getSupabaseClient()
@@ -576,8 +581,9 @@ export async function generateEtfResearch(
   await onProgress?.(15, prior ? `Refreshing version ${prior.version} issuer evidence` : 'Collecting issuer holdings')
   const previousPacket = prior ? await fetchResearchBaseline(ownerId, 'etf', prior.id) : null
   const packet = await materializeEtfResearchPacket(symbol, ownerId)
-  const refresh = await recordResearchRefresh({ownerId,instrument:'etf',packet,priorPacket:previousPacket,prior,reason,conditionsChanged:/kill|entry|invalidation/i.test(reason)})
+  const refresh = await recordResearchRefresh({ownerId,instrument:'etf',packet,priorPacket:previousPacket,prior,reason,conditionsChanged:/kill|entry|invalidation/i.test(reason),forceFullResearch:forceFullResearch || !hasCurrentResearchContract(prior)})
   if (prior && refresh.kind !== 'full_research') { await onProgress?.(100, `Evidence ${refresh.kind}; retained research v${prior.version}`); return prior }
+  await startInvestigation(ownerId,symbol,investigationKey)
   await onProgress?.(45, 'ETF packet assembled')
   const note = await beginResearchVersion({kind:'etf',ownerId,symbol,packetId:packet.id,dataAsOf:packet.dataAsOf,previousId:prior?.id??null})
   const version = note.version

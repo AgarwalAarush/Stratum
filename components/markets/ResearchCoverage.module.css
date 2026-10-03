@@ -1,0 +1,21 @@
+.coverage { margin: 24px 0; border: 1px solid var(--market-border); border-radius: 4px; padding: 20px; color: var(--market-text); }
+.coverage header { display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+.coverage h2 { font-size: 21px; font-weight: 500; letter-spacing: -.02em; }
+.eyebrow { font-family: var(--font-ibm-plex-mono), monospace; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--market-text-muted); margin-bottom: 7px; }
+.coverage header>p,.note,.coverage footer { font-size: 12px; color: var(--market-text-muted); line-height: 1.6; }
+.note { margin: 12px 0 18px; }
+.tableWrap { overflow-x: auto; }
+.coverage table { border-collapse: collapse; width: 100%; font-size: 12px; text-align: left; }
+.coverage th,.coverage td { border-bottom: 1px solid var(--market-border); padding: 10px 12px 10px 0; vertical-align: top; }
+.coverage thead th { font-weight: 400; color: var(--market-text-muted); font-size: 11px; white-space: nowrap; }
+.coverage tbody th { font-weight: 500; }
+.coverage button { cursor: pointer; text-align: left; }
+.coverage button:hover,.coverage a:hover { text-decoration: underline; }
+.coverage button[aria-pressed='true'] { font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
+.controls { display: flex; gap: 20px; align-items: center; margin-top: 20px; padding: 12px 0; font-size: 12px; }
+.controls span { flex: 1; color: var(--market-text-muted); }
+.controls label { display: flex; gap: 7px; }
+.coverage details p { max-width: 360px; margin-top: 8px; overflow-wrap: anywhere; font-weight: 400; }
+.coverage td:last-child { max-width: 520px; }
+.more { font-size: 12px; margin-top: 14px; }
+.coverage footer { margin-top: 16px; }

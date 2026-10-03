@@ -9,7 +9,8 @@ import { fetchPersistedFmpMarketItems } from '@/lib/data/fmp-intelligence'
 import { mergeMarketNews } from '@/lib/markets/news'
 import { fetchEquityResearchLibrary, fetchEtfResearchLibrary } from '@/lib/server/research-library'
 import { cachedFetchWithFallback } from '@/lib/server/cache'
-import { fetchPortfolioResearchCoverage } from '@/lib/server/portfolio-research-seeding'
+import { loadResearchCoverage, researchCoverageResponse } from '@/lib/server/interest-coverage'
+import { ResearchCoverage } from '@/components/markets/ResearchCoverage'
 import { fetchResearchJobs } from '@/lib/server/research-jobs'
 import styles from './research.module.css'
 
@@ -39,9 +40,10 @@ async function ResearchLibrary({ ownerId }: { ownerId: string }) {
         {[["candidates", "Candidate scout"], ["explore", "Explore"], ["screener", "Screener"], ["theses", "Theses"], ["review", "Review queue"], ["biotech", "Biotech"]].map(([path,label]) => <Link key={path} href={`/markets/${path}`}>{label}</Link>)}
       </nav>
       <div className={styles.context}>
-        <Suspense fallback={<SectionLoading label="Portfolio coverage" />}><CoverageSection ownerId={ownerId} /></Suspense>
+
         <Suspense fallback={<SectionLoading label="Research queue" />}><QueueSection ownerId={ownerId} /></Suspense>
       </div>
+      <Suspense fallback={<SectionLoading label="Research coverage" />}><CoverageSection ownerId={ownerId} /></Suspense>
       {library ? <ResearchLibraryGrid notes={notes} /> : <p className={styles.unavailable} role="alert">Saved research could not be loaded. Use Refresh to try again.</p>}
       <Suspense fallback={<SectionLoading label="Supporting evidence" />}><SupportingEvidence /></Suspense>
     </div>
@@ -54,19 +56,8 @@ async function QueueSection({ ownerId }: { ownerId: string }) {
 }
 
 async function CoverageSection({ ownerId }: { ownerId: string }) {
-  const coverage = await fetchPortfolioResearchCoverage(ownerId).catch(() => null)
-  if (!coverage) return <p className="py-4 text-sm text-[var(--text-muted)]">Portfolio coverage is temporarily unavailable. Refresh to retry.</p>
-  if (!coverage.ownedSymbols.length) return null
-  return <section className={styles.coverage} aria-labelledby="portfolio-research-title">
-    <div>
-      <h2 id="portfolio-research-title">Portfolio-first coverage</h2>
-      <p>Owned first, then watchlists. Peers remain research leads.</p>
-    </div>
-    <div>
-      <strong>{coverage.ownedSymbols.filter((symbol) => coverage.coveredSymbols.includes(symbol)).length}/{coverage.ownedSymbols.length} owned researched</strong>
-      <p>{coverage.targets.length ? `Next: ${coverage.targets.map((target) => target.symbol).join(' · ')}` : 'Owned names are covered or already in the research queue.'}</p>
-    </div>
-  </section>
+  const coverage = await loadResearchCoverage(ownerId).then(researchCoverageResponse).catch(()=>null)
+  return <ResearchCoverage initial={coverage} />
 }
 
 async function SupportingEvidence() {

@@ -1,3 +1,4 @@
+import { CAPITAL_ACTIONS, type CapitalAction, type EvidenceGap } from './research-contract.ts'
 import { hasDecisiveCoverageGap, type ResearchCoverage } from './research-coverage.ts'
 import { COMPANY_FORECAST_METRICS } from './forecast-metrics.ts'
 import { readResearchAdvice } from './research-advice.ts'
@@ -16,7 +17,7 @@ export const RECOMMENDATION_ACTIONS = [
 export type RecommendationAction = (typeof RECOMMENDATION_ACTIONS)[number]
 // v1.1 corrects thesis schema/provenance. New manifests retain the original
 // abstention edition rather than rewriting its frozen inputs after repair.
-export const RECOMMENDATION_POLICY = 'prospective-v1.6'
+export const RECOMMENDATION_POLICY = 'prospective-v1.7'
 export type EvidenceRef = {
   id: string
   kind: string
@@ -61,6 +62,7 @@ export type DecisionName = {
   gaps: string[]
   causalLinks: string[]
   selectionReason: string
+  researchUpgrade?: {jobId:string;status:string;scheduledFor:string;error:string|null}
 }
 export type DecisionContext = {
   id: string
@@ -129,6 +131,9 @@ export type Recommendation = {
   }
   alternative: string
   gateReasons: string[]
+  assessmentStatus?: 'decision_ready' | 'unresolved' | 'blocked'
+  evidenceGaps?: EvidenceGap[]
+  followUp?: { trigger: string; nextCheckAt: string | null }
   proposedAction?: RecommendationAction
 }
 const obj = (v: unknown): Record<string, unknown> =>
@@ -312,9 +317,10 @@ export function gateRecommendation(
   const increase = rec.action === 'buy' || rec.action === 'add'
   const reducing = rec.action === 'trim' || rec.action === 'sell'
   const advice = readResearchAdvice(obj(name.research?.content).advice)
+  if (capitalAction && context.policy === 'prospective-v1.7' && advice?.version !== 2) reasons.push('Current research contract upgrade is required before an ownership decision')
   const packetEvidence = context.evidence.find(e => e.kind === 'company_packet' && name.sources.includes(e.id))
   const coverage = obj(obj(packetEvidence?.value).packet).researchCoverage as ResearchCoverage | undefined
-  if (coverage && hasDecisiveCoverageGap(coverage)) {
+  if (advice?.version !== 2 && coverage && hasDecisiveCoverageGap(coverage)) {
     if (increase) reasons.push('Decisive company research coverage remains unresolved')
     if (['hold','trim','sell'].includes(rec.action)) {
       const justification=obj(obj(obj(name.research?.content).coverageReview).actionJustifications)[rec.action]
@@ -322,7 +328,7 @@ export function gateRecommendation(
     }
   }
   if (advice) {
-    if (increase && (advice.newEntryStance.value !== 'eligible' || advice.evidenceSufficiency.value !== 'sufficient')) reasons.push('Research does not establish sufficient evidence for eligible new risk')
+    if (increase && (advice.newEntryStance.value !== 'eligible' || advice.version === 1 && advice.evidenceSufficiency.value !== 'sufficient')) reasons.push('Research does not establish sufficient evidence for eligible new risk')
     if (rec.action === 'hold' && advice.existingPositionStance.value !== 'retain') reasons.push('Hold requires an affirmative existing-position retain stance')
     if (rec.action === 'sell' && advice.existingPositionStance.value !== 'exit' && name.thesis?.status !== 'invalidated') reasons.push('Sell conflicts with the existing-position stance')
     if (rec.action === 'trim' && !['reduce', 'exit'].includes(advice.existingPositionStance.value) && name.thesis?.status !== 'invalidated') reasons.push('Trim conflicts with the existing-position stance')
@@ -331,7 +337,16 @@ export function gateRecommendation(
   if (capitalAction) {
     // Shared macro/World gaps constrain adding risk, but cannot veto an
     // independently supported exit or hold in another instrument/account.
-    reasons.push(...name.gaps, ...(increase ? context.gaps : []))
+    const support = advice?.version === 2 ? advice.decisionSupport?.actionSupport[rec.action as CapitalAction] : undefined
+    if (advice?.version === 2 && support?.status !== 'supported') reasons.push('Research does not independently support this action')
+    if (support && !support.sourceIds.some(id => rec.sourceIds.includes(id))) reasons.push('Decision must cite its independently supported action grounds')
+    const nameGaps = name.gaps.filter(gap => {
+      const prefix = gap.match(/^Missing (?:company|fund) evidence: (.+)$/)?.[1]
+      if (!prefix || advice?.version !== 2) return true
+      const classified = advice.decisionSupport?.evidenceGaps.filter(g => g.dataKeys.includes(prefix)) ?? []
+      return !classified.length || classified.some(g => g.blockingActions.includes(rec.action as CapitalAction))
+    })
+    reasons.push(...nameGaps, ...(increase ? context.gaps : []))
     if (
       !name.quote ||
       !Number.isFinite(Date.parse(name.quote.asOf)) ||
@@ -392,7 +407,7 @@ export function gateRecommendation(
   }
   if (reducing) {
     const researchContent = obj(name.research?.content)
-    const supportedExit = name.thesis?.status === 'invalidated' || researchContent.formalRating === 'SELL'
+    const supportedExit = name.thesis?.status === 'invalidated' || (advice?.version === 2 ? advice.decisionSupport?.actionSupport[rec.action as CapitalAction]?.status === 'supported' : researchContent.formalRating === 'SELL')
     if (!rec.forecasts.length && !supportedExit)
       reasons.push('Risk reduction requires evidenced thesis invalidation, exit research, or a measurable risk forecast')
     const target = rec.entry.targetWeightPct,
@@ -406,7 +421,7 @@ export function gateRecommendation(
     )
       reasons.push('Reduction must lower existing exposure; sell targets zero')
   }
-  if (rec.action === 'hold' && (name.thesis?.status === 'invalidated' || ['SELL', 'NOT_RATED'].includes(String(obj(name.research?.content).formalRating))))
+  if (rec.action === 'hold' && (name.thesis?.status === 'invalidated' || advice?.version !== 2 && ['SELL', 'NOT_RATED'].includes(String(obj(name.research?.content).formalRating))))
     reasons.push('Affirmative hold conflicts with thesis invalidation, exit research, or an unrated evidence case')
   for (const id of [
     ...rec.sourceIds,
@@ -420,9 +435,15 @@ export function gateRecommendation(
     )
       reasons.push('Evidence was unavailable at the decision cutoff')
   }
-  if (!reasons.length) return rec
+  const upgradeFollowUp = name.researchUpgrade ? {trigger:name.researchUpgrade.error ? `Resolve research prerequisite: ${name.researchUpgrade.error}` : 'Complete the scheduled contract-2 ownership investigation',nextCheckAt:name.researchUpgrade.scheduledFor} : {trigger:'Schedule a contract-2 investigation to establish the ownership stance',nextCheckAt:null};
+  const upgradeGap:EvidenceGap = {id:'research-contract-upgrade',kind:'missing_fact',question:'What is the independently supported retain, add, reduce or exit stance under the current research contract?',dataKeys:['research_contract'],blockingActions:[...CAPITAL_ACTIONS],sourceIds:[],followUp:upgradeFollowUp};
+  const needsUpgrade=context.policy==='prospective-v1.7'&&advice?.version!==2;
+  const assessment = { assessmentStatus: CAPITAL_ACTIONS.includes(rec.action as CapitalAction) ? 'decision_ready' as const : 'unresolved' as const, evidenceGaps: advice?.decisionSupport?.evidenceGaps ?? (needsUpgrade?[upgradeGap]:[]), followUp: advice?.decisionSupport?.followUp ?? (needsUpgrade?upgradeFollowUp:undefined) }
+  if (!reasons.length) return {...rec,...assessment}
   return {
     ...rec,
+    ...assessment,
+    assessmentStatus: 'blocked',
     proposedAction: rec.action,
     sourceIds: rec.sourceIds.filter(id => context.evidence.some(e => e.id === id && Number.isFinite(Date.parse(e.availableAt ?? '')) && Date.parse(e.availableAt ?? '') <= Date.parse(context.cutoff))),
     action: 'no_trade',

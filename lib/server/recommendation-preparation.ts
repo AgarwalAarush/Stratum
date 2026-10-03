@@ -1,11 +1,12 @@
 import { decisionContextSignature } from '../markets/decision-refresh.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
-import { recommendationResearchTargets } from '../markets/recommendation-preparation.ts'
+import { seedDecisionResearch } from './interest-coverage.ts'
+import { investigationDate } from './research-investigations.ts'
 import { isRobinhoodPortfolioSyncConfigured } from './robinhood-portfolio-sync.ts'
 import { assembleDecisionContext, contentHash, generateDailyRecommendations, investmentDb, record } from './recommendations.ts'
 import type { AgentJobType } from './agent-jobs.ts'
 
-type Enqueue = (type: AgentJobType, payload: Record<string, unknown>, key: string) => Promise<{id:string;deduplicated:boolean}>
+type Enqueue = (type: AgentJobType, payload: Record<string, unknown>, key: string, options?: {runAfter?:Date}) => Promise<{id:string;deduplicated:boolean}>
 
 /** Probe without persisting, repair sources, then freeze a new immutable edition. */
 export async function prepareDailyRecommendations(ownerId: string, editionKey: string, enqueue: Enqueue, now = new Date()) {
@@ -21,12 +22,14 @@ export async function prepareDailyRecommendations(ownerId: string, editionKey: s
     await queue('sync-robinhood-portfolio',{slot:'final',ownerId},`recommendation-broker:${ownerId}:${context.date}:${editionKey}`)
   if (!context.market || stale(record(context.market).data_as_of))
     await queue('refresh-market-screener',{mode:'daily'},`recommendation-market:${context.date}:${editionKey}`)
-  // Reused research jobs retain their actual status. A terminal failure does
-  // not hold the account indefinitely; its affected name remains blocked.
-  for (const target of recommendationResearchTargets(context))
-    await queue(target.instrumentType === 'etf' ? 'generate-etf-research' : 'generate-company-research',
-      {ownerId,symbol:target.symbol,reason:'Daily decision evidence gap'},
-      `recommendation-research:${ownerId}:${target.symbol}:${context.date}:${String(target.researchId ?? 'missing')}`)
+  // Dated future upgrades remain visible without holding today's edition for days.
+  const plan = await seedDecisionResearch(ownerId,enqueue,now,{refreshMembership:false,backfillAll:true})
+  dependencies.push(...plan.queued.filter(j=>j.date===investigationDate(now)).map(j=>j.jobId))
+  const pending = await investmentDb().from('agent_jobs').select('id,run_after').contains('payload',{ownerId})
+    .in('job_type',['generate-company-research','generate-etf-research','event-refresh-company-research'])
+    .in('status',['queued','running'])
+  if(pending.error) throw new Error(pending.error.message)
+  for(const job of pending.data) if(investigationDate(new Date(job.run_after))<=investigationDate(now)&&!dependencies.includes(job.id)) dependencies.push(job.id)
   if (!dependencies.length) return generateDailyRecommendations(ownerId,now,editionKey)
   const db = investmentDb()
   const priority = await db.from('agent_jobs').update({priority:12}).in('id',dependencies).eq('status','queued').gt('priority',12)

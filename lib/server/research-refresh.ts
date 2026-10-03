@@ -5,9 +5,9 @@ import { runCodexJson } from './codex-exec.ts'
 import { getSupabaseClient } from './supabase.ts'
 import type { CompanyPacket, EquityResearchNote, EtfResearchNote, EtfResearchPacket } from '../markets/types.ts'
 const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}
-export async function recordResearchRefresh(input: {ownerId:string;instrument:'equity'|'etf';packet:CompanyPacket|EtfResearchPacket;priorPacket:unknown;prior:EquityResearchNote|EtfResearchNote|null;reason:string;conditionsChanged?:boolean}): Promise<RefreshDecision> {
+export async function recordResearchRefresh(input: {ownerId:string;instrument:'equity'|'etf';packet:CompanyPacket|EtfResearchPacket;priorPacket:unknown;prior:EquityResearchNote|EtfResearchNote|null;reason:string;conditionsChanged?:boolean;forceFullResearch?:boolean}): Promise<RefreshDecision> {
   const db=getSupabaseClient();if(!db)throw new Error('Supabase service credentials are not configured')
-  const decision=classifyResearchRefresh({priorPacket: input.priorPacket,packet:input.packet,instrument:input.instrument,onDemand:input.reason.startsWith('manual'),priorGeneratedAt:input.prior?.generatedAt,conditionsChanged:input.conditionsChanged})
+  const decision=classifyResearchRefresh({priorPacket: input.priorPacket,packet:input.packet,instrument:input.instrument,onDemand:input.reason.startsWith('manual'),priorGeneratedAt:input.prior?.generatedAt,conditionsChanged:input.conditionsChanged,forceFullResearch:input.forceFullResearch})
   let readiness: 'complete'|'partial'|'blocked' = 'complete'
   let update: unknown=null
   if (decision.kind==='revalidate' && input.prior) {

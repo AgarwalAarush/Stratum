@@ -76,7 +76,7 @@ export function companyResearchOutputSchema(template: Schema, packet: CompanyPac
     if(topic.unresolvedQuestions.length || !topic.sourceIds.length)object(fields.limitations).minLength=20
     return specific
   })}
-  if(hasDecisiveCoverageGap(coverage)){
+  if(object(advice.version).enum && (object(advice.version).enum as unknown[]).includes(1) && hasDecisiveCoverageGap(coverage)){
     object(object(advice.evidenceSufficiency).properties).value={type:'string',enum:['limited','insufficient']}
     object(object(advice.newEntryStance).properties).value={type:'string',enum:['wait','avoid','undetermined']}
   }

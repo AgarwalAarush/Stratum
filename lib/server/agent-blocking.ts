@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
 import { inspectCorpusDisk } from './world-corpus.ts'
 
-export function blockingReason(message: string): 'configuration' | 'capacity' | 'adapter' | 'retired' | null {
+export function blockingReason(message: string): 'configuration' | 'capacity' | 'adapter' | 'retired' | 'research_capacity' | null {
+  if (/Daily research investigation capacity/i.test(message)) return 'research_capacity'
   if (/legacy belief writer retired/i.test(message)) return 'retired'
   if (/safety limit|insufficient.*disk|disk.*critical/i.test(message)) return 'capacity'
   if (/no.*adapter|unsupported.*adapter|adapter.*not.*configured|no.*holdings.*adapter/i.test(message)) return 'adapter'
@@ -9,6 +10,7 @@ export function blockingReason(message: string): 'configuration' | 'capacity' | 
   return null
 }
 export async function blockingFingerprint(reason: string): Promise<string> {
+  if (reason === 'research_capacity') return new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'})
   if (reason === 'retired') return 'git-world-v1'
   const state = reason === 'capacity' ? { disk: (await inspectCorpusDisk()).state } : {
     release: process.env.STRATUM_RELEASE_SHA ?? 'unknown',

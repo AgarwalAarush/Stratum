@@ -209,13 +209,14 @@
         "businessView",
         "evidenceSufficiency",
         "newEntryStance",
-        "existingPositionStance"
+        "existingPositionStance",
+        "decisionSupport"
       ],
       "properties": {
         "version": {
           "type": "integer",
           "enum": [
-            1
+            2
           ]
         },
         "businessView": {
@@ -369,6 +370,396 @@
               "items": {
                 "type": "string",
                 "minLength": 8
+              }
+            }
+          }
+        },
+        "decisionSupport": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "evidenceGaps",
+            "actionSupport",
+            "scenarios",
+            "followUp"
+          ],
+          "properties": {
+            "evidenceGaps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "question",
+                  "kind",
+                  "dataKeys",
+                  "blockingActions",
+                  "sourceIds",
+                  "followUp"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 3
+                  },
+                  "question": {
+                    "type": "string",
+                    "minLength": 8
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "missing_fact",
+                      "capture_failure",
+                      "undisclosed_metric",
+                      "future_uncertainty"
+                    ]
+                  },
+                  "dataKeys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "blockingActions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "buy",
+                        "add",
+                        "hold",
+                        "trim",
+                        "sell"
+                      ]
+                    }
+                  },
+                  "sourceIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "followUp": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "trigger",
+                      "nextCheckAt"
+                    ],
+                    "properties": {
+                      "trigger": {
+                        "type": "string",
+                        "minLength": 8
+                      },
+                      "nextCheckAt": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "actionSupport": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "buy",
+                "add",
+                "hold",
+                "trim",
+                "sell"
+              ],
+              "properties": {
+                "buy": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "reason",
+                    "sourceIds",
+                    "reviewedGapIds",
+                    "reversalConditions"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "supported",
+                        "unresolved"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 40
+                    },
+                    "sourceIds": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reviewedGapIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reversalConditions": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "minLength": 8
+                      }
+                    }
+                  }
+                },
+                "add": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "reason",
+                    "sourceIds",
+                    "reviewedGapIds",
+                    "reversalConditions"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "supported",
+                        "unresolved"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 40
+                    },
+                    "sourceIds": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reviewedGapIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reversalConditions": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "minLength": 8
+                      }
+                    }
+                  }
+                },
+                "hold": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "reason",
+                    "sourceIds",
+                    "reviewedGapIds",
+                    "reversalConditions"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "supported",
+                        "unresolved"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 40
+                    },
+                    "sourceIds": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reviewedGapIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reversalConditions": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "minLength": 8
+                      }
+                    }
+                  }
+                },
+                "trim": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "reason",
+                    "sourceIds",
+                    "reviewedGapIds",
+                    "reversalConditions"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "supported",
+                        "unresolved"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 40
+                    },
+                    "sourceIds": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reviewedGapIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reversalConditions": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "minLength": 8
+                      }
+                    }
+                  }
+                },
+                "sell": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "reason",
+                    "sourceIds",
+                    "reviewedGapIds",
+                    "reversalConditions"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "supported",
+                        "unresolved"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 40
+                    },
+                    "sourceIds": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reviewedGapIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reversalConditions": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "minLength": 8
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "scenarios": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 3,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "assumptions",
+                  "implication",
+                  "sourceIds"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "enum": [
+                      "base",
+                      "downside",
+                      "upside"
+                    ]
+                  },
+                  "assumptions": {
+                    "type": "string",
+                    "minLength": 8
+                  },
+                  "implication": {
+                    "type": "string",
+                    "minLength": 8
+                  },
+                  "sourceIds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "followUp": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "trigger",
+                "nextCheckAt"
+              ],
+              "properties": {
+                "trigger": {
+                  "type": "string",
+                  "minLength": 8
+                },
+                "nextCheckAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
               }
             }
           }

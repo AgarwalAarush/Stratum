@@ -17,12 +17,13 @@ function substantivePacket(packet: Record<string, unknown>, instrument: 'equity'
     periodicFilings: Array.isArray(packet.filings) ? packet.filings.filter(f=>/10-[KQ]/i.test(String(object(f).form ?? object(f).title))) : [],
     decisiveEvents: Array.isArray(packet.events) ? packet.events.filter(e=>/earnings|results|guidance|acquir|merg|divest|spin-off|bankrupt|restatement|product launch|launch|deployment|commercialization|approval|authorization|capital raise|secondary offering|share (?:buyback|issuance)|stock split/i.test(String(object(e).title))) : [] }
 }
-export function classifyResearchRefresh(input: {priorPacket: unknown; packet: unknown; instrument: 'equity' | 'etf'; onDemand?: boolean; priorGeneratedAt?: string; now?: Date; conditionsChanged?: boolean; forecastChanged?: boolean}): RefreshDecision {
+export function classifyResearchRefresh(input: {priorPacket: unknown; packet: unknown; instrument: 'equity' | 'etf'; onDemand?: boolean; priorGeneratedAt?: string; now?: Date; conditionsChanged?: boolean; forecastChanged?: boolean; forceFullResearch?: boolean}): RefreshDecision {
   const current=object(input.packet), prior=object(input.priorPacket)
   const sources = Array.isArray(current.sources) ? current.sources.map(s=>String(object(s).url ?? '')).filter(Boolean) : []
   const substantive = substantivePacket(current,input.instrument)
   const evidenceHash=semanticHash(substantive)
   const decision = (kind: RefreshKind, ...reasons: string[]): RefreshDecision => ({kind,reasons,sourceReferences:sources,evidenceHash})
+  if (input.forceFullResearch) return decision('full_research','Research contract upgrade requires full regeneration')
   if (!Object.keys(prior).length) return decision('full_research','Initial evidence coverage')
   if (input.onDemand) return decision('full_research','Owner requested a full report')
   if (input.forecastChanged) return decision('revalidate','Resolved outcome needs a targeted check of its decisive premise')
