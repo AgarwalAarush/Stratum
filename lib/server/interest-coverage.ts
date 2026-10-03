@@ -5,6 +5,7 @@ import { fetchAuthoritativePortfolios } from './portfolio.ts';
 import { isEtfInstrument } from './etf-research.ts';
 import { fetchFmpStableJson } from './fmp.ts';
 import { reserveInvestigation, investigationDate } from './research-investigations.ts';
+import { ownerRequestedCatchUpAllowance } from './agent-attempt-environment.ts';
 const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
 function database() { const db = getSupabaseClient(); if (!db)
     throw new Error('Research coverage store unavailable'); return db; }
@@ -134,7 +135,7 @@ export async function loadResearchCoverage(ownerId: string, now = new Date()) {
     };
     const row = (symbol: string) => { const note = notes.get(symbol), job = byJob.get(symbol), support = object(object(object(note?.content).advice).decisionSupport); return { symbol, status: status(symbol), researched: Boolean(note), contractCurrent: hasCurrentResearchContract(note?.content), lastInvestigation: note?.generated_at ?? null,lastEvidenceCheck:note?.lastCheckedAt??null, nextCheck: object(support.followUp), job: job ? { status: job.status, error: job.last_error, scheduledFor: job.run_after } : null }; };
     const themes = INTEREST_THEMES.map(theme => { const rows = members.filter(m => m.theme === theme.id && m.active && !m.excluded).map(m => ({ ...row(String(m.symbol)), eligibleSince: String(m.eligible_since) })); return { ...theme, total: rows.length, researched: rows.filter(r => r.researched).length, awaiting: rows.filter(r => r.status === 'awaiting').length, investigating: rows.filter(r => r.status === 'investigating').length, decisionReady: rows.filter(r => r.status === 'decision_ready').length, unresolved: rows.filter(r => r.status === 'unresolved').length, oldestEligibility: rows.filter(r => r.status === 'awaiting').map(r => r.eligibleSince).sort()[0] ?? null }; });
-    return { asOf: now.toISOString(), dailyLimit: 8, inventory: inventory.data?.content ?? null, themes, holdings: owned.map(row), members: members.map(m => ({ ...row(String(m.symbol)), theme: String(m.theme), excluded: Boolean(m.excluded), active: Boolean(m.active), eligibleSince: String(m.eligible_since), provenance: m.provenance })), metrics: { holdingTotal: owned.length, holdingContractCurrent: owned.filter(s => hasCurrentResearchContract(notes.get(s)?.content)).length, failedPrerequisites: owned.map(row).filter(hasFailedResearchPrerequisite).length, researchFailures: [...byJob.values()].filter(j => ['failed', 'blocked'].includes(j.status)).length, todayReserved: slots.data.length, todayStarted: slots.data.filter(s => s.started_at).length }, notes, owned, watchlisted: [...new Set(watches.data.map(w => w.symbol))], jobs: jobs.data };
+    return { asOf: now.toISOString(), dailyLimit: 8, dailyCatchUpAllowance: ownerRequestedCatchUpAllowance(jobs.data,investigationDate(now)), inventory: inventory.data?.content ?? null, themes, holdings: owned.map(row), members: members.map(m => ({ ...row(String(m.symbol)), theme: String(m.theme), excluded: Boolean(m.excluded), active: Boolean(m.active), eligibleSince: String(m.eligible_since), provenance: m.provenance })), metrics: { holdingTotal: owned.length, holdingContractCurrent: owned.filter(s => hasCurrentResearchContract(notes.get(s)?.content)).length, failedPrerequisites: owned.map(row).filter(hasFailedResearchPrerequisite).length, researchFailures: [...byJob.values()].filter(j => ['failed', 'blocked'].includes(j.status)).length, todayReserved: slots.data.length, todayStarted: slots.data.filter(s => s.started_at).length }, notes, owned, watchlisted: [...new Set(watches.data.map(w => w.symbol))], jobs: jobs.data };
 }
 type Enqueue = (type: 'generate-company-research' | 'generate-etf-research', payload: Record<string, unknown>, key: string, options?: {
     runAfter?: Date;
@@ -225,7 +226,7 @@ export async function seedDecisionResearch(ownerId: string, enqueue: Enqueue, no
 }
 /** Safe read model: no full research documents or private portfolio snapshots leave this endpoint. */
 export function researchCoverageResponse(coverage: Awaited<ReturnType<typeof loadResearchCoverage>>) {
-    const { asOf, dailyLimit, inventory, themes, holdings, members, metrics } = coverage;
-    return { asOf, dailyLimit, inventory, themes, holdings, members, metrics };
+    const { asOf, dailyLimit, dailyCatchUpAllowance, inventory, themes, holdings, members, metrics } = coverage;
+    return { asOf, dailyLimit, dailyCatchUpAllowance, inventory, themes, holdings, members, metrics };
 }
 export type ResearchCoverageResponse = ReturnType<typeof researchCoverageResponse>;

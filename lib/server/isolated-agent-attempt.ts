@@ -1,11 +1,12 @@
 import { fork } from 'node:child_process'
+import { agentAttemptEnvironment } from './agent-attempt-environment.ts'
 
 export function runIsolatedAgentAttempt(job: object, timeoutMs: number,
   reportProgress: (progress: number, phase: string) => Promise<void>,
   script = new URL('../../scripts/agent-attempt.ts', import.meta.url)): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const child = fork(script, [], { execArgv: ['--experimental-strip-types'], detached: true,
-      stdio: ['ignore', 'inherit', 'inherit', 'ipc'] })
+      env: agentAttemptEnvironment(job), stdio: ['ignore', 'inherit', 'inherit', 'ipc'] })
     let output: unknown, failure: Error | undefined, completed = false
     const terminate = (signal: NodeJS.Signals) => {
       if (!child.pid) return
