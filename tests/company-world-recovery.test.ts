@@ -23,3 +23,23 @@ test('interruption resumes accepted commit; no-change and critic rejection remai
  }
  delete process.env.SUPABASE_URL;delete process.env.SUPABASE_SERVICE_ROLE_KEY;delete process.env.STRATUM_WORLD_ROOT
 })
+
+test('a failed review remains a failed receipt and rejects the attempt so the queue can retry',async t=>{
+ process.env.SUPABASE_URL='https://memory-test.supabase.co';process.env.SUPABASE_SERVICE_ROLE_KEY='test-service-role';process.env.STRATUM_WORLD_ROOT='/tmp/stratum-world-recovery-absent'
+ const updates:Record<string,unknown>[]=[]
+ t.mock.method(globalThis,'fetch',async(input:RequestInfo|URL,init?:RequestInit)=>{
+  const url=String(input);let response:unknown=[]
+  if(url.includes('/rpc/claim_company_world_receipt'))response=[{report_id:report,owner_id:'owner',symbol:'ABC',status:'reviewing',run_id:null,result_commit:null}]
+  else if(init?.method==='PATCH'){updates.push(JSON.parse(String(init.body)));response=[]}
+  else if(url.includes('/company_world_memory_receipts'))response=[{owner_id:'owner',symbol:'ABC'}]
+  else if(url.includes('/equity_research_notes'))response=[{id:report,symbol:'ABC',version:1,content:{sections:[]},company_packet_id:'packet'}]
+  else if(url.includes('/company_packets'))response=[{packet:{researchDocuments:[{sourceId:'source',url:'https://issuer.example/filing',text:'Original captured company statement.',extractionStatus:'readable',capturedAt:'2026-10-01',quality:'primary'}]}}]
+  else if(url.includes('/equity_research_sources'))response=[{source_id:'source',label:'Filing',url:'https://issuer.example/filing'}]
+  else if(url.includes('/world_thinker_runs'))response={error:'Provider execution failed',outcome_reason:null}
+  return new Response(JSON.stringify(response),{status:200,headers:{'Content-Type':'application/json'}})
+ })
+ try{
+  await assert.rejects(reviewCompanyWorldReceipt(report,job,async()=>({runId:'failed-run',status:'failed',commit:null}),async()=>{}),/Provider execution failed/)
+  assert.equal(updates.at(-1)?.status,'failed');assert.equal(updates.at(-1)?.explanation,'Provider execution failed')
+ }finally{t.mock.restoreAll();delete process.env.SUPABASE_URL;delete process.env.SUPABASE_SERVICE_ROLE_KEY;delete process.env.STRATUM_WORLD_ROOT}
+})
