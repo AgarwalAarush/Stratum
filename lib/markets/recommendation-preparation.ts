@@ -1,5 +1,14 @@
 import { needsDecisionResearchRefresh } from './decision-admission.ts'
-import type { DecisionContext } from './recommendations.ts'
+import { readResearchAdvice } from './research-advice.ts'
+import type { DecisionContext, DecisionName } from './recommendations.ts'
+
+/** Evidence completeness alone cannot skip independent review of a supported action. */
+export function recommendationNeedsReview(name: Pick<DecisionName, 'gaps' | 'owned' | 'research'>): boolean {
+  if (!name.gaps.length) return true
+  const advice = readResearchAdvice(name.research?.content.advice)
+  const actions = name.owned ? ['add', 'hold', 'trim', 'sell'] as const : ['buy'] as const
+  return advice?.version === 2 && actions.some(action => advice.decisionSupport?.actionSupport[action].status === 'supported')
+}
 
 export function recommendationResearchTargets(context: DecisionContext) {
   const seen = new Set<string>()
