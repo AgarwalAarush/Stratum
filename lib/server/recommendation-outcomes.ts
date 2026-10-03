@@ -204,7 +204,7 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
           const issuerCik = record(record(record(frozenPacket?.value).packet).company).cik
           if (typeof issuerCik === 'string' || typeof issuerCik === 'number') observations.push(...companyForecastObservations(String(f.metric), packets.data ?? [], String(issuerCik)))
           if (!observations.some(o => o.period === f.observationPeriod && o.unit === f.unit)) {
-            const { enqueueAgentJob } = await import('./agent-jobs.ts')
+            const { enqueueAgentJob } = await import('./agent-job-queue.ts')
             await enqueueAgentJob('refresh-company-packet', { ownerId: task.owner_id, symbol: rec.symbol, reason: 'due economic forecast' },
               `forecast-packet:${task.owner_id}:${rec.symbol}:${now.toISOString().slice(0, 10)}`)
           }
@@ -265,7 +265,7 @@ export async function evaluateRecommendationOutcomes(now = new Date()) {
           now,
         )
         if (assessment.status === 'disconfirmed' && f.decisivePremise === true && evaluationId) {
-          const { enqueueAgentJob } = await import('./agent-jobs.ts')
+          const { enqueueAgentJob } = await import('./agent-job-queue.ts')
           await enqueueAgentJob(name.instrumentType === 'etf' ? 'generate-etf-research' : 'event-refresh-company-research', { ownerId: task.owner_id, symbol: rec.symbol, instrumentType: name.instrumentType ?? 'equity', reason: `decisive forecast contradiction:${evaluationId}` }, `forecast-feedback:${evaluationId}`)
         }
         if (assessment.outcome !== null || assessment.status === 'unresolvable') {

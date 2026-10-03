@@ -1,4 +1,4 @@
-import { enqueueAgentJob } from '@/lib/server/agent-jobs'
+import { enqueueAgentJob } from '@/lib/server/agent-job-queue'
 import { confirmManualPortfolio } from '@/lib/server/portfolio-confirmation'
 import {
   registerInvestmentExperiment,

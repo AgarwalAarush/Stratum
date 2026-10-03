@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { enqueueAgentJob } from '../lib/server/agent-jobs.ts'
+import { enqueueAgentJob } from '../lib/server/agent-job-queue.ts'
 import { startWorldReplay } from '../lib/server/world-replay.ts'
 
 const days = Math.max(1, Math.min(366, Number(process.env.STRATUM_WORLD_BACKFILL_DAYS ?? 365)))

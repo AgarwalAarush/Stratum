@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { buildAgentJobDedupeKey, enqueueAgentJob, parseAgentJobType } from '../../../../lib/server/agent-jobs.ts'
+import { buildAgentJobDedupeKey, parseAgentJobType } from '../../../../lib/server/agent-job-contracts.ts'
+import { enqueueAgentJob } from '../../../../lib/server/agent-job-queue.ts'
 
 export const dynamic = 'force-dynamic'
 

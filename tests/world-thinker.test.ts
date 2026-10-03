@@ -14,7 +14,7 @@ import { buildWorldUpdateDraftSchema, isCoverageOnlyWorldRun, materializeWorldUp
 import { type WorldNode, type WorldOpportunityLead, type WorldUpdateDraft, type WorldUpdateProposal, validateWorldUpdateDraft, validateWorldUpdateProposal } from '../lib/markets/world-thinker-types.ts'
 import { latestDistinctWorldJournals } from '../lib/server/world-projection.ts'
 import { buildDueAgentJobs } from '../lib/server/agent-schedule.ts'
-import { buildAgentJobDedupeKey } from '../lib/server/agent-jobs.ts'
+import { buildAgentJobDedupeKey } from '../lib/server/agent-job-contracts.ts'
 import { WORLD_COVERAGE_FRONTIERS, assessWorldCoverage, deriveWorldCoverageIndex, matchesWorldCoverageFrontier } from '../lib/markets/world-coverage.ts'
 import { selectDueWorldCoverageFrontiers, summarizeWorldSearchCoverage, worldCoverageUpsertIdentity } from '../lib/server/world-coverage.ts'
 import { classifyWorldReplayBatchOutcome, isWorldThinkerBusyError } from '../lib/server/world-replay.ts'

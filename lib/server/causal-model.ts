@@ -170,7 +170,7 @@ export async function decideOwnerReviewItem(options: { id: string; ownerId: stri
   if (options.status === 'investigate') {
     const item = await supabase.from('owner_review_items').select('id,subject_type,subject_id,causal_model_version_id').eq('id',options.id).eq('owner_id',options.ownerId).single()
     if(item.error)throw new Error('Owner investigation target not found')
-    const { enqueueAgentJob } = await import('./agent-jobs.ts')
+    const { enqueueAgentJob } = await import('./agent-job-queue.ts')
     await enqueueAgentJob('run-world-thinker', { trigger:'manual', ownerReviewItemId:options.id }, `owner-investigation:${options.ownerId}:${options.id}`)
   }
   const terminal = ['investigate', 'accepted', 'rejected', 'no_trade', 'revised'].includes(options.status)

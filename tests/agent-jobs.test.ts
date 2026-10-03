@@ -2,19 +2,60 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
-import {
-  agentJobProvider,
-  agentJobPriority,
-  agentJobStaleAfterMs,
-  buildAgentJobDedupeKey,
-  isMissingDedupeConstraint,
-  marketModelRoutingForAgentJob,
-  modelForAgentJob,
-  normalizeClaimedAgentJob,
-  parseAgentJobType,
-  shouldCoalesceAgentJob,
-  shouldRefreshClosedMarket,
-} from '../lib/server/agent-jobs.ts'
+import { AGENT_JOB_TYPES, agentJobProvider, agentJobPriority, agentJobStaleAfterMs, buildAgentJobDedupeKey, marketModelRoutingForAgentJob, modelForAgentJob, normalizeClaimedAgentJob, parseAgentJobPayload, parseAgentJobType, shouldCoalesceAgentJob, shouldRefreshClosedMarket } from '../lib/server/agent-job-contracts.ts'
+import { isMissingDedupeConstraint } from '../lib/server/agent-job-queue.ts'
+import { executeAgentJob, resolveAgentJobHandler } from '../lib/server/agent-jobs.ts'
+import { testEnvironment } from './fixtures/environment.ts'
+
+test('every registered agent job has an explicit handler', () => {
+  for (const type of AGENT_JOB_TYPES) assert.equal(typeof resolveAgentJobHandler(type), 'function', type)
+})
+
+test('missing and unknown handlers fail instead of falling through to monthly generation', () => {
+  assert.throws(() => resolveAgentJobHandler('generate-monthly-overview', {}), /Missing agent job handler: generate-monthly-overview/)
+  assert.throws(() => resolveAgentJobHandler('new-unhandled-job'), /Unsupported agent job type/)
+})
+
+test('retired belief jobs retain their blocked result even with legacy payloads', async () => {
+  const retired = ['correlate-market-signals', 'synthesize-market-hypotheses', 'deepen-market-hypothesis',
+    'refresh-market-hypothesis-research', 'orchestrate-market-research', 'monitor-market-theses', 'route-market-research-frontiers']
+  for (const jobType of retired) {
+    for (const payload of [{}, null, 'legacy']) {
+      const job = normalizeClaimedAgentJob({ id: 'test-job', job_type: jobType, payload, attempts: 1, max_attempts: 3 })
+      assert.ok(job)
+      assert.deepEqual(await executeAgentJob(job), {
+        readiness: 'blocked',
+        errors: ['Unsupported capability: legacy belief writer retired; use Git World investigation'],
+        authority: 'git-world-v1',
+      })
+    }
+  }
+})
+
+test('job payload parsing narrows known fields while retaining input references and legacy defaults', () => {
+  const original = { ownerId: 'owner', symbol: 123, reason: 42, forceFullResearch: 'true', eventId: null, inputRef: { id: 'receipt' } }
+  assert.deepEqual(parseAgentJobPayload('generate-company-research', original), {
+    ownerId: 'owner', reason: '42', inputRef: { id: 'receipt' },
+  })
+  assert.equal(original.symbol, 123)
+  assert.deepEqual(parseAgentJobPayload('triage-world-observation-proposals', { captureIds: ['first', 42, 'second'] }), {
+    captureIds: ['first', 'second'],
+  })
+  assert.deepEqual(parseAgentJobPayload('run-world-replay', { resumeAttempt: '2', model: false }), { resumeAttempt: 2, model: false })
+  assert.throws(() => parseAgentJobPayload('generate-company-research', null), /payload must be an object/)
+})
+
+test('typed dispatch retains required input validation before provider work', async () => {
+  for (const [jobType, payload, message] of [
+    ['generate-company-research', { ownerId: 'owner', symbol: 123 }, /Research jobs require ownerId and symbol/],
+    ['run-world-thinker', { trigger: 'invalid' }, /World Thinker trigger is invalid/],
+    ['run-market-thesis-cycle', { cycle: 'invalid' }, /valid cycle/],
+  ] as const) {
+    const job = normalizeClaimedAgentJob({ id: 'test-job', job_type: jobType, payload, attempts: 1, max_attempts: 3 })
+    assert.ok(job)
+    await assert.rejects(executeAgentJob(job), message)
+  }
+})
 
 test('routine World ingestion coalesces but explicit historical windows stay distinct', () => {
   assert.equal(shouldCoalesceAgentJob('refresh-world-events', {}), true)
@@ -195,11 +236,11 @@ test('routine snapshot refreshes coalesce during a backlog without swallowing ta
 })
 
 test('bounded market-research jobs persist their actual routed model policy', async () => {
-  const environment = {
+  const environment = testEnvironment({
     STRATUM_SOURCE_SCOUT_MODEL: 'cheap-model',
     STRATUM_MARKET_STANDARD_MODEL: 'standard-model',
     STRATUM_MARKET_RESEARCH_MODEL: 'strong-model',
-  } as NodeJS.ProcessEnv
+  })
   assert.deepEqual(marketModelRoutingForAgentJob('scout-world-sources', environment).map((item) => item.model), ['cheap-model'])
   assert.deepEqual(marketModelRoutingForAgentJob('scout-market-research', environment).map((item) => item.model), ['standard-model'])
   assert.deepEqual(marketModelRoutingForAgentJob('deepen-market-hypothesis', environment).map((item) => item.task), ['hypothesis_analysis', 'hypothesis_critic'])
@@ -208,9 +249,6 @@ test('bounded market-research jobs persist their actual routed model policy', as
   const source = await readFile(new URL('../lib/server/agent-jobs.ts', import.meta.url), 'utf8')
   assert.match(source, /marketModelRouting: modelRouting/)
   assert.match(source, /input_refs: \[job\.payload/)
-  assert.match(source, /scheduledMarketResearchRunLimit/)
-  assert.match(source, /findDueMarketHypothesisResearch\(undefined, requestedIds \? 40 : scheduledResearchLimit\)/)
-  assert.match(source, /requestedHypothesisIds/)
 })
 
 test('market-wide orchestration uses a six-hour durable dedupe bucket', () => {

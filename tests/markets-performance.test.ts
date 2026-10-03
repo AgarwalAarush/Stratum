@@ -35,7 +35,7 @@ test('Markets Overview rehydrates post-close action data and republishes it afte
   assert.match(repository, /fetchLatestMarketLeadershipSummary\(\)/)
   assert.match(repository, /leadership: leadership \?\? overview\.leadership/)
   assert.match(repository, /candidateWeeklySummary: candidateWeeklySummary \?\? overview\.candidateWeeklySummary/)
-  assert.match(jobs, /if \(job\.job_type === 'materialize-market-leadership'\) \{[\s\S]*?await materializeMarketHomeSnapshot\(\)/)
+  assert.match(jobs, /await materializeMarketHomeSnapshot\(\)/)
 })
 
 test('Markets Overview does not block its durable snapshot on live-feed collection', () => {

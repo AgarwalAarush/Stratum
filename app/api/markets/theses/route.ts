@@ -6,7 +6,7 @@ import {
   reviewThesis,
   updateThesisMonitorStatus,
 } from '@/lib/server/theses'
-import { enqueueAgentJob } from '@/lib/server/agent-jobs'
+import { enqueueAgentJob } from '@/lib/server/agent-job-queue'
 import { addSymbolToPrimaryWatchlist } from '@/lib/server/portfolio'
 import { thesisEntityKey, userAuthoredThesisContent } from '@/lib/markets/theses'
 import type { InvestmentThesis, ThesisEntityType, ThesisIntakeDraft, ThesisReviewDecision } from '@/lib/markets/types'

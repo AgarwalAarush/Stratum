@@ -1,5 +1,5 @@
 import { fetchAllAuthoritativeHoldings } from './portfolio.ts'
-import { enqueueAgentJob } from './agent-jobs.ts'
+import { enqueueAgentJob } from './agent-job-queue.ts'
 import {
   evaluateDecisionAlerts,
   eventResearchDedupeKey,

@@ -1,7 +1,7 @@
 import { getSupabaseClient } from '../lib/server/supabase.ts'
 import { reconcileWorldRepositoryProjection } from '../lib/server/world-projection.ts'
 import { dispatchCompanyWorldReceipts, refreshCompanyWorldReceiptContext, updateCompanyWorldReceipt } from '../lib/server/company-world-memory.ts'
-import { enqueueAgentJob } from '../lib/server/agent-jobs.ts'
+import { enqueueAgentJob } from '../lib/server/agent-job-queue.ts'
 const db=getSupabaseClient()
 if(!db)throw new Error('Supabase service credentials are not configured')
 // Import the current accepted synthesis, assigning identities at import time, not Git's old dates.

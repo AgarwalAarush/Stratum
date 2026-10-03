@@ -202,7 +202,6 @@ test('agent jobs and thesis workspace preserve a bounded research frontier', asy
     readFile(new URL('../lib/server/world-memory.ts', import.meta.url), 'utf8'),
   ])
   assert.match(jobs, /'deepen-market-hypothesis'/)
-  assert.match(jobs, /findDueMarketHypothesisResearch/)
   assert.match(jobs, /route-market-research-frontiers/)
   assert.match(research, /findQueuedResearchFrontierScoutPlans/)
   assert.match(research, /completeEvidenceReceivedResearchFrontiers/)
@@ -220,12 +219,11 @@ test('agent jobs and thesis workspace preserve a bounded research frontier', asy
 })
 
 test('market-thesis promotion requires a completed analyst and critic artifact', async () => {
-  const [worldMemory, migration, criticFrontierMigration, criticProvenanceMigration, research] = await Promise.all([
+  const [worldMemory, migration, criticFrontierMigration, criticProvenanceMigration] = await Promise.all([
     readFile(new URL('../lib/server/world-memory.ts', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/202608030003_market_hypothesis_research.sql', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/202608040017_backfill_critic_research_frontiers.sql', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/202608040018_market_research_critic_provenance.sql', import.meta.url), 'utf8'),
-    readFile(new URL('../lib/server/market-thesis-research.ts', import.meta.url), 'utf8'),
   ])
   assert.match(worldMemory, /legacy belief writer retired/)
   assert.match(migration, /add column if not exists research_version_id/)
