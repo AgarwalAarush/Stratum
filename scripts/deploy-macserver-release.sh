@@ -4,6 +4,11 @@
 set -euo pipefail
 
 source_checkout="${1:-$PWD}"
+deployment_mode="${2:---deploy}"
+if [[ "$deployment_mode" != --deploy && "$deployment_mode" != --stage-only && "$deployment_mode" != --activate-only ]]; then
+  echo "Usage: deploy-macserver-release.sh CHECKOUT [--stage-only|--activate-only]" >&2
+  exit 1
+fi
 source_checkout="$(cd "$source_checkout" && pwd)"
 release_root="${STRATUM_RELEASE_ROOT:-$HOME/Projects/Stratum-releases}"
 active_link="${STRATUM_PRODUCTION_LINK:-$HOME/Projects/Stratum-production-current}"
@@ -20,12 +25,22 @@ if [[ ! -e "$release_dir/.git" ]]; then
 fi
 
 cd "$release_dir"
+if [[ "$deployment_mode" != --activate-only ]]; then
 npm ci
 # Existing repository warnings are reported, but only lint errors should block
 # an immutable worker release. Feature checks still run below before activation.
 npm run lint -- --quiet
 node --test --experimental-strip-types tests/world-thinker.test.ts tests/world-memory.test.ts tests/world-memory-retrieval.test.ts tests/company-world-memory.test.ts tests/company-world-recovery.test.ts tests/world-sources.test.ts tests/candidate-scout.test.ts tests/agent-jobs.test.ts tests/agent-schedule.test.ts tests/market-thesis-research.test.ts tests/market-research-orchestrator.test.ts tests/world-source-health.test.ts
 npm run build
+printf '%s\n%s\n' "$revision" "$(cat .next/BUILD_ID)" > .stratum-staged
+else
+  if [[ ! -f .stratum-staged || ! -f .next/BUILD_ID || "$(head -n 1 .stratum-staged)" != "$revision" || "$(tail -n 1 .stratum-staged)" != "$(cat .next/BUILD_ID)" ]]; then
+    echo "Matching verified staged release is unavailable; run --stage-only first." >&2
+    exit 1
+  fi
+  git diff --quiet
+  git diff --cached --quiet
+fi
 
 # The worker environment is intentionally gitignored. Carry its existing
 # owner-only file into the immutable release before the symlink switches.
@@ -36,6 +51,10 @@ fi
 if [[ ! -f "$release_dir/.env.worker" ]]; then
   echo "Missing worker environment in $release_dir" >&2
   exit 1
+fi
+if [[ "$deployment_mode" == --stage-only ]]; then
+  echo "Verified $revision staged at $release_dir. Apply matching migrations, then run --activate-only. Active worker unchanged."
+  exit 0
 fi
 
 # The model repository is initialized before the worker symlink moves. This is
