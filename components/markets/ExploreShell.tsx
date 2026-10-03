@@ -4,11 +4,11 @@ import { MarketsIntentLink } from './MarketsIntentLink'
 import styles from './Explore.module.css'
 
 export function ExploreShell({ view, children }: { view: ExploreView; children: ReactNode }) {
-  return <section className={`market-explore ${styles.page}`}>
-    <header className="market-explore-heading">
+  return <section className={styles.page}>
+    <header className={styles.heading}>
       <div><p className="markets-eyebrow">Market explorer</p><h1 className="markets-display">Explore</h1></div>
     </header>
-    <nav className="market-explore-tabs" aria-label="Explore market data">
+    <nav className={styles.tabs} aria-label="Explore market data">
       {([
         ['stocks', 'Stocks'], ['sectors', 'Sectors'], ['sub-industries', 'Sub-industries'], ['watchlists', 'Watchlists'],
       ] as const).map(([id, label]) => <MarketsIntentLink key={id} href={`/markets/explore?view=${id}`} aria-current={view === id ? 'page' : undefined}>{label}</MarketsIntentLink>)}

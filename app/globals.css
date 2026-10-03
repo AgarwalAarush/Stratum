@@ -10103,10 +10103,6 @@ body:has(.markets-shell) {
 }
 
 /* Markets workflow shell, Explore, and Stock Viewer — shared desktop/mobile */
-.market-explore {
-  padding: 32px 32px 0;
-}
-
 .market-explore-heading {
   align-items: flex-end;
   display: flex;
@@ -10126,7 +10122,6 @@ body:has(.markets-shell) {
   font-size: 10px;
 }
 
-.market-explore-tabs,
 .market-portfolio-tabs {
   border-bottom: 1px solid var(--market-border);
   display: flex;
@@ -10134,7 +10129,6 @@ body:has(.markets-shell) {
   min-height: 46px;
 }
 
-.market-explore-tabs a,
 .market-portfolio-tabs a,
 .market-portfolio-tabs button {
   align-items: center;
@@ -10144,13 +10138,11 @@ body:has(.markets-shell) {
   position: relative;
 }
 
-.market-explore-tabs a[aria-current="page"],
 .market-portfolio-tabs a[aria-current="page"],
 .market-portfolio-tabs button[aria-current="page"] {
   color: var(--market-text);
 }
 
-.market-explore-tabs a[aria-current="page"]::after,
 .market-portfolio-tabs a[aria-current="page"]::after,
 .market-portfolio-tabs button[aria-current="page"]::after {
   background: var(--market-accent);
@@ -10160,15 +10152,6 @@ body:has(.markets-shell) {
   left: 0;
   position: absolute;
   right: 0;
-}
-
-.market-explore .market-screener {
-  padding-left: 0;
-  padding-right: 0;
-}
-
-.market-explore .market-screener-heading {
-  display: none;
 }
 
 .market-explore-groups {
@@ -11111,10 +11094,6 @@ body:has(.markets-shell) {
   font-family: var(--font-ibm-plex-mono), ui-monospace, monospace;
 }
 
-.market-explore .market-watchlists-embedded {
-  padding: 26px 0 0;
-}
-
 .portfolio-workspace .market-watchlists {
   padding-left: 0;
   padding-right: 0;
@@ -11707,10 +11686,6 @@ body:has(.markets-shell) {
 }
 
 @media (max-width: 767px) {
-  .market-explore {
-    padding: 24px 16px 0;
-  }
-
   .market-explore-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -11721,7 +11696,6 @@ body:has(.markets-shell) {
     font-size: 48px;
   }
 
-  .market-explore-tabs,
   .market-portfolio-tabs {
     gap: 22px;
     overflow-x: auto;
@@ -15036,7 +15010,6 @@ body:has(.equity-research-note) {
 /* Reading and data views share margins, type scale and a purposeful title area. */
 .markets-research-library,
 .portfolio-workspace,
-.market-explore,
 .market-screener,
 .market-watchlists,
 .markets-feed-page,
@@ -15142,8 +15115,6 @@ body:has(.equity-research-note) {
   .markets-feed-heading h1,
   .world-header .world-title { font-size: 36px; }
   .market-explore-heading { align-items: flex-start; }
-  .market-explore-tabs { overflow-x: auto; gap: 24px; }
-  .market-explore-tabs a { flex-shrink: 0; }
   .portfolio-value-summary strong { font-size: 24px; }
   .world-priority-grid { grid-template-columns: 1fr; }
   .world-priority-grid .world-current-assessment { border-left: 0; border-top: 1px solid var(--market-border); padding-left: 0; }
