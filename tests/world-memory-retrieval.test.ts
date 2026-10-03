@@ -14,21 +14,27 @@ const claims=[claim('capacity','grid','Grid power bottleneck restricts data cent
 // Frozen task definitions, not model-generated answers; preserves release-to-release comparability.
 test('frozen recall benchmark compares evidence recall, counterevidence, latency and context with existing keyword/relationship baseline',async()=>{
  const benchmark=JSON.parse(await readFile(new URL('./fixtures/world-memory-benchmark.json',import.meta.url),'utf8')) as Array<{name:string;query:string;required:string[];counter?:string[];cutoff?:string;eventFrom?:string;eventTo?:string;excluded?:string[]}>
- let improved=0,baseline=0,total=0,counter=0,counterTotal=0,context=0
- const started=performance.now()
+ let improved=0,baseline=0,total=0,counter=0,baselineCounter=0,counterTotal=0,context=0,baselineContext=0,latency=0,baselineLatency=0
  for(const c of benchmark){
+  const started=performance.now()
   const result=rankWorldMemory({query:c.query,knowledgeCutoff:c.cutoff,eventFrom:c.eventFrom,eventTo:c.eventTo,limit:20},nodes,claims,now)
+  latency+=performance.now()-started
   const found=new Set(result.map(b=>b.claimId))
+  const baselineStarted=performance.now()
   const terms=c.query.toLowerCase().split(/\s+/), direct=nodes.filter(n=>[n.title,...n.aliases].some(t=>terms.some(q=>t.toLowerCase().includes(q))))
   const ids=new Set(direct.flatMap(n=>[n.id,...n.relationships.map(r=>r.targetId)]))
+  for(const n of nodes)if(n.relationships.some(r=>direct.some(d=>d.id===r.targetId)))ids.add(n.id)
+  const baselineClaims=claims.filter(claim=>ids.has(claim.nodeId))
+  baselineLatency+=performance.now()-baselineStarted
   for(const id of c.required){assert.ok(found.has(id),`${c.name}: missing ${id}`);total++;improved++;if(ids.has(claims.find(x=>x.claimId===id)!.nodeId))baseline++}
   for(const id of c.excluded??[])assert.ok(!found.has(id),`${c.name}: leaked ${id}`)
-  for(const id of c.counter??[]){counterTotal++;assert.ok(result.some(b=>b.counterevidence.some(x=>x.claimId===id)),`${c.name}: missing counter ${id}`);counter++}
+  for(const id of c.counter??[]){counterTotal++;assert.ok(result.some(b=>b.counterevidence.some(x=>x.claimId===id)),`${c.name}: missing counter ${id}`);counter++;if(baselineClaims.some(claim=>claim.claimId===id))baselineCounter++}
   if(c.name==='abstention')assert.equal(result.length,0)
   context+=JSON.stringify(result).length
+  baselineContext+=JSON.stringify({nodes:nodes.filter(n=>ids.has(n.id)),claims:baselineClaims}).length
  }
- assert.ok(improved>=baseline);assert.ok(performance.now()-started<1000)
- console.info(JSON.stringify({benchmark:'world-memory-v1',requiredEvidenceRecall:improved/total,baselineRecall:baseline/total,counterevidenceRecall:counter/counterTotal,latencyMs:performance.now()-started,meanContextCharacters:Math.round(context/benchmark.length)}))
+ assert.ok(improved>=baseline);assert.ok(counter>=baselineCounter);assert.ok(latency<1000)
+ console.info(JSON.stringify({benchmark:'world-memory-v1',requiredEvidenceRecall:improved/total,baselineRecall:baseline/total,counterevidenceRecall:counter/counterTotal,baselineCounterevidenceRecall:baselineCounter/counterTotal,latencyMs:latency,baselineLatencyMs:baselineLatency,meanContextCharacters:Math.round(context/benchmark.length),baselineMeanContextCharacters:Math.round(baselineContext/benchmark.length)}))
 })
 test('duplicate origins do not accumulate corroboration and future source captures are excluded',()=>{
  const c=claim('duplicate','grid','Power constraint');c.evidenceOrigins=['original','original'];assert.equal(rankWorldMemory({query:'power'},nodes,[c],now)[0].independentEvidenceCount,1)
