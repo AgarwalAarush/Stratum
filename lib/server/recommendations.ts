@@ -81,6 +81,16 @@ async function rows(
   return accumulated
 }
 
+/** Failed refresh attempts cannot hide the last accepted snapshot. The original
+ * data timestamp remains frozen and the normal instrument price-age gate applies. */
+export async function latestCompleteMarketSnapshot(cutoff: string): Promise<Row[]> {
+  const result = await investmentDb().from('market_snapshots').select('*')
+    .eq('status', 'complete').lte('created_at', cutoff)
+    .order('created_at', { ascending: false }).order('id').limit(1)
+  if (result.error) throw new Error(`market_snapshots: ${result.error.message}`)
+  return result.data ?? []
+}
+
 /** Load exact immutable versions referenced by the selected notes, not every
  * historical packet (which can be hundreds of megabytes of source evidence). */
 export async function loadDecisionPackets(table: 'company_packets' | 'etf_research_packets', ownerId: string, cutoff: string, packetIds: string[]): Promise<Row[]> {
@@ -143,7 +153,7 @@ export async function assembleDecisionContext(
       ),
       optional(
         'Market snapshots',
-        rows('market_snapshots', undefined, cutoff, 'created_at', 10),
+        latestCompleteMarketSnapshot(cutoff),
       ),
       optional(
         'Candidate discovery',
