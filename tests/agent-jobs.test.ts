@@ -251,6 +251,17 @@ test('bounded market-research jobs persist their actual routed model policy', as
   assert.match(source, /input_refs: \[job\.payload/)
 })
 
+test('ownership telemetry uses Sol despite legacy synthesis and preserves World routing', () => {
+  const environment = testEnvironment({ CODEX_SYNTHESIS_MODEL: 'legacy-synthesis', STRATUM_WORLD_CRITIC_MODEL: 'world-critic', STRATUM_WORLD_THINKER_MODEL: 'world-thinker' })
+  const jobs = ['generate-company-research', 'generate-etf-research', 'event-refresh-company-research', 'generate-daily-recommendations'] as const
+  for (const job of jobs) {
+    assert.equal(modelForAgentJob(job, environment), 'gpt-6.1-sol')
+    assert.equal(modelForAgentJob(job, { ...environment, STRATUM_OWNERSHIP_RESEARCH_MODEL: 'configured-ownership' }), 'configured-ownership')
+  }
+  assert.equal(modelForAgentJob('run-world-thinker', environment), 'world-thinker')
+  assert.equal(modelForAgentJob('generate-morning-brief', environment), 'legacy-synthesis')
+})
+
 test('market-wide orchestration uses a six-hour durable dedupe bucket', () => {
   assert.equal(
     buildAgentJobDedupeKey('orchestrate-market-research', new Date('2026-08-04T09:58:00Z')),

@@ -32,6 +32,7 @@ import { dependencyReadiness, parseRecommendationDependencies } from '../markets
 import { prepareDailyRecommendations } from './recommendation-preparation.ts'
 import { AgentJobPool } from './agent-job-pool.ts'
 import { runIsolatedAgentAttempt } from './isolated-agent-attempt.ts'
+import { agentAttemptEnvironment } from './agent-attempt-environment.ts'
 import { blockingFingerprint, blockingReason } from './agent-blocking.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { captureInvestmentMacro } from './investment-macro.ts'
@@ -862,7 +863,9 @@ export async function processOneAgentJob(workerId: string): Promise<boolean> {
     ? 'market-data'
     : agentJobProvider(job.job_type)
   const modelRouting = marketModelRoutingForAgentJob(job.job_type)
-  const model = modelForAgentJob(job.job_type)
+  let attemptEnvironment = process.env
+  try { attemptEnvironment = agentAttemptEnvironment(job) } catch (error) { preparationError ??= error }
+  const model = modelForAgentJob(job.job_type, attemptEnvironment)
   const { data: run, error: runError } = await supabase
     .from('agent_runs')
     .insert({

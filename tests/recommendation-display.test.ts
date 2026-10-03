@@ -40,6 +40,15 @@ test('browser projection retains source dates and account identity without seria
   assert.equal(raw.names[0].research.huge,'private model input')
 })
 
+test('reviewed ownership memos preserve investment grounds without empty packet labels or internal audit prose',()=>{
+ const raw='Hold existing exposure. Packet:00000000-0000-4000-8000-000000000001; internal financial-reconciliation supports positive net cash.\n\nAdvice v2 audit: businessView=constructive; existingPositionStance=retain.\n\nReassess after a reported cash-flow deterioration.'
+ const displayed=readableDecisionMarkdown(raw)
+ assert.match(displayed,/Hold existing exposure\. internal financial-reconciliation supports positive net cash\./)
+ assert.match(displayed,/\n\nReassess after a reported cash-flow deterioration\./)
+ assert.doesNotMatch(displayed,/Packet:|Advice v2 audit:|existingPositionStance/)
+ assert.equal(readableDecisionMarkdown('Advice v2 audit: existingPositionStance=retain.'),'')
+})
+
 test('blocked decisions expose the unresolved issue without internal citations or inflated certainty', () => {
   const rec = {reason:'Independent review blocked action: Blocking execution defect: partial reduction supplies no target weight. [portfolio:00000000-0000-4000-8000-000000000001]',gateReasons:['Reduction must lower existing exposure; sell targets zero']} as Recommendation
   assert.match(decisionHeadline(rec),/clear, justified size/)

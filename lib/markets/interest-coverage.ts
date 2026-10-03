@@ -4,6 +4,23 @@ export const INTEREST_THEMES = [
     { id: 'energy', label: 'Energy' }, { id: 'sustainable_energy', label: 'Sustainable energy' }, { id: 'space', label: 'Space' },
 ] as const;
 export type InterestTheme = typeof INTEREST_THEMES[number]['id'];
+/** Pending durable work remains visible after a newer refresh fails or is cancelled.
+ * Input is newest first; within a status priority the most recent attempt wins. */
+export function selectCoverageJobs<T extends { status: string; payload: unknown }>(jobs: T[]): Map<string, T> {
+    const selected = new Map<string, T>();
+    const priority = (status: string) => status === 'running' ? 3 : status === 'queued' ? 2 : 1;
+    for (const job of jobs) {
+        if (job.status === 'cancelled') continue;
+        const payload = job.payload && typeof job.payload === 'object' ? job.payload as Record<string, unknown> : {};
+        if (typeof payload.symbol !== 'string') continue;
+        const prior = selected.get(payload.symbol);
+        if (!prior || priority(job.status) > priority(prior.status)) selected.set(payload.symbol, job);
+    }
+    return selected;
+}
+export function hasFailedResearchPrerequisite(row: { contractCurrent: boolean; job: { status: string } | null }): boolean {
+    return !row.contractCurrent && Boolean(row.job && ['failed', 'blocked'].includes(row.job.status));
+}
 /** Seeds supplement broad provider classification; they never substitute for company research. */
 export const INTEREST_SEEDS: Record<InterestTheme, readonly string[]> = {
     ai: ['NVDA', 'AMD', 'AVGO', 'ARM', 'TSM', 'ASML', 'AMAT', 'LRCX', 'KLAC', 'MU', 'MRVL', 'ANET', 'VRT', 'MSFT', 'GOOGL', 'AMZN', 'META', 'ORCL', 'PLTR', 'SNOW', 'DDOG', 'NET', 'NOW', 'CRM', 'ADBE', 'APP', 'AI', 'PATH', 'SOUN', 'BBAI', 'TEM', 'NBIS'],

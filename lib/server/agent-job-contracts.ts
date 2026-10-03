@@ -1,4 +1,5 @@
-import { AI_MODELS } from '../ai/config.ts'
+import { AI_MODELS, ownershipResearchModel } from '../ai/config.ts'
+import { isOwnershipResearchJob } from './agent-attempt-environment.ts'
 import { selectMarketModel, type MarketModelSelection } from './market-model-policy.ts'
 
 export const AGENT_JOB_TYPES = [
@@ -508,6 +509,7 @@ export function marketModelRoutingForAgentJob(
 }
 
 export function modelForAgentJob(jobType: AgentJobType, environment: NodeJS.ProcessEnv = process.env): string | null {
+  if (isOwnershipResearchJob(jobType)) return ownershipResearchModel(environment)
   const routed = marketModelRoutingForAgentJob(jobType, environment)
   if (routed.length > 0) return routed[0]!.model
   return agentJobProvider(jobType) === 'codex'
