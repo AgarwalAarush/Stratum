@@ -37,3 +37,15 @@ test('legacy and fund memos preserve their actual story without inventing a manu
  assert.equal(memo[1].companyStory[0].content,'Actual legacy product evidence')
  assert.deepEqual(memo[2].companyStory,[])
 })
+
+test('frozen memo separates supported ownership from incomplete new-capital evidence',()=>{
+ const gap={id:'topic:new-product-economics',description:'New product margins are unavailable',availability:'not_disclosed',affectedActions:['buy','add'],resolution:'Reassess if product margins are disclosed.'}
+ const dimension=(value:string)=>({value,reason:'Captured operations support this assessment.',sourceIds:['issuer'],changeConditions:['Reassess after the next quarterly disclosure.']})
+ const content={researchContractVersion:1,advice:{version:1,businessView:dimension('constructive'),evidenceSufficiency:dimension('insufficient'),newEntryStance:dimension('wait'),existingPositionStance:dimension('retain')},evidenceAssessment:{version:1,gaps:[gap],actionSupport:[{action:'hold',reason:'Established operations support ownership independently of the new product.',sourceIds:['issuer'],gapIds:[gap.id],reversalConditions:['Reduce if established operating cash flow deteriorates.']}]}}
+ const memo=frozenDecisionMemo({names:[{symbol:'FICT',portfolioId:'p',causalLinks:[],research:{id:'frozen',status:'complete',content}}],evidence:[]} as unknown as DecisionContext)[0]
+ assert.equal(memo.assessment.advice?.existingPositionStance.value,'retain')
+ assert.equal(memo.assessment.advice?.newEntryStance.value,'wait')
+ assert.equal(memo.assessment.status,'complete')
+ assert.deepEqual(memo.assessment.evidenceAssessment?.gaps[0].affectedActions,['buy','add'])
+ assert.equal(memo.researchId,'frozen')
+})

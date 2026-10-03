@@ -1,6 +1,6 @@
 type Row = Record<string, unknown>
 export function needsDecisionResearchRefresh(name: { gaps: string[]; entryGaps?: string[] }) {
-  return name.gaps.some(g => /Research missing|Research predates|Research requires independent|ETF holdings|Missing (company|fund) evidence/.test(g)) ||
+  return name.gaps.some(g => /Research missing|Research predates|Research requires independent|Research contract upgrade|ETF holdings|Missing (company|fund) evidence/.test(g)) ||
     Boolean(name.entryGaps?.some(g => /Research entry assumptions/.test(g)))
 }
 const obj = (value: unknown): Row =>
@@ -14,8 +14,19 @@ export function admitDiscoveryCandidates(
   covered: Set<string>,
   cutoff: string,
   limit = 6,
+  lastMeaningfulReviewBySymbol: ReadonlyMap<string, string | null> = new Map(),
 ) {
-  const eligible = candidates
+  // A Scout brief is a lead, never investment evidence. Keep the most recent
+  // known state for each symbol so an older `new` row cannot revive a dismissal.
+  const latestBySymbol = new Map<string, Row>()
+  for (const candidate of candidates) {
+    const generatedAt = Date.parse(String(candidate.generated_at))
+    if (!Number.isFinite(generatedAt) || generatedAt > Date.parse(cutoff)) continue
+    const symbol = String(candidate.symbol)
+    const current = latestBySymbol.get(symbol)
+    if (!current || generatedAt > Date.parse(String(current.generated_at))) latestBySymbol.set(symbol, candidate)
+  }
+  const eligible = [...latestBySymbol.values()]
     .filter(
       (c) =>
         /^[A-Z][A-Z0-9.-]{0,11}$/.test(String(c.symbol)) &&
@@ -23,14 +34,13 @@ export function admitDiscoveryCandidates(
         ['new', 'promoted', 'watchlisted'].includes(String(c.status)) &&
         Number.isFinite(Date.parse(String(c.generated_at))) &&
         Date.parse(String(c.generated_at)) <= Date.parse(cutoff) &&
-        Date.parse(cutoff) - Date.parse(String(c.generated_at)) <
-          7 * 86400000 &&
         (!c.snoozed_until ||
           Date.parse(String(c.snoozed_until)) <= Date.parse(cutoff)),
     )
     .sort(
       (a, b) =>
-        String(b.generated_at).localeCompare(String(a.generated_at)) ||
+        String(lastMeaningfulReviewBySymbol.get(String(a.symbol)) ?? '').localeCompare(String(lastMeaningfulReviewBySymbol.get(String(b.symbol)) ?? '')) ||
+        String(a.generated_at).localeCompare(String(b.generated_at)) ||
         String(a.symbol).localeCompare(String(b.symbol)),
     )
   const selected: Row[] = [],
@@ -47,7 +57,11 @@ export function admitDiscoveryCandidates(
         (diverse && lanes.has(lane))
       )
         continue
-      selected.push(c)
+      selected.push({
+        ...c,
+        requiresResearchRefresh: Date.parse(cutoff) - Date.parse(String(c.generated_at)) >= 7 * 86400000,
+        admissionReason: 'Oldest unreviewed discovery lead; independent current research required',
+      })
       seen.add(symbol)
       lanes.add(lane)
     }

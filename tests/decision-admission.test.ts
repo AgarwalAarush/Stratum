@@ -5,7 +5,7 @@ import {
   hasValidatedSystemThesis,
 } from '../lib/markets/decision-admission.ts'
 
-test('discovery preserves lane breadth and excludes dismissed, stale and future evidence', () => {
+test('discovery preserves lane breadth, excludes dismissed/future rows and refreshes old leads', () => {
   const rows = ['AAA', 'BBB', 'CCC', 'DDD', 'EEE'].map((symbol, i) => ({
     symbol,
     status: 'new',
@@ -30,10 +30,21 @@ test('discovery preserves lane breadth and excludes dismissed, stale and future 
     admitDiscoveryCandidates(rows, new Set(), '2026-08-01').length,
     0,
   )
-  assert.equal(
-    admitDiscoveryCandidates(rows, new Set(), '2026-10-01').length,
-    0,
-  )
+  const oldLeads = admitDiscoveryCandidates(rows, new Set(), '2026-10-01')
+  assert.equal(oldLeads.length, 5)
+  assert.ok(oldLeads.every(row => row.requiresResearchRefresh === true))
+  assert.ok(oldLeads.every(row => String(row.admissionReason).includes('independent current research')))
+})
+
+test('a later dismissal or snooze cannot be bypassed using an older eligible brief', () => {
+  const initial = { symbol: 'LITE', status: 'new', generated_at: '2026-09-01', content: { primaryLane: 'leadership' } }
+  assert.equal(admitDiscoveryCandidates([initial, { ...initial, status: 'dismissed', generated_at: '2026-09-02' }], new Set(), '2026-10-01').length, 0)
+  assert.equal(admitDiscoveryCandidates([initial, { ...initial, snoozed_until: '2026-11-01', generated_at: '2026-09-02' }], new Set(), '2026-10-01').length, 0)
+})
+
+test('discovery rotates toward never-reviewed names before already researched older briefs', () => {
+  const candidates = ['AAA', 'BBB', 'CCC'].map(symbol => ({ symbol, status: 'new', generated_at: '2026-09-01', content: { primaryLane: 'leadership' } }))
+  assert.deepEqual(admitDiscoveryCandidates(candidates, new Set(), '2026-10-01', 1, new Map([['AAA', '2026-09-30']])).map(row => row.symbol), ['BBB'])
 })
 test('system thesis requires a complete validated research artifact rather than a scout score', () => {
   const note = {

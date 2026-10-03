@@ -3,6 +3,9 @@ import { canonicalCausalVersions, canonicalResearchNote, primaryResearchPacket }
 import { RECOMMENDATION_REVIEW_RULES } from '../markets/recommendation-critic.ts'
 import { recommendationDisplayContext } from '../markets/recommendation-display.ts'
 import { admitDiscoveryCandidates, hasValidatedSystemThesis } from '../markets/decision-admission.ts'
+import { hasCurrentResearchContract, requiredEvidenceGaps, validateEvidenceAssessment } from '../markets/research-contract.ts'
+import { readableCompanySourceIds } from '../markets/research-coverage.ts'
+import type { CompanyPacket } from '../markets/types.ts'
 import { createHash, randomUUID } from 'node:crypto'
 import { getSupabaseClient } from './supabase.ts'
 import { fetchAuthoritativePortfolios } from './portfolio.ts'
@@ -14,6 +17,9 @@ import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import {
   RECOMMENDATION_POLICY,
   abstention,
+  decisionResearchSourceId,
+  hasPotentialSupportedAction,
+  revalidateReviewedBatch,
   validateGeneratedBatch,
   type DecisionContext,
   type DecisionName,
@@ -78,6 +84,23 @@ async function rows(
       )
   }
   return accumulated
+}
+
+/** Read the latest state of every scoped lead. A newest-100 window can hide an
+ * older candidate forever, regardless of the admission rotation policy. */
+export async function loadDecisionCandidates(ownerId: string, cutoff: string): Promise<Row[]> {
+  const latest = new Map<string,Row>()
+  for(let offset=0;;offset+=500) {
+    const result=await investmentDb().from('candidate_briefs')
+      .select('id,symbol,owner_id,status,generated_at,snoozed_until,content')
+      .or(`owner_id.eq.${ownerId},owner_id.is.null`).lte('generated_at',cutoff)
+      .order('generated_at',{ascending:false}).order('id').range(offset,offset+499)
+      .abortSignal(AbortSignal.timeout(15_000))
+    if(result.error)throw new Error(`Unable to read candidate rotation: ${result.error.message}`)
+    for(const row of result.data??[])if((!row.owner_id||row.owner_id===ownerId)&&!latest.has(String(row.symbol)))latest.set(String(row.symbol),row)
+    if((result.data?.length??0)<500)return [...latest.values()]
+    if(offset>=9500)throw new Error('Candidate history exceeds supported rotation scope; no partial coverage was accepted')
+  }
 }
 
 /** Load exact immutable versions referenced by the selected notes, not every
@@ -146,7 +169,7 @@ export async function assembleDecisionContext(
       ),
       optional(
         'Candidate discovery',
-        rows('candidate_briefs', undefined, cutoff, 'generated_at', 100),
+        loadDecisionCandidates(ownerId,cutoff),
       ),
       optional(
         'Watchlists',
@@ -178,7 +201,9 @@ export async function assembleDecisionContext(
     portfolio.flatMap((p) => p.holdings.map((h) => h.symbol)),
   )
   const selected = new Set([...owned, ...watched])
-  const admitted = admitDiscoveryCandidates(candidates.filter(c => !c.owner_id || c.owner_id === ownerId), selected, cutoff)
+  const lastReviewed=new Map<string,string>()
+  for(const note of [...research,...fundResearch])if(note.status==='complete'&&hasCurrentResearchContract(record(note.content))&&(!lastReviewed.has(String(note.symbol))||String(note.generated_at)>lastReviewed.get(String(note.symbol))!))lastReviewed.set(String(note.symbol),String(note.generated_at))
+  const admitted = admitDiscoveryCandidates(candidates.filter(c => !c.owner_id || c.owner_id === ownerId), selected, cutoff,6,lastReviewed)
   for (const c of admitted) selected.add(String(c.symbol))
   const selectedNotes = [...selected].flatMap(symbol => {
     const note = [...research,...fundResearch].filter(r => r.symbol === symbol && r.status === 'complete')
@@ -363,6 +388,16 @@ export async function assembleDecisionContext(
             packet.generated_at,
           ),
         )
+      const packetSources = (Array.isArray(packetContent.sources) ? packetContent.sources : []).map(record)
+      const readableSources = isFund ? packetSources.map(s => String(s.id)) : readableCompanySourceIds({ ...packetContent, sources: packetSources, filings: Array.isArray(packetContent.filings) ? packetContent.filings : [], events: Array.isArray(packetContent.events) ? packetContent.events : [] } as unknown as CompanyPacket)
+      const assessmentSupports = record(record(canonicalNote?.content).evidenceAssessment).actionSupport
+      const supportingSourceIds = new Set((Array.isArray(assessmentSupports) ? assessmentSupports : []).flatMap(s => Array.isArray(record(s).sourceIds) ? record(s).sourceIds as unknown[] : []).filter((id): id is string => typeof id === 'string'))
+      // The full source ledger remains in the frozen packet. Separate source
+      // references expose actionSupport provenance without duplicating every
+      // historical report citation in the bounded decision evidence index.
+      if (packet) for (const source of packetSources.filter(s => supportingSourceIds.has(String(s.id)) && readableSources.includes(String(s.id)))) {
+        sourceIds.push(addEvidence(decisionResearchSourceId(String(packet.id), String(source.id)), isFund ? 'etf_source' : 'company_source', { source, underlyingSourceId: source.id, packetId: packet.id }, source.asOf, packet.generated_at, source.url, source.source))
+      }
       if (thesis)
         sourceIds.push(
           addEvidence(
@@ -374,7 +409,14 @@ export async function assembleDecisionContext(
           ),
         )
       const quality = record(packetContent.evidenceQuality)
+      const providerEvidenceGaps = requiredEvidenceGaps(packetContent)
+      const researchContent = record(canonicalNote?.content)
+      let evidenceAssessment: DecisionName['evidenceAssessment']
+      if (researchContent.researchContractVersion === 1) {
+        try { evidenceAssessment = validateEvidenceAssessment(researchContent.evidenceAssessment, (Array.isArray(researchContent.sourceIds) ? researchContent.sourceIds : []).filter((id): id is string => typeof id === 'string' && readableSources.includes(id)), providerEvidenceGaps) } catch { /* A malformed current report cannot waive legacy evidence gates. */ }
+      }
       const nameGaps: string[] = []
+      if (!hasCurrentResearchContract(researchContent, packetContent)) nameGaps.push('Research contract upgrade is required before a capital decision')
       if (note && !canonicalNote) nameGaps.push('Research requires independent primary-evidence reconstruction; legacy shadow context excluded')
       if (
         thesis?.reviewed_at &&
@@ -414,8 +456,6 @@ export async function assembleDecisionContext(
         .lte('retrieved_at', cutoff)
         .order('trading_date', { ascending: false })
         .limit(20)
-      if (liquidityResult.error)
-        nameGaps.push('Liquidity observations unavailable')
       const liquidity = liquidityResult.data ?? []
       const averageDollarVolume =
         liquidity.length === 20
@@ -474,7 +514,11 @@ export async function assembleDecisionContext(
         instrumentType: isFund ? 'etf' : 'equity',
         systemThesisValidated,
         limitations,
+        providerEvidenceGaps,
+        ...(researchContent.researchContractVersion === 1 ? { researchContractVersion: 1 as const } : {}),
+        ...(evidenceAssessment ? { evidenceAssessment } : {}),
         entryGaps: [
+          ...(liquidityResult.error ? ['Liquidity observations unavailable'] : []),
           ...(!Number.isFinite(Date.parse(String(quality.priceAsOf))) || Date.parse(cutoff) - Date.parse(String(quality.priceAsOf)) > 96 * 3600000 ? ['Research entry assumptions use stale price evidence; refresh research'] : []),
           ...(p.dataSource === 'manual_snapshot' && !p.allocationBudget &&
             (!p.capitalAsOf || !Number.isFinite(Date.parse(p.capitalAsOf)) || Date.parse(cutoff) - Date.parse(p.capitalAsOf) > 96 * 3600000)
@@ -558,7 +602,7 @@ export async function assembleDecisionContext(
     date,
     cutoff,
     policy: RECOMMENDATION_POLICY,
-    contracts: { forecast: 2, companyStory: 1 },
+    contracts: { forecast: 2, companyStory: 1, research: 1 },
     editionKey,
     codeVersion:
       process.env.VERCEL_GIT_COMMIT_SHA ??
@@ -627,7 +671,7 @@ export async function generateDailyRecommendations(
   let summary =
     'Daily evaluation is incomplete. Review the stated gaps before changing capital.'
   // Do not spend model time pretending a completely blocked context is decision-ready.
-  if (analysisContext.names.every((n) => n.gaps.length > 0)) {
+  if (analysisContext.names.every((n) => !hasPotentialSupportedAction(n, analysisContext))) {
     recommendations = analysisContext.names.map((n) =>
       abstention(
         n,
@@ -643,7 +687,7 @@ export async function generateDailyRecommendations(
         cwd: input.directory,
         webSearch: false,
         timeoutMs: 15 * 60 * 1000,
-        prompt: `Generate owner-facing investment recommendations using only the frozen context below. ${RECOMMENDATION_REVIEW_RULES} Do not fetch live data or execute orders. Inspect only the frozen files supplied below. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires a validated system thesis (systemThesisValidated) or an accepted owner thesis plus fresh evidence. System recommendations are published for owner review; never rewrite the accepted owner thesis. A candidate screen is only a research lead. State evidence limitations, and never invent consensus or transcripts when they are absent. ETF evidence must be interpreted as fund exposure, never corporate earnings. Assess each instrument and portfolio independently; a missing input elsewhere must not suppress a supported decision here. An affirmative hold does not require a new economic forecast, but must have positive supporting evidence; absence of a sell trigger is insufficient. NOT_RATED research requires abstention or research, not an affirmative hold. A trim or sell may proceed without an economic forecast when supported by documented thesis invalidation, or explicit SELL research. Cite that evidence and explain the reduction. Missing optional macro/World context alone does not veto a supported hold or risk reduction. Buy/add still require evidence-backed measurable forecasts and the full entry, liquidity, cash and portfolio checks. Never invent a forecast to unlock a hold or exit. Write a substantive investment memo, not policy shorthand. A research rating alone is not the explanation: identify the decisive reported facts and source IDs, explain what changed and why it matters for future shareholder cash flows, and distinguish observations from your interpretation. In mechanism connect the company economics to any cited frozen canonical World model or macro evidence. If none is present, state that this decision is based on company evidence and no World forecast was used; do not imply the live shadow World influenced it. In expectations describe the evidence-backed future scenario, assumptions, horizon and what remains unknown even when there is no scored forecast; never say that SELL research removes the need to explain expectations. Explain why the optimistic scenario does not justify retaining or adding exposure at current valuation. In counterThesis give the strongest credible opposing case. Make invalidation and reassessWhen concrete observable checkpoints from the evidence. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers only when the evidence supports them. Prefer a 30-to-95-day reporting checkpoint alongside longer-term beliefs. Each forecast must declare resolutionSource (its exact FRED:/FMP: metric key or source:<cited source ID>) and decisivePremise (whether the claim is decisive to the conclusion). Each forecast must specify observationPeriod (exact quarter-end or economic observation date), unit, threshold and a reporting deadline after that period. Use exact automatically resolvable metrics when relevant: FRED:<series ID> in the captured series units, or FMP:incomeQuarterly:revenue, FMP:incomeQuarterly:operatingIncome, FMP:incomeQuarterly:netIncome, FMP:cashFlowQuarterly:operatingCashFlow, FMP:cashFlowQuarterly:freeCashFlow in reportedCurrency units. Do not invent a quarter-end, earnings date, growth transformation or unsupported threshold to satisfy the contract. Other metrics require an explicitly sourced manual resolution and must not masquerade as automatic. Omit unsupported forecasts and explain the missing evidence. Do not use security-price returns as economic mechanism forecasts; market returns are evaluated separately. Use an empty forecasts array for unresolved identity, missing research or unsupported claims; never encode uncertainty as a directional price forecast. Narrative confidence is not a calibrated probability. Maximum new position is 10%; this is an admission limit for buy/add, not a documented maximum for existing holdings or a compulsory trim trigger. Do not assert an existing-position cap unless sourced portfolio policy establishes one. Do not invent prices or sizing. A trim requires an explicit positive targetWeightPct below currentWeightPct; a sell requires targetWeightPct zero. If no justified reduction size can be determined, abstain. For capitalBasis owner_budget, cash means owner-authorized remaining allocation budget, not broker buying power. Use this budget for recommendations without requesting funding or transfer confirmation; never claim it is settled broker cash. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Every narrative field, entry condition, and decision dimension must contain at least eight characters; risks and invalidation must be nonempty arrays. Provide a substantive exit and reassessment rule even for watch, research, and no-trade. Expiry must be after the cutoff and within seven days; horizons are 1 to 1825 integer days, confidence is 0 to 100, and forecast probabilities are strictly between zero and one. Respond with summary and recommendations.\n${input.prompt}`,
+        prompt: `Generate owner-facing investment recommendations using only the frozen context below. ${RECOMMENDATION_REVIEW_RULES} Do not fetch live data or execute orders. Inspect only the frozen files supplied below. Cover every (portfolioId,symbol) exactly once. Research rating is separate from entry timing and portfolio fit. No-trade means evaluation/entry abstention, hold is affirmative. New risk requires a validated system thesis (systemThesisValidated) or an accepted owner thesis plus fresh evidence. System recommendations are published for owner review; never rewrite the accepted owner thesis. A candidate screen is only a research lead. State evidence limitations, and never invent consensus or transcripts when they are absent. ETF evidence must be interpreted as fund exposure, never corporate earnings. Assess each instrument and portfolio independently; a missing input elsewhere must not suppress a supported decision here. An affirmative hold does not require a new economic forecast, but must have positive supporting evidence; absence of a sell trigger is insufficient. Legacy NOT_RATED research cannot establish affirmative ownership. Under researchContractVersion 1, use the validated action-specific evidence assessment and separately supported ownership stance; insufficient overall evidence may still support retain/reduce/exit if no material gap affects that action. Cite the frozen research, packet and namespaced company_source/etf_source evidence IDs used by its actionSupport. A trim or sell may proceed without an economic forecast when supported by documented thesis invalidation, explicit SELL research, or current cited actionSupport. Cite that evidence and explain the reduction. Missing optional macro/World context alone does not veto a supported hold or risk reduction. Buy/add still require evidence-backed measurable forecasts and the full entry, liquidity, cash and portfolio checks. Never invent a forecast to unlock a hold or exit. Write a substantive investment memo, not policy shorthand. A research rating alone is not the explanation: identify the decisive reported facts and source IDs, explain what changed and why it matters for future shareholder cash flows, and distinguish observations from your interpretation. In mechanism connect the company economics to any cited frozen canonical World model or macro evidence. If none is present, state that this decision is based on company evidence and no World forecast was used; do not imply the live shadow World influenced it. In expectations describe the evidence-backed future scenario, assumptions, horizon and what remains unknown even when there is no scored forecast; never say that SELL research removes the need to explain expectations. Explain why the optimistic scenario does not justify retaining or adding exposure at current valuation. In counterThesis give the strongest credible opposing case. Make invalidation and reassessWhen concrete observable checkpoints from the evidence. Compare an alternative and a counter-thesis. Include specific observable, probabilistic economic forecasts with deadlines, source IDs and falsifiers only when the evidence supports them. Prefer a 30-to-95-day reporting checkpoint alongside longer-term beliefs. Each forecast must declare resolutionSource (its exact FRED:/FMP: metric key or source:<cited source ID>) and decisivePremise (whether the claim is decisive to the conclusion). Each forecast must specify observationPeriod (exact quarter-end or economic observation date), unit, threshold and a reporting deadline after that period. Use exact automatically resolvable metrics when relevant: FRED:<series ID> in the captured series units, or FMP:incomeQuarterly:revenue, FMP:incomeQuarterly:operatingIncome, FMP:incomeQuarterly:netIncome, FMP:cashFlowQuarterly:operatingCashFlow, FMP:cashFlowQuarterly:freeCashFlow in reportedCurrency units. Do not invent a quarter-end, earnings date, growth transformation or unsupported threshold to satisfy the contract. Other metrics require an explicitly sourced manual resolution and must not masquerade as automatic. Omit unsupported forecasts and explain the missing evidence. Do not use security-price returns as economic mechanism forecasts; market returns are evaluated separately. Use an empty forecasts array for unresolved identity, missing research or unsupported claims; never encode uncertainty as a directional price forecast. Narrative confidence is not a calibrated probability. Maximum new position is 10%; this is an admission limit for buy/add, not a documented maximum for existing holdings or a compulsory trim trigger. Do not assert an existing-position cap unless sourced portfolio policy establishes one. Do not invent prices or sizing. A trim requires an explicit positive targetWeightPct below currentWeightPct; a sell requires targetWeightPct zero. If no justified reduction size can be determined, abstain. For capitalBasis owner_budget, cash means owner-authorized remaining allocation budget, not broker buying power. Use this budget for recommendations without requesting funding or transfer confirmation; never claim it is settled broker cash. Choose entry.trigger explicitly: next_session_open, next_open_below_ceiling, or manual_condition. Any additional untestable condition requires manual_condition. Conditional entries expire at expiresAt and are not assumed filled. Use gaps to abstain rather than silently assuming facts. Every narrative field, entry condition, and decision dimension must contain at least eight characters; risks and invalidation must be nonempty arrays. Provide a substantive exit and reassessment rule even for watch, research, and no-trade. Expiry must be after the cutoff and within seven days; horizons are 1 to 1825 integer days, confidence is 0 to 100, and forecast probabilities are strictly between zero and one. Respond with summary and recommendations.\n${input.prompt}`,
         validate: (value) => {
           const v = record(value)
           return {
@@ -706,7 +750,7 @@ export async function generateDailyRecommendations(
         : generated.data.summary
     })
   }
-  recommendations = validateGeneratedBatch([...retained,...recommendations],context).recommendations
+  recommendations = revalidateReviewedBatch([...retained,...recommendations],context)
   if (!analysisContext.names.length) summary = `Retained ${retained.length} analytical conclusions and validated every instrument against a new frozen context. This edition is newly logged advice for owner review.`
   metadata = {...record(metadata),reusedConclusions:retained.length,analyzedNames:analysisContext.names.length}
   const result = await db.rpc('publish_recommendation_batch', {

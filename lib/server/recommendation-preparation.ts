@@ -4,6 +4,7 @@ import { recommendationResearchTargets } from '../markets/recommendation-prepara
 import { isRobinhoodPortfolioSyncConfigured } from './robinhood-portfolio-sync.ts'
 import { assembleDecisionContext, contentHash, generateDailyRecommendations, investmentDb, record } from './recommendations.ts'
 import type { AgentJobType } from './agent-jobs.ts'
+import { CURRENT_RESEARCH_CONTRACT_VERSION } from '../markets/research-contract.ts'
 
 type Enqueue = (type: AgentJobType, payload: Record<string, unknown>, key: string) => Promise<{id:string;deduplicated:boolean}>
 
@@ -23,10 +24,13 @@ export async function prepareDailyRecommendations(ownerId: string, editionKey: s
     await queue('refresh-market-screener',{mode:'daily'},`recommendation-market:${context.date}:${editionKey}`)
   // Reused research jobs retain their actual status. A terminal failure does
   // not hold the account indefinitely; its affected name remains blocked.
-  for (const target of recommendationResearchTargets(context))
+  // Portfolio decisions repair owned research directly. Nonowned watchlists
+  // and discovery use reserved bounded rotation, so a new interest list cannot
+  // flood the queue and consume every research slot during preparation.
+  for (const target of recommendationResearchTargets(context, {ownedOnly:true}))
     await queue(target.instrumentType === 'etf' ? 'generate-etf-research' : 'generate-company-research',
-      {ownerId,symbol:target.symbol,reason:'Daily decision evidence gap'},
-      `recommendation-research:${ownerId}:${target.symbol}:${context.date}:${String(target.researchId ?? 'missing')}`)
+      {ownerId,symbol:target.symbol,reason:'Daily decision evidence gap',requiredResearchContractVersion:CURRENT_RESEARCH_CONTRACT_VERSION},
+      `recommendation-research:v${CURRENT_RESEARCH_CONTRACT_VERSION}:${ownerId}:${target.symbol}:${context.date}:${String(target.researchId ?? 'missing')}`)
   if (!dependencies.length) return generateDailyRecommendations(ownerId,now,editionKey)
   const db = investmentDb()
   const priority = await db.from('agent_jobs').update({priority:12}).in('id',dependencies).eq('status','queued').gt('priority',12)

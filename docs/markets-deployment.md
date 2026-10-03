@@ -122,6 +122,51 @@ Set `WORKER_SCHEDULER_ENABLED=false` only when an external scheduler is intentio
 
 Monitor queued/running/failed rows in `agent_jobs` and execution metadata in `agent_runs`. Keep market-data displays private until Alpaca display and redistribution terms are confirmed.
 
+### Research rollout and portfolio upgrade
+
+Apply `202610030001_worker_research_readiness.sql` and
+`202610030002_research_coverage.sql` before activating the release. The new heartbeat fields are nullable
+for old workers, but absent release, contract, health or queue-loop evidence
+blocks research rollout. A successful build or live process does not verify
+database access, enabled research providers or a completed report upgrade.
+
+The release script checks database/migration readiness before switching the
+daemon, then waits for local and persisted health for the exact activated SHA
+and current research contract. A verification failure exits unsuccessfully and
+retains rollback releases. The private, authenticated
+`/api/markets/operations?requiredRelease=FULL_WORKER_SHA` endpoint reports
+database/heartbeat/release readiness and each holding's completed, pending,
+in-progress, unavailable or blocked research state. Unknown input reads remain
+explicitly unverified.
+
+Run on the configured private worker, with its existing environment sourced:
+
+```bash
+node --experimental-strip-types scripts/check-research-readiness.ts --required-release=FULL_WORKER_SHA
+node --experimental-strip-types scripts/backfill-portfolio-research.ts --required-release=FULL_WORKER_SHA
+node --experimental-strip-types scripts/backfill-portfolio-research.ts --required-release=FULL_WORKER_SHA --batch-size=4 --execute
+```
+
+The backfill command defaults to a read-only plan. `--execute` admits one bounded
+batch to the existing durable queue only after every fresh worker reports the
+required release and current contract. Jobs also carry release/contract guards
+that are enforced when claimed, so a later rollback cannot execute an upgrade
+under older rules. Repeat the plan after jobs finish and admit the next batch;
+queue admission is not a completed backfill. `complete: true` requires a fresh,
+validated current-contract report for every supported holding and no unresolved
+unsupported instruments, blocked jobs or in-progress work.
+
+`RESEARCH_ACTIVE_JOB_LIMIT` defaults to four and accepts one through four. It
+bounds queued plus running work admitted by automatic coverage and the backfill
+planner; explicit manual and decision-repair jobs can still wait durably in the
+queue. Database claiming limits actual simultaneous company/ETF research to four
+across all workers and prevents simultaneous research of the same owner/symbol.
+Admission is transactional across the coverage and backfill planners. A failed
+backfill job can receive two explicitly counted retries after its normal attempt
+budget; exhausted, cancelled and capability-blocked work stays visible and does
+not prevent other holdings receiving research. Immutable runs retain the prior
+failure evidence.
+
 ## Optional Linux/Docker replacement
 
 `Dockerfile.worker` and `docker-compose.worker.yml` remain available if macserver is later replaced with a Linux VPS. The same worker queue and persisted artifacts allow changing hosts without changing the Vercel frontend.

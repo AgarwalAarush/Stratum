@@ -5,6 +5,7 @@ import { FEEDBACK_RULES, validateFeedbackReview, type ResearchFeedback, type Fee
 import { beginResearchVersion, publishResearchVersion, failResearchVersion } from './research-lifecycle.ts'
 import { fetchResearchBaseline, recordResearchRefresh } from './research-refresh.ts'
 import { RESEARCH_ADVICE_RULES, readResearchAdvice, validateResearchNarrative, validateResearchAdvice, type ResearchAdvice } from '../markets/research-advice.ts'
+import { CURRENT_RESEARCH_CONTRACT_VERSION, RESEARCH_CONTRACT_RULES, readEvidenceAssessment, requiredEvidenceGaps, validateEvidenceAssessment, type EvidenceAssessment, type RequiredEvidenceGap } from '../markets/research-contract.ts'
 import type {
   CompanyPacket,
   CompanyPacketSource,
@@ -557,6 +558,8 @@ export async function materializeCompanyPacket(
 }
 
 interface ResearchGeneration {
+  researchContractVersion: number
+  evidenceAssessment: EvidenceAssessment
   coverageReview?: ResearchCoverageReview | null
   feedbackReview?: FeedbackReview | null
   advice?: ResearchAdvice | null
@@ -575,7 +578,7 @@ interface ResearchGeneration {
   sourceIds: string[]
 }
 
-export function validateEquityResearch(value: unknown, allowedSourceIds?: readonly string[], feedback?: ResearchFeedback, coverage?: ResearchCoverage): ResearchGeneration {
+export function validateEquityResearch(value: unknown, allowedSourceIds?: readonly string[], feedback?: ResearchFeedback, coverage?: ResearchCoverage, requiredGaps: readonly RequiredEvidenceGap[] = coverage ? requiredEvidenceGaps({researchCoverage: coverage}) : []): ResearchGeneration {
   const output = record(value)
   const sections = Array.isArray(output.sections) ? output.sections.map(record) : []
   const ids = sections.map((section) => section.id)
@@ -650,10 +653,16 @@ export function validateEquityResearch(value: unknown, allowedSourceIds?: readon
       explanation: change.explanation,
     }
   })
-  const advice = output.advice || allowedSourceIds ? validateResearchAdvice(output.advice, Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []) : null
+  if (output.researchContractVersion !== CURRENT_RESEARCH_CONTRACT_VERSION) throw new Error('New research requires the current complete report contract')
+  const citedSourceIds = Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : []
+  if (!citedSourceIds.length || new Set(citedSourceIds).size !== citedSourceIds.length) throw new Error('Research source ledger must contain unique citations')
+  const evidenceAssessment = validateEvidenceAssessment(output.evidenceAssessment, citedSourceIds, requiredGaps)
+  const contract = {researchContractVersion: CURRENT_RESEARCH_CONTRACT_VERSION, evidenceAssessment}
+  const advice = validateResearchAdvice(output.advice, citedSourceIds, contract)
   validateResearchNarrative(advice, sections.filter(s => s.id === 'verdict').map(s => String(s.content ?? '')).join('\n'))
-  const coverageReview = coverage ? validateCoverageReview(output.coverageReview, coverage, sections as unknown as EquityResearchSection[], Array.isArray(output.sourceIds) ? output.sourceIds.map(String) : [], advice) : null
+  const coverageReview = coverage ? validateCoverageReview(output.coverageReview, coverage, sections as unknown as EquityResearchSection[], citedSourceIds, advice, evidenceAssessment) : null
   return {
+    ...contract,
     coverageReview,
     feedbackReview: feedback ? validateFeedbackReview(output.feedbackReview, feedback) : null,
     advice,
@@ -740,6 +749,8 @@ export function researchPrompt(
     'When coverageReview is required, every topic must be substantively discussed in the mapped report sections, including facts that strengthen the opposing case. A coverageReview row may cite only that topic’s verified sourceIds; when this list is empty, use status unresolved and an empty row sourceIds array. Its report sections may still analyze other readable packet evidence. Each advice dimension requires at least one readable packet source ID, a substantive reason, and an observable change condition, including evidenceSufficiency: cite the available evidence whose limitations you are assessing. Prior judgments are revisable and do not override new product evidence.',
     FEEDBACK_RULES,
     RESEARCH_ADVICE_RULES,
+    RESEARCH_CONTRACT_RULES,
+    `REQUIRED EVIDENCE GAPS: ${JSON.stringify(requiredEvidenceGaps(packet))}`,
     'Formal rating is a compatibility summary. NOT_RATED is valid when the evidence is insufficient. Unsupported facts and valuation remain unavailable.',
     '',
     priorResearch ? `PRIOR RESEARCH VERSION ${priorResearch.version}:\n${JSON.stringify(priorResearch)}` : 'PRIOR RESEARCH: none',
@@ -815,7 +826,7 @@ export async function generateFullEquityResearch(
     const bundle = await withCompanyResearchSchema(packet, schemaPath => runCodexJson({
       prompt: companyResearchBundlePrompt(analysisPacket, priorMarketModel, independentBaseline ? null : priorResearch, reason),
       schemaPath,
-      validate: value => { const v=record(completeResearchSourceLedgers(value)); return {research:validateEquityResearch(v.research, readableCompanySourceIds(packet), packet.outcomeFeedback, packet.researchCoverage),marketModel:validateCompanyMarketModel(v.marketModel,new Set(readableCompanySourceIds(packet)))} },
+      validate: value => { const v=record(completeResearchSourceLedgers(value)); return {research:validateEquityResearch(v.research, readableCompanySourceIds(packet), packet.outcomeFeedback, packet.researchCoverage, requiredEvidenceGaps(packet)),marketModel:validateCompanyMarketModel(v.marketModel,new Set(readableCompanySourceIds(packet)))} },
       timeoutMs: 20 * 60 * 1_000,
     }))
     const marketModel = await materializeCompanyMarketModel(packet, ownerId, reason, {data: bundle.data.marketModel, metadata: bundle.metadata})
@@ -866,6 +877,8 @@ function normalizeResearch(row: Record<string, unknown>): EquityResearchNote {
   const content = record(row.content)
   return {
     id: String(row.id),
+    researchContractVersion: typeof content.researchContractVersion === 'number' ? content.researchContractVersion : null,
+    evidenceAssessment: readEvidenceAssessment(content.evidenceAssessment, Array.isArray(content.sourceIds) ? content.sourceIds.map(String) : []),
     companyMarketModelId: row.company_market_model_id === null || row.company_market_model_id === undefined
       ? null
       : String(row.company_market_model_id),
@@ -876,7 +889,7 @@ function normalizeResearch(row: Record<string, unknown>): EquityResearchNote {
     coverageReview: content.coverageReview as ResearchCoverageReview | undefined ?? null,
     feedbackReview: content.feedbackReview as FeedbackReview | undefined ?? null,
     evidenceAuthority: content.evidenceAuthority as EquityResearchNote['evidenceAuthority'],
-    advice: readResearchAdvice(content.advice),
+    advice: readResearchAdvice(content.advice, Array.isArray(content.sourceIds) ? content.sourceIds.map(String) : [], {researchContractVersion: Number(content.researchContractVersion), evidenceAssessment: readEvidenceAssessment(content.evidenceAssessment)}),
     formalRating: row.formal_rating as EquityResearchNote['formalRating'],
     entryAction: row.entry_action as EquityResearchNote['entryAction'],
     investmentThesis: String(content.investmentThesis ?? content.mispricing ?? ''),

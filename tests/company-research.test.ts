@@ -24,6 +24,8 @@ const sectionIds = [
 
 function validResearch() {
   return {
+    researchContractVersion: 1,
+    evidenceAssessment: {version: 1, gaps: [], actionSupport: [{action: 'hold', reason: 'Current reported operating evidence supports retaining the existing position.', sourceIds: ['source-1'], gapIds: [], reversalConditions: ['Operating leverage fails.']}]},
     advice: { version: 1, businessView: {value:'constructive',reason:'Positive operating evidence.',sourceIds:['source-1'],changeConditions:['Margins deteriorate materially.']}, evidenceSufficiency:{value:'sufficient',reason:'Current primary sources support the opinion.',sourceIds:['source-1'],changeConditions:['Fresh disclosures contradict the premise.']}, newEntryStance:{value:'wait',reason:'Await an attractive valuation.',sourceIds:['source-1'],changeConditions:['Price reaches the entry ceiling.']}, existingPositionStance:{value:'retain',reason:'Retain the current positive exposure.',sourceIds:['source-1'],changeConditions:['Operating leverage fails.']} },
     formalRating: 'HOLD',
     entryAction: 'wait',
@@ -185,4 +187,13 @@ test('publication rejects unknown and orphaned section citations', () => {
   const report = validResearch(); report.sections[0].sourceIds = ['orphan']
   assert.throws(() => validateEquityResearch(report, ['source-1', 'orphan']), /Section citation/)
   assert.equal(validateEquityResearch(validResearch(), ['source-1']).sourceIds.length, 1)
+})
+
+test('new equity reports are upgraded only after validating the complete evidence contract', () => {
+  const valid = validResearch()
+  assert.equal(validateEquityResearch(valid, ['source-1']).researchContractVersion, 1)
+  assert.throws(() => validateEquityResearch({...valid,researchContractVersion:undefined}, ['source-1']), /current complete report contract/)
+  assert.throws(() => validateEquityResearch({...valid,evidenceAssessment:undefined}, ['source-1']), /versioned action-specific evidence assessment/)
+  assert.throws(() => validateEquityResearch(valid, ['source-1'], undefined, undefined, [{id:'packet:cash flow',description:'cash flow'}]), /omits known gap/)
+  assert.throws(() => validateEquityResearch({...valid,sourceIds:['source-1','source-1']}, ['source-1']), /unique citations/)
 })

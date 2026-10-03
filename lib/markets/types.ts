@@ -528,6 +528,8 @@ export interface EtfResearchSection {
 }
 
 export interface EtfResearchNote {
+  researchContractVersion?: number | null
+  evidenceAssessment?: import('./research-contract.ts').EvidenceAssessment | null
   feedbackReview?: import('./research-feedback.ts').FeedbackReview | null
   advice?: import('./research-advice.ts').ResearchAdvice | null
   id: string
@@ -890,6 +892,8 @@ export interface EquityResearchRevision {
 }
 
 export interface EquityResearchNote {
+  researchContractVersion?: number | null
+  evidenceAssessment?: import('./research-contract.ts').EvidenceAssessment | null
   coverageDiagnostics?: import('./research-coverage.ts').ResearchCoverageDiagnostics | null
   coverageReview?: import('./research-coverage.ts').ResearchCoverageReview | null
   evidenceAuthority?: typeof import('./evidence-authority.ts').PRIMARY_RESEARCH_AUTHORITY

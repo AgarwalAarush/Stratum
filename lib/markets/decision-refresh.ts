@@ -4,7 +4,7 @@ const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.
 export function nameDecisionSignature(name:DecisionName) {
   const research=object(name.research?.content)
   const ceiling=typeof research.entryZoneHigh==='number'?research.entryZoneHigh:typeof research.fairValue==='number'?research.fairValue:null
-  return semanticHash({securityId:name.securityId,portfolioId:name.portfolioId,owned:name.owned,quantity:name.quantity,cash:name.cash,capitalBasis:name.capitalBasis,research:semanticValue(Object.fromEntries(Object.entries(research).filter(([key])=>!['revision','reason','worldContextOrigin'].includes(key)))),thesis:semanticValue(name.thesis),gaps:name.gaps,entryGaps:name.entryGaps,limitations:name.limitations,
+  return semanticHash({securityId:name.securityId,portfolioId:name.portfolioId,owned:name.owned,quantity:name.quantity,cash:name.cash,capitalBasis:name.capitalBasis,research:semanticValue(Object.fromEntries(Object.entries(research).filter(([key])=>!['revision','reason','worldContextOrigin'].includes(key)))),thesis:semanticValue(name.thesis),gaps:name.gaps,entryGaps:name.entryGaps,limitations:name.limitations,providerEvidenceGaps:name.providerEvidenceGaps,evidenceAssessment:name.evidenceAssessment,researchContractVersion:name.researchContractVersion,
     quoteCondition: {known:!!name.quote,withinCeiling: name.quote && ceiling!==null ? name.quote.price<=ceiling:null},causalLinks:name.causalLinks})
 }
 export function decisionContextSignature(context:DecisionContext) {

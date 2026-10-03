@@ -1,9 +1,10 @@
 import { needsDecisionResearchRefresh } from './decision-admission.ts'
 import type { DecisionContext } from './recommendations.ts'
 
-export function recommendationResearchTargets(context: DecisionContext) {
+export function recommendationResearchTargets(context: DecisionContext, options: {ownedOnly?: boolean} = {}) {
   const seen = new Set<string>()
   return context.names.filter(name => {
+    if (options.ownedOnly && !name.owned) return false
     if (seen.has(name.symbol) || name.securityId.startsWith('unresolved:') || !needsDecisionResearchRefresh(name)) return false
     seen.add(name.symbol)
     return true

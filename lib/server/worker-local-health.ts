@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DEFAULT_MARKET_DATA_ROOT } from './world-corpus.ts'
+import { CURRENT_RESEARCH_CONTRACT_VERSION } from '../markets/research-contract.ts'
 export function safeWorkerError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   return /<!doctype|<html/i.test(message)
@@ -17,6 +18,10 @@ export async function writeWorkerLocalHealth(state: {
   error?: string
   loopAgeSeconds?: number
   stalled?: boolean
+  database?: 'ready' | 'unverified'
+  lastHeartbeatAt?: string | null
+  lastLoopAt?: string
+  readinessSchema?: 'current' | 'legacy' | 'unknown'
 }) {
   const directory = join(
     process.env.STRATUM_DATA_ROOT || DEFAULT_MARKET_DATA_ROOT,
@@ -31,6 +36,7 @@ export async function writeWorkerLocalHealth(state: {
       ...state,
       checkedAt: new Date().toISOString(),
       release: process.env.STRATUM_RELEASE_SHA ?? 'unknown',
+      researchContractVersion: CURRENT_RESEARCH_CONTRACT_VERSION,
     }),
     { mode: 0o600 },
   )

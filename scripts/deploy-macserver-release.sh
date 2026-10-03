@@ -30,7 +30,7 @@ npm ci
 # Existing repository warnings are reported, but only lint errors should block
 # an immutable worker release. Feature checks still run below before activation.
 npm run lint -- --quiet
-node --test --experimental-strip-types tests/world-thinker.test.ts tests/world-memory.test.ts tests/world-sources.test.ts tests/candidate-scout.test.ts tests/agent-jobs.test.ts tests/agent-schedule.test.ts tests/market-thesis-research.test.ts tests/market-research-orchestrator.test.ts tests/world-source-health.test.ts
+node --test --experimental-strip-types tests/world-thinker.test.ts tests/world-memory.test.ts tests/world-sources.test.ts tests/candidate-scout.test.ts tests/agent-jobs.test.ts tests/agent-schedule.test.ts tests/market-thesis-research.test.ts tests/market-research-orchestrator.test.ts tests/world-source-health.test.ts tests/worker-readiness.test.ts tests/research-rollout.test.ts tests/research-admission-migration.test.ts
 npm run build
 printf '%s\n%s\n' "$revision" "$(cat .next/BUILD_ID)" > .stratum-staged
 else
@@ -64,6 +64,8 @@ set -a
 source "$release_dir/.env.worker"
 set +a
 export STRATUM_RELEASE_SHA="$revision"
+# Readiness columns and database access must exist before the daemon switches.
+node --experimental-strip-types scripts/check-research-readiness.ts --database-only
 node --experimental-strip-types scripts/init-world-repository.ts
 
 # Record release identity without copying provider credentials into an artifact.
@@ -82,8 +84,25 @@ if [[ "$daemon_pid" == <-> ]]; then
   kill -TERM "$daemon_pid"
 else
   echo "Release is staged, but no running system worker was found to restart." >&2
+  exit 1
 fi
-echo "Deployed $revision at $active_link. The prior release worktree is retained for rollback."
+echo "Activated $revision at $active_link; verifying the worker and research contract."
+verified=false
+# Allow prior process heartbeats to expire as well as the new worker to start.
+# Activation is not delivery until database evidence identifies this release.
+for health_wait in {1..48}; do
+  if node --experimental-strip-types scripts/check-worker-health.ts --required-release="$revision" --require-research-readiness &&
+     node --experimental-strip-types scripts/check-research-readiness.ts --required-release="$revision"; then
+    verified=true
+    break
+  fi
+  sleep 5
+done
+if [[ "$verified" != true ]]; then
+  echo "Activated release has not passed worker/database/contract verification. Prior release retained for rollback; portfolio backfill is blocked." >&2
+  exit 1
+fi
+echo "Verified worker release $revision at $active_link. The prior release worktree is retained for rollback."
 
 # Automatic retention requires a separately approved policy and fresh worker
 # health for this exact release. Failure leaves rollback directories intact.
