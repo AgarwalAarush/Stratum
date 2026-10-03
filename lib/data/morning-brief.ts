@@ -15,7 +15,7 @@ import {
   fetchYesterdaysBrief,
   type FeedItemRow,
 } from './overview-persistence.ts'
-import { fetchWorldWorkspace } from '../server/world-projection.ts'
+import { retrieveWorldMemory } from '../server/world-retrieval.ts'
 
 interface SourceItem {
   title: string
@@ -213,11 +213,11 @@ export async function generateMorningBrief(options: MorningBriefGenerationOption
   }
 
   // Fetch live items, historical items, and yesterday's brief in parallel
-  const [liveResults, recentItems, yesterdaysBrief, worldWorkspace] = await Promise.all([
+  const [liveResults, recentItems, yesterdaysBrief, worldRecall] = await Promise.all([
     Promise.allSettled(SECTIONS.map((s) => s.fetch())),
     fetchRecentFeedItems(24),
     fetchYesterdaysBrief(),
-    fetchWorldWorkspace().catch(() => null),
+    retrieveWorldMemory({query:'technology AI power semiconductor macro policy demand constraint',limit:6}).catch(() => null),
   ])
 
   // Build live source items with labels
@@ -290,14 +290,10 @@ Yesterday's Brief Context:
 
 Previous prose is comparison context, never evidence. Note developing stories and whether yesterday's watch list items have materialized in today's headlines.`
   }
-  const latestWorldJournal = worldWorkspace?.latestChanges[0]
-  const worldBlock = latestWorldJournal ? `
-
-Shadow World research journal (commit ${worldWorkspace?.commit ?? 'unavailable'}, as of ${latestWorldJournal.asOf}):
-${latestWorldJournal.summary}
-${latestWorldJournal.body.slice(0, 6_000)}
-
-Use this shadow journal only to nominate questions. Its conclusions are not verified source facts. Identify what materially changed, which beliefs moved, scenario changes, new company investigations, and indicators requiring attention. It is an assessment layer; retain its uncertainty and do not turn research leads into recommendations.` : ''
+  const worldBlock = worldRecall?.bundles.length ? `
+Shadow World memory (retrieval receipt ${worldRecall.receipt.id}, commit ${worldRecall.receipt.commit}):
+${JSON.stringify(worldRecall.bundles.map(b=>({claim:b.claim,acceptedAt:b.acceptedAt,freshness:b.freshness,sources:b.sources,counterevidence:b.counterevidence})))}
+Use this context to nominate questions and explain uncertainty. World assessments are not verified current source facts or capital recommendations. Cite the supplied primary headlines for briefing conclusions.` : ''
 
   const prompt = `You are a morning intelligence briefing writer for Stratum, a tech intelligence dashboard. Below are the latest headlines across AI research, policy, cybersecurity, venture capital, tech events, infrastructure, startups, papers, repos, discussions, earnings, deals, research reports, and macro indicators. Each headline has a numbered source reference. Some items include metadata details in parentheses (categories, star counts, engagement metrics, EPS figures) — use these for richer analysis.
 

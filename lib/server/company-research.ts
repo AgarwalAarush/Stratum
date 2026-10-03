@@ -1,5 +1,6 @@
 import { startInvestigation } from './research-investigations.ts'
 import { hasCurrentResearchContract, validatePacketDecisionSupport } from '../markets/research-contract.ts'
+import { retrieveWorldMemory, worldResearchPreparation } from './world-retrieval.ts'
 import { COMPANY_STORY_RULES } from '../markets/company-story.ts'
 import { feedbackSources, loadResearchFeedback } from './research-feedback.ts'
 import { needsIndependentResearch, primaryResearchPacket, PRIMARY_RESEARCH_AUTHORITY } from '../markets/evidence-authority.ts'
@@ -777,9 +778,13 @@ export async function generateFullEquityResearch(
     if (error || !data) throw new Error('Originating World dossier is unavailable or mismatched')
     worldOrigin = data
   }
+  const worldPreparation = await retrieveWorldMemory({query:`${symbol} business demand constraints`,symbol,limit:12},{ownerId})
+    .then(worldResearchPreparation).catch(error=>({retrievalReceipt:{error:error instanceof Error?error.message:String(error)},questions:[],documentUrls:[],authority:'questions_and_documents_only' as const}))
+  worldOrigin = {...worldOrigin,decisive_questions:[...(Array.isArray(worldOrigin?.decisive_questions)?worldOrigin.decisive_questions:[]),...worldPreparation.questions],documentUrls:worldPreparation.documentUrls}
   const independentBaseline = Boolean(priorResearch && priorResearch.evidenceAuthority?.version !== 1)
   const previousPacket = priorResearch ? await fetchResearchBaseline(ownerId, 'equity', priorResearch.id) : null
   const packet = await materializeCompanyPacket(symbol, ownerId, new Date(), worldOrigin)
+  Object.assign(packet,{worldMemoryPreparation:worldPreparation})
   const baseline = record(previousPacket)
   if (baseline.researchCoverage) {
     packet.researchCoverage = baseline.researchCoverage as ResearchCoverage
@@ -833,7 +838,7 @@ export async function generateFullEquityResearch(
       result.data.revision = {priorVersion:priorResearch.version,opinionChange:result.data.formalRating === 'NOT_RATED' || priorResearch.formalRating === 'NOT_RATED' ? 'initial' : rank[result.data.formalRating] > rank[priorResearch.formalRating] ? 'more_constructive' : rank[result.data.formalRating] < rank[priorResearch.formalRating] ? 'less_constructive' : 'unchanged',summary:'Reconstructed from primary evidence without legacy World conclusions; differences below are a post-generation comparison, not an inferred economic outcome.',changes}
     }
     const coverageDiagnostics = researchCoverageDiagnostics(packet.researchCoverage)
-    const content = { ...result.data, coverageDiagnostics, reason, evidenceAuthority: PRIMARY_RESEARCH_AUTHORITY, worldContextOrigin: analysisPacket.worldOrigin ?? null }
+    const content = { ...result.data, coverageDiagnostics, reason, evidenceAuthority: PRIMARY_RESEARCH_AUTHORITY, worldContextOrigin: analysisPacket.worldOrigin ?? null, worldMemoryPreparation: worldPreparation }
     await publishResearchVersion({kind:'equity',id:noteRecord.id,content,sources:packet.sources,metadata:result.metadata,generatedAt,extra:{company_market_model_id:marketModel.id}})
     await onProgress?.(100, `Research complete; coverage ${coverageDiagnostics.status}, ${coverageDiagnostics.attempts} passes, ${Math.round(coverageDiagnostics.durationMs/1000)} seconds`)
     const note: EquityResearchNote = {
@@ -936,6 +941,18 @@ export async function fetchLatestCompanyPacket(ownerId: string, symbol: string):
   return data && record(data.packet).symbol === symbol ? data.packet as CompanyPacket : null
 }
 
+export async function fetchEquityResearchHistory(ownerId:string,symbol:string) {
+ const db=getSupabaseClient();if(!db)return []
+ const r=await db.from('equity_research_notes').select('id,version,generated_at').eq('owner_id',ownerId).eq('symbol',symbol).eq('status','complete').order('version',{ascending:false})
+ if(r.error)throw new Error(r.error.message)
+ return r.data??[]
+}
+export async function fetchEquityResearchVersion(ownerId:string,symbol:string,reportId:string):Promise<EquityResearchNote|null> {
+ const db=getSupabaseClient();if(!db)return null
+ const r=await db.from('equity_research_notes').select('*').eq('id',reportId).eq('owner_id',ownerId).eq('symbol',symbol).eq('status','complete').maybeSingle()
+ if(r.error)throw new Error(r.error.message)
+ return r.data?normalizeResearch(r.data):null
+}
 export async function fetchLatestEquityResearch(ownerId: string, symbol: string): Promise<EquityResearchNote | null> {
   const supabase = getSupabaseClient()
   if (!supabase || !validOwnerId(ownerId)) return null
