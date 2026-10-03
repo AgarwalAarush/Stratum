@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { CaretDown, Check, PencilSimple, Plus, Trash, X } from '@phosphor-icons/react'
+import { requestJson } from '@/lib/client/request-json'
 import { formatEntryAction } from '@/lib/markets/research-presentation'
 import { parsePortfolioUpdate, type ParsedPortfolioUpdate } from '@/lib/markets/portfolio-updates'
 import { MarketsIntentLink } from './MarketsIntentLink'
@@ -65,6 +66,8 @@ export function PortfolioWorkspace({
   const [notice, setNotice] = useState('')
   const [editingTransaction, setEditingTransaction] = useState<PortfolioTransaction | null>(null)
   const [removeArmedId, setRemoveArmedId] = useState<string | null>(null)
+  const [ledgerPending, setLedgerPending] = useState(false)
+  const ledgerPendingRef = useRef(false)
   const recordTriggerRef = useRef<HTMLButtonElement>(null)
   const updateDialogRef = useRef<HTMLElement>(null)
 
@@ -72,43 +75,54 @@ export function PortfolioWorkspace({
   const activePortfolio = portfolios.find((portfolio) => portfolio.account.id === (requestedPortfolioId ?? activePortfolioId)) ?? portfolios[0] ?? null
   const structuredActionIsCash = structuredAction === 'cash_deposit' || structuredAction === 'cash_withdrawal'
 
+  const writeLedger = async (body: Record<string, unknown>, errorMessage: string): Promise<boolean> => {
+    if (ledgerPendingRef.current) return false
+    ledgerPendingRef.current = true
+    setLedgerPending(true)
+    setNotice('')
+    try {
+      await requestJson('/api/markets/portfolio', { method: 'POST', body, errorMessage })
+      return true
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : errorMessage)
+      return false
+    } finally {
+      ledgerPendingRef.current = false
+      setLedgerPending(false)
+    }
+  }
+
   const recordPortfolioUpdate = async (update: ParsedPortfolioUpdate, source: 'manual' | 'natural_language') => {
     if (!activePortfolio) {
       setNotice('Choose a portfolio before recording an update.')
-      return
+      return false
     }
-    const response = await fetch('/api/markets/portfolio', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'record-portfolio-update',
-        portfolioId: activePortfolio.account.id,
-        source,
-        ...(source === 'natural_language' ? { instruction } : {
-          transactionAction: update.action,
-          symbol: update.symbol,
-          quantity: update.quantity,
-          pricePerShare: update.pricePerShare,
-          fees: update.fees,
-          occurredAt: update.occurredAt,
-          notes: update.notes,
-        }),
+    const saved = await writeLedger({
+      action: 'record-portfolio-update',
+      portfolioId: activePortfolio.account.id,
+      source,
+      ...(source === 'natural_language' ? { instruction } : {
+        transactionAction: update.action,
+        symbol: update.symbol,
+        quantity: update.quantity,
+        pricePerShare: update.pricePerShare,
+        fees: update.fees,
+        occurredAt: update.occurredAt,
+        notes: update.notes,
       }),
-    })
-    const payload = await response.json()
-    if (!response.ok) {
-      setNotice(payload.error ?? 'Portfolio update could not be recorded')
-      return
-    }
+    }, 'Portfolio update could not be recorded')
+    if (!saved) return false
     setPreview(null)
     setInstruction('')
     setNotice('Portfolio updated. Recalculating balances…')
     router.refresh()
+    return true
   }
 
-  const submitStructuredUpdate = (event: FormEvent<HTMLFormElement>) => {
+  const submitStructuredUpdate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
     const action = String(form.get('transactionAction')) as ParsedPortfolioUpdate['action']
     const isCash = action === 'cash_deposit' || action === 'cash_withdrawal'
     const update = {
@@ -121,24 +135,15 @@ export function PortfolioWorkspace({
       notes: String(form.get('notes') ?? '').trim(),
     } as ParsedPortfolioUpdate
     if (editingTransaction) {
-      void (async () => {
-        const response = await fetch('/api/markets/portfolio', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'correct-portfolio-transaction', transactionId: editingTransaction.id, transactionAction: update.action, symbol: update.symbol, quantity: update.quantity, pricePerShare: update.pricePerShare, fees: update.fees, occurredAt: update.occurredAt, notes: update.notes }),
-        })
-        const payload = await response.json()
-        if (!response.ok) {
-          setNotice(payload.error ?? 'The ledger entry could not be corrected')
-          return
-        }
-        setNotice('Ledger entry corrected. The original remains in the audit trail.')
-        closeRecording()
-        router.refresh()
-      })()
-    } else {
-      void recordPortfolioUpdate(update, 'manual')
+      const saved = await writeLedger({ action: 'correct-portfolio-transaction', transactionId: editingTransaction.id, transactionAction: update.action, symbol: update.symbol, quantity: update.quantity, pricePerShare: update.pricePerShare, fees: update.fees, occurredAt: update.occurredAt, notes: update.notes }, 'The ledger entry could not be corrected')
+      if (!saved) return
+      formElement.reset()
+      setNotice('Ledger entry corrected. The original remains in the audit trail.')
+      closeRecording()
+      router.refresh()
+    } else if (await recordPortfolioUpdate(update, 'manual')) {
+      formElement.reset()
     }
-    event.currentTarget.reset()
   }
 
   const previewNaturalLanguageUpdate = (event: FormEvent<HTMLFormElement>) => {
@@ -153,38 +158,42 @@ export function PortfolioWorkspace({
   }
 
   const closeInbox = async (id: string, status: 'dismissed' | 'resolved') => {
-    const response = await fetch('/api/markets/portfolio', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update-inbox', itemId: id, status }),
-    })
-    if (response.ok) setInbox((current) => current.filter((item) => item.id !== id))
+    setNotice('')
+    try {
+      await requestJson('/api/markets/portfolio', {
+        method: 'POST', body: { action: 'update-inbox', itemId: id, status },
+        errorMessage: 'The alert could not be updated',
+      })
+      setInbox((current) => current.filter((item) => item.id !== id))
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The alert could not be updated')
+    }
   }
 
   const saveReview = async (event: FormEvent<HTMLFormElement>, decisionId: string, symbol: string) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    const response = await fetch('/api/markets/portfolio', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'save-review',
-        decisionId,
-        symbol,
-        outcome: form.get('outcome'),
-        expectationAssessment: form.get('expectationAssessment'),
-        lessons: form.get('lessons'),
-        postmortem: form.get('postmortem'),
-      }),
-    })
-    const payload = await response.json()
-    if (!response.ok) {
-      setNotice(payload.error ?? 'Review could not be saved')
-      return
+    setNotice('')
+    try {
+      const payload = await requestJson<{ review: PortfolioWorkspaceData['reviews'][number] }>('/api/markets/portfolio', {
+        method: 'POST',
+        body: {
+          action: 'save-review',
+          decisionId,
+          symbol,
+          outcome: form.get('outcome'),
+          expectationAssessment: form.get('expectationAssessment'),
+          lessons: form.get('lessons'),
+          postmortem: form.get('postmortem'),
+        },
+        errorMessage: 'Review could not be saved',
+      })
+      setReviews((current) => [payload.review, ...current.filter((item) => item.decisionId !== decisionId)])
+      setReviewingDecisionId(null)
+      setNotice(`${symbol} decision review saved.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Review could not be saved')
     }
-    setReviews((current) => [payload.review, ...current.filter((item) => item.decisionId !== decisionId)])
-    setReviewingDecisionId(null)
-    setNotice(`${symbol} decision review saved.`)
   }
 
   const priceBySymbol = new Map(universe.rows.map((row) => [row.symbol, row.price]))
@@ -268,15 +277,8 @@ export function PortfolioWorkspace({
       setRemoveArmedId(transactionId)
       return
     }
-    const response = await fetch('/api/markets/portfolio', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'void-portfolio-transaction', transactionId }),
-    })
-    const payload = await response.json()
-    if (!response.ok) {
-      setNotice(payload.error ?? 'The ledger entry could not be removed')
-      return
-    }
+    const removed = await writeLedger({ action: 'void-portfolio-transaction', transactionId }, 'The ledger entry could not be removed')
+    if (!removed) return
     setRemoveArmedId(null)
     setNotice('Ledger entry removed. The original stays in the audit trail.')
     router.refresh()
@@ -400,7 +402,7 @@ export function PortfolioWorkspace({
                 return <article key={transaction.id} className="portfolio-ledger-entry">
                   <div><strong>{title}</strong><span>{transaction.symbol ? `${transaction.quantity} ${transaction.symbol} at ${formatMoney(transaction.pricePerShare)}` : formatMoney(transaction.pricePerShare)}</span><time>{transaction.occurredAt}</time></div>
                   <p>{transaction.notes || 'No note'}</p>
-                  {editable ? <footer><button type="button" onClick={() => openTransactionCorrection(transaction)}><PencilSimple size={13} /> Edit</button><button type="button" className={removeArmedId === transaction.id ? 'portfolio-ledger-remove-armed' : ''} onClick={() => void removeTransaction(transaction.id)}><Trash size={13} />{removeArmedId === transaction.id ? 'Confirm remove' : 'Remove'}</button></footer> : <small>Imported entry · managed outside this ledger</small>}
+                  {editable ? <footer><button type="button" disabled={ledgerPending} onClick={() => openTransactionCorrection(transaction)}><PencilSimple size={13} /> Edit</button><button type="button" disabled={ledgerPending} className={removeArmedId === transaction.id ? 'portfolio-ledger-remove-armed' : ''} onClick={() => void removeTransaction(transaction.id)}><Trash size={13} />{removeArmedId === transaction.id ? 'Confirm remove' : 'Remove'}</button></footer> : <small>Imported entry · managed outside this ledger</small>}
                 </article>
               })}
           </section>
@@ -440,9 +442,9 @@ export function PortfolioWorkspace({
               ) : <button type="button" onClick={() => setReviewingDecisionId(decision.id)}>Review outcome</button>}
             </article>
           ))}
-          {notice ? <p className="portfolio-review-notice">{notice}</p> : null}
         </div>
       ) : null}
+      {notice && !recordingOpen ? <p className="portfolio-review-notice" role="status">{notice}</p> : null}
       {recordingOpen ? <div className="portfolio-update-modal-layer">
         <button type="button" className="portfolio-update-modal-backdrop" aria-label="Close record update dialog" onClick={closeRecording} />
         <section ref={updateDialogRef} className="portfolio-update-panel" role="dialog" aria-modal="true" aria-labelledby="portfolio-update-title">
@@ -464,7 +466,7 @@ export function PortfolioWorkspace({
             </>}
             <label>Date<input name="occurredAt" type="date" required defaultValue={editingTransaction?.occurredAt ?? new Date().toISOString().slice(0, 10)} /></label>
             <label className="portfolio-update-notes">Notes<textarea name="notes" placeholder="Optional reason or context" defaultValue={editingTransaction?.notes ?? ''} /></label>
-            <button type="submit" disabled={!activePortfolio}>{editingTransaction ? 'Save correction' : 'Record transaction'}</button>
+            <button type="submit" disabled={!activePortfolio || ledgerPending}>{ledgerPending ? 'Saving…' : editingTransaction ? 'Save correction' : 'Record transaction'}</button>
           </form> : <form className="natural-language-update" onSubmit={previewNaturalLanguageUpdate}>
             <label>Describe the update<textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="Buy 10 shares of NVDA at $200" required /></label>
             <p>Also works for: “Sell 2 AMD at $490” or “Deposit $5,000 cash”.</p>
@@ -473,7 +475,7 @@ export function PortfolioWorkspace({
           {preview ? <div className="portfolio-update-preview" role="status">
             <strong>Confirm this update</strong>
             <p>{preview.action.replaceAll('_', ' ')}{preview.symbol ? ` · ${preview.quantity} ${preview.symbol} at ${formatMoney(preview.pricePerShare)}` : ` · ${formatMoney(preview.pricePerShare)}`} · {preview.occurredAt}</p>
-            <div><button type="button" onClick={() => void recordPortfolioUpdate(preview, 'natural_language')}>Confirm and record</button><button type="button" onClick={() => setPreview(null)}>Edit</button></div>
+            <div><button type="button" disabled={ledgerPending} onClick={() => void recordPortfolioUpdate(preview, 'natural_language')}>{ledgerPending ? 'Saving…' : 'Confirm and record'}</button><button type="button" disabled={ledgerPending} onClick={() => setPreview(null)}>Edit</button></div>
           </div> : null}
           {notice ? <p className="portfolio-update-notice" role="status">{notice}</p> : null}
         </section>
