@@ -166,6 +166,11 @@ export async function assembleDecisionContext(
       optional('ETF research', rows('etf_research_notes', ownerId, cutoff)),
       optional('Interest coverage', (async()=>{const result=await db.from('market_interest_memberships').select('symbol,theme,eligible_since').eq('owner_id',ownerId).eq('active',true).eq('excluded',false).lte('eligible_since',cutoff);if(result.error)throw new Error(result.error.message);return result.data})()),
     ])
+  const upgradeJobs = await optional('Research upgrade schedule',(async()=>{
+    const result=await db.from('agent_jobs').select('id,status,payload,last_error,run_after').contains('payload',{ownerId,targetContractVersion:2}).lte('created_at',cutoff).order('created_at',{ascending:false}).limit(1000);
+    if(result.error)throw new Error(result.error.message);return result.data;
+  })());
+  const upgradeBySymbol=new Map<string,Row>();for(const job of upgradeJobs){const symbol=String(record(job.payload).symbol);if(!upgradeBySymbol.has(symbol))upgradeBySymbol.set(symbol,job)}
   const snapshot = market.find((m) => m.status === 'complete')
   const watched = new Set(
     watches.flatMap((w) =>
@@ -484,6 +489,7 @@ export async function assembleDecisionContext(
         capitalBasis: p.allocationBudget ? 'owner_budget' : 'broker_cash',
         quote: price,
         research: note,
+        ...(upgradeBySymbol.has(symbol)?{researchUpgrade:{jobId:String(upgradeBySymbol.get(symbol)!.id),status:String(upgradeBySymbol.get(symbol)!.status),scheduledFor:String(upgradeBySymbol.get(symbol)!.run_after),error:upgradeBySymbol.get(symbol)!.last_error as string|null}}:{}),
         thesis,
         sources: [...sourceIds, ...causalLinks],
         gaps: nameGaps,

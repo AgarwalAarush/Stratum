@@ -1,3 +1,9 @@
+export const ADVICE_VALUES = {
+  businessView: ['constructive', 'mixed', 'adverse', 'undetermined'],
+  evidenceSufficiency: ['sufficient', 'limited', 'insufficient'],
+  newEntryStance: ['eligible', 'wait', 'avoid', 'undetermined'],
+  existingPositionStance: ['retain', 'reduce', 'exit', 'undetermined'],
+} as const
 /** One version governs generation, upgrades and action review. Historical advice stays immutable. */
 export const RESEARCH_CONTRACT_VERSION = 2
 export const CAPITAL_ACTIONS = ['buy', 'add', 'hold', 'trim', 'sell'] as const
@@ -27,6 +33,12 @@ export type DecisionSupport = {
 const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}
 const text = (v: unknown, min = 8) => typeof v === 'string' && v.trim().length >= min
 const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === 'string')
+export function validateAdviceDimensions(advice:Record<string,unknown>,allowedSourceIds?:readonly string[]):void {
+  for(const [key,values] of Object.entries(ADVICE_VALUES)){
+    const field=object(advice[key]);
+    if(!(values as readonly unknown[]).includes(field.value)||!text(field.reason)||!strings(field.sourceIds)||!field.sourceIds.length||field.sourceIds.some(id=>allowedSourceIds&&!allowedSourceIds.includes(id))||!strings(field.changeConditions)||!field.changeConditions.length||field.changeConditions.some(condition=>!text(condition)))throw new Error(`Invalid cited research advice: ${key}`)
+  }
+}
 export function validateDecisionSupport(value: unknown, allowedSourceIds?: readonly string[]): DecisionSupport {
   const v = object(value)
   const citations = (ids: unknown, required = false) => strings(ids) && (!required || ids.length > 0) && ids.every(id => !allowedSourceIds || allowedSourceIds.includes(id))
@@ -49,7 +61,12 @@ export function validateDecisionSupport(value: unknown, allowedSourceIds?: reado
 export function hasCurrentResearchContract(content: unknown): boolean {
   const c = object(content), advice = object(c.advice ?? c)
   if (advice.version !== RESEARCH_CONTRACT_VERSION) return false
-  try { validateDecisionSupport(advice.decisionSupport); return true } catch { return false }
+  try {
+    validateAdviceDimensions(advice);
+    const support=validateDecisionSupport(advice.decisionSupport).actionSupport;
+    const stance=String(object(advice.existingPositionStance).value),entry=String(object(advice.newEntryStance).value);
+    return !(stance==='retain'&&support.hold.status!=='supported'||stance==='reduce'&&support.trim.status!=='supported'||stance==='exit'&&support.sell.status!=='supported'||entry==='eligible'&&support.buy.status!=='supported'&&support.add.status!=='supported');
+  } catch { return false }
 }
 /** A model cannot omit an input limitation to make an action pass. */
 export function validatePacketDecisionSupport(advice: unknown, missing: readonly string[], topics: Array<{id: string; unresolvedQuestions: string[]; sourceIds: string[]}> = []): void {
