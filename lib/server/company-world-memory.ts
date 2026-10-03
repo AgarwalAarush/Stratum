@@ -132,6 +132,8 @@ export async function reviewCompanyWorldReceipt(reportId:string,jobId:string,rev
   const run=await db.from('world_thinker_runs').select('outcome_reason,error').eq('id',result.runId).single()
   if(run.error)throw new Error(run.error.message)
   await updateCompanyWorldReceipt(reportId,{status,run_id:result.runId,result_commit:result.commit,explanation:run.data.outcome_reason??run.data.error??'Source-backed findings accepted through the World critic.',finished_at:new Date().toISOString()})
+  // Preserve the failed receipt, but let the durable queue retry execution errors.
+  if(status==='failed')throw new Error(run.data.error??run.data.outcome_reason??'Company World review failed')
   return {...result,status}
  }catch(error){await updateCompanyWorldReceipt(reportId,{status:'failed',finished_at:new Date().toISOString(),explanation:error instanceof Error?error.message:String(error)});throw error}
 }

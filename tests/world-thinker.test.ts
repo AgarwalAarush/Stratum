@@ -505,6 +505,12 @@ test('model-facing World schemas satisfy strict Responses object requirements', 
   const source = JSON.parse(await readFile(join(process.cwd(), 'schemas', 'world-update-proposal.schema.json'), 'utf8'))
   visit(buildWorldUpdateDraftSchema(source, [], []))
   visit(buildWorldUpdateDraftSchema(source, [], ['current']))
+  const draftSchema = buildWorldUpdateDraftSchema(source, [], ['current'])
+  const claimSchema = (draftSchema.$defs as {claim:{properties:Record<string,{type:unknown}>}}).claim
+  for (const key of ['observationIds','supports','contradicts','supersedes','evidence']) {
+    assert.equal(claimSchema.properties[key].type, 'array', `${key} uses [] instead of a provider-rejected nullable array`)
+  }
+  assert.deepEqual(source.$defs.claim.properties.evidence.type, ['array','null'], 'legacy canonical claims remain readable')
   const canonical = proposal()
   const draft = {...canonical, eventClassifications: [{eventKey:'NO_EVENTS',classification:'noise' as const,rationale:'Invented event'}]}
   assert.throws(() => materializeWorldUpdateProposal(draft, {baseCommit:null,current:node({id:'current',kind:'current'}),eventKeyMap:[]}, 'company_research', now), /unknown event key/)
