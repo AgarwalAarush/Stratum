@@ -30,9 +30,14 @@ export async function refreshInterestMembership(ownerId: string, now = new Date(
         throw new Error('FMP_API_KEY is not configured');
     const [assets, batches] = await Promise.all([
         pages('market_assets', 'symbol,name,active,tradable,exchange'),
-        Promise.all(['NASDAQ','NYSE','AMEX','ARCA','BATS'].map(exchange=>fetchFmpStableJson<Array<Record<string,unknown>>>('company-screener',{exchange,limit:10000,isActivelyTrading:true},{apiKey}))),
+        Promise.allSettled(['NASDAQ','NYSE','AMEX','ARCA','BATS'].map(exchange=>fetchFmpStableJson<Array<Record<string,unknown>>>('company-screener',{exchange,limit:10000,isActivelyTrading:true},{apiKey}))),
     ]);
-    const profiles=[...new Map(batches.flat().map(profile=>[String(profile.symbol),profile])).values()];
+    const exchanges=['NASDAQ','NYSE','AMEX','ARCA','BATS'];
+    const classificationFailures=batches.flatMap((batch,i)=>batch.status==='rejected'?[{exchange:exchanges[i],error:batch.reason instanceof Error?batch.reason.message:'Classification collection failed'}]:[]);
+    const successful=batches.flatMap(batch=>batch.status==='fulfilled'?[batch.value]:[]);
+    // Restricted exchange filters cannot discard the available broad feed or prevent holdings upgrades.
+    if(classificationFailures.length)try{successful.push(await fetchFmpStableJson<Array<Record<string,unknown>>>('company-screener',{limit:10000,isActivelyTrading:true},{apiKey}))}catch(error){classificationFailures.push({exchange:'global',error:error instanceof Error?error.message:'Broad classification feed failed'})}
+    const profiles=[...new Map(successful.flat().map(profile=>[String(profile.symbol),profile])).values()];
     if (!Array.isArray(profiles) || !profiles.length)
         throw new Error('Interest classification source returned no profiles; retaining previous inventory');
     const eligible = new Map(assets.filter(a => a.active && a.tradable && ['NYSE', 'NASDAQ', 'AMEX', 'ARCA', 'BATS'].includes(String(a.exchange))).map(a => [String(a.symbol), a])), members: Array<Record<string, unknown>> = [];
@@ -76,7 +81,7 @@ export async function refreshInterestMembership(ownerId: string, now = new Date(
     const registered = await db.from('market_universe_members').upsert([...positive].map(symbol => ({ universe: 'search-coverage', symbol, source: 'owner-interest-coverage', source_as_of: now.toISOString(), active: true, refreshed_at: now.toISOString() })), { onConflict: 'universe,symbol' });
     if (registered.error)
         throw new Error(registered.error.message);
-    const content = { eligibleAssets: eligible.size, classifiedAssets: classified.size, classificationGaps: eligible.size - classified.size, confirmedSymbols: positive.size, memberships: members.length, sourceTruncated: batches.some(batch=>batch.length>=10000), asOf: now.toISOString() };
+    const content = { eligibleAssets: eligible.size, classifiedAssets: classified.size, classificationGaps: eligible.size - classified.size, confirmedSymbols: positive.size, memberships: members.length, classificationFailures, sourceTruncated: successful.some(batch=>batch.length>=10000), asOf: now.toISOString() };
     const saved = await db.from('market_interest_inventories').upsert({ owner_id: ownerId, version: 1, content, refreshed_at: now.toISOString() });
     if (saved.error)
         throw new Error(saved.error.message);
@@ -126,8 +131,8 @@ export async function seedDecisionResearch(ownerId: string, enqueue: Enqueue, no
     refreshMembership?: boolean;
     backfillAll?: boolean;
 } = {}) {
-    if (options.refreshMembership !== false)
-        await refreshInterestMembership(ownerId, now);
+    let classificationError:string|null=null;
+    if (options.refreshMembership !== false)try {await refreshInterestMembership(ownerId,now)}catch(error){classificationError=error instanceof Error?error.message:'Classification refresh failed'}
     const c = await loadResearchCoverage(ownerId, now), active = new Set(c.jobs.filter(j => ['queued', 'running'].includes(j.status)).map(j => String(object(j.payload).symbol))), failures = new Map<string, string>(), backfill = c.owned.some(s => !hasCurrentResearchContract(c.notes.get(s)?.content));
     const failedSeen = new Set<string>();
     for (const j of c.jobs) {
@@ -160,7 +165,9 @@ export async function seedDecisionResearch(ownerId: string, enqueue: Enqueue, no
         const key = target.forceFullResearch
             ? `research-upgrade:${ownerId}:${target.symbol}:${RESEARCH_CONTRACT_VERSION}`
             : `research-investigation:${ownerId}:${target.symbol}:${investigationDate(when)}:${target.researchId ?? 'initial'}`;
-        if (!await reserveInvestigation(ownerId,target.symbol,target.lane,key,when)) return false;
+        const reserved=await reserveInvestigation(ownerId,target.symbol,target.lane,key,when);
+        // Borrow today's unused theme capacity, while keeping future backfill days at six holdings.
+        if(!reserved && !(target.lane==='owned'&&investigationDate(when)===investigationDate(now)&&await reserveInvestigation(ownerId,target.symbol,'other',key,when)))return false;
         let jobId: string | null = null;
         try {
             const instrumentType = await isEtfInstrument(target.symbol) ? 'etf' : 'equity';
@@ -199,7 +206,7 @@ export async function seedDecisionResearch(ownerId: string, enqueue: Enqueue, no
                 throw new Error('Unable to schedule holdings backfill within 60 days');
         }
     }
-    return { backfill, ownedCount: c.owned.length, queued, inventory: c.inventory };
+    return { backfill, ownedCount: c.owned.length, queued, inventory: c.inventory,classificationError };
 }
 /** Safe read model: no full research documents or private portfolio snapshots leave this endpoint. */
 export function researchCoverageResponse(coverage: Awaited<ReturnType<typeof loadResearchCoverage>>) {
