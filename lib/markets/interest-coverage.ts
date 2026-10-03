@@ -44,7 +44,7 @@ export function classifyInterestProfile(profile: {
 export type CoverageResearch = {
     symbol: string;
     status: string;
-    generated_at: string;
+    generated_at: string; lastCheckedAt?:string;
     content?: unknown;
     instrumentType: 'equity' | 'etf';
 };
@@ -75,7 +75,8 @@ export function investigationDue(note: CoverageResearch | undefined, now: Date):
     })?.advice;
     const next = a?.decisionSupport?.followUp?.nextCheckAt;
     // Undisclosed metrics and future events without a date await the materiality monitor.
-    return Boolean(next && Date.parse(next) <= now.getTime()) || now.getTime() - Date.parse(note.generated_at) > 35 * 86400000;
+    const checked=Math.max(Date.parse(note.generated_at),Date.parse(note.lastCheckedAt??note.generated_at));
+    return Boolean(next&&Date.parse(next)>checked&&Date.parse(next)<=now.getTime())||now.getTime()-checked>35*86400000;
 }
 export function selectInvestigationTargets(input: {
     owned: CoverageTarget[];
@@ -134,4 +135,8 @@ export function admitInterestResearch(members: Array<{
         if (selected.length < limit && !selected.includes(member.symbol))
             selected.push(member.symbol);
     return selected;
+}
+
+export function decisionReadiness(recommendations:Array<{symbol:string;researchId:string|null;action:string;expiresAt:string;blocked:boolean}>,notes:Map<string,CoverageResearch&{id:string}>,now:Date):Set<string>{
+ return new Set(recommendations.filter(r=>['buy','add','hold','trim','sell'].includes(r.action)&&!r.blocked&&Date.parse(r.expiresAt)>now.getTime()&&notes.get(r.symbol)?.id===r.researchId&&hasCurrentResearchContract(notes.get(r.symbol)?.content)).map(r=>r.symbol))
 }

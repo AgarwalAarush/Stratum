@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { currentAdvice } from './fixtures/research-advice-v2.ts';
-import { selectInvestigationTargets, investigationDue, classifyInterestProfile, admitInterestResearch, type CoverageTarget } from '../lib/markets/interest-coverage.ts';
+import { decisionReadiness, selectInvestigationTargets, investigationDue, classifyInterestProfile, admitInterestResearch, type CoverageTarget } from '../lib/markets/interest-coverage.ts';
 import { coverageRetryPassages, groundCoverageTopics } from '../lib/server/company-research-coverage.ts';
 const now = new Date('2026-10-03T14:00:00Z');
 const target = (symbol: string, theme?: CoverageTarget['theme'], lane: CoverageTarget['lane'] = 'interest', eligibleSince = '2026-01-01'): CoverageTarget => ({ symbol, theme, lane, eligibleSince, instrumentType: 'equity', forceFullResearch: true });
@@ -90,3 +90,11 @@ test('database reservations are idempotent, isolated, bounded at eight; broad me
         await db.close();
     }
 });
+
+test('rechecked unresolved checkpoints wait, and only current passed decisions are ready',()=>{
+ const advice=currentAdvice();advice.decisionSupport!.followUp.nextCheckAt='2026-09-20T00:00:00Z';const note={id:'r2',symbol:'ABC',status:'complete',instrumentType:'equity' as const,generated_at:'2026-09-01T00:00:00Z',lastCheckedAt:'2026-10-01T00:00:00Z',content:{advice}};
+ assert.equal(investigationDue(note,now),false);
+ const row={symbol:'ABC',researchId:'r2',action:'hold',expiresAt:'2026-10-05T00:00:00Z',blocked:false},notes=new Map([['ABC',note]]);
+ assert.deepEqual([...decisionReadiness([row],notes,now)],['ABC']);
+ for(const patch of [{researchId:'old'},{blocked:true},{action:'research'},{expiresAt:'2026-10-01T00:00:00Z'}])assert.equal(decisionReadiness([{...row,...patch}],notes,now).size,0);
+})
