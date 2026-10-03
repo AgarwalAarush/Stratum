@@ -8,9 +8,9 @@ function marketDate(value: string): Date {
     : new Date(value)
 }
 
-export function formatMarketDate(value: string): string {
+export function formatMarketDate(value: string, timeZone = MARKET_TIME_ZONE): string {
   return new Intl.DateTimeFormat('en-US', {
-    timeZone: MARKET_TIME_ZONE,
+    timeZone,
     month: 'short',
     day: 'numeric',
     year: 'numeric',
