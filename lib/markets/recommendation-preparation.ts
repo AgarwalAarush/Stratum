@@ -5,7 +5,8 @@ import type { DecisionContext, DecisionName } from './recommendations.ts'
 /** Evidence completeness alone cannot skip independent review of a supported action. */
 export function recommendationNeedsReview(name: Pick<DecisionName, 'gaps' | 'owned' | 'research'>): boolean {
   if (!name.gaps.length) return true
-  const advice = readResearchAdvice(name.research?.content.advice)
+  const content = name.research?.content
+  const advice = readResearchAdvice(content && typeof content === 'object' ? (content as Record<string,unknown>).advice : null)
   const actions = name.owned ? ['add', 'hold', 'trim', 'sell'] as const : ['buy'] as const
   return advice?.version === 2 && actions.some(action => advice.decisionSupport?.actionSupport[action].status === 'supported')
 }
