@@ -5,7 +5,7 @@ export function WorldConnections({receipts,reciprocal=false}:{receipts:CompanyWo
  return <section className="world-memory-connections" aria-label={reciprocal?'Connected company research':'World connections'}>
   <p className="markets-eyebrow">Research memory</p><h2>{reciprocal?'Connected company research':'World connections'}</h2>
   <p>Company evidence can strengthen or challenge World’s shadow knowledge.</p>
-  {!receipts.length?<p>Awaiting memory indexing.</p>:<ul>{receipts.map(r=><li key={r.report_id}>
+  {!receipts.length?<p>No World review is recorded for this version.</p>:<ul>{receipts.map(r=><li key={r.report_id}>
    <strong>{reciprocal?<Link href={`/markets/stocks/${encodeURIComponent(r.symbol)}/research?report=${r.report_id}`}>{r.symbol} research</Link>:r.symbol}</strong>
    <span>{labels[r.status]??r.status}</span>
    {r.explanation?<p>{r.explanation}</p>:null}
