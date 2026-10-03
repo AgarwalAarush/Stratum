@@ -19,16 +19,20 @@ async function pages(table: string, columns: string, ownerId?: string) { const d
     if (r.data.length < 1000)
         break;
 } return out; }
-export async function refreshInterestMembership(ownerId: string, now = new Date()) {
+export async function refreshInterestMembership(ownerId: string, now = new Date(), force = false) {
     const db = database(), prior = await db.from('market_interest_inventories').select('refreshed_at,content').eq('owner_id', ownerId).maybeSingle();
     if (prior.error)
         throw new Error(prior.error.message);
-    if (prior.data && now.getTime() - Date.parse(prior.data.refreshed_at) < 86400000)
+    if (!force && prior.data && now.getTime() - Date.parse(prior.data.refreshed_at) < 86400000)
         return prior.data.content;
     const apiKey = process.env.FMP_API_KEY;
     if (!apiKey)
         throw new Error('FMP_API_KEY is not configured');
-    const [assets, profiles] = await Promise.all([pages('market_assets', 'symbol,name,active,tradable,exchange'), fetchFmpStableJson<Array<Record<string, unknown>>>('company-screener', { limit: 10000, isActivelyTrading: true }, { apiKey })]);
+    const [assets, batches] = await Promise.all([
+        pages('market_assets', 'symbol,name,active,tradable,exchange'),
+        Promise.all(['NASDAQ','NYSE','AMEX','ARCA','BATS'].map(exchange=>fetchFmpStableJson<Array<Record<string,unknown>>>('company-screener',{exchange,limit:10000,isActivelyTrading:true},{apiKey}))),
+    ]);
+    const profiles=[...new Map(batches.flat().map(profile=>[String(profile.symbol),profile])).values()];
     if (!Array.isArray(profiles) || !profiles.length)
         throw new Error('Interest classification source returned no profiles; retaining previous inventory');
     const eligible = new Map(assets.filter(a => a.active && a.tradable && ['NYSE', 'NASDAQ', 'AMEX', 'ARCA', 'BATS'].includes(String(a.exchange))).map(a => [String(a.symbol), a])), members: Array<Record<string, unknown>> = [];
@@ -72,7 +76,7 @@ export async function refreshInterestMembership(ownerId: string, now = new Date(
     const registered = await db.from('market_universe_members').upsert([...positive].map(symbol => ({ universe: 'search-coverage', symbol, source: 'owner-interest-coverage', source_as_of: now.toISOString(), active: true, refreshed_at: now.toISOString() })), { onConflict: 'universe,symbol' });
     if (registered.error)
         throw new Error(registered.error.message);
-    const content = { eligibleAssets: eligible.size, classifiedAssets: classified.size, classificationGaps: eligible.size - classified.size, confirmedSymbols: positive.size, memberships: members.length, sourceTruncated: profiles.length >= 10000, asOf: now.toISOString() };
+    const content = { eligibleAssets: eligible.size, classifiedAssets: classified.size, classificationGaps: eligible.size - classified.size, confirmedSymbols: positive.size, memberships: members.length, sourceTruncated: batches.some(batch=>batch.length>=10000), asOf: now.toISOString() };
     const saved = await db.from('market_interest_inventories').upsert({ owner_id: ownerId, version: 1, content, refreshed_at: now.toISOString() });
     if (saved.error)
         throw new Error(saved.error.message);
