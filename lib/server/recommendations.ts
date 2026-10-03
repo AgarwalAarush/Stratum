@@ -1,3 +1,4 @@
+import { reviewWithOneRevision } from '../markets/recommendation-revision.ts'
 import { archiveDecisionEvidence } from './decision-evidence-archive.ts'
 import { admitInterestResearch } from '../markets/interest-coverage.ts'
 import { renewUnchangedRecommendation } from '../markets/decision-refresh.ts'
@@ -18,6 +19,7 @@ import {
   RECOMMENDATION_POLICY,
   abstention,
   validateGeneratedBatch,
+  validateReviewedBatch,
   type DecisionContext,
   type DecisionName,
   type EvidenceRef,
@@ -661,7 +663,7 @@ export async function generateDailyRecommendations(
   } else {
     await withDecisionInputs(analysisContext, async (input) => {
       if (!input.criticSchemaPath) throw new Error('Recommendation critic schema is required')
-      const generated = await runCodexJson({
+      const initialGenerated = await runCodexJson({
         schemaPath: resolve('schemas/daily-recommendations.schema.json'),
         cwd: input.directory,
         webSearch: false,
@@ -675,12 +677,12 @@ export async function generateDailyRecommendations(
           }
         },
       })
-      const critic = await runCodexJson({
+      const review = async (batch: typeof initialGenerated.data) => runCodexJson({
         schemaPath: input.criticSchemaPath,
         cwd: input.directory,
         webSearch: false,
         timeoutMs: 8 * 60 * 1000,
-        prompt: `Independently criticize these proposed decisions against the frozen evidence. ${RECOMMENDATION_REVIEW_RULES} Flag any unsupported economic link, overlooked contrary evidence, misleading timestamp, stale data, invalid sizing or invented factual claim. Identify blocking problems only by the exact portfolioId and symbol pairs in DECISIONS; copy both values verbatim. Never use a portfolio name, wildcard, or global target. For a shared blocking problem, name each affected valid pair separately. Do not change the original thesis or fetch new information.\nCONTEXT ${input.prompt}\nDECISIONS ${JSON.stringify({summary: generated.data.summary, recommendations: generated.data.recommendations})}`,
+        prompt: `Independently criticize these proposed decisions against the frozen evidence. ${RECOMMENDATION_REVIEW_RULES} Flag any unsupported economic link, overlooked contrary evidence, misleading timestamp, stale data, invalid sizing or invented factual claim. Identify blocking problems only by the exact portfolioId and symbol pairs in DECISIONS; copy both values verbatim. Never use a portfolio name, wildcard, or global target. For a shared blocking problem, name each affected valid pair separately. Do not change the original thesis or fetch new information.\nCONTEXT ${input.prompt}\nDECISIONS ${JSON.stringify({summary: batch.summary, recommendations: batch.recommendations})}`,
         validate: (value) => {
           const v = record(value)
           if (!Array.isArray(v.blocks)) throw new Error('Invalid critic')
@@ -693,10 +695,16 @@ export async function generateDailyRecommendations(
               !String(x.reason ?? '').trim()
             )
               throw new Error('Invalid critic target')
-            return x
+            return {symbol:String(x.symbol),portfolioId:String(x.portfolioId),reason:String(x.reason)}
           })
         },
       })
+      const {generated,critic,revision} = await reviewWithOneRevision(initialGenerated,review,async (targets,blocks) => {
+        const repairContext={...analysisContext,names:analysisContext.names.filter(n=>targets.some(r=>r.symbol===n.symbol&&r.portfolioId===n.portfolioId))}
+        return runCodexJson({schemaPath:resolve('schemas/daily-recommendations.schema.json'),cwd:input.directory,webSearch:false,timeoutMs:15*60*1000,
+          prompt:`Revise only the rejected account/security pairs below using the same frozen evidence. ${RECOMMENDATION_REVIEW_RULES} Independently establish the corrected stance from cited facts; reviewer feedback is a criticism, not evidence or authority to choose an action. Resolve each criticism, or state the exact remaining ownership question and follow-up. Do not invent facts, forecasts, sizing, or scenarios to pass review. Missing Buy/Add support must not erase independently supported retention. Preserve essential identity, price, ownership and portfolio gates. Return every rejected pair exactly once and no other recommendation. All unchanged decisions will be retained and the complete batch will receive a fresh independent review. Give a summary for the complete edition.\nCONTEXT ${input.prompt}\nREJECTED PROPOSALS ${JSON.stringify(targets)}\nREVIEW FINDINGS ${JSON.stringify(blocks)}`,
+          validate:value=>{const v=record(value);return {summary:String(v.summary??''),...validateGeneratedBatch(v.recommendations,repairContext)}}})
+      },recommendations=>validateReviewedBatch(recommendations,analysisContext))
       recommendations = generated.data.recommendations.map((r) => {
         const block = critic.data.find(
           (b) => b.symbol === r.symbol && b.portfolioId === r.portfolioId,
@@ -722,6 +730,7 @@ export async function generateDailyRecommendations(
         contractFailures: generated.data.failures,
         critic: critic.metadata,
         criticBlocks: critic.data,
+        reviewRevision: revision,
       }
       recommendations = recommendations.map(reviewedForecasts)
       summary = recommendations.some((r) => r.gateReasons.length)
@@ -729,7 +738,7 @@ export async function generateDailyRecommendations(
         : generated.data.summary
     })
   }
-  recommendations = validateGeneratedBatch([...retained,...recommendations],context).recommendations
+  recommendations = validateReviewedBatch([...retained,...recommendations],context)
   if (!analysisContext.names.length) summary = `Retained ${retained.length} analytical conclusions and validated every instrument against a new frozen context. This edition is newly logged advice for owner review.`
   metadata = {...record(metadata),reusedConclusions:retained.length,analyzedNames:analysisContext.names.length}
   const result = await db.rpc('publish_recommendation_batch', {
