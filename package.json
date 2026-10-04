@@ -31,6 +31,7 @@
     "react-simple-maps": "^3.0.0",
     "remark-gfm": "^4.0.1",
     "swr": "^2.4.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
