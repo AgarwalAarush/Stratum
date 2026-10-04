@@ -3904,7 +3904,9 @@ export type Database = {
       }
       recommendation_evaluation_tasks: {
         Row: {
+          checkpoint_date: string | null
           error: string | null
+          evaluator_version: string | null
           horizon: string
           id: string
           kind: string
@@ -3912,10 +3914,13 @@ export type Database = {
           not_before: string
           owner_id: string
           recommendation_id: string
+          retrospective: boolean
           status: string
         }
         Insert: {
+          checkpoint_date?: string | null
           error?: string | null
+          evaluator_version?: string | null
           horizon: string
           id?: string
           kind: string
@@ -3923,10 +3928,13 @@ export type Database = {
           not_before: string
           owner_id: string
           recommendation_id: string
+          retrospective?: boolean
           status?: string
         }
         Update: {
+          checkpoint_date?: string | null
           error?: string | null
+          evaluator_version?: string | null
           horizon?: string
           id?: string
           kind?: string
@@ -3934,6 +3942,7 @@ export type Database = {
           not_before?: string
           owner_id?: string
           recommendation_id?: string
+          retrospective?: boolean
           status?: string
         }
         Relationships: [
@@ -4778,6 +4787,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      worker_claim_gate: {
+        Row: {
+          expected_release_sha: string | null
+          paused: boolean
+          reason: string | null
+          singleton: boolean
+          updated_at: string
+        }
+        Insert: {
+          expected_release_sha?: string | null
+          paused?: boolean
+          reason?: string | null
+          singleton?: boolean
+          updated_at?: string
+        }
+        Update: {
+          expected_release_sha?: string | null
+          paused?: boolean
+          reason?: string | null
+          singleton?: boolean
+          updated_at?: string
+        }
+        Relationships: []
       }
       worker_heartbeats: {
         Row: {
@@ -7555,6 +7588,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      recommendation_checkpoint_date: {
+        Args: { p_horizon: string; p_issued: string }
+        Returns: string
+      }
       record_capital_decision: {
         Args: {
           p_change_summary: Json
@@ -7766,6 +7803,15 @@ export type Database = {
           year_low: number
         }[]
       }
+      set_worker_claim_gate: {
+        Args: {
+          p_expected_release_sha?: string
+          p_paused: boolean
+          p_reason?: string
+        }
+        Returns: Json
+      }
+      worker_claim_gate_status: { Args: never; Returns: Json }
     }
     Enums: {
       [_ in never]: never
