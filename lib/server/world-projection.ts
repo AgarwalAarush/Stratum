@@ -269,7 +269,7 @@ async function loadWorldWorkspace(options: { includeReplayBatches?: boolean }): 
     nodesPromise,
     supabase.from('world_thinker_runs').select('status,result_commit,started_at,error').order('started_at', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('world_thinker_runs').select('result_commit,started_at').in('status', ['projected', 'push_pending']).not('result_commit', 'is', null).order('started_at', { ascending: false }).limit(1).maybeSingle(),
-    supabase.from('world_event_clusters').select('processing_state,source_diversity,first_seen_at').in('processing_state', ['pending', 'failed', 'quarantined']),
+    supabase.rpc('world_event_queue_health'),
     supabase.from('world_opportunity_leads').select('*').order('created_at', { ascending: false }).limit(40),
     loadWorldCoverageFrontiers(),
     replayPromise,
@@ -279,10 +279,10 @@ async function loadWorldWorkspace(options: { includeReplayBatches?: boolean }): 
   }
   const current = nodes.find((node) => node.kind === 'current') ?? null
   const journals = latestDistinctWorldJournals(nodes, 2)
-  const events = (eventResult.data ?? []) as Array<{ processing_state: string; source_diversity: number; first_seen_at: string }>
+  const queueHealth = eventResult.data?.[0]
+  if (!queueHealth) throw new Error('Unable to load World status: event queue health is unavailable')
   const run = runResult.data as { status: string; result_commit: string | null; started_at: string; error: string | null } | null
   const successfulRun = successfulRunResult.data as { result_commit: string | null; started_at: string } | null
-  const pendingDates = events.filter((event) => event.processing_state === 'pending' || event.processing_state === 'failed').map((event) => event.first_seen_at).sort()
   return {
     commit: projection?.commit_sha ?? null, branch: projection?.branch ?? null, canonical: projection?.is_canonical ?? false,
     dataAsOf: current?.asOf ?? null, freshness: freshness(current?.asOf ?? null), current, latestChanges: journals,
@@ -297,9 +297,9 @@ async function loadWorldWorkspace(options: { includeReplayBatches?: boolean }): 
     replay,
     health: {
       lastRunAt: run?.started_at ?? null, lastRunStatus: run?.status ?? null, lastCommit: run?.result_commit ?? null,
-      pendingEvents: events.filter((event) => event.processing_state === 'pending').length, failedEvents: events.filter((event) => event.processing_state === 'failed').length,
-      quarantinedEvents: events.filter((event) => event.processing_state === 'quarantined').length, oldestPendingAt: pendingDates[0] ?? null,
-      sourceCount: events.reduce((sum, event) => sum + Number(event.source_diversity || 0), 0), failure: run?.error ?? null,
+      pendingEvents: Number(queueHealth.pending_events), failedEvents: Number(queueHealth.failed_events),
+      quarantinedEvents: Number(queueHealth.quarantined_events), oldestPendingAt: queueHealth.oldest_pending_at,
+      sourceCount: Number(queueHealth.source_count), failure: run?.error ?? null,
       lastSuccessfulRunAt: successfulRun?.started_at ?? null, lastSuccessfulCommit: successfulRun?.result_commit ?? null,
     },
   }

@@ -7834,6 +7834,16 @@ export type Database = {
         Returns: Json
       }
       worker_claim_gate_status: { Args: never; Returns: Json }
+      world_event_queue_health: {
+        Args: never
+        Returns: {
+          failed_events: number
+          oldest_pending_at: string
+          pending_events: number
+          quarantined_events: number
+          source_count: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
