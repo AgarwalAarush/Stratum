@@ -608,6 +608,28 @@ export async function reviseWorldSourceCanonicalUrl(input: { slug: string; canon
   return normalizeRegistryEntry(data as RecordValue)
 }
 
+/** Collection needs every admitted source, independently of the bounded
+ * dashboard list and the volume of newer discovery candidates. */
+export async function fetchAdmittedWorldSources(): Promise<WorldSourceRegistryEntry[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase service credentials are not configured')
+  const sources: WorldSourceRegistryEntry[] = []
+  const pageSize = 200
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase.from('world_source_registry')
+      .select('*,world_source_domains(domain_id)').in('status', ['approved', 'probation'])
+      .order('id').range(offset, offset + pageSize - 1)
+    if (error) throw new Error(`Unable to load admitted World sources: ${error.message}`)
+    const rows = data ?? []
+    for (const row of rows) {
+      const item = row as RecordValue
+      const mappings = Array.isArray(item.world_source_domains) ? item.world_source_domains : []
+      sources.push(normalizeRegistryEntry(item, mappings.map((mapping) => String(record(mapping).domain_id))))
+    }
+    if (rows.length < pageSize) return sources
+  }
+}
+
 export async function fetchWorldSourceControlWorkspace(ownerId?: string): Promise<WorldSourceControlWorkspaceData> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
