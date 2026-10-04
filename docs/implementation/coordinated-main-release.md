@@ -88,6 +88,13 @@ Whole-release retention still requires approval of its exact inventory. Automati
 retention and destructive corpus pruning remain disabled without their approved
 policy and verified backup/restore prerequisites.
 
+Worker source collection must read the complete approved/probation registry;
+bounded dashboard queries cannot determine ingestion eligibility. A zero-item
+collection result does not prove ingestion works. Verify at least one fresh
+governed primary-source capture against its active contract and domain, then check
+the immutable archive hash and bytes and read the extracted text. Preserve any
+upstream failures as failures.
+
 Code convergence does not establish investment efficacy. Ownership upgrades,
 fresh frozen editions and independent review, company-feedback retries, primary
 capture coverage, and the positive World publication-to-recall path need their
