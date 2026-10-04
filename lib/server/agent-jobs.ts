@@ -37,6 +37,8 @@ import { blockingFingerprint, blockingReason } from './agent-blocking.ts'
 import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { captureInvestmentMacro } from './investment-macro.ts'
 import { generateDailyRecommendations } from './recommendations.ts'
+import { finalizeRecommendationEdition, runRecommendationAssessment } from './recommendation-edition-jobs.ts'
+import { RECOMMENDATION_ASSESSMENT_VERSION } from '../markets/recommendation-assessments.ts'
 import { evaluateRecommendationOutcomes, reviewRecommendationCohort } from './recommendation-outcomes.ts'
 import { sendInvestmentNewsletter } from './investment-newsletter.ts'
 import { generateMorningBrief } from '../data/morning-brief.ts'
@@ -374,8 +376,16 @@ const AGENT_JOB_HANDLERS: AgentJobHandlers = {
     return result
   },
   'generate-daily-recommendations': async (job) => {
+    const ownerId=job.payload.ownerId ?? MARKETS_OWNER_ID
+    if(job.payload.phase==='assess'||job.payload.phase==='finalize') {
+      if(!job.payload.manifestId||job.payload.assessmentVersion!==RECOMMENDATION_ASSESSMENT_VERSION) throw new Error('Invalid frozen recommendation assessment job')
+      if(job.payload.phase==='assess') return runRecommendationAssessment(ownerId,job.payload.manifestId,job.payload.assessmentKeys)
+      const result=await finalizeRecommendationEdition(ownerId,job.payload.manifestId,parseRecommendationDependencies(job.payload),job.payload.priorBatchId)
+      await captureShadowPolicies(result.batchId)
+      return result
+    }
     await captureInvestmentMacro().catch(error => console.warn(JSON.stringify({ event: 'investment_macro_capture_failed', error: error instanceof Error ? error.message : String(error) })))
-    const now = new Date(), ownerId = typeof job.payload.ownerId === 'string' ? job.payload.ownerId : undefined, editionKey = typeof job.payload.editionKey === 'string' ? job.payload.editionKey : 'daily'
+    const now = new Date(), editionKey = typeof job.payload.editionKey === 'string' ? job.payload.editionKey : 'daily'
     const result = job.payload.phase === 'publish'
       ? await generateDailyRecommendations(ownerId, now, editionKey)
       : await prepareDailyRecommendations(ownerId ?? MARKETS_OWNER_ID,editionKey,enqueueAgentJob,now)

@@ -79,7 +79,7 @@ type BaselinePayload = JobPayload & { scopeType?: 'domain' | 'global'; scopeKey?
 
 export interface AgentJobPayloadMap {
   'review-recommendation-trade': JobPayload & { instruction?: string }
-  'generate-daily-recommendations': OwnedPayload & { editionKey?: string; phase?: string; dependencyJobIds?: string[] }
+  'generate-daily-recommendations': OwnedPayload & { editionKey?: string; phase?: string; dependencyJobIds?: string[]; manifestId?: string; assessmentKeys?: string[]; assessmentVersion?: string; priorBatchId?: string }
   'evaluate-recommendation-outcomes': JobPayload
   'review-recommendation-cohort': JobPayload
   'send-investment-newsletter': JobPayload
@@ -180,7 +180,7 @@ const cadenceFields = { cadenceMinutes: 'number' } as const
  * Required business inputs are still checked by the handler with its existing error. */
 const PAYLOAD_FIELDS: PayloadFieldMap = {
   'review-recommendation-trade': { instruction: 'coercedString' },
-  'generate-daily-recommendations': { ...ownerFields, editionKey: 'string', phase: 'string', dependencyJobIds: 'strings' },
+  'generate-daily-recommendations': { ...ownerFields, editionKey: 'string', phase: 'string', dependencyJobIds: 'strings', manifestId: 'string', assessmentKeys: 'strings', assessmentVersion: 'string', priorBatchId: 'string' },
   'evaluate-recommendation-outcomes': {},
   'review-recommendation-cohort': {},
   'send-investment-newsletter': {},

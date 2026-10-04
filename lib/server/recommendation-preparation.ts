@@ -3,7 +3,8 @@ import { MARKETS_OWNER_ID } from '../auth/markets-auth.ts'
 import { seedDecisionResearch } from './interest-coverage.ts'
 import { investigationDate } from './research-investigations.ts'
 import { isRobinhoodPortfolioSyncConfigured } from './robinhood-portfolio-sync.ts'
-import { assembleDecisionContext, contentHash, generateDailyRecommendations, investmentDb, record } from './recommendations.ts'
+import { assembleDecisionContext, contentHash, investmentDb, record } from './recommendations.ts'
+import { startRecommendationEdition } from './recommendation-edition-jobs.ts'
 import type { AgentJobType } from './agent-job-contracts.ts'
 
 type Enqueue = (type: AgentJobType, payload: Record<string, unknown>, key: string, options?: {runAfter?:Date}) => Promise<{id:string;deduplicated:boolean}>
@@ -30,7 +31,7 @@ export async function prepareDailyRecommendations(ownerId: string, editionKey: s
     .in('status',['queued','running'])
   if(pending.error) throw new Error(pending.error.message)
   for(const job of pending.data) if(investigationDate(new Date(job.run_after))<=investigationDate(now)&&!dependencies.includes(job.id)) dependencies.push(job.id)
-  if (!dependencies.length) return generateDailyRecommendations(ownerId,now,editionKey)
+  if (!dependencies.length) return startRecommendationEdition(ownerId,now,editionKey,enqueue)
   const db = investmentDb()
   const priority = await db.from('agent_jobs').update({priority:12}).in('id',dependencies).eq('status','queued').gt('priority',12)
   if (priority.error) throw new Error(priority.error.message)
