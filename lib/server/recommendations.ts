@@ -99,16 +99,20 @@ export async function latestCompleteMarketSnapshot(cutoff: string): Promise<Row[
   return result.data ?? []
 }
 
-/** Load exact immutable versions referenced by the selected notes, not every
- * historical packet (which can be hundreds of megabytes of source evidence). */
+/** Load exact immutable versions referenced by the selected notes. A single
+ * packet can contain megabytes of captured disclosures, so each read has its
+ * own deadline and cannot silently drop required evidence after a failed batch. */
 export async function loadDecisionPackets(table: 'company_packets' | 'etf_research_packets', ownerId: string, cutoff: string, packetIds: string[]): Promise<Row[]> {
-  const ids = [...new Set(packetIds)], result: Row[] = []
-  for (let i = 0; i < ids.length; i += 5) {
+  const result: Row[] = []
+  for (const id of new Set(packetIds)) {
     const response = await investmentDb().from(table).select('*')
-      .eq('owner_id', ownerId).in('id', ids.slice(i,i+5)).lte('generated_at', cutoff)
+      .eq('owner_id', ownerId).eq('id', id).lte('generated_at', cutoff)
+      .retry(false)
       .abortSignal(AbortSignal.timeout(20_000))
-    if (response.error) throw new Error(`${table}: ${response.error.message}`)
-    result.push(...response.data)
+    if (response.error) throw new Error(`${table}: required immutable packet ${id} could not be read: ${response.error.message}`)
+    if (response.data?.length !== 1 || response.data[0].id !== id)
+      throw new Error(`${table}: required immutable packet ${id} is unavailable for this owner at the decision cutoff`)
+    result.push(response.data[0])
   }
   return result
 }
@@ -227,9 +231,13 @@ export async function assembleDecisionContext(
   })())
   const checkByNote=new Map<string,Row>()
   for(const check of refreshChecks)if(!checkByNote.has(String(check.research_note_id)))checkByNote.set(String(check.research_note_id),check)
+  // A diagnostic probe may describe missing packets. A frozen edition must
+  // retain every exact packet referenced by its selected accepted research.
+  const requiredPackets = (label: string, request: Promise<Row[]>) =>
+    options.persist === false ? optional(label, request) : request
   const [packets,fundPackets] = await Promise.all([
-    optional('Company packets', loadDecisionPackets('company_packets',ownerId,cutoff,selectedNotes.flatMap(n => typeof n.company_packet_id === 'string' ? [String(checkByNote.get(String(n.id))?.packet_id ?? n.company_packet_id)] : []))),
-    optional('ETF packets', loadDecisionPackets('etf_research_packets',ownerId,cutoff,selectedNotes.flatMap(n => typeof n.etf_research_packet_id === 'string' ? [String(checkByNote.get(String(n.id))?.packet_id ?? n.etf_research_packet_id)] : []))),
+    requiredPackets('Company packets', loadDecisionPackets('company_packets',ownerId,cutoff,selectedNotes.flatMap(n => typeof n.company_packet_id === 'string' ? [String(checkByNote.get(String(n.id))?.packet_id ?? n.company_packet_id)] : []))),
+    requiredPackets('ETF packets', loadDecisionPackets('etf_research_packets',ownerId,cutoff,selectedNotes.flatMap(n => typeof n.etf_research_packet_id === 'string' ? [String(checkByNote.get(String(n.id))?.packet_id ?? n.etf_research_packet_id)] : []))),
   ])
   const universe = [
     ...new Set([...selected, ...candidates.map((c) => String(c.symbol))]),

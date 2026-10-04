@@ -5,6 +5,8 @@ import { PGlite } from '@electric-sql/pglite'
 
 const release = 'a'.repeat(40)
 type Gate = { paused: boolean; expected_release_sha: string | null; running_jobs: number; running_attempts: number }
+type PlanNode = { 'Node Type': string; 'Relation Name'?: string; 'Index Name'?: string; Plans?: PlanNode[] }
+const planNodes = (node: PlanNode): PlanNode[] => [node, ...(node.Plans ?? []).flatMap(planNodes)]
 
 async function database() {
   const db = new PGlite()
@@ -83,5 +85,46 @@ test('claim control is private and invalid release metadata leaves the gate unch
     await assert.rejects(setGate(db, true, 'invalid'), /valid release SHA/)
     await assert.rejects(db.query('select set_worker_claim_gate(true,null,$1)', [release]), /reason is required/)
     assert.equal((await status(db)).paused, false)
+  } finally { await db.close() }
+})
+
+test('running-work indexes remove history scans without changing pause or drain evidence', async () => {
+  const db = await database()
+  try {
+    await db.exec(`alter table agent_jobs add column retained_context text;
+      alter table agent_runs add column retained_output text;
+      insert into agent_jobs(id,job_type,status,retained_context)
+        select md5('job-'||n)::uuid,'refresh-world-events',case when n<=3 then 'running' else 'succeeded' end,
+          repeat('retained investigation context ',40) from generate_series(1,1500) n;
+      insert into agent_runs(id,job_id,status,retained_output)
+        select md5('run-'||n)::uuid,md5('job-'||n)::uuid,case when n<=2 or n=4 then 'running' else 'succeeded' end,
+          repeat('retained attempt output ',50) from generate_series(1,1500) n;
+      insert into agent_runs(id,job_id,status,retained_output)
+        values(md5('extra-run')::uuid,md5('job-1')::uuid,'running','another unfinished attempt');`)
+    await db.exec('vacuum analyze agent_jobs')
+    await db.exec('vacuum analyze agent_runs')
+    await setGate(db, true)
+    const gateSql = (await db.query<{ prosrc: string }>("select prosrc from pg_proc where oid='worker_claim_gate_status()'::regprocedure")).rows[0].prosrc
+    const explain = async () => planNodes((await db.query<{ 'QUERY PLAN': Array<{ Plan: PlanNode }> }>(`explain (format json) ${gateSql}`)).rows[0]['QUERY PLAN'][0].Plan)
+    const before = await explain()
+    for (const relation of ['agent_jobs', 'agent_runs']) assert.ok(before.some(node => node['Node Type'] === 'Seq Scan' && node['Relation Name'] === relation))
+    const expected = { paused: true, expected_release_sha: release, running_jobs: 3, running_attempts: 3 }
+    const evidence = (gate: Gate) => ({ paused: gate.paused, expected_release_sha: gate.expected_release_sha, running_jobs: gate.running_jobs, running_attempts: gate.running_attempts })
+    assert.deepEqual(evidence(await status(db)), expected)
+    await db.exec(await readFile(new URL('../supabase/migrations/202610030009_worker_claim_gate_indexes.sql', import.meta.url), 'utf8'))
+    const after = await explain()
+    for (const index of ['agent_jobs_running_gate', 'agent_runs_running_gate']) assert.ok(after.some(node => node['Node Type'] === 'Index Only Scan' && node['Index Name'] === index), `default planning must use ${index}`)
+    assert.equal(after.some(node => node['Node Type'] === 'Seq Scan' && ['agent_jobs', 'agent_runs'].includes(node['Relation Name'] ?? '')), false)
+    const indexed = await status(db)
+    assert.deepEqual(evidence(indexed), expected)
+    assert.equal((await db.query<{ claimed: unknown }>("select claim_agent_job('new-worker') claimed")).rows[0].claimed, null)
+    // A still-running historical attempt on a finished job does not prevent
+    // draining. The join continues to count only attempts on running jobs.
+    await db.exec("update agent_jobs set status='succeeded' where status='running'")
+    const drained = await status(db)
+    assert.equal(drained.paused, true)
+    assert.equal(drained.running_jobs, 0)
+    assert.equal(drained.running_attempts, 0)
+    assert.equal((await db.query<{ count: number }>("select count(*) from agent_runs where status='running'")).rows[0].count, 4)
   } finally { await db.close() }
 })
