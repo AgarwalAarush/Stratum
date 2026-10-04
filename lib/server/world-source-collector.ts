@@ -1,7 +1,7 @@
 import { parseHTML } from 'linkedom'
 import type { WorldSourceContract, WorldSourceRegistryEntry } from '../markets/types.ts'
 import { storeWorldCorpusDocument } from './world-corpus.ts'
-import { fetchActiveMarketDomainPacks, fetchWorldSourceControlWorkspace, resolveApprovedWorldSource } from './world-source-control.ts'
+import { fetchActiveMarketDomainPacks, fetchAdmittedWorldSources, resolveApprovedWorldSource } from './world-source-control.ts'
 import { getSupabaseClient } from './supabase.ts'
 
 const FETCH_TIMEOUT_MS = 30_000
@@ -176,10 +176,10 @@ export function governedCaptureCoverageKey(sourceId: string, contractVersion: nu
 }
 
 async function fetchCollectionTargets(now: Date): Promise<GovernedSourceFetchTarget[]> {
-  const [workspace, activePacks] = await Promise.all([fetchWorldSourceControlWorkspace(), fetchActiveMarketDomainPacks()])
+  const [sources, activePacks] = await Promise.all([fetchAdmittedWorldSources(), fetchActiveMarketDomainPacks()])
   const activeDomainIds = new Set(activePacks.map((pack) => pack.id))
   const eligible: GovernedSourceFetchTarget[] = []
-  for (const source of workspace.sources) {
+  for (const source of sources) {
     if (source.status !== 'approved' && source.status !== 'probation') continue
     const domainIds = source.domainIds.filter((id) => activeDomainIds.has(id))
     if (domainIds.length === 0) continue
