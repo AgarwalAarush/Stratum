@@ -17,6 +17,12 @@ export async function writeWorkerLocalHealth(state: {
   error?: string
   loopAgeSeconds?: number
   stalled?: boolean
+  databaseCheckedAt?: string | null
+  schema?: 'ready' | 'unverified'
+  claiming?: boolean
+  activeAttempts?: number
+  drained?: boolean
+  releaseControlVersion?: 1
 }) {
   const directory = join(
     process.env.STRATUM_DATA_ROOT || DEFAULT_MARKET_DATA_ROOT,
@@ -29,6 +35,7 @@ export async function writeWorkerLocalHealth(state: {
     temporary,
     JSON.stringify({
       ...state,
+      processId: process.pid,
       checkedAt: new Date().toISOString(),
       release: process.env.STRATUM_RELEASE_SHA ?? 'unknown',
     }),
