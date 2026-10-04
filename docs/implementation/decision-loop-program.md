@@ -1,5 +1,13 @@
 # Decision-loop simplification delivery
 
+October 3 reconciliation note: ownership repair PR 65 and maintainability PR 72
+are merged into main. Migrations 007 and 008 are already applied; only 006 from
+the earlier program remains pending. The already-live 030002 freeze migration is
+restored in source. Follow [coordinated-main-release.md](coordinated-main-release.md)
+for current drain, staging, migration, activation, and verification procedures.
+The October 1 snapshot below is historical; recheck live release and migration
+evidence before reusing its pending-state descriptions.
+
 Status on October 1, 2026: the complete program and foundation follow-up are
 merged into `main`, with deployment explicitly held by the owner. Only the earlier
 Release 1 worker/frontend changes are live. Primary collection remains blocked by
