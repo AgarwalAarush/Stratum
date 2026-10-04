@@ -28,7 +28,7 @@ export async function retrieveWorldMemory(input:WorldMemoryQuery,options:{ownerI
   canonicalCommit=projection.data?.commit_sha??null
   if(!canonicalCommit)snapshotGap='No canonical World projection is available at this cutoff.'
  }
- let snapshots=db.from('world_memory_snapshots').select('commit_sha,accepted_at,sources').lte('accepted_at',cutoff).order('accepted_at',{ascending:false}).limit(1)
+ let snapshots=db.from('world_memory_snapshots').select('commit_sha,accepted_at').lte('accepted_at',cutoff).order('accepted_at',{ascending:false}).limit(1)
  if(canonicalCommit)snapshots=snapshots.eq('commit_sha',canonicalCommit)
  if(options.branch)snapshots=snapshots.eq('branch',options.branch)
  const selected=liveCanonical&&!canonicalCommit?{data:null,error:null}:await snapshots.maybeSingle(); if(selected.error)throw new Error(`World retrieval unavailable: ${selected.error.message}`)
