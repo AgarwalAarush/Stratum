@@ -1,7 +1,5 @@
 import { fetchLatestSnapshotMeta } from '../../../../lib/server/markets-repository.ts'
 
-export const CACHE_TTL_SECONDS = 10
-
 export async function GET() {
   const snapshot = await fetchLatestSnapshotMeta()
   return Response.json({
