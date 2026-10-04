@@ -5,7 +5,7 @@ import { enqueueAgentJob } from '../lib/server/agent-job-queue.ts'
 const db=getSupabaseClient()
 if(!db)throw new Error('Supabase service credentials are not configured')
 // Import the current accepted synthesis, assigning identities at import time, not Git's old dates.
-const projection=await reconcileWorldRepositoryProjection({canonical:false})
+const projection=await reconcileWorldRepositoryProjection({canonical:process.env.STRATUM_WORLD_CUTOVER_ENABLED==='true'})
 const indexed=await db.rpc('backfill_company_world_reports')
 if(indexed.error)throw new Error(indexed.error.message)
 const dispatched=await dispatchCompanyWorldReceipts((payload,key,priority)=>enqueueAgentJob('run-world-thinker',payload,key,{priority}))

@@ -235,7 +235,7 @@ export async function assembleDecisionContext(
         ? 'Owner watchlist'
         : interestAdmitted.includes(symbol) ? 'Completed owner-interest research admitted for decision review' : selected.has(symbol) ? 'Scout discovery admitted for investigation; screening is not a buy signal' : 'Discovery candidate outside the bounded daily admission',
   }))
-  const world = canonicalCausalVersions(worldVersions, process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true')
+  const world = canonicalCausalVersions(worldVersions, process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true', cutoff)
   const addEvidence = (
     id: string,
     kind: string,

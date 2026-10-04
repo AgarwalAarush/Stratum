@@ -19,10 +19,11 @@ function number(value: unknown, fallback = 0): number {
 }
 
 function causalState(node: WorldNode, canonical: boolean): string {
+  if (node.status === 'dormant') return 'weakened'
+  if (node.status === 'archived' || node.status === 'superseded') return 'archived'
   if (!canonical) return 'shadow'
   if (node.status === 'active') return 'active'
   if (node.status === 'monitoring') return 'monitoring'
-  if (node.status === 'dormant') return 'weakened'
   return 'archived'
 }
 
@@ -31,7 +32,7 @@ function reviewDecisionForNode(node: WorldNode): 'review_world_change' | null {
   return ['situation', 'hypothesis', 'indicator'].includes(node.kind) ? 'review_world_change' : null
 }
 
-function reviewPayloadForNode(node: WorldNode, modelVersionId: string, commit: string): Row {
+function reviewPayloadForNode(node: WorldNode, modelVersionId: string, commit: string, canonical: boolean): Row {
   const whatChanged = node.changeSummary?.trim() || node.summary
   return {
     owner_id: MARKETS_OWNER_ID,
@@ -48,7 +49,7 @@ function reviewPayloadForNode(node: WorldNode, modelVersionId: string, commit: s
     attention_minutes: node.kind === 'hypothesis' ? 10 : 4,
     priority: node.importance,
     source_ids: node.sourceIds,
-    metadata: { commit, kind: node.kind, confidence: node.confidence, canonical: false },
+    metadata: { commit, kind: node.kind, confidence: node.confidence, canonical },
   }
 }
 
@@ -85,8 +86,9 @@ async function attachDeltaOrCreate(payload: Row): Promise<void> {
 export async function projectWorldCausalModel(options: { commit: string; canonical: boolean; nodes: WorldNode[] }): Promise<{ modelCount: number; reviewCount: number }> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
-  const eligible = options.nodes.filter((node) => ['active', 'monitoring'].includes(node.status)
-    && ['situation', 'theme', 'market', 'scenario', 'hypothesis', 'indicator'].includes(node.kind))
+  // Terminal versions must be projected too, so a withdrawn belief suppresses
+  // its older active version rather than leaving it as decision authority.
+  const eligible = options.nodes.filter((node) => ['situation', 'theme', 'market', 'scenario', 'hypothesis', 'indicator'].includes(node.kind))
   if (eligible.length === 0) return { modelCount: 0, reviewCount: 0 }
   const rows = eligible.map((node) => ({
     causal_key: `world:${node.id}`, source_kind: 'world_node', source_id: node.id, source_version: options.commit,
@@ -101,10 +103,10 @@ export async function projectWorldCausalModel(options: { commit: string; canonic
   const ids = new Map((data ?? []).map((item) => [String(item.source_id), String(item.id)]))
   let reviewCount = 0
   for (const node of eligible) {
-    if (!reviewDecisionForNode(node)) continue
+    if (!['active', 'monitoring'].includes(node.status) || !reviewDecisionForNode(node)) continue
     const modelVersionId = ids.get(node.id)
     if (!modelVersionId) continue
-    await attachDeltaOrCreate(reviewPayloadForNode(node, modelVersionId, options.commit))
+    await attachDeltaOrCreate(reviewPayloadForNode(node, modelVersionId, options.commit, options.canonical))
     reviewCount += 1
   }
   return { modelCount: rows.length, reviewCount }
@@ -144,7 +146,7 @@ export async function fetchCausalModelSnapshot(ownerId = MARKETS_OWNER_ID): Prom
   const supabase = getSupabaseClient()
   if (!supabase) return { world: [], marketTheses: [], pendingReviews: [], deferredReviewCount: 0 }
   const [modelsResult, reviewResult, deferredResult] = await Promise.all([
-    supabase.from('causal_model_versions').select('*').in('state', ['active', 'monitoring', 'shadow']).order('as_of', { ascending: false }).limit(250),
+    supabase.from('causal_model_versions').select('*').order('created_at', { ascending: false }).order('as_of', { ascending: false }).limit(250),
     supabase.from('owner_review_items').select('*').eq('owner_id', ownerId).in('status', ['pending', 'in_review']).order('priority', { ascending: false }).order('updated_at', { ascending: false }).limit(MAX_OPEN_OWNER_REVIEWS),
     supabase.from('owner_review_items').select('id', { count: 'exact', head: true }).eq('owner_id', ownerId).eq('status', 'deferred'),
   ])
@@ -156,7 +158,7 @@ export async function fetchCausalModelSnapshot(ownerId = MARKETS_OWNER_ID): Prom
     const key = String(item.causal_key)
     if (!newest.has(key)) newest.set(key, item)
   }
-  const models = [...newest.values()]
+  const models = [...newest.values()].filter(item => ['active', 'monitoring', 'shadow'].includes(String(item.state)))
   return {
     world: models.filter((item) => item.source_kind === 'world_node').sort((a, b) => number(b.importance) - number(a.importance)),
     marketTheses: models.filter((item) => item.source_kind === 'market_thesis').sort((a, b) => number(b.importance) - number(a.importance)),

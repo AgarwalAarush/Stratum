@@ -795,9 +795,10 @@ const AGENT_JOB_HANDLERS: AgentJobHandlers = {
       : typeof job.payload.coverageFrontierId === 'string' ? [job.payload.coverageFrontierId] : undefined
     if(trigger==='company_research') {
       if(typeof job.payload.researchNoteId!=='string')throw new Error('Company feedback requires a completed report receipt')
+      const canonical = process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true'
       return reviewCompanyWorldReceipt(job.payload.researchNoteId,job.id,
-        options=>runWorldThinker({...options,canonicalProjection:false}),
-        commit=>reconcileWorldRepositoryProjection({commit,canonical:false}))
+        options=>runWorldThinker({...options,canonicalProjection:canonical}),
+        commit=>reconcileWorldRepositoryProjection({commit,canonical}))
     }
     return runWorldThinker({
       legacyHypothesisId: typeof job.payload.legacyHypothesisId === 'string' ? job.payload.legacyHypothesisId : undefined,

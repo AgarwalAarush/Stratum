@@ -1,7 +1,15 @@
 /** Only explicitly promoted current beliefs may appear as decision authority. */
-export function canonicalCausalVersions<T extends Record<string, unknown>>(rows: T[], enabled: boolean): T[] {
+export function canonicalCausalVersions<T extends Record<string, unknown>>(rows: T[], enabled: boolean, cutoff = new Date().toISOString()): T[] {
   if (!enabled) return []
-  return currentWorldVersions(rows).filter(row => ['active','monitoring'].includes(String(row.state)) && object(row.freshness).canonical === true)
+  const at = Date.parse(cutoff)
+  if (!Number.isFinite(at)) return []
+  // Choose the latest known version before checking eligibility. Expiry must
+  // abstain rather than resurrecting an older, apparently fresh belief.
+  return currentWorldVersions(rows, cutoff).filter(row => {
+    const freshness = object(row.freshness)
+    const reviewAt = Date.parse(String(freshness.nextReviewAt ?? ''))
+    return ['active','monitoring'].includes(String(row.state)) && freshness.canonical === true && Number.isFinite(reviewAt) && reviewAt > at
+  })
 }
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
