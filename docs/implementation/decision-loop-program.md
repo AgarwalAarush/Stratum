@@ -1,9 +1,12 @@
 # Decision-loop simplification delivery
 
-October 3 reconciliation note: ownership repair PR 65 and maintainability PR 72
-are merged into main. Migrations 007 and 008 are already applied; only 006 from
-the earlier program remains pending. The already-live 030002 freeze migration is
-restored in source. Follow [coordinated-main-release.md](coordinated-main-release.md)
+October 3 reconciliation note: ownership repair PR 65, maintainability PR 72,
+and coordinated release guards PR 73 are merged into main. Migrations 006–008
+and the preparatory 030004 worker gate are applied. Calendar aging was applied
+with database and file claims paused and zero running attempts; its 15,330
+historical checkpoints are explicitly retrospective. The already-live 030002
+freeze migration is restored in source and its live definition is unchanged.
+Follow [coordinated-main-release.md](coordinated-main-release.md)
 for current drain, staging, migration, activation, and verification procedures.
 The October 1 snapshot below is historical; recheck live release and migration
 evidence before reusing its pending-state descriptions.
