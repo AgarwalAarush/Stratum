@@ -416,6 +416,23 @@ test('a node source list cannot self-authorize an unknown factual source', () =>
   assert.throws(() => validateWorldProposalAgainstState(invalid, []), /Unknown source invented:source/)
 })
 
+test('exact cited host sources survive a draft that omits their ledger entries', () => {
+  const original = proposal()
+  const draft = { ...original, eventClassifications: [], sources: [] }
+  const host = original.sources.map(source => ({ source_id: source.id, url: source.url, title: source.title,
+    publisher: source.publisher ?? null, published_at: now, claim_state: source.claimState, stance: source.stance }))
+  const hydrated = validateWorldUpdateDraftWithHostSources(draft, host, true)
+  assert.deepEqual(hydrated.sources.map(source => source.id), ['feed:1', 'feed:2'])
+  assert.equal(hydrated.sources[0].url, original.sources[0].url)
+  const context = { baseCommit: null, eventKeyMap: [], current: node({ id: 'current', kind: 'current', aliases: [], claims: [], indicators: [], sourceIds: [] }) }
+  assert.doesNotThrow(() => validateWorldProposalAgainstState(materializeWorldUpdateProposal(hydrated, context, 'manual', now), []))
+
+  const unknown = { ...draft, upserts: [node({ claims: [{ text: 'An unsupported new assertion.', sourceIds: ['feed:invented'] }] })] }
+  const rejected = validateWorldUpdateDraftWithHostSources(unknown, host, true)
+  assert.ok(!rejected.sources.some(source => source.id === 'feed:invented'))
+  assert.throws(() => validateWorldProposalAgainstState(materializeWorldUpdateProposal(rejected, context, 'manual', now), []), /Unknown source feed:invented/)
+})
+
 test('proposal graph validation fails before publication for unstated relationship targets', () => {
   const current = node({ id: 'current', kind: 'current', title: 'Current world assessment', aliases: [], claims: [], sourceIds: [], relationships: [], body: 'A provisional assessment.', summary: 'A provisional assessment.' })
   const invalid = proposal([current, node({ relationships: [{ type: 'depends_on', targetId: 'missing-situation', description: 'This node was never declared.' }] })])

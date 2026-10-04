@@ -416,7 +416,25 @@ export function validateWorldUpdateDraftWithHostSources(
   if (eventFree && input.eventClassifications === undefined) input.eventClassifications = []
   if (!Array.isArray(input.sources)) return validateWorldUpdateDraft(input)
   const known = new Map(sources.map((source) => [source.source_id, source]))
-  const hydratedSources = input.sources.map((candidate) => {
+  // The host already owns the supplied event and prior-state source ledger.
+  // A model may cite one of those exact IDs without repeating its metadata.
+  // Restore only referenced, known entries; unknown IDs still fail the normal
+  // graph validation and never acquire evidence from a guessed match.
+  const referenced = new Set<string>()
+  const collectReferences = (value: unknown): void => {
+    if (Array.isArray(value)) { value.forEach(collectReferences); return }
+    if (!value || typeof value !== 'object') return
+    for (const [key, child] of Object.entries(value)) {
+      if (['sourceIds', 'supportingSourceIds', 'contradictingSourceIds'].includes(key) && Array.isArray(child)) {
+        for (const id of child) if (typeof id === 'string') referenced.add(id)
+      } else collectReferences(child)
+    }
+  }
+  collectReferences(input.upserts)
+  collectReferences(input.opportunityLeads)
+  const declared = new Set(input.sources.map(candidate => candidate && typeof candidate === 'object' ? (candidate as Record<string, unknown>).id : undefined))
+  const supplied = [...input.sources, ...[...referenced].filter(id => known.has(id) && !declared.has(id)).map(id => ({ id }))]
+  const hydratedSources = supplied.map((candidate) => {
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return candidate
     const item = candidate as Record<string, unknown>
     const host = typeof item.id === 'string' ? known.get(item.id) : undefined
