@@ -775,8 +775,8 @@ const AGENT_JOB_HANDLERS: AgentJobHandlers = {
         since: typeof job.payload.since === 'string' ? new Date(job.payload.since) : undefined,
         until: typeof job.payload.until === 'string' ? new Date(job.payload.until) : undefined,
       })
-    const result = await processWorldReplayStep(replay.id, { model: job.payload.model !== false })
-    if (!result.complete) {
+    const result = await processWorldReplayStep(replay.id, { model: job.payload.model !== false, cursorAt: typeof job.payload.cursorAt === 'string' ? job.payload.cursorAt : undefined })
+    if (!result.complete && !result.superseded) {
       const resumeAttempt = Number(job.payload.resumeAttempt ?? 0) + 1
       const payload = { replayRunId: replay.id, cursorAt: result.replay.cursorAt, step: result.nextStep, resumeAttempt, model: job.payload.model !== false }
       await enqueueAgentJob(
@@ -795,9 +795,10 @@ const AGENT_JOB_HANDLERS: AgentJobHandlers = {
       : typeof job.payload.coverageFrontierId === 'string' ? [job.payload.coverageFrontierId] : undefined
     if(trigger==='company_research') {
       if(typeof job.payload.researchNoteId!=='string')throw new Error('Company feedback requires a completed report receipt')
+      const canonical = process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true'
       return reviewCompanyWorldReceipt(job.payload.researchNoteId,job.id,
-        options=>runWorldThinker({...options,canonicalProjection:false}),
-        commit=>reconcileWorldRepositoryProjection({commit,canonical:false}))
+        options=>runWorldThinker({...options,canonicalProjection:canonical}),
+        commit=>reconcileWorldRepositoryProjection({commit,canonical}))
     }
     return runWorldThinker({
       legacyHypothesisId: typeof job.payload.legacyHypothesisId === 'string' ? job.payload.legacyHypothesisId : undefined,

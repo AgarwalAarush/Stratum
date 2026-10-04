@@ -6467,6 +6467,7 @@ export type Database = {
       world_repository_projections: {
         Row: {
           branch: string
+          canonical_promoted_at: string | null
           commit_sha: string
           error: string | null
           file_count: number
@@ -6475,6 +6476,7 @@ export type Database = {
         }
         Insert: {
           branch: string
+          canonical_promoted_at?: string | null
           commit_sha: string
           error?: string | null
           file_count: number
@@ -6483,6 +6485,7 @@ export type Database = {
         }
         Update: {
           branch?: string
+          canonical_promoted_at?: string | null
           commit_sha?: string
           error?: string | null
           file_count?: number
@@ -7491,6 +7494,25 @@ export type Database = {
         Args: { p_commit_sha: string }
         Returns: {
           branch: string
+          canonical_promoted_at: string | null
+          commit_sha: string
+          error: string | null
+          file_count: number
+          is_canonical: boolean
+          projected_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "world_repository_projections"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      promote_world_repository_projection_if_current: {
+        Args: { p_commit_sha: string; p_expected_current_commit_sha: string }
+        Returns: {
+          branch: string
+          canonical_promoted_at: string | null
           commit_sha: string
           error: string | null
           file_count: number

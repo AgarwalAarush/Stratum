@@ -3,7 +3,9 @@
 Production web and the macserver worker must use the same verified main commit.
 Keep the Vercel ignored-build hold in place while integrating code, applying
 migrations, and staging a release. Preserve Sol ownership routing, investigation
-budgets, independent review, and World shadow authority throughout the rollout.
+budgets, independent review, and the configured World authority throughout the
+rollout. Changing World authority requires the separately verified canonical
+cutover described in `world-canonical-and-utes.md`.
 
 ## Verification and staging
 
@@ -99,4 +101,6 @@ Code convergence does not establish investment efficacy. Ownership upgrades,
 fresh frozen editions and independent review, company-feedback retries, primary
 capture coverage, and the positive World publication-to-recall path need their
 own persisted acceptance evidence. Missing historical originals stay explicitly
-blocked. World remains shadow-only.
+blocked. Canonical World publication and prospective investment-policy promotion
+are separate decisions; a working canonical model does not establish investment
+efficacy.

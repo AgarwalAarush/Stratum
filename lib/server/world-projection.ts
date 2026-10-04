@@ -42,20 +42,74 @@ export async function readWorldCommit(root: string, commit: string): Promise<{
   return { nodes, sources: await parseIndex<WorldSourceReference>('world/index/sources.json'), leads: await parseIndex<WorldOpportunityLead>('world/index/opportunity-leads.json') }
 }
 
-export async function projectWorldRepository(options: { root?: string; commit?: string; branch?: string; canonical?: boolean } = {}): Promise<{ commit: string; fileCount: number; idempotent: boolean }> {
+interface WorldProjectionResult {
+  commit: string
+  fileCount: number
+  idempotent: boolean
+  canonical: boolean
+  superseded: boolean
+}
+
+interface WorldPromotionPlan {
+  canonical: boolean
+  superseded: boolean
+  promote: boolean
+  expectedCurrentCommit: string | null
+}
+
+async function isAncestor(root: string, ancestor: string, descendant: string): Promise<boolean> {
+  try {
+    await git(root, ['merge-base', '--is-ancestor', ancestor, descendant])
+    return true
+  } catch (error) {
+    if ((error as { code?: number }).code === 1) return false
+    throw error
+  }
+}
+
+async function planWorldProjectionPromotion(root: string, commit: string): Promise<WorldPromotionPlan> {
+  const supabase = getSupabaseClient()!
+  const current = await supabase.from('world_repository_projections').select('commit_sha').eq('is_canonical', true).maybeSingle()
+  if (current.error) throw new Error(`Unable to inspect canonical world projection: ${current.error.message}`)
+  const expectedCurrentCommit = current.data?.commit_sha ?? null
+  if (expectedCurrentCommit === commit) return { canonical: true, superseded: false, promote: true, expectedCurrentCommit }
+  if (current.data) {
+    // A recovered older outbox must not roll the accepted model back.
+    if (await isAncestor(root, commit, current.data.commit_sha)) return { canonical: false, superseded: true, promote: false, expectedCurrentCommit }
+    if (!await isAncestor(root, current.data.commit_sha, commit)) throw new Error('Canonical World promotion requires a descendant of the accepted commit')
+  }
+  return { canonical: true, superseded: false, promote: true, expectedCurrentCommit }
+}
+
+async function publishWorldProjectionAuthority(commit: string, branch: string, snapshot: Awaited<ReturnType<typeof readWorldCommit>>, plan: WorldPromotionPlan): Promise<{ canonical: boolean; superseded: boolean }> {
+  if (plan.promote) {
+    const { error } = await getSupabaseClient()!.rpc('promote_world_repository_projection_if_current', {
+      p_commit_sha: commit, p_expected_current_commit_sha: plan.expectedCurrentCommit,
+    })
+    if (error) throw new Error(`Unable to promote world projection: ${error.message}`)
+  }
+  // A failed checked promotion must publish no memory. Live recall is also
+  // pinned to the canonical commit, so late old snapshots cannot replace it.
+  if (!plan.superseded) await publishWorldMemorySnapshot(commit, branch, snapshot.nodes.map(n => n.node), snapshot.sources)
+  return { canonical: plan.canonical, superseded: plan.superseded }
+}
+
+export async function projectWorldRepository(options: { root?: string; commit?: string; branch?: string; canonical?: boolean } = {}): Promise<WorldProjectionResult> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const root = options.root ?? worldRepositoryRoot()
   const branch = options.branch ?? worldRepositoryBranch()
   const commit = options.commit ?? await git(root, ['rev-parse', branch])
-  const { data: existing, error: existingError } = await supabase.from('world_repository_projections').select('commit_sha,file_count').eq('commit_sha', commit).maybeSingle()
+  const { data: existing, error: existingError } = await supabase.from('world_repository_projections').select('commit_sha,file_count,is_canonical').eq('commit_sha', commit).maybeSingle()
   if (existingError) throw new Error(`Unable to inspect world projection: ${existingError.message}`)
   if (existing) {
     const snapshot = await readWorldCommit(root, commit)
-    await publishWorldMemorySnapshot(commit, branch, snapshot.nodes.map(n=>n.node), snapshot.sources)
-    return { commit, fileCount: Number(existing.file_count), idempotent: true }
+    const plan = options.canonical ? await planWorldProjectionPromotion(root, commit) : { canonical: Boolean(existing.is_canonical), superseded: false, promote: false, expectedCurrentCommit: null }
+    const authority = await publishWorldProjectionAuthority(commit, branch, snapshot, plan)
+    return { commit, fileCount: Number(existing.file_count), idempotent: true, ...authority }
   }
   const snapshot = await readWorldCommit(root, commit)
+  const plan = options.canonical ? await planWorldProjectionPromotion(root, commit) : { canonical: false, superseded: false, promote: false, expectedCurrentCommit: null }
   const rows = snapshot.nodes.map(({ path, node }) => ({
     commit_sha: commit, file_path: path, node_id: node.id, kind: node.kind, status: node.status, title: node.title, as_of: node.asOf,
     next_review_at: node.nextReviewAt, confidence: node.confidence, importance: node.importance, summary: node.summary, aliases: node.aliases,
@@ -66,7 +120,7 @@ export async function projectWorldRepository(options: { root?: string; commit?: 
     const { error } = await supabase.from('world_file_index').upsert(rows, { onConflict: 'commit_sha,file_path' })
     if (error) throw new Error(`Unable to project world files: ${error.message}`)
   }
-  if (snapshot.leads.length > 0) {
+  if (!plan.superseded && snapshot.leads.length > 0) {
     const leadRows = snapshot.leads.map((lead) => ({
       id: lead.id, world_commit: commit, originating_node_id: lead.originatingNodeId, originating_hypothesis_id: lead.originatingHypothesisId,
       symbol: lead.symbol, issuer: lead.issuer, value_chain_role: lead.valueChainRole, what_changed: lead.whatChanged, why_now: lead.whyNow,
@@ -84,20 +138,24 @@ export async function projectWorldRepository(options: { root?: string; commit?: 
     commit_sha: commit, branch, file_count: rows.length, is_canonical: false,
   })
   if (projectionError) throw new Error(`Unable to record world projection: ${projectionError.message}`)
-  await publishWorldMemorySnapshot(commit, branch, snapshot.nodes.map(n=>n.node), snapshot.sources)
-  if (options.canonical) {
-    const { error: promoteError } = await supabase.rpc('promote_world_repository_projection', { p_commit_sha: commit })
-    if (promoteError) throw new Error(`Unable to promote world projection: ${promoteError.message}`)
-  }
-  return { commit, fileCount: rows.length, idempotent: false }
+  const authority = await publishWorldProjectionAuthority(commit, branch, snapshot, plan)
+  return { commit, fileCount: rows.length, idempotent: false, ...authority }
 }
 
-export async function reconcileWorldRepositoryProjection(options: { root?: string; commit?: string; branch?: string; canonical?: boolean } = {}): Promise<{ commit: string; fileCount: number; idempotent: boolean }> {
+export async function projectAcceptedWorldState(options: { root?: string; commit?: string; branch?: string; canonical?: boolean } = {}): Promise<{ projection: WorldProjectionResult; causalProjection: { modelCount: number; reviewCount: number } }> {
   const result = await projectWorldRepository(options)
   const root = options.root ?? worldRepositoryRoot()
   const snapshot = await readWorldCommit(root, result.commit)
-  await projectWorldCausalModel({ commit: result.commit, canonical: Boolean(options.canonical), nodes: snapshot.nodes.map((entry) => entry.node) })
-  await refreshWorldCoverageState(snapshot.nodes.map((entry) => entry.node), new Date(), snapshot.sources)
+  let causalProjection = { modelCount: 0, reviewCount: 0 }
+  if (!result.superseded) {
+    causalProjection = await projectWorldCausalModel({ commit: result.commit, canonical: result.canonical, nodes: snapshot.nodes.map((entry) => entry.node) })
+    await refreshWorldCoverageState(snapshot.nodes.map((entry) => entry.node), new Date(), snapshot.sources)
+  }
+  return { projection: result, causalProjection }
+}
+
+export async function reconcileWorldRepositoryProjection(options: { root?: string; commit?: string; branch?: string; canonical?: boolean } = {}): Promise<WorldProjectionResult> {
+  const { projection: result } = await projectAcceptedWorldState(options)
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase service credentials are not configured')
   const { data: run, error: runError } = await supabase.from('world_thinker_runs').select('id,push_pending').eq('result_commit', result.commit).order('started_at', { ascending: false }).limit(1).maybeSingle()
