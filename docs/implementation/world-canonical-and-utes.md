@@ -25,6 +25,11 @@ an owner thesis, execute a trade, or promote an investment-policy experiment.
   independent critic remains mandatory.
 - Company research uses World for questions and document leads; independent
   company evidence remains the source of its investment opinion.
+- Decision assembly reads each required immutable packet separately. Failed or
+  missing packet evidence stops a production freeze; a read-only diagnostic may
+  expose the gap. Captured source text remains complete and losslessly archived.
+- Exact World queue health uses a partial covering index for pending, failed,
+  and quarantined events, avoiding a scan of the wide retained event table.
 
 ## Historical reconstruction
 
