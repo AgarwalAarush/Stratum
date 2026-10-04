@@ -41,13 +41,56 @@ test('bounded prompt preserves the complete frozen manifest, source values and n
     assert.equal(index.names[0].research.file, index.names[0].file)
     assert.equal(index.names[0].research.field, 'research')
     for (const file of await readdir(directory)) {
-      assert.match(file, /^(manifest|critic-schema|name-\d+|evidence-\d+)\.json$/)
+      assert.match(file, /^(manifest|critic-schema|name-\d+|(?:readable-)?evidence-\d+)\.json$/)
       assert.equal((await stat(join(directory, file))).mode & 0o777, 0o600)
     }
     return null
   })
   assert.equal(JSON.stringify(context), before)
   await assert.rejects(stat(directory), {code: 'ENOENT'})
+})
+
+test('bounded assessment keeps the full frozen portfolio and comparison evidence without changing its manifest hash',async()=>{
+  const full=structuredClone(context)
+  full.names.push({...structuredClone(context.names[0]),symbol:'OTHER',portfolioId:'other-account'})
+  full.portfolio=[{account:'portfolio',cash:100},{account:'other-account',cash:500}]
+  await withDecisionInputs(full,async input=>{
+    const index=JSON.parse(input.prompt.split('\n')[1])
+    assert.equal(index.names.length,1)
+    assert.deepEqual(index.otherNames.map((n: {symbol:string})=>n.symbol),['OTHER'])
+    assert.deepEqual(index.portfolio,full.portfolio)
+    assert.equal(input.manifestHash,createHash('sha256').update(JSON.stringify(full)).digest('hex'))
+    assert.deepEqual(JSON.parse(await readFile(join(input.directory,'manifest.json'),'utf8')),full)
+    assert.deepEqual(JSON.parse(await readFile(join(input.directory,index.otherNames[0].file),'utf8')),full.names[1])
+    const schema=JSON.parse(await readFile(input.criticSchemaPath!,'utf8'))
+    assert.equal(schema.properties.blocks.items.anyOf.length,1)
+    assert.deepEqual(schema.properties.blocks.items.anyOf[0].properties.symbol.enum,['ABC'])
+  },{names:[full.names[0]]})
+})
+
+test('large captured documents stay exact and private while quotations and facts remain directly readable',async()=>{
+  const full=structuredClone(context)
+  const text='Opening disclosure. '.repeat(10000)+'Decisive contrary passage at the end.'
+  const document={id:'doc',url:'https://issuer.example/filing',text}
+  full.evidence[0].value={packet:{financialStatements:{revenue:123},researchDocuments:[document],researchCoverage:{documents:[document],topics:[{quote:'Decisive contrary passage at the end.'}]}}}
+  await withDecisionInputs(full,async input=>{
+    const index=JSON.parse(input.prompt.split('\n')[1])
+    const evidence=index.evidence[0]
+    const readable=JSON.parse(await readFile(join(input.directory,evidence.readableFile),'utf8'))
+    assert.deepEqual(JSON.parse(await readFile(join(input.directory,evidence.file),'utf8')),full.evidence[0].value)
+    assert.equal(readable.packet.researchDocuments[0].text,null)
+    assert.deepEqual(readable.packet.financialStatements,{revenue:123})
+    assert.equal(readable.packet.researchCoverage.topics[0].quote,'Decisive contrary passage at the end.')
+    const reference=readable.packet.researchDocuments[0].frozenTextFile
+    assert.equal(reference.file,readable.packet.researchCoverage.documents[0].frozenTextFile.file)
+    const captured=await readFile(join(input.directory,reference.file))
+    assert.equal(captured.toString('utf8'),text)
+    assert.equal(captured.length,reference.bytes)
+    assert.equal(createHash('sha256').update(captured).digest('hex'),reference.sha256)
+    assert.equal((await stat(join(input.directory,reference.file))).mode&0o777,0o600)
+    assert.equal((await readdir(input.directory)).filter(f=>f.endsWith('.txt')).length,1)
+    assert.ok((await stat(join(input.directory,evidence.readableFile))).size<3000)
+  })
 })
 
 test('large ETF narrative fields and accepted theses stay readable without inflating the index', async () => {

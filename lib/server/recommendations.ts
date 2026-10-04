@@ -1,4 +1,5 @@
 import { reviewWithOneRevision } from '../markets/recommendation-revision.ts'
+import { MAX_ASSESSMENT_NAMES } from '../markets/recommendation-assessments.ts'
 import { ownershipResearchModel } from '../ai/config.ts'
 import { archiveDecisionEvidence } from './decision-evidence-archive.ts'
 import { admitInterestResearch } from '../markets/interest-coverage.ts'
@@ -637,22 +638,12 @@ export async function assembleDecisionContext(
   return frozenContext
 }
 
-export async function generateDailyRecommendations(
-  ownerId = MARKETS_OWNER_ID,
-  now = new Date(),
-  editionKey = 'daily',
-) {
-  const db = investmentDb(),
-    context = await assembleDecisionContext(ownerId, now, editionKey)
-  const prior = await db
-    .from('recommendation_batches')
-    .select('id')
-    .eq('manifest_id', context.id)
-    .maybeSingle()
-  if (prior.error) throw new Error(prior.error.message)
-  if (prior.data) return { batchId: prior.data.id, reused: true }
-  const latest=await db.from('recommendation_batches').select('id,manifest_id').eq('owner_id',ownerId).order('published_at',{ascending:false}).limit(1).maybeSingle()
+export async function renewFrozenRecommendations(context: DecisionContext, batchId?: string) {
+  if (!batchId) return [] as Recommendation[]
+  const db = investmentDb()
+  const latest=await db.from('recommendation_batches').select('id,manifest_id').eq('owner_id',context.ownerId).eq('id',batchId).lte('published_at',context.cutoff).maybeSingle()
   if(latest.error)throw new Error(latest.error.message)
+  if(!latest.data) throw new Error('Renewal source is outside the frozen owner or cutoff')
   const retained:Recommendation[]=[]
   if(latest.data) {
     const [manifest,versions]=await Promise.all([
@@ -665,7 +656,14 @@ export async function generateDailyRecommendations(
       if(renewed)retained.push(renewed)
     }
   }
-  const analysisContext={...context,names:context.names.filter(n=>!retained.some(r=>r.symbol===n.symbol&&r.portfolioId===n.portfolioId))}
+  return retained
+}
+
+/** One durable assessment is small enough to finish inside the existing attempt
+ * budget. Every file remains a projection of the same complete frozen manifest. */
+export async function assessFrozenRecommendations(context: DecisionContext, names: DecisionName[]) {
+  if (!names.length || names.length > MAX_ASSESSMENT_NAMES) throw new Error('Invalid bounded recommendation assessment size')
+  const analysisContext = { ...context, names }
   let recommendations: Recommendation[] = [],
     metadata: unknown = {
       provider: 'deterministic',
@@ -683,7 +681,7 @@ export async function generateDailyRecommendations(
       ),
     )
   } else {
-    await withDecisionInputs(analysisContext, async (input) => {
+    await withDecisionInputs(context, async (input) => {
       const criticSchemaPath=input.criticSchemaPath
       if (!criticSchemaPath) throw new Error('Recommendation critic schema is required')
       const initialGenerated = await runCodexJson({
@@ -714,7 +712,7 @@ export async function generateDailyRecommendations(
           return v.blocks.map((b) => {
             const x = record(b)
             if (
-              !context.names.some(
+              !analysisContext.names.some(
                 (n) => n.symbol === x.symbol && n.portfolioId === x.portfolioId,
               ) ||
               !String(x.reason ?? '').trim()
@@ -746,6 +744,7 @@ export async function generateDailyRecommendations(
           : r
       })
       metadata = {
+        reviewedKeys: names.map(n=>`${n.portfolioId}:${n.symbol}`),
         forecastReviewPolicy: FORECAST_REVIEW_POLICY,
         withheldForecasts: recommendations.filter(r => !forecastsAreApproved(r) && r.forecasts.length).map(r => ({
           portfolioId: r.portfolioId, symbol: r.symbol, reasons: r.gateReasons, forecasts: r.forecasts,
@@ -761,11 +760,24 @@ export async function generateDailyRecommendations(
       summary = recommendations.some((r) => r.gateReasons.length)
         ? `${recommendations.filter((r) => r.gateReasons.length).length} proposed decisions were blocked by evidence or portfolio checks. Review each final action and its reasons before changing capital.`
         : generated.data.summary
-    })
+    }, { names })
   }
-  recommendations = validateReviewedBatch([...retained,...recommendations],context)
-  if (!analysisContext.names.length) summary = `Retained ${retained.length} analytical conclusions and validated every instrument against a new frozen context. This edition is newly logged advice for owner review.`
-  metadata = {...record(metadata),reusedConclusions:retained.length,analyzedNames:analysisContext.names.length}
+  return { recommendations, summary, metadata }
+}
+
+export async function publishFrozenRecommendations(
+  context: DecisionContext,
+  assessment: { recommendations: Recommendation[]; summary: string; metadata: unknown },
+) {
+  const db = investmentDb()
+  const prior = await db.from('recommendation_batches').select('id').eq('manifest_id',context.id).maybeSingle()
+  if (prior.error) throw new Error(prior.error.message)
+  if (prior.data) return { batchId: prior.data.id, reused: true }
+  const recommendations = validateReviewedBatch(assessment.recommendations,context)
+  const metadata = assessment.metadata
+  const summary = recommendations.some(r=>r.gateReasons.length)
+    ? `${recommendations.filter(r=>r.gateReasons.length).length} proposed decisions were blocked by evidence or portfolio checks. Review each final action and its reasons before changing capital.`
+    : assessment.summary
   const result = await db.rpc('publish_recommendation_batch', {
     p_manifest_id: context.id,
     p_recommendations: recommendations,
@@ -779,6 +791,12 @@ export async function generateDailyRecommendations(
     count: recommendations.length,
     abstentions: recommendations.filter((r) => r.action === 'no_trade').length,
   }
+}
+
+export async function generateDailyRecommendations(ownerId = MARKETS_OWNER_ID, now = new Date(), editionKey = 'daily') {
+  const { startRecommendationEdition } = await import('./recommendation-edition-jobs.ts')
+  const { enqueueAgentJob } = await import('./agent-job-queue.ts')
+  return startRecommendationEdition(ownerId, now, editionKey, enqueueAgentJob)
 }
 
 export async function fetchRecommendationWorkspace(ownerId: string) {
