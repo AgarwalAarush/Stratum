@@ -4,6 +4,7 @@ import { fetchWorldRuns, fetchWorldWorkspace } from '@/lib/server/world-projecti
 import { WorldBenchmarkControl, WorldReviewControl, WorldSystemAction } from '@/components/markets/WorldActions'
 import { fetchWorldGovernanceSnapshot } from '@/lib/server/world-governance'
 import { fetchWorldBenchmarkSnapshot } from '@/lib/server/world-benchmark'
+import { isHistoricalReconstructionRun } from '@/lib/markets/world-reconstruction'
 
 function formatTime(value: unknown): string {
   if (typeof value !== 'string') return 'Unavailable'
@@ -27,6 +28,7 @@ export default async function WorldSystemPage() {
   await requireAllowedMarketUser()
   const [world, runs, governance, benchmark] = await Promise.all([fetchWorldWorkspace(), fetchWorldRuns(30), fetchWorldGovernanceSnapshot(), fetchWorldBenchmarkSnapshot()])
   const replay = world.replay.run
+  const reconstruction = replay ? isHistoricalReconstructionRun(replay) : false
   const attentionTotal = governance.routeVolumes.reduce((sum, item) => sum + item.count, 0)
   const activePolicy = governance.policies.find((policy) => policy.status === 'active')
   const reviewGroups = ['suspected_miss', 'false_positive', 'promoted_change', 'compound_link', 'coverage_problem'] as const
@@ -119,17 +121,17 @@ export default async function WorldSystemPage() {
       </section>
 
       <section className="world-system-section" id="replay">
-        <div className="world-section-heading world-section-heading--major"><div><p className="markets-eyebrow">Historical replay</p><h2>{replay ? `${replay.weeksVerified} evidence-backed of ${replay.weeksTotal} weeks` : 'Replay has not started'}</h2>{replay ? <p>{replay.weeksCompleted} resolved · {replay.weeksProjected} produced retained clusters · {replay.weeksUncovered} explicitly uncovered</p> : null}</div>{!replay || replay.status !== 'completed' ? <WorldSystemAction action="resume-replay" label={replay ? 'Resume replay' : 'Start replay'} /> : <span>Complete</span>}</div>
+        <div className="world-section-heading world-section-heading--major"><div><p className="markets-eyebrow">Historical evidence reconstruction</p><h2>{replay ? reconstruction ? `${replay.weeksVerified} of ${replay.weeksTotal} windows contain observations` : 'Legacy replay requires replacement' : 'Reconstruction has not started'}</h2>{replay ? <p>{reconstruction ? `${replay.weeksCompleted} windows resolved · ${replay.weeksUncovered} explicitly uncovered` : `${replay.weeksCompleted} legacy windows resolved; these counters are not isolated historical evidence.`}</p> : null}<p>Uses only observations ingested before each cutoff. Missing history remains uncovered. Completion does not establish investment performance.</p></div>{!replay || !reconstruction || replay.status !== 'completed' ? <WorldSystemAction action="resume-replay" label={reconstruction ? 'Resume reconstruction' : 'Start reconstruction'} /> : <span>Complete</span>}</div>
         {replay?.error ? <p className="world-system-error">{replay.error}</p> : null}
         <div className="world-system-table world-system-table--batches">
           {world.replay.batches.slice(0, 12).map((batch) => <div className="world-system-table-row" key={batch.id}>
-            <div><strong>{formatTime(batch.weekStart)} – {formatTime(batch.weekEnd)}</strong><p>{batch.sourceCount} sources from {batch.sourceFamilies.length} families · {batch.clusterCount} retained clusters</p></div>
-            <div><span>Status</span><strong>{batch.status}</strong></div>
+            <div><strong>{formatTime(batch.weekStart)} – {formatTime(batch.weekEnd)}</strong><p>{reconstruction ? `${batch.sourceCount} observations from ${batch.sourceFamilies.length} publishers` : `${batch.sourceCount} legacy sources · ${batch.clusterCount} retained clusters`}</p></div>
+            <div><span>{reconstruction ? 'Reconstruction' : 'Legacy status'}</span><strong>{batch.status}</strong></div>
             <div><span>Attempts</span><strong>{batch.attemptCount}{batch.recoveryCount ? ` · ${batch.recoveryCount} recovered` : ''}</strong></div>
-            <div><span>Events</span><strong>{batch.eventCursor} / {batch.eventClusterIds.length}</strong></div>
-            {batch.status === 'failed' ? <WorldSystemAction action="retry-replay-batch" label="Retry" payload={{ batchId: batch.id }} /> : <span />}
+            <div><span>{reconstruction ? 'Evidence' : 'Events'}</span><strong>{reconstruction ? `${batch.sourceUrls.length} source links` : `${batch.eventCursor} / ${batch.eventClusterIds.length}`}</strong></div>
+            {batch.status === 'failed' && reconstruction ? <WorldSystemAction action="retry-replay-batch" label="Retry" payload={{ batchId: batch.id }} /> : <span />}
           </div>)}
-          {world.replay.batches.length === 0 ? <p className="world-empty-copy">The first worker continuation will create replay batches.</p> : null}
+          {world.replay.batches.length === 0 ? <p className="world-empty-copy">The first worker continuation will create reconstruction windows.</p> : null}
         </div>
       </section>
 

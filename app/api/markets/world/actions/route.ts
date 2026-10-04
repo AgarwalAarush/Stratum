@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAllowedMarketUser } from '@/lib/auth/markets-session'
 import { enqueueAgentJob } from '@/lib/server/agent-job-queue'
 import { getSupabaseClient } from '@/lib/server/supabase'
-import { fetchWorldReplayStatus, startWorldReplay } from '@/lib/server/world-replay'
+import { fetchWorldReplayStatus, resumeWorldReplay } from '@/lib/server/world-replay'
+import { isHistoricalReconstructionRun } from '@/lib/markets/world-reconstruction'
 import { labelWorldReview, rollbackWorldPolicy, startWorldPolicyExperiment } from '@/lib/server/world-governance'
 import { evaluateWorldBenchmark, labelWorldBenchmarkCase, seedWorldBenchmarkFromEventLedger } from '@/lib/server/world-benchmark'
 import { WORLD_ATTENTION_ROUTES, WORLD_SPECIALIST_LENSES } from '@/lib/markets/world-attention'
@@ -52,20 +53,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ queued: true, ...job })
     }
     if (body.action === 'resume-replay') {
-      const current = await fetchWorldReplayStatus()
-      const replay = current.run ?? await startWorldReplay()
-      if (replay.status === 'completed') return NextResponse.json({ error: 'The latest replay is already complete' }, { status: 409 })
-      await supabase.from('world_replay_runs').update({ status: 'queued', error: null, updated_at: new Date().toISOString() }).eq('id', replay.id)
+      const current = await fetchWorldReplayStatus({ includeBatches: false })
+      if (current.run && isHistoricalReconstructionRun(current.run) && current.run.status === 'completed') return NextResponse.json({ error: 'The latest historical reconstruction is already complete' }, { status: 409 })
+      const replay = await resumeWorldReplay(current.run?.id)
       const job = await enqueueAgentJob('run-world-replay', { replayRunId: replay.id, cursorAt: replay.cursorAt, step: `resume:${Date.now()}` })
       return NextResponse.json({ queued: true, replayRunId: replay.id, ...job })
     }
     if (body.action === 'retry-replay-batch') {
       if (typeof body.batchId !== 'string') return NextResponse.json({ error: 'A replay batch is required' }, { status: 400 })
-      const { data: batch, error } = await supabase.from('world_replay_batches').select('replay_run_id,week_start').eq('id', body.batchId).maybeSingle()
+      const { data: batch, error } = await supabase.from('world_replay_batches').select('replay_run_id,week_start,status').eq('id', body.batchId).maybeSingle()
       if (error || !batch) return NextResponse.json({ error: error?.message ?? 'Replay batch not found' }, { status: 404 })
-      await supabase.from('world_replay_runs').update({ status: 'queued', cursor_at: batch.week_start, error: null, updated_at: new Date().toISOString() }).eq('id', batch.replay_run_id)
-      const job = await enqueueAgentJob('run-world-replay', { replayRunId: batch.replay_run_id, cursorAt: batch.week_start, step: `retry:${Date.now()}` })
-      return NextResponse.json({ queued: true, ...job })
+      if (batch.status !== 'failed') return NextResponse.json({ error: 'Only failed replay batches can be retried' }, { status: 409 })
+      const replay = await resumeWorldReplay(batch.replay_run_id)
+      const job = await enqueueAgentJob('run-world-replay', { replayRunId: replay.id, cursorAt: replay.cursorAt, step: `retry:${Date.now()}` })
+      return NextResponse.json({ queued: true, replayRunId: replay.id, ...job })
     }
     if (body.action === 'retry-quarantined-event') {
       if (typeof body.eventClusterId !== 'string') return NextResponse.json({ error: 'An event cluster is required' }, { status: 400 })

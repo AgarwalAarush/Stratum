@@ -8,6 +8,7 @@ import type { WorldNode } from '@/lib/markets/world-thinker-types'
 import { fetchWorldWorkspace } from '@/lib/server/world-projection'
 import { WorldLeadActions, WorldRefreshAction } from '@/components/markets/WorldActions'
 import { WorldMarkdown } from '@/components/markets/WorldMarkdown'
+import { isHistoricalReconstructionRun } from '@/lib/markets/world-reconstruction'
 
 function formatTime(value: string | null): string {
   if (!value) return 'Unavailable'
@@ -58,10 +59,11 @@ export default async function MarketsWorldPage() {
   const activeModelCount = world.situations.length + world.themes.length + world.actors.length + world.scenarios.length + world.hypotheses.length + world.indicators.length
   const healthyCoverage = world.coverage.filter((frontier) => frontier.status === 'healthy').length
   const replay = world.replay.run
-  const replayPercent = replay && replay.weeksTotal > 0 ? Math.round((replay.weeksCompleted / replay.weeksTotal) * 100) : null
+  const reconstruction = replay ? isHistoricalReconstructionRun(replay) : false
+  const replayPercent = replay && replay.weeksTotal > 0 ? Math.min(100, Math.round((replay.weeksCompleted / replay.weeksTotal) * 100)) : null
   const attentionHeadline = runNeedsAttention
     ? 'The latest run failed; the prior validated world state remains published.'
-    : replay?.status === 'failed' ? 'Historical replay paused after a failed batch; live world state remains available.'
+    : replay?.status === 'failed' ? (reconstruction ? 'Historical reconstruction stopped after a failed window; live World remains available.' : 'Legacy replay needs a fresh historical reconstruction; live World remains available.')
       : `${countLabel(world.health.quarantinedEvents, 'event')} ${world.health.quarantinedEvents === 1 ? 'needs' : 'need'} manual review after repeated failures.`
 
   return (
@@ -98,8 +100,8 @@ export default async function MarketsWorldPage() {
 
       {replay && replay.status !== 'completed' ? (
         <section className="world-replay-notice" aria-label="Historical replay progress">
-          <div><p className="markets-eyebrow">Historical memory</p><strong>{replay.status === 'failed' ? 'Replay needs attention' : 'One-year replay is building the model'}</strong></div>
-          <div className="world-replay-progress"><span style={{ width: `${replayPercent ?? 0}%` }} /><small>{replay.weeksCompleted} resolved · {replay.weeksVerified} evidence-backed · {replay.weeksUncovered} uncovered</small></div>
+          <div><p className="markets-eyebrow">Historical evidence</p><strong>{reconstruction ? (replay.status === 'failed' ? 'Reconstruction needs attention' : 'Reconstructing evidence known at each cutoff') : 'Legacy replay requires a fresh reconstruction'}</strong></div>
+          <div className="world-replay-progress"><span style={{ width: `${reconstruction ? replayPercent ?? 0 : 0}%` }} /><small>{reconstruction ? `${replay.weeksCompleted} windows resolved · ${replay.weeksVerified} contain observations · ${replay.weeksUncovered} uncovered` : 'Legacy results do not count as isolated historical evidence'}</small></div>
           <Link href="/markets/world/system">View progress →</Link>
         </section>
       ) : null}
