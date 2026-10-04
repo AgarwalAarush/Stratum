@@ -20,9 +20,19 @@ export async function retrieveWorldMemory(input:WorldMemoryQuery,options:{ownerI
  const q=validateMemoryQuery(input), now=options.now??new Date().toISOString(), started=performance.now()
  const db=getSupabaseClient(); if(!db)throw new Error('Supabase service credentials are not configured')
  const cutoff=new Date(Math.min(Date.parse(q.knowledgeCutoff??now),Date.parse(now))).toISOString()
+ const liveCanonical=process.env.STRATUM_WORLD_CUTOVER_ENABLED==='true'&&(!q.knowledgeCutoff||Date.parse(q.knowledgeCutoff)>=Date.parse(now))
+ let canonicalCommit:string|null=null, snapshotGap:string|null=null
+ if(liveCanonical){
+  const projection=await db.from('world_repository_projections').select('commit_sha').eq('is_canonical',true).lte('canonical_promoted_at',cutoff).maybeSingle()
+  if(projection.error)throw new Error(`World retrieval unavailable: ${projection.error.message}`)
+  canonicalCommit=projection.data?.commit_sha??null
+  if(!canonicalCommit)snapshotGap='No canonical World projection is available at this cutoff.'
+ }
  let snapshots=db.from('world_memory_snapshots').select('commit_sha,accepted_at,sources').lte('accepted_at',cutoff).order('accepted_at',{ascending:false}).limit(1)
+ if(canonicalCommit)snapshots=snapshots.eq('commit_sha',canonicalCommit)
  if(options.branch)snapshots=snapshots.eq('branch',options.branch)
- const selected=await snapshots.maybeSingle(); if(selected.error)throw new Error(`World retrieval unavailable: ${selected.error.message}`)
+ const selected=liveCanonical&&!canonicalCommit?{data:null,error:null}:await snapshots.maybeSingle(); if(selected.error)throw new Error(`World retrieval unavailable: ${selected.error.message}`)
+ if(liveCanonical&&canonicalCommit&&!selected.data)snapshotGap='The canonical World memory snapshot is not ready; prior commits are excluded.'
  const snapshot=selected.data, nodes:WorldNode[]=[], claims:MemoryClaim[]=[]
  if(snapshot){
   // Page the snapshot; silently truncating the graph would lose counterevidence.
@@ -65,7 +75,7 @@ export async function retrieveWorldMemory(input:WorldMemoryQuery,options:{ownerI
   for(const r of found.data??[])reports.push({reportId:r.report_id,symbol:r.symbol,version:r.version,href:`/markets/stocks/${encodeURIComponent(r.symbol)}/research?report=${r.report_id}`,dataAsOf:r.data_as_of,knownAt:r.indexed_at})
  }
  const result={bundles,reports,relatedNodes:nodes.filter(n=>bundles.some(b=>b.relatedNodeIds.includes(n.id))).map(n=>({id:n.id,title:n.title,summary:n.summary})),
-  abstention:bundles.length?null:'No eligible accepted claim matches this query and time window.'}
+  abstention:bundles.length?null:snapshotGap??'No eligible accepted claim matches this query and time window.'}
  const receipt={id:randomUUID(),algorithm:'lexical-alias-relationship-v1',query:q,knowledgeCutoff:cutoff,commit:snapshot?.commit_sha??null,
   retrievedAt:now,claimIds:bundles.map(b=>b.claimId),nodeIds:[...new Set(bundles.map(b=>b.nodeId))],reportIds:reports.map(r=>r.reportId),latencyMs:Math.round(performance.now()-started),
   contextCharacters:JSON.stringify(result).length,digest:createHash('sha256').update(JSON.stringify(result)).digest('hex')}

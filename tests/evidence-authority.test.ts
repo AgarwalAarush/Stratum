@@ -69,3 +69,23 @@ test('canonical World requires valid review and knowledge timestamps at the froz
   ]) assert.deepEqual(canonicalCausalVersions([row], true, '2026-10-03'), [])
   assert.deepEqual(canonicalCausalVersions([base], true, 'invalid'), [])
 })
+
+test('World authority selects current beliefs within the accepted projection commit', () => {
+  const base = { causal_key: 'world:power', source_kind: 'world_node', state: 'active', as_of: '2026-10-01', freshness: { canonical: true, nextReviewAt: '2026-10-05' } }
+  const prior = { ...base, id: 'prior', created_at: '2026-10-01', source_commit: 'B' }
+  const current = { ...base, id: 'current', created_at: '2026-10-02', source_commit: 'C' }
+  assert.deepEqual(canonicalCausalVersions([prior], true, '2026-10-03', 'C'), [])
+  assert.deepEqual(canonicalCausalVersions([prior, current], true, '2026-10-03', 'C').map(row => row.id), ['current'])
+  assert.deepEqual(canonicalCausalVersions([prior, current], true, '2026-10-03', 'B').map(row => row.id), ['prior'])
+  assert.deepEqual(canonicalCausalVersions([prior, current], true, '2026-10-03', null), [])
+  assert.deepEqual(canonicalCausalVersions([{ ...current, source_commit: null }], true, '2026-10-03', 'C'), [])
+})
+
+test('late materialization from a superseded commit cannot hide accepted beliefs or revive expired ones', () => {
+  const base = { causal_key: 'world:power', source_kind: 'world_node', state: 'active', as_of: '2026-10-01', freshness: { canonical: true, nextReviewAt: '2026-10-05' } }
+  const accepted = { ...base, id: 'accepted-C', created_at: '2026-10-02T10:00:00Z', source_commit: 'C' }
+  const latePrior = { ...base, id: 'late-B', created_at: '2026-10-02T12:00:00Z', source_commit: 'B' }
+  assert.deepEqual(canonicalCausalVersions([accepted, latePrior], true, '2026-10-03', 'C').map(row => row.id), ['accepted-C'])
+  const expired = { ...accepted, id: 'expired-C', created_at: '2026-10-02T11:00:00Z', freshness: { canonical: true, nextReviewAt: '2026-10-03' } }
+  assert.deepEqual(canonicalCausalVersions([accepted, expired, latePrior], true, '2026-10-03', 'C'), [])
+})

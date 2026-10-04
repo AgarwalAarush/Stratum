@@ -148,7 +148,8 @@ export async function assembleDecisionContext(
       )
       return []
     })
-  const [research, theses, worldVersions, market, candidates, watches, macro, fundResearch, interestMembers] =
+  const worldEnabled = process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true'
+  const [research, theses, worldVersions, market, candidates, watches, macro, fundResearch, interestMembers, worldProjections] =
     await Promise.all([
       optional('Research', loadDecisionHistory('equity_research_notes', ownerId, cutoff)),
       optional(
@@ -184,6 +185,12 @@ export async function assembleDecisionContext(
       ),
       optional('ETF research', loadDecisionHistory('etf_research_notes', ownerId, cutoff)),
       optional('Interest coverage', (async()=>{const result=await db.from('market_interest_memberships').select('symbol,theme,eligible_since').eq('owner_id',ownerId).eq('active',true).eq('excluded',false).lte('eligible_since',cutoff);if(result.error)throw new Error(result.error.message);return result.data})()),
+      optional('Canonical World publication', (async () => {
+        if (!worldEnabled) return []
+        const result = await db.from('world_repository_projections').select('commit_sha,canonical_promoted_at').eq('is_canonical', true).lte('canonical_promoted_at', cutoff).maybeSingle()
+        if (result.error) throw new Error(result.error.message)
+        return result.data ? [result.data] : []
+      })()),
     ])
   const upgradeJobs = await optional('Research upgrade schedule',(async()=>{
     const result=await db.from('agent_jobs').select('id,status,payload,last_error,run_after').contains('payload',{ownerId,targetContractVersion:2}).lte('created_at',cutoff).order('created_at',{ascending:false}).limit(1000);
@@ -235,7 +242,10 @@ export async function assembleDecisionContext(
         ? 'Owner watchlist'
         : interestAdmitted.includes(symbol) ? 'Completed owner-interest research admitted for decision review' : selected.has(symbol) ? 'Scout discovery admitted for investigation; screening is not a buy signal' : 'Discovery candidate outside the bounded daily admission',
   }))
-  const world = canonicalCausalVersions(worldVersions, process.env.STRATUM_WORLD_CUTOVER_ENABLED === 'true', cutoff)
+  const acceptedWorldCommit = typeof worldProjections[0]?.commit_sha === 'string' ? worldProjections[0].commit_sha : null
+  const world = canonicalCausalVersions(worldVersions, worldEnabled, cutoff, acceptedWorldCommit)
+  if (worldEnabled && !acceptedWorldCommit) gaps.push('No canonical World publication is available at the decision cutoff')
+  else if (worldEnabled && !world.length) gaps.push('Canonical World publication has no current, fresh materialized beliefs; prior commits are excluded')
   const addEvidence = (
     id: string,
     kind: string,

@@ -12,14 +12,13 @@ import { writeWorldEvidenceInputs } from './world-evidence-inputs.ts'
 import { runCodexJson } from './codex-exec.ts'
 import { selectMarketModel } from './market-model-policy.ts'
 import { commitWorldUpdate, currentWorldCommit, validateWorldProposalAgainstState, worldRepositoryBranch, worldRepositoryRoot } from './world-repository.ts'
-import { latestDistinctWorldJournals, projectWorldRepository, readWorldCommit } from './world-projection.ts'
+import { latestDistinctWorldJournals, projectAcceptedWorldState, readWorldCommit } from './world-projection.ts'
 import { readWorldCorpusExtract } from './world-corpus.ts'
 import { getSupabaseClient } from './supabase.ts'
 import { fetchPortfolioResearchCoverage } from './portfolio-research-seeding.ts'
-import { loadWorldCoverageFrontiers, recordWorldCoverageSearch, refreshWorldCoverageState, selectDueWorldCoverageFrontiers } from './world-coverage.ts'
+import { loadWorldCoverageFrontiers, recordWorldCoverageSearch, selectDueWorldCoverageFrontiers } from './world-coverage.ts'
 import type { WorldCoverageFrontier } from '../markets/world-coverage.ts'
 import type { WorldSpecialistLens } from '../markets/world-attention.ts'
-import { projectWorldCausalModel } from './causal-model.ts'
 
 export interface WorldThinkerOptions {
   trigger: WorldUpdateProposal['trigger']
@@ -750,11 +749,11 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
         event_cluster_ids: context.events.map((event) => event.id), projection_status: 'pending', lead_status: 'pending', checkpoint_status: context.events.length ? 'pending' : 'advanced',
       }, { onConflict: 'commit_sha' })
       if (changeSetError) throw new Error(`Unable to record World change set: ${changeSetError.message}`)
-      await projectWorldRepository({ root, branch, commit: committed.commit, canonical: options.canonicalProjection })
-      const committedSnapshot = await readWorldCommit(root, committed.commit)
-      const causalProjection = await projectWorldCausalModel({ commit: committed.commit, canonical: Boolean(options.canonicalProjection), nodes: committedSnapshot.nodes.map((entry) => entry.node) })
-      const queuedResearch = await persistAndQueueLeads(proposal.opportunityLeads, committed.commit, options.trigger)
-      const { error: projectedChangeSetError } = await supabase.from('world_change_sets').update({ projection_status: 'projected', lead_status: 'projected', updated_at: new Date().toISOString() }).eq('commit_sha', committed.commit)
+      const { projection, causalProjection } = await projectAcceptedWorldState({ root, branch, commit: committed.commit, canonical: options.canonicalProjection })
+      // The accepted Git output and its event checkpoint remain durable even
+      // when a newer accepted commit has already superseded its publication.
+      const queuedResearch = projection.superseded ? [] : await persistAndQueueLeads(proposal.opportunityLeads, committed.commit, options.trigger)
+      const { error: projectedChangeSetError } = await supabase.from('world_change_sets').update({ is_canonical: projection.canonical, projection_status: 'projected', lead_status: 'projected', updated_at: new Date().toISOString() }).eq('commit_sha', committed.commit)
       if (projectedChangeSetError) throw new Error(`Unable to advance World change set projection: ${projectedChangeSetError.message}`)
       if (context.events.length) {
         const { error } = await supabase.from('world_event_clusters').update({ processing_state: 'processed', processed_at: new Date().toISOString(), processing_error: null, next_attempt_at: null, lease_run_id: null, lease_expires_at: null, updated_at: new Date().toISOString() }).in('id', context.events.map((event) => event.id)).eq('lease_run_id', runId)
@@ -762,9 +761,8 @@ export async function runWorldThinker(options: WorldThinkerOptions): Promise<{ r
         const { error: checkpointError } = await supabase.from('world_change_sets').update({ checkpoint_status: 'advanced', updated_at: new Date().toISOString() }).eq('commit_sha', committed.commit)
         if (checkpointError) throw new Error(`Unable to advance World change set checkpoint: ${checkpointError.message}`)
       }
-      if (context.explorationFrontiers.length) await recordWorldCoverageSearch(context.explorationFrontiers.map((frontier) => frontier.id))
-      await refreshWorldCoverageState(committedSnapshot.nodes.map((entry) => entry.node), new Date(), committedSnapshot.sources)
-      await updateRun(runId, { status: committed.pushPending ? 'push_pending' : 'projected', projection_status: 'projected', opportunity_lead_count: proposal.opportunityLeads.length, research_queued_count: queuedResearch.filter((item) => !item.deduplicated).length, model_metadata: { causalProjection, thinker: draftResult.metadata, webSearch: context.needsWebSearch }, finished_at: new Date().toISOString() })
+      if (!projection.superseded && context.explorationFrontiers.length) await recordWorldCoverageSearch(context.explorationFrontiers.map((frontier) => frontier.id))
+      await updateRun(runId, { status: committed.pushPending ? 'push_pending' : 'projected', projection_status: 'projected', opportunity_lead_count: proposal.opportunityLeads.length, research_queued_count: queuedResearch.filter((item) => !item.deduplicated).length, model_metadata: { publication: projection, causalProjection, thinker: draftResult.metadata, webSearch: context.needsWebSearch }, finished_at: new Date().toISOString() })
       return { runId, status: committed.pushPending ? 'push_pending' : 'projected', commit: committed.commit, criticVerdict: 'pass', queuedResearch }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

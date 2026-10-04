@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { renderWorldNode } from '../lib/server/world-repository.ts'
-import { projectWorldRepository, reconcileWorldRepositoryProjection } from '../lib/server/world-projection.ts'
+import { projectWorldRepository, projectAcceptedWorldState, reconcileWorldRepositoryProjection } from '../lib/server/world-projection.ts'
 import { canonicalCausalVersions } from '../lib/markets/evidence-authority.ts'
 import { fetchCausalModelSnapshot } from '../lib/server/causal-model.ts'
 import { resolveAgentJobHandler, type AgentJobRecord } from '../lib/server/agent-jobs.ts'
@@ -48,6 +48,7 @@ async function fixture(t: TestContext) {
   const calls: Array<{ path: string; body: unknown }> = []
   let modelSequence = 0
   let failPromotion = false
+  let failCausal = false
   t.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input)), path = url.pathname
     const body = init?.body ? JSON.parse(String(init.body)) : undefined
@@ -57,12 +58,15 @@ async function fixture(t: TestContext) {
       if (init?.method === 'POST') { projections.set(body.commit_sha, { ...body }); response = body }
       else if (url.searchParams.get('is_canonical') === 'eq.true') response = [...projections.values()].find(p => p.is_canonical) ?? null
       else response = projections.get(url.searchParams.get('commit_sha')?.slice(3) ?? '') ?? null
-    } else if (path.endsWith('/promote_world_repository_projection')) {
+    } else if (path.endsWith('/promote_world_repository_projection_if_current')) {
       if (failPromotion) return new Response(JSON.stringify({ message: 'Promotion unavailable', code: 'P0001' }), { status: 400 })
+      const current = [...projections.values()].find(p => p.is_canonical)?.commit_sha ?? null
+      if (current !== body.p_commit_sha && current !== body.p_expected_current_commit_sha) return new Response(JSON.stringify({ message: 'Canonical World changed before promotion', code: '40001' }), { status: 400 })
       for (const projection of projections.values()) projection.is_canonical = projection.commit_sha === body.p_commit_sha
       response = projections.get(body.p_commit_sha)
     } else if (path.endsWith('/causal_model_versions')) {
       if (init?.method === 'POST') {
+        if (failCausal) return new Response(JSON.stringify({ message: 'Causal write interrupted', code: 'P0001' }), { status: 400 })
         response = body.map((row: Row) => {
           const prior = models.find(m => m.source_id === row.source_id && m.source_version === row.source_version)
           if (prior) Object.assign(prior, row)
@@ -79,7 +83,7 @@ async function fixture(t: TestContext) {
     }
     return new Response(JSON.stringify(response), { headers: { 'Content-Type': 'application/json' } })
   })
-  return { root, commit, save, projections, models, calls, failPromotion: () => { failPromotion = true } }
+  return { root, commit, save, projections, models, calls, failPromotion: () => { failPromotion = true }, failCausal: () => { failCausal = true } }
 }
 
 test('promoting an existing accepted shadow commit updates repository and causal authority without duplicating versions', async t => {
@@ -95,16 +99,50 @@ test('promoting an existing accepted shadow commit updates repository and causal
   await reconcileWorldRepositoryProjection({ root: f.root, branch: 'main', commit: f.commit, canonical: true })
   assert.equal(f.models.length, 1)
   assert.equal(f.projections.size, 1)
-  assert.equal(f.calls.filter(c => c.path.endsWith('/promote_world_repository_projection')).length, 1)
+  const promotions = f.calls.filter(c => c.path.endsWith('/promote_world_repository_projection_if_current'))
+  assert.equal(promotions.length, 2)
+  assert.deepEqual(promotions[0].body, { p_commit_sha: f.commit, p_expected_current_commit_sha: null })
+  assert.deepEqual(promotions[1].body, { p_commit_sha: f.commit, p_expected_current_commit_sha: f.commit })
+  assert.equal(f.calls.some(c => c.path.endsWith('/promote_world_repository_projection')), false)
 })
 
 test('failed promotion rejects recovery and leaves the existing commit shadow', async t => {
   const f = await fixture(t)
   await reconcileWorldRepositoryProjection({ root: f.root, commit: f.commit, canonical: false })
+  const memoryPublications = f.calls.filter(c => c.path.endsWith('/publish_world_memory_snapshot')).length
   f.failPromotion()
   await assert.rejects(reconcileWorldRepositoryProjection({ root: f.root, commit: f.commit, canonical: true }), /Promotion unavailable/)
   assert.equal(f.projections.get(f.commit)?.is_canonical, false)
   assert.deepEqual(canonicalCausalVersions(f.models, true, '2026-10-03T12:00:00Z'), [])
+  assert.equal(f.calls.filter(c => c.path.endsWith('/publish_world_memory_snapshot')).length, memoryPublications)
+})
+
+test('direct accepted-state publication skips superseded causal and coverage writes', async t => {
+  const f = await fixture(t)
+  await projectAcceptedWorldState({ root: f.root, commit: f.commit, canonical: true })
+  const newer = await f.save({ ...node, summary: 'New independent evidence updated the accepted model.', asOf: '2026-10-02T12:00:00Z' })
+  await projectAcceptedWorldState({ root: f.root, commit: newer, canonical: true })
+  const modelCount = f.models.length
+  const coverageWrites = f.calls.filter(c => c.path.endsWith('/world_coverage_frontiers') && c.body !== undefined).length
+  const recovered = await projectAcceptedWorldState({ root: f.root, commit: f.commit, canonical: true })
+  assert.equal(recovered.projection.superseded, true)
+  assert.equal(recovered.projection.canonical, false)
+  assert.deepEqual(recovered.causalProjection, { modelCount: 0, reviewCount: 0 })
+  assert.equal(f.models.length, modelCount)
+  assert.equal(f.calls.filter(c => c.path.endsWith('/world_coverage_frontiers') && c.body !== undefined).length, coverageWrites)
+  assert.equal(f.projections.get(newer)?.is_canonical, true)
+})
+
+test('a promoted pointer with interrupted causal materialization cannot consume the previous commit', async t => {
+  const f = await fixture(t)
+  await projectAcceptedWorldState({ root: f.root, commit: f.commit, canonical: true })
+  const newer = await f.save({ ...node, summary: 'New accepted evidence requires a new materialized version.', asOf: '2026-10-02T12:00:00Z' })
+  f.failCausal()
+  await assert.rejects(projectAcceptedWorldState({ root: f.root, commit: newer, canonical: true }), /Causal write interrupted/)
+  assert.equal(f.projections.get(newer)?.is_canonical, true)
+  assert.equal(f.models.length, 1)
+  assert.equal(canonicalCausalVersions(f.models, true, '2026-10-03T12:00:00Z').length, 1)
+  assert.deepEqual(canonicalCausalVersions(f.models, true, '2026-10-03T12:00:00Z', newer), [])
 })
 
 test('withdrawn canonical nodes suppress older authority and recovery cannot roll back a newer accepted commit', async t => {

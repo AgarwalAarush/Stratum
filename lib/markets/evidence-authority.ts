@@ -1,11 +1,14 @@
 /** Only explicitly promoted current beliefs may appear as decision authority. */
-export function canonicalCausalVersions<T extends Record<string, unknown>>(rows: T[], enabled: boolean, cutoff = new Date().toISOString()): T[] {
-  if (!enabled) return []
+export function canonicalCausalVersions<T extends Record<string, unknown>>(rows: T[], enabled: boolean, cutoff = new Date().toISOString(), acceptedCommit?: string | null): T[] {
+  if (!enabled || acceptedCommit === null) return []
   const at = Date.parse(cutoff)
   if (!Number.isFinite(at)) return []
-  // Choose the latest known version before checking eligibility. Expiry must
-  // abstain rather than resurrecting an older, apparently fresh belief.
-  return currentWorldVersions(rows, cutoff).filter(row => {
+  // Pin publication before choosing its latest known version. A superseded
+  // commit may finish materializing later, but cannot hide this commit's rows.
+  const publication = acceptedCommit === undefined ? rows : rows.filter(row => row.source_commit === acceptedCommit)
+  // Choose the latest version within that publication before eligibility.
+  // Expiry must abstain rather than resurrecting an older, fresh belief.
+  return currentWorldVersions(publication, cutoff).filter(row => {
     const freshness = object(row.freshness)
     const reviewAt = Date.parse(String(freshness.nextReviewAt ?? ''))
     return ['active','monitoring'].includes(String(row.state)) && freshness.canonical === true && Number.isFinite(reviewAt) && reviewAt > at
