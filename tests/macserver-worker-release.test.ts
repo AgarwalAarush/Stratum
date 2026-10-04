@@ -8,4 +8,8 @@ test('macserver releases recognize an existing linked worktree', async () => {
   assert.doesNotMatch(source, /if \[\[ ! -d "\$release_dir\/\.git" \]\]; then/)
   assert.match(source, /cp "\$active_link\/\.env\.worker" "\$release_dir\/\.env\.worker"/)
   assert.match(source, /mv -f -h "\$next_link" "\$active_link"/)
+  assert.ok(source.indexOf('worker-release-control.ts verify-activation') < source.indexOf('mv -f -h'))
+  assert.ok(source.indexOf('worker-release-control.ts schema') < source.indexOf('mv -f -h'))
+  assert.match(source, /worker-release-control\.ts verify --required-release="\$revision" --drained/)
+  assert.doesNotMatch(source, /worker-release-control\.ts resume --required-release="\$revision"/)
 })

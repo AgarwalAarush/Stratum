@@ -29,9 +29,7 @@ if [[ "$deployment_mode" != --activate-only ]]; then
 npm ci
 # Existing repository warnings are reported, but only lint errors should block
 # an immutable worker release. Feature checks still run below before activation.
-npm run lint -- --quiet
-node --test --experimental-strip-types tests/world-thinker.test.ts tests/world-memory.test.ts tests/world-memory-retrieval.test.ts tests/company-world-memory.test.ts tests/company-world-recovery.test.ts tests/world-sources.test.ts tests/candidate-scout.test.ts tests/agent-jobs.test.ts tests/agent-schedule.test.ts tests/market-thesis-research.test.ts tests/market-research-orchestrator.test.ts tests/world-source-health.test.ts
-npm run build
+npm run verify
 printf '%s\n%s\n' "$revision" "$(cat .next/BUILD_ID)" > .stratum-staged
 else
   if [[ ! -f .stratum-staged || ! -f .next/BUILD_ID || "$(head -n 1 .stratum-staged)" != "$revision" || "$(tail -n 1 .stratum-staged)" != "$(cat .next/BUILD_ID)" ]]; then
@@ -53,7 +51,7 @@ if [[ ! -f "$release_dir/.env.worker" ]]; then
   exit 1
 fi
 if [[ "$deployment_mode" == --stage-only ]]; then
-  echo "Verified $revision staged at $release_dir. Apply matching migrations, then run --activate-only. Active worker unchanged."
+  echo "Verified $revision staged at $release_dir. Pause database and file claims, drain attempts, apply matching migrations, then run --activate-only. Active worker unchanged."
   exit 0
 fi
 
@@ -64,6 +62,15 @@ set -a
 source "$release_dir/.env.worker"
 set +a
 export STRATUM_RELEASE_SHA="$revision"
+daemon_pid="$(launchctl print "system/$label" 2>/dev/null | awk '/pid =/{print $3; exit}')"
+if [[ "$daemon_pid" != <-> ]]; then
+  echo "No running supervisor is available for a verified handoff; active release unchanged." >&2
+  exit 1
+fi
+# The database barrier also stops legacy workers that do not understand the
+# file pause. Existing attempts must finish before changing schema or code.
+node --experimental-strip-types scripts/worker-release-control.ts verify-activation --required-release="$revision" --worker-pid="$daemon_pid"
+node --experimental-strip-types scripts/worker-release-control.ts schema
 node --experimental-strip-types scripts/init-world-repository.ts
 
 # Record release identity without copying provider credentials into an artifact.
@@ -74,20 +81,26 @@ next_link="${active_link}.next"
 rm -f "$next_link"
 ln -s "$release_dir" "$next_link"
 mv -f -h "$next_link" "$active_link"
-daemon_pid="$(launchctl print "system/$label" 2>/dev/null | awk '/pid =/{print $3; exit}')"
-if [[ "$daemon_pid" == <-> ]]; then
-  # The daemon deliberately runs as the macserver user. Terminating that
-  # process is enough for KeepAlive to relaunch the stable wrapper and follow
-  # the new production symlink—without requiring sudo for each release.
-  kill -TERM "$daemon_pid"
-else
-  echo "Release is staged, but no running system worker was found to restart." >&2
+# Both barriers remain in place as KeepAlive follows the new symlink. The new
+# worker verifies schema and database health before it can acknowledge resume.
+kill -TERM "$daemon_pid"
+verified=false
+for health_wait in {1..48}; do
+  if node --experimental-strip-types scripts/worker-release-control.ts verify --required-release="$revision" --drained; then
+    verified=true
+    break
+  fi
+  sleep 5
+done
+if [[ "$verified" != true ]]; then
+  echo "New release health is unverified; database and file claims remain paused. Previous release retained." >&2
+  exit 1
 fi
-echo "Deployed $revision at $active_link. The prior release worktree is retained for rollback."
+echo "Activated and verified $revision with claims paused. Verify the same web SHA, then run worker-release-control.ts resume --required-release=$revision. Prior release retained."
 
 # Automatic retention requires a separately approved policy and fresh worker
 # health for this exact release. Failure leaves rollback directories intact.
-if [[ -n "${STRATUM_RELEASE_RETENTION_APPROVAL_FILE:-}" ]]; then
+if [[ -n "${STRATUM_RELEASE_RETENTION_APPROVAL_FILE:-}" && ! -f "${STRATUM_DATA_ROOT:-/Users/Shared/StratumData}/health/worker-pause.json" ]]; then
   for retention_wait in {1..12}; do
     if node --experimental-strip-types scripts/worker-release-retention.ts --automatic; then
       break

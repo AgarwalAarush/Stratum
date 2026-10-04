@@ -1,10 +1,12 @@
 import { dispatchCompanyWorldReceipts } from '../lib/server/company-world-memory.ts'
 import { execFileSync } from 'node:child_process'
 import { writeWorkerLocalHealth, safeWorkerError } from '../lib/server/worker-local-health.ts'
+import { AgentJobPool } from '../lib/server/agent-job-pool.ts'
+import { workerClaimsPaused, verifyWorkerSchema, WORKER_HEALTH_MAX_AGE_MS } from '../lib/server/worker-release-control.ts'
 import { workerProgressState } from '../lib/server/worker-watchdog.ts'
 import { hostname } from 'node:os'
 import { enqueueAgentJob } from '../lib/server/agent-job-queue.ts'
-import { resumeBlockedAgentJobs, processAgentJobs, processOneAgentJob, recoverInterruptedAgentJobs, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
+import { resumeBlockedAgentJobs, processOneAgentJob, recoverInterruptedAgentJobs, recoverStaleAgentJobs, supersedeQueuedRoutineAgentJobs } from '../lib/server/agent-jobs.ts'
 import { enqueueDueAgentJobs } from '../lib/server/agent-schedule.ts'
 import { recordWorkerHeartbeat } from '../lib/server/worker-heartbeat.ts'
 import type { AgentJobType } from '../lib/server/agent-job-contracts.ts'
@@ -37,6 +39,22 @@ let nextRecoveryAt = 0
 let nextQueueReconcileAt = 0
 let shutdownTimer: NodeJS.Timeout | null = null
 let lastLoopAt = Date.now()
+let databaseCheckedAt: string | null = null
+let schema: 'ready' | 'unverified' = 'unverified'
+let nextSchemaCheckAt = 0
+let paused = true
+const pool = new AgentJobPool(async () => {
+  if (stopping || schema !== 'ready' || await workerClaimsPaused()) return false
+  return processOneAgentJob(workerId)
+})
+
+async function publishHealth(error?: string) {
+  const databaseFresh = databaseCheckedAt !== null && Date.now() - Date.parse(databaseCheckedAt) < WORKER_HEALTH_MAX_AGE_MS
+  await writeWorkerLocalHealth({ workerId, status: !error && !consecutiveFailures && databaseFresh && schema === 'ready' ? 'healthy' : 'degraded',
+    consecutiveFailures, ...(error ? { error } : {}), ...workerProgressState(lastLoopAt), databaseCheckedAt, schema,
+    claiming: !paused && !stopping, activeAttempts: pool.active,
+    drained: (paused || stopping) && pool.active === 0 && !maintenanceRunning, releaseControlVersion: 1 })
+}
 
 function requestStop(signal: 'SIGINT' | 'SIGTERM') {
   if (stopping) return
@@ -60,14 +78,22 @@ async function heartbeat(): Promise<void> {
   nextHeartbeatAt = Date.now() + HEARTBEAT_INTERVAL_MS
   try {
     await recordWorkerHeartbeat({ workerId, schedulerEnabled, fmpEnabled, codexEnabled })
+    databaseCheckedAt = new Date().toISOString()
+    if (Date.now() >= nextSchemaCheckAt) {
+      schema = 'unverified'
+      await verifyWorkerSchema()
+      schema = 'ready'
+      nextSchemaCheckAt = Date.now() + 60_000
+    }
     const progress = workerProgressState(lastLoopAt)
-    await writeWorkerLocalHealth({workerId,status:consecutiveFailures || progress.stalled?'degraded':'healthy',consecutiveFailures, ...progress})
+    await publishHealth(progress.stalled ? 'Worker control loop stalled' : undefined)
     if (progress.stalled) {
       console.error(JSON.stringify({ event: 'worker_control_loop_stalled', workerId, ...progress }))
       process.exit(1)
     }
   } catch (error) {
-    await writeWorkerLocalHealth({workerId,status:'degraded',consecutiveFailures,error:safeWorkerError(error)})
+    databaseCheckedAt = null
+    await publishHealth(safeWorkerError(error))
     console.warn(JSON.stringify({
       level: 'warn',
       workerId,
@@ -83,7 +109,8 @@ async function maintenance(){
   maintenanceRunning=true
   try{
     await heartbeat()
-      if (schedulerEnabled && Date.now() >= nextScheduleAt) {
+      paused = await workerClaimsPaused()
+      if (!paused && schema === 'ready' && schedulerEnabled && Date.now() >= nextScheduleAt) {
         const scheduled = await enqueueDueAgentJobs(new Date(), lastScheduledKeys, {
           includeFmp: fmpEnabled,
           includeCodex: codexEnabled,
@@ -136,6 +163,15 @@ async function main() {
     }))
   }
   console.info(JSON.stringify({ level: 'info', workerId, event: 'worker_concurrency', concurrency: WORKER_CONCURRENCY }))
+  // A restarted release acknowledges the barrier before any startup mutations.
+  while ((paused = await workerClaimsPaused()) || schema !== 'ready') {
+    lastLoopAt = Date.now()
+    await heartbeat()
+    await publishHealth()
+    if (stopping) return
+    if (runOnce) throw new Error('Worker claims are paused or required schema is unavailable')
+    await new Promise(resolve => setTimeout(resolve, 1_000))
+  }
   const domainSync = await ensureDeclaredMarketDomainPacks()
   if (worldThinkerEnabled) await ensureWorldCoverageFrontiers()
   if (domainSync.inserted.length > 0 || domainSync.upgraded.length > 0) {
@@ -175,6 +211,13 @@ async function main() {
     lastLoopAt = Date.now()
     try {
       await maintenance()
+      paused = await workerClaimsPaused()
+      if (paused || schema !== 'ready') {
+        await publishHealth()
+        if (runOnce) return
+        await new Promise(resolve => setTimeout(resolve, 1_000))
+        continue
+      }
       if (Date.now() >= nextRecoveryAt) {
         await resumeBlockedAgentJobs()
         const recovered = await recoverStaleAgentJobs()
@@ -186,20 +229,26 @@ async function main() {
         if (superseded > 0) console.info(JSON.stringify({ level: 'info', workerId, event: 'routine_queue_superseded', count: superseded }))
         nextQueueReconcileAt = Date.now() + 60_000
       }
-      const processed = runOnce ? Number(await processOneAgentJob(workerId)) : await processAgentJobs(workerId, WORKER_CONCURRENCY)
+      const processed = runOnce ? Number(await processOneAgentJob(workerId)) : await pool.next(WORKER_CONCURRENCY)
       consecutiveFailures = 0
-      await writeWorkerLocalHealth({workerId,status:'healthy',consecutiveFailures})
+      await publishHealth()
       if (runOnce) return
       if (!processed) await new Promise((resolve) => setTimeout(resolve, Math.min(60000, POLL_INTERVAL_MS * 2 ** Math.min(consecutiveFailures,4))))
     } catch (error) {
       consecutiveFailures += 1
       const message = safeWorkerError(error)
-      await writeWorkerLocalHealth({workerId,status:'degraded',consecutiveFailures,error:message})
+      await publishHealth(message)
       console.error(JSON.stringify({ level: 'error', workerId, error: message.includes('<!DOCTYPE') ? 'Database gateway returned HTML; service unavailable' : message.slice(0,1000), consecutiveFailures }))
       if (runOnce) throw error
       await new Promise((resolve) => setTimeout(resolve, Math.min(60000, POLL_INTERVAL_MS * 2 ** Math.min(consecutiveFailures,4))))
     }
   } while (!stopping) } finally { if(maintenanceTimer)clearInterval(maintenanceTimer) }
+  // Pending isolated attempts own their slots until their process groups exit.
+  while (pool.active || maintenanceRunning) {
+    await publishHealth()
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
+  await publishHealth()
   if (shutdownTimer) clearTimeout(shutdownTimer)
 }
 

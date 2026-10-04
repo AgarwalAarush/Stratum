@@ -118,5 +118,6 @@ test('orchestration is worker-queued, durable, and separately visible from sourc
   assert.doesNotMatch(migration, /market_thesis_versions.*insert/i)
   assert.match(schema, /selectedKeys/)
   assert.match(worker, /WORKER_CONCURRENCY/)
-  assert.match(worker, /processAgentJobs/)
+  assert.match(worker, /new AgentJobPool/)
+  assert.match(worker, /pool.next\(WORKER_CONCURRENCY\)/)
 })
