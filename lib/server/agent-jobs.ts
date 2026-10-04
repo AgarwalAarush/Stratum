@@ -319,13 +319,13 @@ export async function resumeBlockedAgentJobs(): Promise<number> {
   const db = getSupabaseClient()
   if (!db) return 0
   const rows = await db.from('agent_jobs').select('id,blocked_on').eq('status', 'blocked').limit(100)
-  if (rows.error) throw new Error(rows.error.message)
+  if (rows.error) throw new Error(`Unable to inspect blocked agent jobs: ${rows.error.message}`)
   let resumed = 0
   for (const row of rows.data ?? []) {
     const state = row.blocked_on as { reason: string; fingerprint: string }
     if (!state?.reason || state.fingerprint === await blockingFingerprint(state.reason)) continue
     const changed = await db.from('agent_jobs').update({ status: 'queued', blocked_on: null, attempts: 0, run_after: new Date().toISOString() }).eq('id', row.id).eq('status', 'blocked')
-    if (changed.error) throw new Error(changed.error.message)
+    if (changed.error) throw new Error(`Unable to resume blocked agent job: ${changed.error.message}`)
     resumed++
   }
   return resumed
