@@ -35,13 +35,18 @@ export function EtfResearchReport({
 }) {
   const complete = research?.status === 'complete'
   const confidence = research && research.confidence <= 1 ? research.confidence * 100 : research?.confidence
+  const holdingsAsOf = packet?.evidenceQuality ? packet.evidenceQuality.holdingsAsOf : packet?.dataAsOf
+  // Issuer holdings dates are calendar dates; UTC midnight must not become
+  // the preceding New York market date. Current packets require that date.
+  const holdingsDate = holdingsAsOf && /^\d{4}-\d{2}-\d{2}(?:T|$)/.test(holdingsAsOf) && Number.isFinite(Date.parse(holdingsAsOf))
+    ? formatMarketDate(holdingsAsOf.slice(0, 10)) : null
   return (
     <article className="equity-research-note etf-research-note" data-research-presentation>
       <header className="equity-research-header">
         <div>
           <p className="markets-eyebrow">ETF research · portfolio exposure · capital allocation</p>
           <h1 className="markets-display">{stock.company}</h1>
-          <p>{stock.symbol} · {stock.exchange} · issuer-held portfolio data as of {formatMarketDate(packet?.dataAsOf ?? stock.dataAsOf)}</p>
+          <p>{stock.symbol} · {stock.exchange} · {holdingsDate ? `issuer-held portfolio data as of ${holdingsDate}` : 'Issuer holdings date unavailable'}</p>
         </div>
         <div className="equity-research-header-actions">
           <Link href={`/markets/stocks/${stock.symbol}`}>← Stock Viewer</Link>
@@ -88,7 +93,7 @@ export function EtfResearchReport({
           <section className="etf-research-holdings" aria-labelledby="etf-holdings-title">
             <header>
               <div><p className="markets-eyebrow">Issuer holdings snapshot</p><h2 id="etf-holdings-title">What the fund owns</h2></div>
-              <span>Effective {formatMarketDate(packet?.dataAsOf ?? stock.dataAsOf)}</span>
+              <span>{holdingsDate ? `Effective ${holdingsDate}` : 'Effective date unavailable'}</span>
             </header>
             {packet?.holdings.length ? (
               <table>
